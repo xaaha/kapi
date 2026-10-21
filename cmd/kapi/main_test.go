@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -255,5 +256,60 @@ func TestHomeViewShowsBrokenPagesAndQuotesOddPaths(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("home view missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestHookContextWrapsTheHomeViewAsJSON(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 1}}}}}}
+	out, err := run(t, f, "hook-context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		AdditionalContext string `json:"additionalContext"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.HasPrefix(got.AdditionalContext, "## kapi ambient context\nkapi: shared HTML pages") || !strings.Contains(got.AdditionalContext, "/w/plan.html: agent 1 unread") {
+		t.Errorf("additionalContext = %q", got.AdditionalContext)
+	}
+}
+
+func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("COPILOT_HOME", "")
+	if _, err := run(t, &fakeAPI{}, "setup", "hooks"); err == nil || !strings.Contains(err.Error(), "temporary build") {
+		t.Errorf("install from a test binary: error = %v", err)
+	}
+	out, err := run(t, &fakeAPI{}, "setup", "hooks", "--remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"Claude Code", "Codex", "Copilot CLI", "OpenCode"} {
+		if !strings.Contains(out, h) || !strings.Contains(out, "absent") {
+			t.Errorf("remove output missing %s absent:\n%s", h, out)
+		}
+	}
+}
+
+func TestReviewH5SetupHooksFailsWhenAHarnessFails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("COPILOT_HOME", "")
+	settings := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, &fakeAPI{}, "setup", "hooks", "--remove")
+	if err == nil || !strings.Contains(err.Error(), "1 harness") {
+		t.Errorf("error = %v", err)
+	}
+	if !strings.Contains(out, "Claude Code") || !strings.Contains(out, "Copilot CLI") {
+		t.Errorf("every harness should still be reported:\n%s", out)
 	}
 }
