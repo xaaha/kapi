@@ -82,6 +82,9 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
 `delete` fails with `ErrInboundLinks` when another element links to `#<id>`.
+`edit` follows the same rule: it fails with `ErrDanglingLinks` (422, naming
+the ids) when it adds a link to a missing id or removes an element that other
+elements link to.
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 

@@ -306,6 +306,32 @@ func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	}
 }
 
+func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a <kapi-code data-kapi-id=\"cccccccc\" lang=\"go\">x</kapi-code></p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#cccccccc\">code</a> and <a href=\"#gone0000\">old</a></p>\n"
+	for _, tc := range []struct {
+		name, id, html, dangling string
+	}{
+		{"adds a link to a missing id", "aaaaaaaa", `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">x</kapi-code> <a href="#zzzzzzzz">z</a> <a href="#yyyyyyyy">y</a></p>`, "#yyyyyyyy, #zzzzzzzz"},
+		{"removes a linked element", "aaaaaaaa", `<p>a, no code</p>`, "#cccccccc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, path := newPage(t, orig)
+			s := open(t, home, path)
+			_, _, err := s.Apply(1, Op{Kind: "edit", ID: tc.id, HTML: tc.html})
+			if !errors.Is(err, ErrDanglingLinks) || !strings.HasSuffix(err.Error(), ": "+tc.dangling) {
+				t.Fatalf("err = %v, want ErrDanglingLinks naming %s", err, tc.dangling)
+			}
+			if got := onDisk(t, path); got != orig {
+				t.Errorf("refused edit changed the file:\n%s", got)
+			}
+		})
+	}
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "edit", ID: "bbbbbbbb", HTML: `<p>see <a href="#cccccccc">the code</a> and <a href="#gone0000">old</a></p>`})
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">y</kapi-code> <a href="#bbbbbbbb">b</a></p>`})
+}
+
 func TestEditRejectsBadHTML(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p><p data-kapi-id="bbbbbbbb">b</p>`)
 	s := open(t, home, path)

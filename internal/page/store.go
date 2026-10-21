@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -20,6 +21,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 )
 
 type Op struct {
@@ -291,7 +293,34 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	if root.id == "" {
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
-	return assignIDs(splice(src, e.start, e.end, string(frag))), nil
+	out := assignIDs(splice(src, e.start, e.end, string(frag)))
+	before := dangling(src)
+	var added []string
+	for id := range dangling(out) {
+		if !before[id] {
+			added = append(added, "#"+id)
+		}
+	}
+	if len(added) > 0 {
+		slices.Sort(added)
+		return nil, fmt.Errorf("%w: %s", ErrDanglingLinks, strings.Join(added, ", "))
+	}
+	return out, nil
+}
+
+func dangling(src []byte) map[string]bool {
+	els := parse(src)
+	ids := map[string]bool{}
+	for _, e := range els {
+		ids[e.id] = true
+	}
+	out := map[string]bool{}
+	for i := range els {
+		if href, _ := els[i].attr("href"); len(href) > 1 && href[0] == '#' && !ids[href[1:]] {
+			out[href[1:]] = true
+		}
+	}
+	return out
 }
 
 func move(src []byte, els []element, e *element, before string) ([]byte, error) {

@@ -447,6 +447,14 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 	}
 }
 
+func TestAnEditThatLeavesADanglingLinkIs422(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p><a href=\"#zzzzzzzz\">z</a></p>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "#zzzzzzzz") {
+		t.Errorf("edit adding a dangling link: %d %v, want 422 naming #zzzzzzzz", code, out)
+	}
+}
+
 func TestAnOpWithoutAnIDIs422(t *testing.T) {
 	s := newSite(t, `<h1 data-kapi-id="hhhhhhhh">Plan <b>bold</b></h1>`)
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"","html":"<b>x</b>"}}`)
