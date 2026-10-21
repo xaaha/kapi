@@ -122,14 +122,10 @@
     if (bar.hidden || !selected) return;
     const r = (editing?.area || selected).getBoundingClientRect();
     if (!ring.hidden) {
-      const s = getComputedStyle(selected);
-      const px = (k) => parseFloat(s[k]) || 0;
-      const left = r.left + px("paddingLeft") + px("borderLeftWidth");
-      const top = r.top + px("paddingTop") + px("borderTopWidth");
-      ring.style.left = `${left}px`;
-      ring.style.top = `${top}px`;
-      ring.style.width = `${r.right - px("paddingRight") - px("borderRightWidth") - left}px`;
-      ring.style.height = `${r.bottom - px("paddingBottom") - px("borderBottomWidth") - top}px`;
+      ring.style.left = `${r.left - 4}px`;
+      ring.style.top = `${r.top - 4}px`;
+      ring.style.width = `${r.width + 8}px`;
+      ring.style.height = `${r.height + 8}px`;
       ring.toggleAttribute("data-editing", !!editing);
     }
     const top = r.top - bar.offsetHeight - 8;

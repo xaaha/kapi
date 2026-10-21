@@ -311,18 +311,18 @@ test("the toolbar does not show the raw block id", async () => {
   assert.doesNotMatch(await page.eval(`document.querySelector(".kapi-bar").textContent`), /#/);
 });
 
-test("the selection ring sits on the content box", async () => {
+test("the selection ring wraps the whole element, list markers included", async () => {
   await select("cccccccc");
   await page.waitFor(`!!document.querySelector(".kapi-ring:not([hidden])")`);
-  const [ring, content] = await page.eval(`(() => {
+  const [ring, box, marker] = await page.eval(`(() => {
     const el = document.querySelector('[data-kapi-id="cccccccc"]');
-    const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
-    const ring = document.querySelector(".kapi-ring").getBoundingClientRect();
-    return [[ring.left, ring.right], [r.left + parseFloat(s.paddingLeft) + parseFloat(s.borderLeftWidth), r.right - parseFloat(s.paddingRight) - parseFloat(s.borderRightWidth)]];
+    const pick = ({ left, right, top, bottom }) => ({ left, right, top, bottom });
+    const li = el.querySelector("li").getBoundingClientRect();
+    return [pick(document.querySelector(".kapi-ring").getBoundingClientRect()), pick(el.getBoundingClientRect()), li.left - 24];
   })()`);
-  assert.ok(Math.abs(ring[0] - content[0]) <= 1, `ring left ${ring[0]} vs content ${content[0]}`);
-  assert.ok(Math.abs(ring[1] - content[1]) <= 1, `ring right ${ring[1]} vs content ${content[1]}`);
+  assert.ok(ring.left <= box.left && ring.left <= marker, `ring left ${ring.left}, element ${box.left}, marker ${marker}`);
+  assert.ok(ring.right >= box.right && ring.top <= box.top && ring.bottom >= box.bottom, JSON.stringify({ ring, box }));
+  assert.ok(box.left - ring.left <= 8 && ring.right - box.right <= 8, JSON.stringify({ ring, box }));
 });
 
 test("chat is always docked on the right on wide screens, with no hide control", async () => {
