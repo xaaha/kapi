@@ -223,6 +223,20 @@ func TestPostsFromAnotherOriginOrNotJSONAreRefused(t *testing.T) {
 	}
 }
 
+const pageCSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
+
+func TestPageCSPBlocksSourceThatOverridesTheReferrerPolicy(t *testing.T) {
+	payload := `<p data-kapi-id="aaaaaaaa"><img referrerpolicy="unsafe-url" src="http://127.0.0.1:61999/x"></p>` + "\n" + `<meta name="referrer" content="unsafe-url">`
+	s := newSite(t, payload)
+	resp := s.get("/p/" + s.id + "/")
+	if !strings.Contains(resp.body, `referrerpolicy="unsafe-url"`) {
+		t.Fatalf("the stub renderer should pass the payload through:\n%s", resp.body)
+	}
+	if got := resp.header.Get("Content-Security-Policy"); got != pageCSP {
+		t.Errorf("page CSP = %q, want %q", got, pageCSP)
+	}
+}
+
 func TestResponsesSetNoCookieAndNoReferrer(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	for _, resp := range []got{s.get("/p/" + s.id + "/"), s.get("/static/kapi.js"), s.raw("GET", "/nope/", nil)} {
