@@ -1,0 +1,13 @@
+name = "kapi-hub"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "kapi.example.com", custom_domain = true },
+]
+
+[[r2_buckets]]
+binding = "PAGES"
+bucket_name = "kapi-pages"
