@@ -17,8 +17,10 @@
   --kapi-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
 }
 
-html.kapi-panel-open {
-  padding-right: var(--kapi-panel-width);
+@media screen and (min-width: 761px) {
+  html {
+    padding-right: var(--kapi-panel-width);
+  }
 }
 
 #kapi-page [contenteditable="true"] {
@@ -131,11 +133,6 @@ html.kapi-panel-open {
   flex-direction: column;
   background: var(--kapi-bg);
   border-left: 1px solid var(--kapi-border);
-}
-
-html:not(.kapi-panel-open) #kapi-chrome .kapi-panel,
-html.kapi-panel-open #kapi-chrome .kapi-opener {
-  display: none;
 }
 
 #kapi-chrome .kapi-panel-head {
@@ -345,58 +342,48 @@ html.kapi-panel-open #kapi-chrome .kapi-opener {
   color: #fff;
 }
 
-#kapi-chrome .kapi-opener {
-  position: fixed;
-  z-index: 2147483001;
-  right: 16px;
-  bottom: 16px;
-  padding: 7px 14px;
-  background: var(--kapi-bg);
-  border: 1px solid var(--kapi-border);
-  border-radius: 999px;
-  box-shadow: var(--kapi-shadow);
-}
-
-#kapi-chrome .kapi-opener-status {
+#kapi-chrome .kapi-composer-dot {
   display: none;
 }
 
-@media (max-width: 760px) {
-  html.kapi-panel-open {
-    padding-right: 0;
-    padding-bottom: 40vh;
+@media screen and (max-width: 760px) {
+  :root {
+    --kapi-bar-height: 104px;
   }
 
-  html:not(.kapi-panel-open) {
-    padding-bottom: 48px;
+  html {
+    padding-bottom: var(--kapi-bar-height);
   }
 
   #kapi-chrome .kapi-panel {
     top: auto;
     left: 0;
     width: auto;
-    height: 40vh;
     border-left: 0;
     border-top: 1px solid var(--kapi-border);
     box-shadow: var(--kapi-shadow);
   }
 
-  #kapi-chrome .kapi-opener {
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 48px;
-    padding: 0 16px;
-    gap: 8px;
-    border: 0;
-    border-top: 1px solid var(--kapi-border);
-    border-radius: 0;
-    box-shadow: none;
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-panel-head,
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-scroll {
+    display: none;
   }
 
-  #kapi-chrome .kapi-opener-status {
-    display: inline;
-    margin-left: auto;
-    color: var(--kapi-muted);
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-composer textarea {
+    min-height: 0;
+    height: 40px;
+    resize: none;
+  }
+
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-composer-dot {
+    display: block;
+  }
+
+  #kapi-chrome .kapi-hint {
+    display: none;
+  }
+
+  #kapi-chrome .kapi-panel.kapi-expanded {
+    height: 40vh;
   }
 }

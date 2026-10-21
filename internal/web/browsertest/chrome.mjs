@@ -95,6 +95,7 @@ export async function launch() {
 
       const page = {
         errors,
+        call,
         async eval(expression) {
           const r = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
           if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);

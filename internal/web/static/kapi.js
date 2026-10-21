@@ -50,19 +50,16 @@
   const sendButton = h("button", { type: "submit", class: "kapi-primary", text: "Send" });
   const composer = h("form", { class: "kapi-composer" },
     targetChip, input,
-    h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
+    h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
+      h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, dot, statusText,
-      button("Undo", "undo", "Undo the last change"), button("Hide", "collapse", "Hide chat")),
-    notice, h("div", { class: "kapi-scroll" }, empty, log), composer);
-  const opener = h("button", { type: "button", class: "kapi-opener", "data-action": "expand", title: "Show chat" },
-    h("span", { class: "kapi-dot", "data-state": "connecting" }), h("span", { text: "Chat" }),
-    h("span", { class: "kapi-opener-status", text: STATUS.connecting }));
+      button("Undo", "undo", "Undo the last change")),
+    notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), composer);
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
   const ring = h("div", { class: "kapi-ring", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, ring, bar, panel, opener);
+  const root = h("div", { id: "kapi-chrome" }, ring, bar, panel);
   document.body.append(root);
-  if (!matchMedia("(max-width: 760px)").matches) document.documentElement.classList.add("kapi-panel-open");
 
   if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
 
@@ -74,7 +71,6 @@
   function setStatus(state) {
     for (const d of root.querySelectorAll(".kapi-dot")) d.dataset.state = state;
     statusText.textContent = STATUS[state] || STATUS.none;
-    opener.querySelector(".kapi-opener-status").textContent = statusText.textContent;
     dot.title = statusText.textContent;
   }
 
@@ -254,18 +250,13 @@
   }
 
   async function action(name) {
-    if (name === "collapse" || name === "expand") {
-      document.documentElement.classList.toggle("kapi-panel-open", name === "expand");
-      if (name === "expand") input.focus();
-      return placeBar();
-    }
     if (name === "undo") return (await op("undo", { id: "" }))?.ok && refresh(null);
     if (name === "save") return saveEdit();
     if (name === "cancel") return cancelEdit();
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
-    if (name === "ask") return action("expand");
+    if (name === "ask") return input.focus();
     if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
     if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
     const list = peers(selected);
@@ -473,6 +464,7 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (editing) cancelEdit();
+      else if (panel.contains(document.activeElement)) document.activeElement.blur();
       else if (!notice.hidden) notice.hidden = true;
       else select(null);
       return;
@@ -493,6 +485,10 @@
   document.addEventListener("input", placeBar);
   new ResizeObserver(placeBar).observe(main);
   notice.addEventListener("click", () => (notice.hidden = true));
+  panel.addEventListener("focusin", () => panel.classList.add("kapi-expanded"));
+  panel.addEventListener("focusout", (e) => {
+    if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
+  });
 
   connect();
 })();

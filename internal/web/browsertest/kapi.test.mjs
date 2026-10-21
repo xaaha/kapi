@@ -325,26 +325,43 @@ test("the selection ring sits on the content box", async () => {
   assert.ok(Math.abs(ring[1] - content[1]) <= 1, `ring right ${ring[1]} vs content ${content[1]}`);
 });
 
-test("on narrow screens chat starts as a bar and opens to at most 40% of the height", async () => {
-  const narrow = await browser.open(server.url, { width: 390, height: 800 });
+test("chat is always docked on the right on wide screens, with no hide control", async () => {
+  const [r, w, hgt] = await page.eval(`[(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-panel").getBoundingClientRect()), document.documentElement.clientWidth, document.documentElement.clientHeight]`);
+  assert.deepEqual(r, { left: w - 340, right: w, top: 0, bottom: hgt });
+  assert.equal(await page.eval(`document.querySelectorAll('#kapi-chrome [data-action="collapse"], #kapi-chrome [data-action="expand"]').length`), 0);
+});
+
+test("on phones chat is a composer bar that expands to 40% and collapses back", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
-    await narrow.waitFor(`!document.documentElement.classList.contains("kapi-panel-open")`);
-    assert.equal(await narrow.eval(`document.querySelector(".kapi-opener").getBoundingClientRect().width`), 390);
-    await narrow.eval(`document.querySelector(".kapi-opener").click()`);
-    await narrow.waitFor(`document.documentElement.classList.contains("kapi-panel-open")`);
-    assert.ok((await narrow.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`)) <= 320);
-    assert.deepEqual(narrow.errors, []);
+    const box = () => phone.eval(`(({ top, height }) => ({ top, height }))(document.querySelector(".kapi-panel").getBoundingClientRect())`);
+    const visible = (sel) => phone.eval(`document.querySelector(${JSON.stringify(sel)}).checkVisibility()`);
+    const bar = await box();
+    assert.ok(bar.height <= 120, `bar height ${bar.height}`);
+    assert.equal(bar.top + bar.height, await phone.eval(`document.documentElement.clientHeight`));
+    assert.equal(await visible(".kapi-composer textarea"), true);
+    assert.equal(await visible(".kapi-scroll"), false);
+
+    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    await phone.waitFor(`document.querySelector(".kapi-scroll").checkVisibility()`);
+    const open = await box();
+    assert.ok(open.height > bar.height && open.height <= 320, `open height ${open.height}`);
+
+    await phone.key("Escape");
+    await phone.waitFor(`!document.querySelector(".kapi-scroll").checkVisibility()`);
+    assert.deepEqual(await box(), bar);
+    assert.deepEqual(phone.errors, []);
   } finally {
-    await narrow.close();
+    await phone.close();
   }
 });
 
-test("Undo and Hide render as quiet bordered buttons", async () => {
+test("Undo renders as a quiet bordered button", async () => {
   const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head button")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
-  assert.deepEqual(styles, [["Undo", "1px", "solid"], ["Hide", "1px", "solid"]]);
+  assert.deepEqual(styles, [["Undo", "1px", "solid"]]);
 });
 
 test("every request carries the token prefix and every POST is JSON", async () => {
