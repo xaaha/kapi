@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -73,6 +74,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "wrong host", http.StatusForbidden)
 		return
 	}
+	if !tidy(r.URL.Path) {
+		http.Error(w, "untidy path", http.StatusBadRequest)
+		return
+	}
 	if r.Method == http.MethodPost && !s.sameOriginJSON(r) {
 		http.Error(w, "posts must come from this page as application/json", http.StatusForbidden)
 		return
@@ -85,6 +90,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path, r2.URL.RawPath = "/"+rest, ""
 	s.mux.ServeHTTP(w, r2)
+}
+
+func tidy(p string) bool {
+	clean := path.Clean(p)
+	if strings.HasSuffix(p, "/") && clean != "/" {
+		clean += "/"
+	}
+	return clean == p
 }
 
 func (s *Server) sameOriginJSON(r *http.Request) bool {

@@ -237,6 +237,36 @@ func TestPageCSPBlocksSourceThatOverridesTheReferrerPolicy(t *testing.T) {
 	}
 }
 
+func TestUntidyPathsAreRefusedBeforeTheTokenIsStripped(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	for _, p := range []string{
+		"/" + token + "//p/" + s.id + "/",
+		"/" + token + "/p/" + s.id + "//",
+		"/" + token + "/p/" + s.id + "/../" + s.id + "/",
+		"/" + token + "/p/./" + s.id + "/",
+		"/" + token + "/p/" + s.id + "/%2e%2e/" + s.id + "/",
+		"//" + token + "/p/" + s.id + "/",
+	} {
+		conn, err := net.Dial("tcp", s.srv.Listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", p, s.srv.Listener.Addr())
+		resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		conn.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("GET %s: %s (Location %q), want 400", p, resp.Status, resp.Header.Get("Location"))
+		}
+	}
+	if resp := s.get("/p/" + s.id + "/"); resp.code != http.StatusOK {
+		t.Errorf("tidy path: %d", resp.code)
+	}
+}
+
 func TestResponsesSetNoCookieAndNoReferrer(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	for _, resp := range []got{s.get("/p/" + s.id + "/"), s.get("/static/kapi.js"), s.raw("GET", "/nope/", nil)} {
