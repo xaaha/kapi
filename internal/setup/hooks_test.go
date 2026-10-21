@@ -268,3 +268,23 @@ func TestReviewH3OtherValuesKeepHTMLCharacters(t *testing.T) {
 		t.Errorf("copilot hooks:\n%s", s)
 	}
 }
+
+func TestReviewH4MalformedManagedEntriesAreRepaired(t *testing.T) {
+	for _, entry := range []string{
+		`{"type": "command", "command": "kapi", "timeout": "10"}`,
+		`{"type": "prompt", "command": "kapi", "timeout": 10}`,
+		`{"type": "command", "command": "kapi", "timeout": 10.5}`,
+		`{"type": 1, "command": "kapi"}`,
+	} {
+		o := opts(t)
+		claude, _, _, _, _ := o.paths()
+		write(t, claude, `{"hooks": {"SessionStart": [{"matcher": "", "hooks": [`+entry+`]}]}}`)
+		if s := statuses(Install(o))["Claude Code"]; s != "updated" {
+			t.Errorf("%s: %s", entry, s)
+		}
+		got := read(t, claude)
+		if !strings.Contains(got, `"type": "command"`) || !strings.Contains(got, `"timeout": 10`+"\n") {
+			t.Errorf("%s not repaired:\n%s", entry, got)
+		}
+	}
+}

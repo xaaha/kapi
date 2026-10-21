@@ -283,15 +283,11 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 			if err != nil {
 				return nil, false, err
 			}
-			var cur struct {
-				Type    string  `json:"type"`
-				Command string  `json:"command"`
-				Timeout float64 `json:"timeout"`
-			}
+			var cur map[string]any
 			if err := json.Unmarshal(h, &cur); err != nil {
 				return nil, false, err
 			}
-			if cur.Type == "command" && cur.Command == command && int(cur.Timeout) == timeout && float64(int(cur.Timeout)) == cur.Timeout && !changed {
+			if cur["type"] == "command" && cur["command"] == command && cur["timeout"] == float64(timeout) && !changed {
 				return content, false, nil
 			}
 			for k, v := range map[string]any{"type": "command", "command": command, "timeout": timeout} {
