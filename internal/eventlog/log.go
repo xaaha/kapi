@@ -54,6 +54,26 @@ func Open(dir string) (*Log, error) {
 	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{})}, nil
 }
 
+// Summary reads a log's reader cursors and unread counts without opening it for writing.
+func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
+	events, err := readEvents(filepath.Join(dir, eventsFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	cursors, err := readCursors(filepath.Join(dir, cursorsFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	pending := func(reader string) int {
+		c := cursors[reader]
+		if c >= uint64(len(events)) {
+			return 0
+		}
+		return len(events[c:])
+	}
+	return cursors, pending, nil
+}
+
 func (l *Log) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()

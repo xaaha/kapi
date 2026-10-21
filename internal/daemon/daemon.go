@@ -14,6 +14,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -39,6 +41,13 @@ type Response struct {
 	Event   *eventlog.Event  `json:"event,omitempty"`
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Readers []ReaderStatus   `json:"readers,omitempty"`
+	Pages   []PageStatus     `json:"pages,omitempty"`
+}
+
+type PageStatus struct {
+	Path    string         `json:"path"`
+	Readers []ReaderStatus `json:"readers,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -141,41 +150,50 @@ func (s *Server) handle(conn net.Conn) {
 	var req Request
 	if err := dec.Decode(&req); err != nil {
 		if !errors.Is(err, io.EOF) {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 		}
+		return
+	}
+	if req.Op == "pages" {
+		pages, err := s.listPages()
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Pages: pages})
 		return
 	}
 	l, err := s.page(req.Page)
 	if err != nil {
-		reply(enc, Response{Error: err.Error()})
+		reply(enc, &Response{Error: err.Error()})
 		return
 	}
 	switch req.Op {
 	case "append":
 		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
 		if err != nil {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, Response{Event: &e})
+		reply(enc, &Response{Event: &e})
 	case "pending":
-		reply(enc, Response{Events: l.Pending(req.Reader)})
+		reply(enc, &Response{Events: l.Pending(req.Reader)})
 	case "ack":
 		if err := l.Ack(req.Reader, req.Seq); err != nil {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, Response{})
+		reply(enc, &Response{})
 	case "status":
-		reply(enc, Response{Readers: s.status(req.Page, l)})
+		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
 		s.watch(dec, enc, &req, l)
 	default:
-		reply(enc, Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
+		reply(enc, &Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
 	}
 }
 
-func reply(enc *json.Encoder, resp Response) {
+func reply(enc *json.Encoder, resp *Response) {
 	if err := enc.Encode(resp); err != nil {
 		log.Printf("reply: %v", err)
 	}
@@ -183,7 +201,7 @@ func reply(enc *json.Encoder, resp Response) {
 
 func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *eventlog.Log) {
 	if req.Reader == "" {
-		reply(enc, Response{Error: "watch needs a reader"})
+		reply(enc, &Response{Error: "watch needs a reader"})
 		return
 	}
 	s.setAttached(req.Page, req.Reader, true)
@@ -247,4 +265,63 @@ func (s *Server) status(page string, l *eventlog.Log) []ReaderStatus {
 		out = append(out, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: l.Cursor(r), Pending: len(l.Pending(r))})
 	}
 	return out
+}
+
+func (s *Server) listPages() ([]PageStatus, error) {
+	root := filepath.Join(s.home, "pages")
+	dirs, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []PageStatus
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		dir := filepath.Join(root, d.Name())
+		b, err := os.ReadFile(filepath.Join(dir, "page.txt"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			out = append(out, PageStatus{Path: dir, Error: err.Error()})
+			continue
+		}
+		out = append(out, s.pageStatus(strings.TrimSuffix(string(b), "\n"), dir))
+	}
+	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
+	return out, nil
+}
+
+func (s *Server) pageStatus(path, dir string) PageStatus {
+	s.mu.Lock()
+	l, open := s.pages[path]
+	attached := maps.Clone(s.attached[path])
+	s.mu.Unlock()
+	if open {
+		readers := s.status(path, l)
+		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
+		return PageStatus{Path: path, Readers: readers}
+	}
+	cursors, pending, err := eventlog.Summary(dir)
+	if err != nil {
+		return PageStatus{Path: path, Error: err.Error()}
+	}
+	names := map[string]bool{"agent": true}
+	for r := range cursors {
+		names[r] = true
+	}
+	for r := range attached {
+		names[r] = true
+	}
+	var readers []ReaderStatus
+	for r := range names {
+		since, on := attached[r]
+		readers = append(readers, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: cursors[r], Pending: pending(r)})
+	}
+	slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
+	return PageStatus{Path: path, Readers: readers}
 }

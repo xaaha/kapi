@@ -201,3 +201,59 @@ func TestReviewF2DaemonRejectsUnknownFlags(t *testing.T) {
 		t.Fatal("kapi daemon --bogus started the daemon instead of failing")
 	}
 }
+
+func TestHomeViewListsPagesAndNextSteps(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{
+		{Path: "/w/plan.html", Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 2, Attached: true}, {Reader: "codex"}}},
+		{Path: "/w/notes.html", Readers: []daemon.ReaderStatus{{Reader: "agent"}}},
+	}}}
+	out, err := run(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `kapi: shared HTML pages for you and your agent
+pages[2]:
+  /w/plan.html: agent 2 unread (watching), codex 0 unread
+  /w/notes.html: agent 0 unread
+next:
+  kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
+  kapi say <page> <text>  reply on a page
+  kapi pending <page>     list unread events without consuming them
+  kapi --help             every command
+`
+	if out != want {
+		t.Errorf("home view:\n%s\nwant:\n%s", out, want)
+	}
+	if len(f.requests) != 1 || f.requests[0].Op != "pages" {
+		t.Errorf("requests = %+v", f.requests)
+	}
+}
+
+func TestHomeViewWithNoPages(t *testing.T) {
+	out, err := run(t, &fakeAPI{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "pages: none yet\n") || !strings.Contains(out, "kapi watch <page>") {
+		t.Errorf("home view:\n%s", out)
+	}
+}
+
+func TestHomeViewShowsBrokenPagesAndQuotesOddPaths(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{
+		{Path: "/w/bad.html", Error: "events.ndjson line 1: invalid character"},
+		{Path: "/w/two\nlines.html", Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 1}}},
+	}}}
+	out, err := run(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  /w/bad.html: error: events.ndjson line 1: invalid character\n",
+		"  \"/w/two\\nlines.html\": agent 1 unread\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("home view missing %q:\n%s", want, out)
+		}
+	}
+}
