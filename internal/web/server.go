@@ -51,6 +51,7 @@ func New(pages Pages, token, host string) *Server {
 	})
 	s.mux.HandleFunc("GET /p/{id}/{$}", s.withPage(s.handlePage))
 	s.mux.HandleFunc("GET /p/{id}/blocks/{block}", s.withPage(s.handleBlock))
+	s.mux.HandleFunc("GET /p/{id}/source/{block}", s.withPage(s.handleSource))
 	s.mux.HandleFunc("GET /p/{id}/events", s.withPage(s.handleEvents))
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
@@ -195,7 +196,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, rev := st.Source()
 	id := r.PathValue("block")
-	if !page.Contains(src, id) {
+	if _, err := page.Outer(src, id); err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -209,6 +210,21 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 	w.Header().Set("Kapi-Rev", strconv.FormatUint(rev, 10))
 	if _, err := w.Write(out); err != nil { //nolint:gosec // render output, which has no scripts
 		log.Printf("write block: %v", err)
+	}
+}
+
+func (s *Server) handleSource(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
+	src, rev := st.Source()
+	out, err := page.Outer(src, r.PathValue("block"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Kapi-Rev", strconv.FormatUint(rev, 10))
+	if _, err := w.Write(out); err != nil { //nolint:gosec // text/plain with nosniff
+		log.Printf("write source: %v", err)
 	}
 }
 

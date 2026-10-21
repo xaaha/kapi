@@ -239,6 +239,20 @@ func TestBlockCarriesTheRevision(t *testing.T) {
 	}
 }
 
+func TestSourceIsTheElementsOuterHTMLAsText(t *testing.T) {
+	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a &lt; b {}</kapi-code>\n")
+	resp := s.get("/p/" + s.id + "/source/bbbbbbbb")
+	if resp.code != http.StatusOK || resp.header.Get("Kapi-Rev") != "1" || !strings.HasPrefix(resp.header.Get("Content-Type"), "text/plain") {
+		t.Fatalf("source: %d, Kapi-Rev %q, Content-Type %q", resp.code, resp.header.Get("Kapi-Rev"), resp.header.Get("Content-Type"))
+	}
+	if want := `<kapi-code data-kapi-id="bbbbbbbb" lang="go">if a &lt; b {}</kapi-code>`; resp.body != want {
+		t.Errorf("source = %q, want %q", resp.body, want)
+	}
+	if resp := s.get("/p/" + s.id + "/source/zzzzzzzz"); resp.code != http.StatusNotFound {
+		t.Errorf("unknown block: %d", resp.code)
+	}
+}
+
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`)

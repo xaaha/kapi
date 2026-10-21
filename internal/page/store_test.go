@@ -289,7 +289,7 @@ func TestOpenNeedsAnAbsoluteExistingPath(t *testing.T) {
 	}
 }
 
-func TestFormIDAndContains(t *testing.T) {
+func TestFormIDAndOuter(t *testing.T) {
 	src := []byte(`<kapi-form data-kapi-id="aaaaaaaa" name="env"><kapi-text data-kapi-id="bbbbbbbb" name="why">Why</kapi-text></kapi-form>`)
 	if id, err := FormID(src, "env"); err != nil || id != "aaaaaaaa" {
 		t.Errorf("FormID = %q, %v", id, err)
@@ -297,7 +297,10 @@ func TestFormIDAndContains(t *testing.T) {
 	if _, err := FormID(src, "why"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("FormID of a non-form: err = %v", err)
 	}
-	if !Contains(src, "bbbbbbbb") || Contains(src, "cccccccc") {
-		t.Error("Contains is wrong")
+	if got, err := Outer(src, "bbbbbbbb"); err != nil || string(got) != `<kapi-text data-kapi-id="bbbbbbbb" name="why">Why</kapi-text>` {
+		t.Errorf("Outer = %q, %v", got, err)
+	}
+	if _, err := Outer(src, "cccccccc"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Outer of an unknown id: err = %v", err)
 	}
 }

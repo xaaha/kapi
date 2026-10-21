@@ -123,10 +123,13 @@ func find(els []element, id string) (*element, error) {
 	return nil, fmt.Errorf("%w: #%s", ErrNotFound, id)
 }
 
-// Contains reports whether src has an element with data-kapi-id id.
-func Contains(src []byte, id string) bool {
-	_, err := find(parse(src), id)
-	return err == nil
+// Outer returns the source of the element with data-kapi-id id, from its start tag to its end tag.
+func Outer(src []byte, id string) ([]byte, error) {
+	e, err := find(parse(src), id)
+	if err != nil {
+		return nil, err
+	}
+	return src[e.start:e.end], nil
 }
 
 // FormID returns the data-kapi-id of the kapi-form named name.
