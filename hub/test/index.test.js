@@ -167,3 +167,26 @@ test("reads are read-only and the API only accepts PUT", async () => {
   assert.equal(get.headers.get("Allow"), "PUT");
   assert.equal((await call(env, "GET", "/api/other")).status, 404);
 });
+
+test("raw paths with dot segments, encoded dots or slashes, or backslashes are rejected before routing", async () => {
+  const env = setup();
+  await put(env, ID, "1", "<p>secret</p>");
+  for (const path of [
+    `/api/%2e%2e/p/${ID}/`,
+    `/api/%2E%2E/p/${ID}/`,
+    `/api/%2e./p/${ID}/`,
+    `/api/../p/${ID}/`,
+    `/api/..%2fp/${ID}/`,
+    `/api%2F..%2Fp/${ID}/`,
+    `/p%2F${ID}/`,
+    `/p%5C${ID}/`,
+    `/api\\..\\p/${ID}/`,
+    `/api\\p/${ID}/`,
+  ]) {
+    const raw = { url: BASE + path, method: "GET", headers: new Headers() };
+    const res = await worker.fetch(raw, env);
+    assert.equal(res.status, 400, path);
+    assert.doesNotMatch(await res.text(), /secret/, path);
+  }
+  assert.equal((await call(env, "GET", `/p/${ID}/?q=..`)).status, 200, "query strings are not paths");
+});

@@ -2,6 +2,11 @@ const PAGE_ID = /^[0-9a-f]{16}$/;
 const REV = /^[0-9]{1,20}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_TITLE = 200;
+const UNSAFE_PATH = /\.\.|%2e|%2f|%5c|\\/i;
+
+function rawPath(url) {
+  return url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/\\]*/i, "").split(/[?#]/, 1)[0];
+}
 
 export const CSP = [
   "default-src 'none'",
@@ -20,6 +25,7 @@ export default {
 };
 
 async function route(request, env) {
+  if (UNSAFE_PATH.test(rawPath(request.url))) return text(400, "bad path");
   const path = new URL(request.url).pathname;
   let m;
   if ((m = /^\/api\/pages\/([^/]+)\/revs\/([^/]+)$/.exec(path))) {
