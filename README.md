@@ -18,3 +18,15 @@ kapi --help
 
 In Claude Code, run `kapi watch <page>` under the Monitor tool so each event
 arrives as a notification while the agent keeps working.
+
+## Skill
+
+Install the kapi skill in the [Agent Skills](https://agentskills.io) format:
+
+```sh
+npx skills add xaaha/kapi --skill kapi
+```
+
+It is a short stub that sends the agent to `kapi` and `kapi --help`, so an
+installed copy cannot go stale against a newer CLI.
+
