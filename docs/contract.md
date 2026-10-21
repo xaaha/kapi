@@ -114,8 +114,11 @@ port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
 `p/{id}/` or `p/{id}/events` gets 403 with
-`{"error":"kapi restarted","reopen":"kapi open <page path>"}`, where the page
-path is filled in only for a page id kapi knows; the body never holds a token.
+`{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
+is filled in only for a page id kapi knows and only when the segment is one of
+the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
+`$KAPI_HOME/previous-tokens`, mode 0600); otherwise `reopen` is
+`kapi open <page>`. The body never holds a token.
 
 The token is the first path segment of every URL, including static files. No
 cookies: browsers send cookies to every port on `127.0.0.1`, so a cookie would
