@@ -336,3 +336,46 @@ func TestReviewH7CodexConfigWithFeaturesKapiCannotEditIsLeftAlone(t *testing.T) 
 		t.Errorf("a features key inside another table: %v", err)
 	}
 }
+
+func TestReviewH8RemoveKeepsUserHooksSharingAGroupWithKapi(t *testing.T) {
+	o := opts(t)
+	claude, _, _, _, _ := o.paths()
+	write(t, claude, `{"hooks": {"SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "mine"}, {"type": "command", "command": "kapi"}]}]}}`)
+	Remove(o)
+	if got := read(t, claude); !strings.Contains(got, `"mine"`) || strings.Contains(got, `"kapi"`) {
+		t.Errorf("after remove:\n%s", got)
+	}
+}
+
+func TestReviewH8RemoveDropsAnEmptyHooksObject(t *testing.T) {
+	o := opts(t)
+	claude, _, _, _, _ := o.paths()
+	write(t, claude, `{"model": "opus"}`)
+	Install(o)
+	Remove(o)
+	if got := read(t, claude); got != "{\n  \"model\": \"opus\"\n}\n" {
+		t.Errorf("after remove:\n%s", got)
+	}
+}
+
+func TestReviewH8CopilotRemovalMatchesEveryCommandKey(t *testing.T) {
+	o := opts(t)
+	_, _, _, _, copilot := o.paths()
+	write(t, copilot, `{"version": 1, "hooks": {"sessionStart": [{"powershell": "kapi hook-context"}, {"command": "/bin/kapi hook-context"}, {"bash": "mine"}]}}`)
+	Remove(o)
+	if got := read(t, copilot); strings.Contains(got, "kapi") || !strings.Contains(got, `"mine"`) {
+		t.Errorf("after remove:\n%s", got)
+	}
+}
+
+func TestReviewH8CodexConfigKeepsCRLF(t *testing.T) {
+	for in, want := range map[string]string{
+		"model = 1\r\n":                     "model = 1\r\n\r\n[features]\r\nhooks = true\r\n",
+		"[features]\r\nother = 1\r\n[x]\r\n": "[features]\r\nother = 1\r\nhooks = true\r\n[x]\r\n",
+	} {
+		got, _, err := codexConfigUpdate(in)
+		if err != nil || got != want {
+			t.Errorf("%q: got %q, %v, want %q", in, got, err, want)
+		}
+	}
+}
