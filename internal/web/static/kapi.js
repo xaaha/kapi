@@ -251,10 +251,15 @@
   function scheduleFlush() {
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => {
-      if (editing || !pending) return;
-      const job = pending;
-      pending = null;
-      refresh(job === "page" ? null : [...job]);
+      if (!pending || (editing && pending === "page")) return;
+      if (pending === "page") {
+        pending = null;
+        return refresh(null);
+      }
+      const held = editing && idOf(editing.el);
+      const ids = [...pending].filter((id) => id !== held);
+      pending = pending.has(held) ? new Set([held]) : null;
+      if (ids.length) refresh(ids);
     }, 30);
   }
 
@@ -275,13 +280,16 @@
     for (const id of ids) {
       const el = find(id);
       if (!el) return loadPage();
+      if (editing?.el === el) {
+        schedule([id]);
+        continue;
+      }
       const res = await fetch(`${base}/blocks/${encodeURIComponent(id)}`);
       if (!res.ok) return loadPage();
       const tpl = document.createElement("template");
       tpl.innerHTML = (await res.text()).trim();
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
-      if (editing?.el === el) return void schedule([id]);
       el.replaceWith(next);
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;

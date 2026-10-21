@@ -240,3 +240,16 @@ test("renders markup from events as literal text", async () => {
   assert.match(await page.eval(`document.querySelector(".kapi-answer .kapi-msg-text").textContent`), /onerror=/);
   assert.equal(await page.eval(`window.pwned`), undefined);
 });
+
+test("refetches other changed blocks while one is being edited", async () => {
+  await select("aaaaaaaa");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
+  server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  server.push({ kind: "revision", target: "aaaaaaaa,cccccccc", text: "edited" });
+  await until(async () => (await text("cccccccc")) === "Agent rewrote this");
+  assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0);
+  assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "aaaaaaaa");
+  await page.key("Escape");
+  await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
+});
