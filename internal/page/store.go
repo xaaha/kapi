@@ -23,6 +23,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
 )
 
@@ -270,6 +271,11 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	src, sum, err := apply(s.src, op)
 	if err == nil {
 		src, _, err = prepare(src)
+	}
+	if err == nil && op.Kind == "edit" {
+		if _, lost := render.Block(src, op.ID); errors.Is(lost, render.ErrNotFound) {
+			err = ErrEditLostID
+		}
 	}
 	if err != nil {
 		return s.rev, Summary{}, err

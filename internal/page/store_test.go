@@ -667,3 +667,21 @@ func TestAnAgentWritingInALoopAlwaysWins(t *testing.T) {
 		}
 	}
 }
+
+func TestEditRefusesAResultThatLosesItsID(t *testing.T) {
+	src := `<p data-kapi-id="aaaaaaaa">a</p>` + "\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	for _, h := range []string{
+		`<td data-kapi-id="aaaaaaaa">cell</td>`,
+		`<tr data-kapi-id="aaaaaaaa"><td>x</td></tr>`,
+		`<script data-kapi-id="aaaaaaaa">x()</script>`,
+	} {
+		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrEditLostID) {
+			t.Errorf("edit %q: err = %v, want ErrEditLostID", h, err)
+		}
+	}
+	if got := onDisk(t, path); got != src {
+		t.Errorf("refused edit changed the file: %s", got)
+	}
+}
