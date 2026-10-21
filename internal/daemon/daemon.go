@@ -276,11 +276,16 @@ func (s *Server) store(path string) (*page.Store, *eventlog.Log, error) {
 
 // Page finds a page kapi has seen by its 16-hex id, for the browser.
 func (s *Server) Page(id string) (*page.Store, *eventlog.Log, error) {
-	b, err := os.ReadFile(filepath.Join(s.home, "pages", id, "page.txt"))
+	path, err := s.PagePath(id)
 	if err != nil {
 		return nil, nil, err
 	}
-	return s.store(strings.TrimSuffix(string(b), "\n"))
+	return s.store(path)
+}
+
+func (s *Server) PagePath(id string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(s.home, "pages", id, "page.txt"))
+	return strings.TrimSuffix(string(b), "\n"), err
 }
 
 func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {

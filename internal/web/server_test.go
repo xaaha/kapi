@@ -33,6 +33,16 @@ type fakePages struct {
 	pages map[string]*page.Store
 }
 
+func (f *fakePages) PagePath(id string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	path, ok := f.paths[id]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+	return path, nil
+}
+
 func (f *fakePages) Page(id string) (*page.Store, *eventlog.Log, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -146,6 +156,33 @@ func (s *site) events() []eventlog.Event {
 	}
 	events, _ := l.After(0)
 	return events
+}
+
+func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	const old = "0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct{ path, reopen string }{
+		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
+		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
+	} {
+		resp := s.raw("GET", tc.path, nil)
+		var body map[string]string
+		if err := json.Unmarshal([]byte(resp.body), &body); err != nil {
+			t.Fatalf("GET %s: %d %q is not JSON", tc.path, resp.code, resp.body)
+		}
+		if resp.code != http.StatusForbidden || body["error"] != "kapi restarted" || body["reopen"] != tc.reopen || len(body) != 2 {
+			t.Errorf("GET %s: %d %v, want 403 with reopen %q", tc.path, resp.code, body, tc.reopen)
+		}
+		if strings.Contains(resp.body, token) || strings.Contains(resp.body, old) {
+			t.Errorf("GET %s: body %q carries a token", tc.path, resp.body)
+		}
+	}
+	for _, p := range []string{"/" + old + "/static/kapi.js", "/" + old + "/p/" + s.id + "/blocks/aaaaaaaa"} {
+		if resp := s.raw("GET", p, nil); resp.code != http.StatusForbidden || strings.Contains(resp.body, "restarted") {
+			t.Errorf("GET %s: %d %q, want a plain 403", p, resp.code, resp.body)
+		}
+	}
 }
 
 func TestEveryPathNeedsTheTokenAsItsFirstSegment(t *testing.T) {

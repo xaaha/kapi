@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bufio"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -82,6 +83,19 @@ func TestARestartedDaemonKeepsThePortWithANewTokenAndTheStreamResumes(t *testing
 	}
 	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("http.url mode = %v, %v; want 0600", fi.Mode().Perm(), err)
+	}
+	resp, err := http.Get(pageURL + "events") //nolint:gosec // the daemon under test gave this URL
+	if err != nil {
+		t.Fatal(err)
+	}
+	notice, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"error":"kapi restarted","reopen":"kapi open ` + path + `"}` + "\n"
+	if resp.StatusCode != http.StatusForbidden || string(notice) != want {
+		t.Errorf("old tab's events after restart: %s %q, want 403 %q", resp.Status, notice, want)
 	}
 	reopened := call(t, home, &Request{Op: "open", Page: path}).URL
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "after"})

@@ -28,9 +28,10 @@ import (
 //go:embed static
 var static embed.FS
 
-// Pages finds a page's store and event log by its 16-hex id; a page kapi has never seen is fs.ErrNotExist.
+// Pages finds a page by its 16-hex id; a page kapi has never seen is fs.ErrNotExist.
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
+	PagePath(id string) (string, error)
 }
 
 type Server struct {
@@ -84,12 +85,27 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !s.validToken(seg) {
-		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
+		s.refuseToken(w, rest)
 		return
 	}
 	r2 := r.Clone(r.Context())
 	r2.URL.Path, r2.URL.RawPath = "/"+rest, ""
 	s.mux.ServeHTTP(w, r2)
+}
+
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events)?$`)
+
+func (s *Server) refuseToken(w http.ResponseWriter, rest string) {
+	m := reopenable.FindStringSubmatch(rest)
+	if m == nil {
+		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
+		return
+	}
+	reopen := "kapi open <page>"
+	if path, err := s.pages.PagePath(m[1]); err == nil {
+		reopen = "kapi open " + path
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "kapi restarted", "reopen": reopen})
 }
 
 func tidy(p string) bool {
