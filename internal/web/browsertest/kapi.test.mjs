@@ -374,3 +374,11 @@ test("sortable tables sort by a header click, numeric or by locale, without an o
   assert.deepEqual(await sortState(), ["ascending", null]);
   assert.equal(requests("POST", "").length, 0);
 });
+
+test("edits prose that contains a preset as source", async () => {
+  await select("hhhhhhhh");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  assert.equal(requests("GET", "/source/hhhhhhhh").length, 1);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
+});

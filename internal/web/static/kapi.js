@@ -186,7 +186,7 @@
     if (!selected || editing || busy) return;
     const el = selected;
     notice.hidden = true;
-    if (!el.hasAttribute("data-kapi-preset")) {
+    if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) {
       editing = { el, original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
       el.contentEditable = "true";
       el.focus();

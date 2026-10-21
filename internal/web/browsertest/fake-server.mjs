@@ -46,6 +46,13 @@ export const SAMPLE = [
       "</tbody></table></div>",
   },
   {
+    id: "hhhhhhhh",
+    source: '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p><kapi-callout kind="note">Freeze writes.</kapi-callout></div>',
+    html:
+      '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p>' +
+      '<aside data-kapi-preset="callout" class="callout"><p>Freeze writes.</p></aside></div>',
+  },
+  {
     id: "ffffffff",
     source: '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window.</kapi-callout>',
   },
