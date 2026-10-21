@@ -40,6 +40,8 @@ var payloads = []string{
 	`<xmp><script>alert(1)</script></xmp>`,
 	`<textarea><script>alert(1)</script></textarea>`,
 	`<p id="kapi-page">clobber</p>`,
+	`<img src="a.png" referrerpolicy="unsafe-url" srcset="https://e.test/x 1x"><a href="/" ping="https://e.test/" referrerpolicy="unsafe-url">x</a>`,
+	`<meta name="referrer" content="unsafe-url"><link rel="prefetch" href="https://e.test/"><base href="https://e.test/">`,
 	`</kapi-code><script>alert(1)</script>`,
 	`"><script>alert(1)</script>`,
 	`' onmouseover='alert(1)`,
@@ -151,6 +153,29 @@ func TestSanitizerDropsDangerousContent(t *testing.T) {
 	}
 }
 
+func TestSanitizerDropsReferrerLeaks(t *testing.T) {
+	cases := []struct{ src, banned string }{
+		{`<img src="a.png" referrerpolicy="unsafe-url">`, "referrerpolicy"},
+		{`<a href="https://e.test/" referrerpolicy="unsafe-url">x</a>`, "referrerpolicy"},
+		{`<kapi-callout><p referrerpolicy="unsafe-url">x</p></kapi-callout>`, "referrerpolicy"},
+		{`<a href="https://e.test/" ping="https://e.test/p">x</a>`, "ping"},
+		{`<img src="a.png" srcset="https://e.test/x.png 1x">`, "srcset"},
+		{`<kapi-form name="f"><button formaction="https://e.test/">x</button><kapi-text name="t">t</kapi-text></kapi-form>`, "formaction"},
+		{`<meta name="referrer" content="unsafe-url"><p>x</p>`, "<meta"},
+		{`<p>x<meta name="referrer" content="unsafe-url"></p>`, "<meta"},
+		{`<kapi-plan><kapi-step><meta name="referrer" content="unsafe-url">x</kapi-step></kapi-plan>`, "<meta"},
+		{`<link rel="prefetch" href="https://e.test/"><p>x</p>`, "<link"},
+		{`<ul><li><link rel="stylesheet" href="https://e.test/x.css"></li></ul>`, "<link"},
+		{`<base href="https://e.test/"><p>x</p>`, "<base"},
+		{`<div><base href="https://e.test/"></div>`, "<base"},
+	}
+	for _, c := range cases {
+		if got := render(t, c.src); strings.Contains(got, c.banned) {
+			t.Errorf("Render(%q) = %q, still contains %q", c.src, got, c.banned)
+		}
+	}
+}
+
 func assertSafe(t *testing.T, src, out string) {
 	t.Helper()
 	doc, err := html.Parse(strings.NewReader("<!doctype html><body>" + out))
@@ -181,8 +206,8 @@ func assertSafe(t *testing.T, src, out string) {
 				switch {
 				case strings.HasPrefix(key, "on"):
 					t.Errorf("source %q rendered event handler %s=%q:\n%s", src, a.Key, a.Val, out)
-				case key == "style":
-					t.Errorf("source %q rendered a style attribute:\n%s", src, out)
+				case key == "style", key == "referrerpolicy", key == "ping", key == "srcset", key == "formaction":
+					t.Errorf("source %q rendered a %s attribute:\n%s", src, a.Key, out)
 				case key == "id" && strings.HasPrefix(val, "kapi") && (!inDiagram || n.Data != "marker"):
 					t.Errorf("source %q rendered a reserved id %q:\n%s", src, a.Val, out)
 				case key == "href" || key == "src" || key == "cite" || key == "action" || key == "formaction" || strings.HasSuffix(key, "href"):
