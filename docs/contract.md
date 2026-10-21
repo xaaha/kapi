@@ -85,6 +85,12 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 
+An op whose `rev` is older than the current revision still applies when its
+target element's outer source at that `rev` (from `revs/<rev>.html`) equals
+its current outer source, so edits to other blocks never refuse a save.
+`ErrStale` (409) means the target element itself changed, or the op is
+`undo` at an old `rev`.
+
 `undo` reverts only the browser's own ops. When the file changed outside the
 browser after the op being undone, `undo` fails with 422 instead of discarding
 that change. Before writing, `Apply` compares the file's bytes (not only its

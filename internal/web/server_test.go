@@ -439,6 +439,17 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 	}
 }
 
+func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
+	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	editFile(t, s.path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p>a, by the human</p>"}}`); code != http.StatusOK || out["rev"] != 3.0 {
+		t.Errorf("save on an untouched block: %d %v, want 200 rev 3", code, out)
+	}
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
+		t.Errorf("op on the block the agent changed: %d %v, want 409 rev 3", code, out)
+	}
+}
+
 func TestUndoAcrossAFileEditIs422(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`); code != http.StatusOK {

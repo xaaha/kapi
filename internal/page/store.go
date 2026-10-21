@@ -119,7 +119,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if rev != s.rev {
+	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
 		return s.rev, Summary{}, ErrStale
 	}
 	raw, err := os.ReadFile(s.path)
@@ -159,6 +159,19 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		return s.rev, Summary{}, err
 	}
 	return s.rev, sum, nil
+}
+
+func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
+	then, err := os.ReadFile(s.revPath(rev))
+	if err != nil {
+		return false
+	}
+	was, err := Outer(then, op.ID)
+	if err != nil {
+		return false
+	}
+	is, err := Outer(s.src, op.ID)
+	return err == nil && bytes.Equal(was, is)
 }
 
 func (s *Store) revPath(rev uint64) string {

@@ -176,6 +176,74 @@ func TestApplyRefusesAStaleRevision(t *testing.T) {
 	}
 }
 
+func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c</p>\n"
+	const agents = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c, by the agent</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
+		{Kind: "done", ID: "aaaaaaaa"},
+		{Kind: "archive", ID: "aaaaaaaa"},
+		{Kind: "delete", ID: "aaaaaaaa"},
+		{Kind: "move", ID: "aaaaaaaa"},
+	} {
+		t.Run(op.Kind, func(t *testing.T) {
+			home, path := newPage(t, orig)
+			s := open(t, home, path)
+			externalWrite(t, path, agents)
+			if _, _, err := s.Refresh(); err != nil {
+				t.Fatal(err)
+			}
+			rev, _, err := s.Apply(1, op)
+			if err != nil {
+				t.Fatalf("%s at rev 1 after the agent changed another block: %v", op.Kind, err)
+			}
+			if rev != 3 {
+				t.Errorf("rev = %d, want 3", rev)
+			}
+			if got := onDisk(t, path); !strings.Contains(got, "c, by the agent") {
+				t.Errorf("the agent's edit was lost:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
+		{Kind: "done", ID: "aaaaaaaa"},
+		{Kind: "archive", ID: "aaaaaaaa"},
+		{Kind: "delete", ID: "aaaaaaaa"},
+		{Kind: "move", ID: "aaaaaaaa"},
+	} {
+		t.Run(op.Kind, func(t *testing.T) {
+			home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+			s := open(t, home, path)
+			const agents = "<p data-kapi-id=\"aaaaaaaa\">a, by the agent</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+			externalWrite(t, path, agents)
+			if _, _, err := s.Refresh(); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.Apply(1, op); !errors.Is(err, ErrStale) {
+				t.Fatalf("%s on a block the agent changed: err = %v, want ErrStale", op.Kind, err)
+			}
+			if got := onDisk(t, path); got != agents {
+				t.Errorf("stale op changed the file:\n%s", got)
+			}
+		})
+	}
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	for _, rev := range []uint64{0, 3} {
+		if _, _, err := s.Apply(rev, Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+			t.Errorf("rev %d: err = %v, want ErrStale", rev, err)
+		}
+	}
+	if _, _, err := s.Apply(1, Op{Kind: "undo"}); !errors.Is(err, ErrStale) {
+		t.Errorf("undo at an old rev: err = %v, want ErrStale", err)
+	}
+}
+
 func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">old</p>\n<p data-kapi-id=\"bbbbbbbb\">keep</p>\n")
 	s := open(t, home, path)
