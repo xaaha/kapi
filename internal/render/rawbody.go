@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -88,4 +89,42 @@ func MaskRawBodies(src []byte) []byte {
 		}
 	}
 	return out
+}
+
+func Unwraps(tag string) bool {
+	_, allowed := allowedTags[tag]
+	return !allowed && !dropped[tag] && !strings.HasPrefix(tag, "kapi-") && tag != "svg" && tag != "math"
+}
+
+func CountBlocks(src []byte) (int, error) {
+	root, err := load(src)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for c := root.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Namespace == "" && !dropped[c.Data] {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func Unlabeled(src []byte) (int, error) {
+	root, err := load(src)
+	if err != nil {
+		return 0, err
+	}
+	n, seen := 0, map[string]bool{}
+	for c := root.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode || c.Namespace != "" || dropped[c.Data] {
+			continue
+		}
+		id := attrVal(c, "data-kapi-id")
+		if id == "" || seen[id] {
+			n++
+		}
+		seen[id] = true
+	}
+	return n, nil
 }

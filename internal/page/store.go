@@ -84,24 +84,20 @@ func Open(home, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := normalize(raw)
-	if err != nil {
-		return nil, err
-	}
-	if !bytes.Equal(raw, src) {
-		if s.conversion, err = s.keepOriginal(raw); err != nil {
+	if s.rev > 0 {
+		if s.src, err = os.ReadFile(s.revPath(s.rev)); err != nil {
 			return nil, err
 		}
 	}
-	if s.rev == 0 {
-		err = s.commit(src, !bytes.Equal(raw, src), 1, nil)
-	} else if s.src, err = os.ReadFile(s.revPath(s.rev)); err == nil {
-		if bytes.Equal(raw, s.src) {
-			return s, nil
-		}
-		err = s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo)
-	}
+	src, text, err := s.absorb(raw, s.rev+1)
 	if err != nil {
+		return nil, err
+	}
+	if s.rev > 0 && bytes.Equal(raw, s.src) && bytes.Equal(src, raw) {
+		return s, nil
+	}
+	s.conversion = text
+	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -109,23 +105,89 @@ func Open(home, path string) (*Store, error) {
 
 func (s *Store) Path() string { return s.path }
 
-func (s *Store) OriginalPath() string { return filepath.Join(s.dir, "original.html") }
-
 func (s *Store) Conversion() string { return s.conversion }
 
-func (s *Store) keepOriginal(raw []byte) (string, error) {
-	dropped, err := render.Dropped(raw)
-	if err != nil || dropped.Empty() {
-		return "", err
+func (s *Store) rawPath(rev uint64) string {
+	return filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+}
+
+func (s *Store) absorb(raw []byte, rev uint64) ([]byte, string, error) {
+	src, ch, err := prepare(raw)
+	if err != nil || ch.splits == 0 {
+		return src, "", err
 	}
-	text := "converted to kapi format: removed " + dropped.String()
-	if _, err := os.Stat(s.OriginalPath()); err == nil {
-		return text + "; the original from the first conversion is kept", nil
+	if err := os.MkdirAll(filepath.Join(s.dir, "raw"), 0o700); err != nil {
+		return nil, "", err
 	}
-	if err := writeAtomic(s.OriginalPath(), raw); err != nil {
-		return "", err
+	if err := writeAtomic(s.rawPath(rev), raw); err != nil {
+		return nil, "", err
 	}
-	return text + "; original saved", nil
+	text := fmt.Sprintf("split %d block(s) so each has its own id", ch.splits)
+	if !ch.dropped.Empty() {
+		text += "; removed " + ch.dropped.String()
+	}
+	return src, text + "; raw input saved to " + s.rawPath(rev), nil
+}
+
+type change struct {
+	splits  int
+	dropped render.Report
+}
+
+func (c *change) rewrite(part []byte) ([]byte, error) {
+	d, err := render.Dropped(part)
+	if err != nil {
+		return nil, err
+	}
+	c.splits++
+	for name, n := range d.Elements {
+		c.dropped.Elements[name] += n
+	}
+	c.dropped.Attributes += d.Attributes
+	return render.Canonical(part)
+}
+
+func prepare(src []byte) ([]byte, change, error) {
+	ch := change{dropped: render.Report{Elements: map[string]int{}}}
+	whole := false
+	for range 4 {
+		els := parse(src)
+		need := map[int]bool{}
+		var split []int
+		for _, i := range units(els) {
+			n, err := render.CountBlocks(src[els[i].start:els[i].end])
+			if err != nil {
+				return nil, ch, err
+			}
+			switch {
+			case n > 1:
+				split = append(split, i)
+			case n == 1:
+				need[i] = true
+			}
+		}
+		if len(split) > 0 {
+			for k := len(split) - 1; k >= 0; k-- {
+				e := els[split[k]]
+				c, err := ch.rewrite(src[e.start:e.end])
+				if err != nil {
+					return nil, ch, err
+				}
+				src = splice(src, e.start, e.end, string(c))
+			}
+			continue
+		}
+		src = assignIDs(src, els, need)
+		missing, err := render.Unlabeled(src)
+		if err != nil || missing == 0 || whole {
+			return src, ch, err
+		}
+		whole = true
+		if src, err = ch.rewrite(src); err != nil {
+			return nil, ch, err
+		}
+	}
+	return src, ch, nil
 }
 
 func (s *Store) Source() ([]byte, uint64) {
@@ -143,24 +205,18 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		return Summary{}, false, err
 	}
 	old := s.src
-	src, err := normalize(raw)
+	src, text, err := s.absorb(raw, s.rev+1)
 	if err != nil {
 		return Summary{}, false, err
 	}
-	text := "edited in the file"
-	if !bytes.Equal(raw, src) {
-		conversion, err := s.keepOriginal(raw)
-		if err != nil {
-			return Summary{}, false, err
-		}
-		if conversion != "" {
-			text += "; " + conversion
-		}
+	summary := "edited in the file"
+	if text != "" {
+		summary += "; " + text
 	}
 	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
 		return Summary{}, false, err
 	}
-	return Summary{Text: text, IDs: changedBlocks(old, s.src)}, true, nil
+	return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
 }
 
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
@@ -200,7 +256,7 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
-		src, err = normalize(src)
+		src, _, err = prepare(src)
 	}
 	if err != nil {
 		return s.rev, Summary{}, err
@@ -209,14 +265,6 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		return s.rev, Summary{}, err
 	}
 	return s.rev, sum, nil
-}
-
-func normalize(raw []byte) ([]byte, error) {
-	src, err := render.Canonical(raw)
-	if err != nil {
-		return nil, err
-	}
-	return assignIDs(src), nil
 }
 
 func (s *Store) revPath(rev uint64) string {
@@ -393,6 +441,11 @@ func changedBlocks(old, cur []byte) []string {
 			}
 		}
 		return ids, outer
+	}
+	old, errOld := render.Canonical(old)
+	cur, errCur := render.Canonical(cur)
+	if errOld != nil || errCur != nil {
+		return nil
 	}
 	oldIDs, oldOuter := blocks(old)
 	curIDs, curOuter := blocks(cur)

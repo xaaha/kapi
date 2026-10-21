@@ -315,33 +315,35 @@ func TestARestartedDaemonClearsPresenceLeftBehind(t *testing.T) {
 	}
 }
 
-func TestOpenReportsALossyConversion(t *testing.T) {
+func TestOpenReportsASplit(t *testing.T) {
 	home, _, stop := serving(t)
 	defer stop()
-	raw := "<style>p{}</style><p onclick=\"x()\">hi</p><script>x()</script>\n"
+	raw := "<p>before <kapi-callout>c</kapi-callout> after<script>x()</script></p>\n"
 	path := writePage(t, raw)
 	resp := call(t, home, &Request{Op: "open", Page: path})
-	want := "converted to kapi format: removed 1 script, 1 style, 1 attribute; original saved"
-	if resp.Error != "" || resp.Notice != want {
-		t.Fatalf("open = %+v, want notice %q", resp, want)
+	prefix := "split 1 block(s) so each has its own id; removed 1 script; raw input saved to "
+	if resp.Error != "" || !strings.HasPrefix(resp.Notice, prefix) {
+		t.Fatalf("open = %+v, want a notice starting %q", resp, prefix)
 	}
-	if orig, err := os.ReadFile(resp.Original); err != nil || string(orig) != raw {
-		t.Errorf("original %q = %q, %v", resp.Original, orig, err)
+	if saved, err := os.ReadFile(strings.TrimPrefix(resp.Notice, prefix)); err != nil || string(saved) != raw {
+		t.Errorf("saved raw input = %q, %v", saved, err)
 	}
 	pending := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"})
 	found := false
 	for _, e := range pending.Events {
-		found = found || (e.Kind == "revision" && e.Text == want)
+		found = found || (e.Kind == "revision" && e.Text == resp.Notice)
 	}
 	if !found {
 		t.Errorf("no revision event with the notice in %+v", pending.Events)
 	}
-	if again := call(t, home, &Request{Op: "open", Page: path}); again.Notice != "" || again.Original != "" {
+	if again := call(t, home, &Request{Op: "open", Page: path}); again.Notice != "" {
 		t.Errorf("second open repeats the notice: %+v", again)
 	}
-
-	clean := writePage(t, "<p>clean</p>\n")
-	if resp := call(t, home, &Request{Op: "open", Page: clean}); resp.Notice != "" || resp.Original != "" {
+	clean := writePage(t, "<p>clean</p>\n<script>kept()</script>\n")
+	if resp := call(t, home, &Request{Op: "open", Page: clean}); resp.Notice != "" {
 		t.Errorf("clean page open = %+v", resp)
+	}
+	if b, _ := os.ReadFile(clean); !strings.Contains(string(b), "<script>kept()</script>") {
+		t.Errorf("open dropped a script from the file: %s", b)
 	}
 }

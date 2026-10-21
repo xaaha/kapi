@@ -40,14 +40,13 @@ type Request struct {
 }
 
 type Response struct {
-	Error    string           `json:"error,omitempty"`
-	Event    *eventlog.Event  `json:"event,omitempty"`
-	Events   []eventlog.Event `json:"events,omitempty"`
-	Readers  []ReaderStatus   `json:"readers,omitempty"`
-	Pages    []PageStatus     `json:"pages,omitempty"`
-	URL      string           `json:"url,omitempty"`
-	Notice   string           `json:"notice,omitempty"`
-	Original string           `json:"original,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Event   *eventlog.Event  `json:"event,omitempty"`
+	Events  []eventlog.Event `json:"events,omitempty"`
+	Readers []ReaderStatus   `json:"readers,omitempty"`
+	Pages   []PageStatus     `json:"pages,omitempty"`
+	URL     string           `json:"url,omitempty"`
+	Notice  string           `json:"notice,omitempty"`
 }
 
 type PageStatus struct {
@@ -387,8 +386,8 @@ func (s *Server) open(enc *json.Encoder, path string) {
 	s.mu.Lock()
 	resp := &Response{URL: s.baseURL + "p/" + page.ID(path) + "/"}
 	s.mu.Unlock()
-	if opened && st.Conversion() != "" {
-		resp.Notice, resp.Original = st.Conversion(), st.OriginalPath()
+	if opened {
+		resp.Notice = st.Conversion()
 	}
 	reply(enc, resp)
 }

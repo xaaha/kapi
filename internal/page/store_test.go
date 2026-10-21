@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -462,27 +463,6 @@ func TestEditAfterASplitKeepsEverything(t *testing.T) {
 	renderedBlocks(t, got)
 }
 
-func TestRefreshAndOpsKeepTheSourceCanonical(t *testing.T) {
-	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	s := open(t, home, path)
-	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n"+strings.ReplaceAll(hoistRepro, "aaaaaaaa", "cccccccc"))
-	if _, ok, err := s.Refresh(); err != nil || !ok {
-		t.Fatalf("Refresh = %v, %v", ok, err)
-	}
-	src, _ := s.Source()
-	if ids := renderedBlocks(t, src); len(ids) != 4 {
-		t.Errorf("after refresh blocks = %v:\n%s", ids, src)
-	}
-	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<div data-kapi-id="aaaaaaaa" onclick="x()">ok<script>alert(1)</script></div>`})
-	src, _ = s.Source()
-	if want := `<div data-kapi-id="aaaaaaaa">ok</div>`; !strings.Contains(string(src), want) {
-		t.Errorf("edit result is not canonical, want %s in:\n%s", want, src)
-	}
-	if ids := renderedBlocks(t, src); len(ids) != 4 {
-		t.Errorf("after edit blocks = %v:\n%s", ids, src)
-	}
-}
-
 func TestOpenGivesFormattingCopiesFreshIDs(t *testing.T) {
 	home, path := newPage(t, `<b data-kapi-id="aaaaaaaa">bold<div>block</b>after</div>`)
 	src, _ := open(t, home, path).Source()
@@ -510,43 +490,139 @@ func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
 }
 
 const lavishPage = "<!doctype html>\n<html><head><style>body{color:red}</style></head><body>\n" +
-	"<h1>Report</h1>\n<p onclick=\"go()\">Hello</p>\n<script>go()</script>\n</body></html>\n"
+	"<h1 class=title>Report</h1>\n<p onclick=\"go()\">Hello &amp; welcome</p>\n<script>go()</script>\n</body></html>\n"
 
-func TestOpenKeepsTheOriginalWhenConversionDrops(t *testing.T) {
+func rawSaves(t *testing.T, s *Store) []string {
+	t.Helper()
+	names, err := filepath.Glob(filepath.Join(s.dir, "raw", "*.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
+}
+
+func TestOpenOfAFullDocumentOnlyAddsIDs(t *testing.T) {
 	home, path := newPage(t, lavishPage)
 	s := open(t, home, path)
-	orig, err := os.ReadFile(s.OriginalPath())
-	if err != nil || string(orig) != lavishPage {
-		t.Fatalf("original copy = %q, %v; want the untouched file", orig, err)
+	got := onDisk(t, path)
+	if stripped := regexp.MustCompile(` data-kapi-id="[a-z2-7]{8}"`).ReplaceAllString(got, ""); stripped != lavishPage {
+		t.Fatalf("open changed more than ids:\n%s", got)
 	}
-	want := "converted to kapi format: removed 1 body, 1 doctype, 1 head, 1 html, 1 script, 1 style, 1 attribute; original saved"
-	if got := s.Conversion(); got != want {
-		t.Errorf("Conversion() = %q, want %q", got, want)
+	src, _ := s.Source()
+	if ids := renderedBlocks(t, src); len(ids) != 2 {
+		t.Errorf("want ids on the h1 and the p, got %v:\n%s", ids, got)
 	}
-	if got := onDisk(t, path); strings.Contains(got, "<script") || !strings.Contains(got, "Hello") {
-		t.Errorf("page file after conversion:\n%s", got)
-	}
-
-	externalWrite(t, path, onDisk(t, path)+"<script>again()</script>\n")
-	sum, ok, err := s.Refresh()
-	if err != nil || !ok || !strings.Contains(sum.Text, "converted to kapi format: removed 1 script") {
-		t.Fatalf("Refresh = %+v, %v, %v", sum, ok, err)
-	}
-	if orig, _ := os.ReadFile(s.OriginalPath()); string(orig) != lavishPage {
-		t.Errorf("a later conversion overwrote the original copy:\n%s", orig)
-	}
-	if again := open(t, home, path); again.Conversion() != "" {
-		t.Errorf("reopening a converted page reports %q", again.Conversion())
+	if s.Conversion() != "" || len(rawSaves(t, s)) != 0 {
+		t.Errorf("adding ids alone reported %q and saved %v", s.Conversion(), rawSaves(t, s))
 	}
 }
 
-func TestOpenOfAKapiPageKeepsNoOriginal(t *testing.T) {
-	home, path := newPage(t, "<h1>Plan</h1>\n"+hoistRepro+"\n<kapi-plan><kapi-step>one</kapi-step></kapi-plan>\n")
+func TestRefreshKeepsTheAgentsBytes(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s := open(t, home, path)
-	if _, err := os.Stat(s.OriginalPath()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("ids and splits alone made an original copy: %v", err)
+	written := "<p data-kapi-id='q0000001' class=x>Fish &amp; chips &copy;</p>\n<script>later()</script>\n<p data-kapi-id='q0000002'>b</p>\n"
+	externalWrite(t, path, written)
+	if _, ok, err := s.Refresh(); err != nil || !ok {
+		t.Fatalf("Refresh = %v, %v", ok, err)
 	}
-	if s.Conversion() != "" {
-		t.Errorf("Conversion() = %q, want empty", s.Conversion())
+	if got := onDisk(t, path); got != written {
+		t.Errorf("refresh rewrote the file:\n%s", got)
+	}
+	src, rev := s.Source()
+	if rev != 2 || string(src) != written {
+		t.Errorf("Source = rev %d %q", rev, src)
+	}
+	if out, _ := render.Render(src); strings.Contains(string(out), "later()") {
+		t.Errorf("served output kept the script: %s", out)
+	}
+}
+
+func TestSplitsSaveTheRawInputEveryTime(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	s := open(t, home, path)
+	if saves := rawSaves(t, s); len(saves) != 1 || !strings.Contains(s.Conversion(), "raw input saved to "+saves[0]) {
+		t.Fatalf("saves %v, conversion %q", saves, s.Conversion())
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.dir, "raw", "1.html")); string(b) != hoistRepro {
+		t.Errorf("raw/1.html = %q, want the untouched input", b)
+	}
+	for i, extra := range []string{"<p>x <kapi-code>c</kapi-code> y<script>s()</script></p>", "<b>bold<div>block</b>after</div>"} {
+		src, _ := s.Source()
+		input := string(src) + "\n" + extra + "\n"
+		externalWrite(t, path, input)
+		sum, ok, err := s.Refresh()
+		if err != nil || !ok {
+			t.Fatalf("Refresh = %v, %v", ok, err)
+		}
+		_, rev := s.Source()
+		saved := filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+		if b, err := os.ReadFile(saved); err != nil || string(b) != input {
+			t.Errorf("edit %d: %s = %q, %v; want the input", i, saved, b, err)
+		}
+		if !strings.Contains(sum.Text, "raw input saved to "+saved) {
+			t.Errorf("edit %d: summary %q does not name %s", i, sum.Text, saved)
+		}
+		got, _ := s.Source()
+		renderedBlocks(t, got)
+	}
+	if len(rawSaves(t, s)) != 3 {
+		t.Errorf("raw saves = %v, want one per split write", rawSaves(t, s))
+	}
+}
+
+func TestOpenProcessesAPageFromBeforeTheStore(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	dir := filepath.Join(home, "pages", ID(path))
+	if err := os.MkdirAll(filepath.Join(dir, "revs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "revs", "1.html"), []byte(hoistRepro), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"rev":1,"undo":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := open(t, home, path)
+	src, rev := s.Source()
+	if rev != 2 || !strings.Contains(s.Conversion(), "split 1 block") {
+		t.Errorf("rev %d, conversion %q", rev, s.Conversion())
+	}
+	renderedBlocks(t, src)
+}
+
+func TestCodeBodiesStayUntouchedInTheFile(t *testing.T) {
+	body := "\nstd::vector<int> v;\n<td data-kapi-id=\"cellcell\">x</td> <kapi-callout>no</kapi-callout>\n"
+	home, path := newPage(t, `<kapi-code lang="cpp">`+body+`</kapi-code>`+"\n")
+	open(t, home, path)
+	got := onDisk(t, path)
+	if !strings.Contains(got, ">"+body+"</kapi-code>") || strings.Count(got, "data-kapi-id") != 2 {
+		t.Errorf("file after open:\n%s", got)
+	}
+	if _, err := Outer([]byte(got), "cellcell"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an id inside a code body is addressable")
+	}
+}
+
+func TestOpsChangeOnlyTheValueTheyTouch(t *testing.T) {
+	src := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=done>x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "archive", ID: "aaaaaaaa"})
+	want := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=\"archived\">x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
+	if got := onDisk(t, path); got != want {
+		t.Errorf("after archive:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestOpenLabelsBlocksTheParserInvents(t *testing.T) {
+	raw := `<p data-kapi-id="aaaaaaaa">a<div data-kapi-id="bbbbbbbb">b</div></p>` + "\n"
+	home, path := newPage(t, raw)
+	s := open(t, home, path)
+	src, _ := s.Source()
+	if ids := renderedBlocks(t, src); len(ids) != 3 {
+		t.Errorf("blocks = %v:\n%s", ids, src)
+	}
+	if !strings.Contains(s.Conversion(), "raw input saved to") {
+		t.Errorf("conversion = %q", s.Conversion())
 	}
 }

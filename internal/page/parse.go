@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+
+	"github.com/xaaha/kapi/internal/render"
 )
 
 const idAttr = "data-kapi-id"
@@ -33,10 +35,6 @@ func (e *element) attr(key string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func (e *element) needsID() bool {
-	return e.parent < 0 || strings.HasPrefix(e.name, "kapi-")
 }
 
 func (e *element) contains(o *element) bool {
@@ -63,7 +61,7 @@ func parse(src []byte) []element {
 	closeAt := func(i, closeStart, end int) {
 		els[i].closeStart, els[i].end = closeStart, end
 	}
-	z := html.NewTokenizer(bytes.NewReader(src))
+	z := html.NewTokenizer(bytes.NewReader(render.MaskRawBodies(src)))
 	off := 0
 	for {
 		tt := z.Next()
@@ -156,8 +154,28 @@ func newID(taken map[string]bool) string {
 	}
 }
 
-func assignIDs(src []byte) []byte {
-	els := parse(src)
+func transparent(name string) bool {
+	return name == "html" || name == "head" || name == "body" || render.Unwraps(name)
+}
+
+func units(els []element) []int {
+	var out []int
+	for i := range els {
+		if transparent(els[i].name) {
+			continue
+		}
+		top := true
+		for p := els[i].parent; p >= 0 && top; p = els[p].parent {
+			top = transparent(els[p].name)
+		}
+		if top {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func assignIDs(src []byte, els []element, need map[int]bool) []byte {
 	taken := map[string]bool{}
 	first := map[string]int{}
 	for i, e := range els {
@@ -168,7 +186,7 @@ func assignIDs(src []byte) []byte {
 	}
 	for i := len(els) - 1; i >= 0; i-- {
 		e := &els[i]
-		if e.needsID() && (e.id == "" || first[e.id] != i) {
+		if (need[i] || strings.HasPrefix(e.name, "kapi-")) && (e.id == "" || first[e.id] != i) {
 			src = setAttr(src, e, idAttr, newID(taken))
 		}
 	}
@@ -176,25 +194,71 @@ func assignIDs(src []byte) []byte {
 }
 
 func setAttr(src []byte, e *element, key, val string) []byte {
-	if _, ok := e.attr(key); !ok {
-		at := e.start + 1
-		for at < e.tagEnd && !strings.ContainsRune(" \t\n\r\f/>", rune(src[at])) {
-			at++
+	quoted := `"` + html.EscapeString(val) + `"`
+	if from, to, ok := attrValue(src[e.start:e.tagEnd], key); ok {
+		if from == to {
+			quoted = "=" + quoted
 		}
-		return splice(src, at, at, ` `+key+`="`+html.EscapeString(val)+`"`)
+		return splice(src, e.start+from, e.start+to, quoted)
 	}
-	attrs := make([]html.Attribute, len(e.attrs))
-	copy(attrs, e.attrs)
-	for i := range attrs {
-		if attrs[i].Namespace == "" && attrs[i].Key == key {
-			attrs[i].Val = val
+	at := e.start + 1
+	for at < e.tagEnd && !strings.ContainsRune(" \t\n\r\f/>", rune(src[at])) {
+		at++
+	}
+	return splice(src, at, at, " "+key+"="+quoted)
+}
+
+func attrValue(tag []byte, key string) (int, int, bool) {
+	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
+	i := 1
+	for i < len(tag) && !isSpace(tag[i]) && tag[i] != '/' && tag[i] != '>' {
+		i++
+	}
+	for i < len(tag) {
+		for i < len(tag) && (isSpace(tag[i]) || tag[i] == '/') {
+			i++
+		}
+		if i >= len(tag) || tag[i] == '>' {
+			return 0, 0, false
+		}
+		nameStart := i
+		for i < len(tag) && !isSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
+			i++
+		}
+		name := strings.ToLower(string(tag[nameStart:i]))
+		for i < len(tag) && isSpace(tag[i]) {
+			i++
+		}
+		if i >= len(tag) || tag[i] != '=' {
+			if name == key {
+				return i, i, true
+			}
+			continue
+		}
+		i++
+		for i < len(tag) && isSpace(tag[i]) {
+			i++
+		}
+		valStart := i
+		if i < len(tag) && (tag[i] == '"' || tag[i] == '\'') {
+			q := tag[i]
+			i++
+			for i < len(tag) && tag[i] != q {
+				i++
+			}
+			if i < len(tag) {
+				i++
+			}
+		} else {
+			for i < len(tag) && !isSpace(tag[i]) && tag[i] != '>' {
+				i++
+			}
+		}
+		if name == key {
+			return valStart, i, true
 		}
 	}
-	tt := html.StartTagToken
-	if e.selfClosing {
-		tt = html.SelfClosingTagToken
-	}
-	return splice(src, e.start, e.tagEnd, html.Token{Type: tt, Data: e.name, Attr: attrs}.String())
+	return 0, 0, false
 }
 
 func splice(src []byte, from, to int, with string) []byte {

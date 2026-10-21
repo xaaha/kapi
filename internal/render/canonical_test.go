@@ -277,3 +277,39 @@ func textContent(t *testing.T, out string) string {
 	}
 	return b.String()
 }
+
+func TestCountBlocksAndUnwraps(t *testing.T) {
+	cases := map[string]int{
+		`<p>one</p>`: 1,
+		`<p>a <kapi-callout>c</kapi-callout> b</p>`: 3,
+		`<script>x</script>`:                        0,
+		`<custom-tag><p>a</p><p>b</p></custom-tag>`: 2,
+		`<b>bold<div>block</b>after</div>`:          2,
+		"text only":                                 0,
+	}
+	for src, want := range cases {
+		if got, err := CountBlocks([]byte(src)); err != nil || got != want {
+			t.Errorf("CountBlocks(%q) = %d, %v; want %d", src, got, err, want)
+		}
+	}
+	for tag, want := range map[string]bool{"custom-tag": true, "font": true, "p": false, "script": false, "svg": false, "kapi-x": false, "table": false} {
+		if Unwraps(tag) != want {
+			t.Errorf("Unwraps(%q) = %v", tag, !want)
+		}
+	}
+}
+
+func TestUnlabeledCountsBlocksWithoutAnID(t *testing.T) {
+	cases := map[string]int{
+		`<p data-kapi-id="a">x</p><p data-kapi-id="b">y</p>`:                          0,
+		`<p data-kapi-id="a">x <kapi-callout data-kapi-id="b">c</kapi-callout> y</p>`: 1,
+		`<p>x</p><script>s()</script>`:                                                1,
+		`<p data-kapi-id="a">x</p><p data-kapi-id="a">copy</p>`:                       1,
+		`<p data-kapi-id="a">a<div data-kapi-id="b">b</div></p>`:                      1,
+	}
+	for src, want := range cases {
+		if got, err := Unlabeled([]byte(src)); err != nil || got != want {
+			t.Errorf("Unlabeled(%q) = %d, %v; want %d", src, got, err, want)
+		}
+	}
+}
