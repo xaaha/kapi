@@ -280,6 +280,20 @@ test("refetches other changed blocks while one is being edited", async () => {
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
 
+test("a whole-page refresh waits until the edit ends", async () => {
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  const loads = pageLoads();
+  server.push({ kind: "revision", target: "", text: "file changed" });
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(pageLoads(), loads);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  await page.key("Escape");
+  await until(() => pageLoads() === loads + 1);
+});
+
 test("edits a preset block as source in a textarea", async () => {
   await select("ffffffff");
   await click('.kapi-bar [data-action="edit"]');
