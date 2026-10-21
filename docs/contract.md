@@ -51,10 +51,12 @@ rendered preset. Prose elements render to the same HTML as their source.
 ### Editing
 
 Prose elements (no `data-kapi-preset`) are edited in place and saved as an
-`edit` op with the element's outer HTML. Preset elements are edited as source:
-the browser fetches `GET /p/{id}/source/{block}`, shows it in a textarea, and
-saves the textarea as the `edit` op's `HTML`. Rendered preset HTML is never
-sent back.
+`edit` op with the element's outer HTML. Preset elements, and prose that holds
+a preset, are edited as source: the browser fetches
+`GET /p/{id}/source/{block}?part=inner`, shows only the element's body in a
+textarea, and saves the textarea as the `edit` op's `Inner`. The element's
+opening tag, its attributes and its closing tag are never shown and never
+change. Rendered preset HTML is never sent back.
 
 ## Go interfaces
 
@@ -75,6 +77,7 @@ type Op struct {
     Kind string // edit, delete, done, archive, move, undo
     ID   string
     HTML string // edit: new outer HTML of the element
+    Inner *string // edit, instead of HTML: new source between the element's start and end tags
     Before string // move: id to insert before, "" means end
 }
 type Summary struct{ Text string; IDs []string } // "edited #k3f9a2bq" etc., goes into the event log
@@ -85,6 +88,11 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 `edit` follows the same rule: it fails with `ErrDanglingLinks` (422, naming
 the ids) when it adds a link to a missing id or removes an element that other
 elements link to.
+An `edit` with `inner` keeps the element's start tag and end tag byte for byte
+and replaces only the source between them. It follows every rule an `edit`
+with `html` does, and it fails with `ErrInnerEscapes` (422) when the new body
+would close the element or leave it unclosed. An op with both `html` and
+`inner` is 422.
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 
@@ -138,7 +146,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 |---|---|---|
 | `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
-| `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev` |
+| `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |

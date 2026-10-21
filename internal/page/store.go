@@ -27,13 +27,15 @@ var (
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
+	ErrInnerEscapes  = errors.New("the inner source closes the element early; edit only what goes between its tags")
 )
 
 type Op struct {
-	Kind   string `json:"kind"`
-	ID     string `json:"id"`
-	HTML   string `json:"html,omitempty"`
-	Before string `json:"before,omitempty"`
+	Kind   string  `json:"kind"`
+	ID     string  `json:"id"`
+	HTML   string  `json:"html,omitempty"`
+	Inner  *string `json:"inner,omitempty"`
+	Before string  `json:"before,omitempty"`
 }
 
 type Summary struct {
@@ -449,7 +451,14 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 	one := []string{op.ID}
 	switch op.Kind {
 	case "edit":
-		out, err := edit(src, els, e, op.HTML)
+		with := op.HTML
+		if op.Inner != nil {
+			if op.HTML != "" {
+				return nil, Summary{}, errors.New("an edit takes html or inner, not both")
+			}
+			with = string(src[e.start:e.tagEnd]) + *op.Inner + string(src[e.closeStart:e.end])
+		}
+		out, err := edit(src, els, e, with, op.Inner != nil)
 		return out, Summary{Text: "edited", IDs: one}, err
 	case "delete":
 		for i := range els {
@@ -478,10 +487,16 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 	return nil, Summary{}, fmt.Errorf("unknown op kind %q", op.Kind)
 }
 
-func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
+func edit(src []byte, els []element, e *element, with string, inner bool) ([]byte, error) {
 	frag, root, err := fragment(with)
+	if err != nil && inner {
+		return nil, ErrInnerEscapes
+	}
 	if err != nil {
 		return nil, err
+	}
+	if inner && root.closeStart != len(frag)-(e.end-e.closeStart) {
+		return nil, ErrInnerEscapes
 	}
 	if !strings.HasPrefix(root.name, "kapi-") {
 		for _, f := range parse(frag) {

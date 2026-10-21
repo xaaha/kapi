@@ -388,6 +388,37 @@ func TestSourceIsTheElementsOuterHTMLAsText(t *testing.T) {
 	}
 }
 
+func TestInnerSourceIsTheBodyByteForByte(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">a <em>b</em></kapi-callout>\n<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n}</kapi-code>\n")
+	for id, want := range map[string]string{"aaaaaaaa": "a <em>b</em>", "bbbbbbbb": "if a < b && c {\n}"} {
+		resp := s.get("/p/" + s.id + "/source/" + id + "?part=inner")
+		if resp.code != http.StatusOK || resp.header.Get("Kapi-Rev") != "1" || !strings.HasPrefix(resp.header.Get("Content-Type"), "text/plain") {
+			t.Fatalf("inner source: %d, Kapi-Rev %q, Content-Type %q", resp.code, resp.header.Get("Kapi-Rev"), resp.header.Get("Content-Type"))
+		}
+		if resp.body != want {
+			t.Errorf("inner source of #%s = %q, want %q", id, resp.body, want)
+		}
+	}
+	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa?part=outer"); resp.code != http.StatusBadRequest {
+		t.Errorf("unknown part: %d", resp.code)
+	}
+}
+
+func TestAnInnerEditKeepsTheElementsTags(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">old</kapi-callout>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"new <strong>text</strong>"}}`)
+	if code != http.StatusOK || out["rev"] != 2.0 {
+		t.Fatalf("inner edit: %d %v", code, out)
+	}
+	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa"); resp.body != `<kapi-callout data-kapi-id="aaaaaaaa" kind="note">new <strong>text</strong></kapi-callout>` {
+		t.Errorf("source after inner edit = %q", resp.body)
+	}
+	code, out = s.post("/ops", `{"rev":2,"op":{"kind":"edit","id":"aaaaaaaa","inner":"x</kapi-callout><p>y</p><kapi-callout>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "closes the element early") {
+		t.Errorf("escaping inner edit: %d %v", code, out)
+	}
+}
+
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`)

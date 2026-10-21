@@ -151,6 +151,7 @@ test("edits a block in place and posts its new outer HTML", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  assert.equal(await page.eval(`document.activeElement.innerText`), "Move the session store to the new cluster in two steps.");
   await page.type(" Then verify.");
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
@@ -219,6 +220,7 @@ test("ignores Escape and a second save while a save is in flight", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  assert.equal(await page.eval(`document.activeElement.innerText`), "Move the session store to the new cluster in two steps.");
   await page.type(" Then verify.");
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
@@ -308,7 +310,7 @@ test("a stale source save keeps the source text", async () => {
   await select("ffffffff");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
-  const mine = '<kapi-callout data-kapi-id="ffffffff" kind="note">Mine.</kapi-callout>';
+  const mine = "Mine.";
   await page.eval(`document.activeElement.value = ${JSON.stringify(mine)}`);
   server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
   server.push({ kind: "revision", target: "cccccccc", text: "edited" });
@@ -351,17 +353,17 @@ test("edits a preset block as source in a textarea", async () => {
   await select("ffffffff");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
-  assert.equal(requests("GET", "/source/ffffffff").length, 1);
-  assert.equal(await page.eval(`document.activeElement.value`), server.state.blocks.find((b) => b.id === "ffffffff").source);
+  assert.deepEqual(requests("GET", "/source/ffffffff").map((r) => r.search), ["?part=inner"]);
+  assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.");
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
   assert.equal(await page.eval(`getComputedStyle(document.activeElement).fontFamily.includes("mono")`), true);
 
-  const next = '<kapi-callout data-kapi-id="ffffffff" kind="warning">Copy at night.</kapi-callout>';
-  await page.eval(`document.activeElement.value = ${JSON.stringify(next)}`);
+  await page.eval(`document.activeElement.value = "Copy at night."`);
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
-  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "ffffffff", html: next } });
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "ffffffff", inner: "Copy at night." } });
   await until(async () => (await text("ffffffff")) === "Copy at night.");
+  assert.equal(server.state.blocks.find((b) => b.id === "ffffffff").source, '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy at night.</kapi-callout>');
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
 });
 
@@ -479,7 +481,8 @@ test("edits prose that contains a preset as source", async () => {
   await select("hhhhhhhh");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
-  assert.equal(requests("GET", "/source/hhhhhhhh").length, 1);
+  assert.deepEqual(requests("GET", "/source/hhhhhhhh").map((r) => r.search), ["?part=inner"]);
+  assert.equal(await page.eval(`document.activeElement.value`), '<p>Before the cutover:</p><kapi-callout kind="note">Freeze writes.</kapi-callout>');
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
 });
 

@@ -73,6 +73,8 @@ const renderCallout = (src) =>
     '<aside$1 data-kapi-preset="kapi-callout" class="callout"><p>$2</p></aside>',
   );
 
+const tags = (src) => src.match(/^(<[^>]*>)([\s\S]*)(<\/[\w-]+>)$/);
+
 const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderCallout(b.source) } : { ...b });
 
 export async function startFakeServer({ blocks = SAMPLE } = {}) {
@@ -110,7 +112,14 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (linked) return { status: 422, body: { error: `#${op.id} is linked from #${linked.id}` } };
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
-    if (op.kind === "edit" && state.blocks[i].source) {
+    if (op.kind === "edit" && "inner" in op) {
+      const b = state.blocks[i];
+      const [, open, , close] = tags(b.source ?? b.html);
+      if (b.source) {
+        b.source = open + op.inner + close;
+        b.html = renderCallout(b.source);
+      } else b.html = open + op.inner + close;
+    } else if (op.kind === "edit" && state.blocks[i].source) {
       state.blocks[i].source = op.html;
       state.blocks[i].html = renderCallout(op.html);
     } else if (op.kind === "edit") state.blocks[i].html = op.html;
@@ -145,7 +154,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     let body = "";
     for await (const chunk of req) body += chunk;
     const parsed = body ? JSON.parse(body) : null;
-    state.requests.push({ method: req.method, path: url.pathname, headers: req.headers, body: parsed });
+    state.requests.push({ method: req.method, path: url.pathname, search: url.search, headers: req.headers, body: parsed });
 
     const prefix = `/${TOKEN}/`;
     if (!url.pathname.startsWith(prefix)) return json(res, 403, { error: "bad token" });
@@ -180,7 +189,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));
       if (!b) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Kapi-Rev": String(state.rev) });
-      return res.end(b.source ?? b.html);
+      const src = b.source ?? b.html;
+      return res.end(url.searchParams.get("part") === "inner" ? tags(src)[2] : src);
     }
     if (req.method === "GET" && rest === "events") {
       if (state.refuseEvents) {

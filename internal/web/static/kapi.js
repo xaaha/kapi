@@ -226,7 +226,7 @@
     const el = selected;
     notice.hidden = true;
     if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) {
-      editing = { el, rev: Number(main.dataset.rev), original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
+      editing = { el, rev: Number(main.dataset.rev), original: el.innerHTML, field: "html", initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
       el.contentEditable = "true";
       el.focus();
       getSelection().selectAllChildren(el);
@@ -236,7 +236,7 @@
     busy = true;
     renderBar();
     let rev = Number(main.dataset.rev);
-    const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}`)
+    const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}?part=inner`)
       .then((res) => {
         if (!res.ok) return null;
         rev = Number(res.headers.get("Kapi-Rev") || rev);
@@ -255,7 +255,7 @@
     box.style.marginBottom = style.marginBottom;
     el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
-    editing = { el, area, box, rev, initial: src, read: () => area.value };
+    editing = { el, area, box, rev, field: "inner", initial: src, read: () => area.value };
     area.focus();
     renderBar();
   }
@@ -288,10 +288,10 @@
   async function saveEdit() {
     if (!editing || busy) return;
     const session = editing;
-    const html = session.read();
-    if (html === session.initial) return endEdit(false);
+    const text = session.read();
+    if (text === session.initial) return endEdit(false);
     const id = idOf(session.el);
-    const res = await op("edit", { id, html }, { rev: session.rev, stale: STALE_EDIT });
+    const res = await op("edit", { id, [session.field]: text }, { rev: session.rev, stale: STALE_EDIT });
     if (editing !== session) return;
     if (res?.ok) {
       endEdit(false);

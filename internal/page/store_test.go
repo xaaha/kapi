@@ -994,3 +994,92 @@ func TestAValuelessIDGetsAWellFormedValue(t *testing.T) {
 		t.Errorf("file = %q", got)
 	}
 }
+
+func ptr(s string) *string { return &s }
+
+const innerPage = "<kapi-callout data-kapi-id=\"aaaaaaaa\"  kind='warning'>old <em>body</em></kapi-callout>\n" +
+	"<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n</kapi-code>\n" +
+	"<kapi-diff data-kapi-id=\"cccccccc\">-<p>\n+</kapi-callout>\n</kapi-diff>\n" +
+	"<div data-kapi-id=\"dddddddd\"><p>see <a href=\"#aaaaaaaa\">it</a></p></div>\n" +
+	"<table data-kapi-id=\"eeeeeeee\"><tr><td>x</td></tr></table>\n"
+
+func TestInnerIsTheBodyByteForByte(t *testing.T) {
+	for id, want := range map[string]string{
+		"aaaaaaaa": "old <em>body</em>",
+		"bbbbbbbb": "if a < b && c {\n",
+		"cccccccc": "-<p>\n+</kapi-callout>\n",
+		"dddddddd": `<p>see <a href="#aaaaaaaa">it</a></p>`,
+	} {
+		got, err := Inner([]byte(innerPage), id)
+		if err != nil || string(got) != want {
+			t.Errorf("Inner(#%s) = %q, %v; want %q", id, got, err, want)
+		}
+	}
+	if _, err := Inner([]byte(innerPage), "zzzzzzzz"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAnInnerEditKeepsTheTagsAndReplacesOnlyTheBody(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("new <strong>text</strong>")})
+	mustApply(t, s, Op{Kind: "edit", ID: "bbbbbbbb", Inner: ptr("if x < y {\n\treturn\n}\n")})
+	want := strings.Replace(innerPage, "old <em>body</em>", "new <strong>text</strong>", 1)
+	want = strings.Replace(want, "if a < b && c {\n", "if x < y {\n\treturn\n}\n", 1)
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file after inner edits:\n%s\nwant:\n%s", got, want)
+	}
+	if sum.Text != "edited" || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
+		t.Errorf("summary = %+v", sum)
+	}
+}
+
+func TestAnInnerEditFollowsTheEditRules(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		op    Op
+		check func(error) bool
+	}{
+		{"closes the element early", Op{ID: "aaaaaaaa", Inner: ptr(`x</kapi-callout><kapi-callout kind="note">y`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"adds a stray end tag", Op{ID: "aaaaaaaa", Inner: ptr(`x</kapi-callout>`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"leaves a same-named element open", Op{ID: "aaaaaaaa", Inner: ptr(`<kapi-callout kind="note">y`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"closes a raw body early", Op{ID: "bbbbbbbb", Inner: ptr("x</kapi-code><p>y</p><kapi-code>")}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"links to a missing id", Op{ID: "aaaaaaaa", Inner: ptr(`<a href="#zzzzzzzz">z</a>`)}, func(err error) bool { return errors.Is(err, ErrDanglingLinks) }},
+		{"puts a preset in prose", Op{ID: "dddddddd", Inner: ptr(`<kapi-callout kind="note">y</kapi-callout>`)}, func(err error) bool { return errors.Is(err, ErrPresetInProse) }},
+		{"carries html too", Op{ID: "aaaaaaaa", HTML: "<p>x</p>", Inner: ptr("y")}, func(err error) bool { return err != nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, path := newPage(t, innerPage)
+			s := open(t, home, path)
+			tc.op.Kind = "edit"
+			if _, _, err := s.Apply(1, tc.op); !tc.check(err) {
+				t.Fatalf("err = %v", err)
+			}
+			if got := onDisk(t, path); got != innerPage {
+				t.Errorf("refused edit changed the file:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestAnInnerEditAtAnOldRevChecksOnlyItsBlock(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "dddddddd"})
+	if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("fresh")}); err != nil {
+		t.Fatalf("inner edit of an unchanged block at an old rev: %v", err)
+	}
+	if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("again")}); !errors.Is(err, ErrStale) {
+		t.Errorf("inner edit of a changed block at an old rev: err = %v, want ErrStale", err)
+	}
+}
+
+func TestAnInnerEditThatNeedsASplitSavesTheRawInput(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, Op{Kind: "edit", ID: "eeeeeeee", Inner: ptr("<p>stray</p>")})
+	if !strings.Contains(sum.Text, "raw input saved to") || len(rawSaves(t, s)) != 1 {
+		t.Errorf("summary %q, raw saves %v", sum.Text, rawSaves(t, s))
+	}
+}

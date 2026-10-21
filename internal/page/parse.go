@@ -133,6 +133,15 @@ func Outer(src []byte, id string) ([]byte, error) {
 	return src[e.start:e.end], nil
 }
 
+// Inner returns the source between the start and end tags of the element with data-kapi-id id.
+func Inner(src []byte, id string) ([]byte, error) {
+	e, err := find(parse(src), id)
+	if err != nil {
+		return nil, err
+	}
+	return src[e.tagEnd:e.closeStart], nil
+}
+
 // FormID returns the data-kapi-id of the kapi-form named name.
 func FormID(src []byte, name string) (string, error) {
 	for _, e := range parse(src) {

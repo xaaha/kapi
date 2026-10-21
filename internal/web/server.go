@@ -250,8 +250,17 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 }
 
 func (s *Server) handleSource(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
+	part := page.Outer
+	switch r.URL.Query().Get("part") {
+	case "":
+	case "inner":
+		part = page.Inner
+	default:
+		http.Error(w, `part must be "inner" or left out`, http.StatusBadRequest)
+		return
+	}
 	src, rev := st.Source()
-	out, err := page.Outer(src, r.PathValue("block"))
+	out, err := part(src, r.PathValue("block"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
