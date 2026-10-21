@@ -383,3 +383,16 @@ test("edits prose that contains a preset as source", async () => {
   assert.equal(requests("GET", "/source/hhhhhhhh").length, 1);
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
 });
+
+test("forms whose names shadow DOM properties still select and submit", async () => {
+  await page.eval(`document.querySelector('form[name="submit"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="iiiiiiii"]').hasAttribute("data-kapi-selected")`);
+  await click('input[name="action"][value="ship"]');
+  await page.eval(`document.querySelector('input[name="getAttribute"]').value = "ready"`);
+  await click('form[name="submit"] button[type="submit"]');
+  await until(() => requests("POST", "/answers").length === 1);
+  assert.deepEqual(requests("POST", "/answers")[0].body, {
+    form: "submit",
+    values: { action: ["ship"], getAttribute: ["ready"], closest: ["x"] },
+  });
+});

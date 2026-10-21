@@ -53,6 +53,15 @@ export const SAMPLE = [
       '<aside data-kapi-preset="callout" class="callout"><p>Freeze writes.</p></aside></div>',
   },
   {
+    id: "iiiiiiii",
+    html:
+      '<div class="kapi-form" data-kapi-preset="form" data-kapi-id="iiiiiiii"><form name="submit">' +
+      '<label><input type="radio" name="action" value="ship"> Ship</label>' +
+      '<label>Why <input type="text" name="getAttribute"></label>' +
+      '<input type="hidden" name="closest" value="x">' +
+      '<button type="submit">Send</button></form></div>',
+  },
+  {
     id: "ffffffff",
     source: '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window.</kapi-callout>',
   },

@@ -66,6 +66,7 @@
 
   if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
 
+  const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
   const peers = (el) => [...el.parentElement.children].filter((c) => c.hasAttribute("data-kapi-id"));
@@ -408,7 +409,7 @@
     for (const [k, v] of new FormData(form)) {
       if (typeof v === "string") (values[k] ||= []).push(v);
     }
-    const name = form.getAttribute("name") || form.closest("kapi-form,[data-kapi-form]")?.getAttribute("name") || "";
+    const name = Element.prototype.getAttribute.call(form, "name") || closest(form, "kapi-form,[data-kapi-form]")?.getAttribute("name") || "";
     const res = await request("/answers", { form: name, values });
     if (!res) return;
     if (res.ok) say("Answer sent to the agent.");
@@ -449,14 +450,14 @@
 
   main.addEventListener("click", (e) => {
     if (editing) return;
-    const th = e.target.closest('[data-kapi-sort="on"] th');
+    const th = closest(e.target, '[data-kapi-sort="on"] th');
     if (th && main.contains(th)) sortTable(th);
-    const el = e.target.closest("[data-kapi-id]");
+    const el = closest(e.target, "[data-kapi-id]");
     if (el && main.contains(el)) select(el);
   });
 
   main.addEventListener("dblclick", (e) => {
-    if (!editing && e.target.closest("[data-kapi-id]") === selected) startEdit();
+    if (!editing && closest(e.target, "[data-kapi-id]") === selected) startEdit();
   });
 
   main.addEventListener("submit", (e) => {
