@@ -288,3 +288,26 @@ func TestReviewH4MalformedManagedEntriesAreRepaired(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewH6OnlyKapiCommandsCountAsManaged(t *testing.T) {
+	o := opts(t)
+	claude, _, _, _, copilot := o.paths()
+	others := []string{"/x/kapi-tools/run.sh", "kapi-other", "mykapi", "kapi watch plan.html"}
+	var claudeEntries, copilotEntries []string
+	for _, c := range others {
+		claudeEntries = append(claudeEntries, `{"type": "command", "command": "`+c+`"}`)
+		copilotEntries = append(copilotEntries, `{"type": "command", "bash": "`+c+`"}`)
+	}
+	write(t, claude, `{"hooks": {"SessionStart": [{"matcher": "", "hooks": [`+strings.Join(claudeEntries, ",")+`]}]}}`)
+	write(t, copilot, `{"version": 1, "hooks": {"sessionStart": [`+strings.Join(copilotEntries, ",")+`]}}`)
+	Install(o)
+	Remove(o)
+	for _, p := range []string{claude, copilot} {
+		got := read(t, p)
+		for _, c := range others {
+			if !strings.Contains(got, `"`+c+`"`) {
+				t.Errorf("%s lost %q:\n%s", p, c, got)
+			}
+		}
+	}
+}

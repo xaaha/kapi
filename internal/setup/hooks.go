@@ -218,11 +218,16 @@ func stringField(raw json.RawMessage, keys ...string) []string {
 
 func isManaged(raw json.RawMessage, keys ...string) bool {
 	for _, s := range stringField(raw, keys...) {
-		if strings.Contains(s, Marker) {
+		if isKapiCommand(s) {
 			return true
 		}
 	}
 	return false
+}
+
+func isKapiCommand(s string) bool {
+	s = strings.TrimSuffix(strings.TrimSpace(s), " hook-context")
+	return filepath.Base(s) == Marker
 }
 
 func withoutManaged(items []json.RawMessage, keys ...string) []json.RawMessage {
