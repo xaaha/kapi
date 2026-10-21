@@ -66,8 +66,8 @@ func Install(o Options) []Result {
 			return sessionStartUpdate(b, o.Command, o.timeout())
 		}),
 		rewriteFile("Codex features", codexConfig, func(b []byte) ([]byte, bool, error) {
-			s, changed := codexConfigUpdate(string(b))
-			return []byte(s), changed, nil
+			s, changed, err := codexConfigUpdate(string(b))
+			return []byte(s), changed, err
 		}),
 		rewriteFile("OpenCode", openCode, func(b []byte) ([]byte, bool, error) {
 			if len(b) > 0 && !bytes.Contains(b, []byte(openCodeManagedPrefix)) {
@@ -498,22 +498,31 @@ func copilotRemoval(content []byte) ([]byte, bool, error) {
 }
 
 var (
-	tomlSection = regexp.MustCompile(`^\s*(\[{1,2})([^\]]+)(\]{1,2})\s*(?:#.*)?$`)
-	tomlHooks   = regexp.MustCompile(`^\s*hooks\s*=\s*(true|false)\s*(?:#.*)?$`)
+	tomlSection             = regexp.MustCompile(`^\s*(\[{1,2})([^\]]+)(\]{1,2})\s*(?:#.*)?$`)
+	tomlHooks               = regexp.MustCompile(`^\s*hooks\s*=\s*(true|false)\s*(?:#.*)?$`)
+	tomlQuotedFeaturesTable = regexp.MustCompile(`^\s*\[\s*["']features["']\s*\]`)
+	tomlFeaturesKey         = regexp.MustCompile(`^\s*["']?features["']?\s*[.=]`)
+	errCodexFeatures        = errors.New("config.toml defines features in a form kapi cannot edit; add hooks = true under [features] yourself")
 )
 
 // codexConfigUpdate turns on Codex's [features].hooks flag, which Codex needs
 // before it runs any hook.
-func codexConfigUpdate(content string) (string, bool) {
+func codexConfigUpdate(content string) (string, bool, error) {
 	nl := "\n"
 	if strings.Contains(content, "\r\n") {
 		nl = "\r\n"
 	}
 	if strings.TrimSpace(content) == "" {
-		return "[features]" + nl + "hooks = true" + nl, true
+		return "[features]" + nl + "hooks = true" + nl, true, nil
 	}
 	lines := regexp.MustCompile(`\r?\n`).Split(content, -1)
-	inFeatures, sawFeatures := false, false
+	inFeatures, sawFeatures, sawTable := false, false, false
+	for _, line := range lines {
+		if tomlQuotedFeaturesTable.MatchString(line) || (!sawTable && tomlFeaturesKey.MatchString(line)) {
+			return content, false, errCodexFeatures
+		}
+		sawTable = sawTable || tomlSection.MatchString(line)
+	}
 	for i, line := range lines {
 		if m := tomlSection.FindStringSubmatch(line); m != nil {
 			if (m[1] != "[" || m[3] != "]") && (m[1] != "[[" || m[3] != "]]") {
@@ -521,7 +530,7 @@ func codexConfigUpdate(content string) (string, bool) {
 			}
 			if inFeatures {
 				out := append(append(append([]string{}, lines[:i]...), "hooks = true"), lines[i:]...)
-				return strings.Join(out, nl), true
+				return strings.Join(out, nl), true, nil
 			}
 			inFeatures = strings.TrimSpace(m[2]) == "features"
 			sawFeatures = sawFeatures || inFeatures
@@ -532,10 +541,10 @@ func codexConfigUpdate(content string) (string, bool) {
 		}
 		if m := tomlHooks.FindStringSubmatch(line); m != nil {
 			if m[1] == "true" {
-				return content, false
+				return content, false, nil
 			}
 			lines[i] = strings.Replace(line, "false", "true", 1)
-			return strings.Join(lines, nl), true
+			return strings.Join(lines, nl), true, nil
 		}
 	}
 	if sawFeatures {
@@ -543,11 +552,11 @@ func codexConfigUpdate(content string) (string, bool) {
 		if !strings.HasSuffix(content, nl) {
 			suffix = nl
 		}
-		return content + suffix + "hooks = true" + nl, true
+		return content + suffix + "hooks = true" + nl, true, nil
 	}
 	sep := nl + nl
 	if strings.HasSuffix(content, nl) {
 		sep = nl
 	}
-	return content + sep + "[features]" + nl + "hooks = true" + nl, true
+	return content + sep + "[features]" + nl + "hooks = true" + nl, true, nil
 }

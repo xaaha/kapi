@@ -155,7 +155,10 @@ func TestCodexConfigUpdate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, changed := codexConfigUpdate(tc.in)
+			got, changed, err := codexConfigUpdate(tc.in)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if got != tc.want || changed != tc.changed {
 				t.Errorf("got %q (changed=%v), want %q (changed=%v)", got, changed, tc.want, tc.changed)
 			}
@@ -309,5 +312,27 @@ func TestReviewH6OnlyKapiCommandsCountAsManaged(t *testing.T) {
 				t.Errorf("%s lost %q:\n%s", p, c, got)
 			}
 		}
+	}
+}
+
+func TestReviewH7CodexConfigWithFeaturesKapiCannotEditIsLeftAlone(t *testing.T) {
+	for _, in := range []string{
+		"features = { hooks = false }\n",
+		"model = \"x\"\nfeatures.hooks = false\n",
+		"[\"features\"]\nhooks = false\n",
+		"['features']\nother = 1\n",
+	} {
+		o := opts(t)
+		_, _, codexConfig, _, _ := o.paths()
+		write(t, codexConfig, in)
+		if s := statuses(Install(o))["Codex features"]; !strings.HasPrefix(s, "error:") {
+			t.Errorf("%q: %s", in, s)
+		}
+		if got := read(t, codexConfig); got != in {
+			t.Errorf("%q rewritten to %q", in, got)
+		}
+	}
+	if _, _, err := codexConfigUpdate("[profiles.x]\nfeatures = 1\n"); err != nil {
+		t.Errorf("a features key inside another table: %v", err)
 	}
 }
