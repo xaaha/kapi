@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,6 +140,44 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	if !strings.HasPrefix(url, "http://127.0.0.1:") || !strings.Contains(url, "/p/") || !strings.Contains(url, "?t=") {
+		t.Fatalf("open printed %q", url)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser := &http.Client{Jar: jar}
+	resp, err := browser.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1">`) {
+		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
+	}
+
+	base, _, _ := strings.Cut(url, "?")
+	resp, err = browser.Post(base+"messages", "application/json", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST messages: %s", resp.Status)
+	}
+	if got := e.kapi("pending", e.page); !strings.HasSuffix(got, " human message: from the browser\n") {
+		t.Errorf("pending = %q", got)
 	}
 }
 
