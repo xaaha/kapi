@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/xaaha/kapi/internal/render"
@@ -22,6 +23,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
 )
 
 type Op struct {
@@ -275,6 +277,13 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	frag, root, err := fragment(with)
 	if err != nil {
 		return nil, err
+	}
+	if !strings.HasPrefix(root.name, "kapi-") {
+		for _, f := range parse(frag) {
+			if _, ok := f.attr("data-kapi-preset"); ok || strings.HasPrefix(f.name, "kapi-") {
+				return nil, ErrPresetInProse
+			}
+		}
 	}
 	if root.id != "" && root.id != e.id {
 		return nil, fmt.Errorf("edit cannot change the id #%s to #%s", e.id, root.id)

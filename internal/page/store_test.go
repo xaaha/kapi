@@ -491,3 +491,20 @@ func TestOpenGivesFormattingCopiesFreshIDs(t *testing.T) {
 		t.Errorf("id kept %d times:\n%s", n, src)
 	}
 }
+
+func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	for _, h := range []string{
+		`<p data-kapi-id="aaaaaaaa">x <kapi-callout>y</kapi-callout></p>`,
+		`<div data-kapi-id="aaaaaaaa"><aside class="kapi-callout" data-kapi-preset="callout">rendered</aside></div>`,
+		`<p data-kapi-id="aaaaaaaa" data-kapi-preset="code">x</p>`,
+	} {
+		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrPresetInProse) {
+			t.Errorf("edit %q: err = %v, want ErrPresetInProse", h, err)
+		}
+	}
+	if got := onDisk(t, path); got != `<p data-kapi-id="aaaaaaaa">a</p>` {
+		t.Errorf("refused edit changed the file: %s", got)
+	}
+}
