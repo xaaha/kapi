@@ -46,7 +46,8 @@ type Response struct {
 
 type PageStatus struct {
 	Path    string         `json:"path"`
-	Readers []ReaderStatus `json:"readers"`
+	Readers []ReaderStatus `json:"readers,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -267,25 +268,60 @@ func (s *Server) status(page string, l *eventlog.Log) []ReaderStatus {
 }
 
 func (s *Server) listPages() ([]PageStatus, error) {
-	files, err := filepath.Glob(filepath.Join(s.home, "pages", "*", "page.txt"))
+	root := filepath.Join(s.home, "pages")
+	dirs, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	var out []PageStatus
-	for _, f := range files {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return nil, err
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
 		}
-		path := strings.TrimSpace(string(b))
-		l, err := s.page(path)
-		if err != nil {
-			return nil, err
+		dir := filepath.Join(root, d.Name())
+		b, err := os.ReadFile(filepath.Join(dir, "page.txt"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
 		}
-		readers := s.status(path, l)
-		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
-		out = append(out, PageStatus{Path: path, Readers: readers})
+		if err != nil {
+			out = append(out, PageStatus{Path: dir, Error: err.Error()})
+			continue
+		}
+		out = append(out, s.pageStatus(strings.TrimSuffix(string(b), "\n"), dir))
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
 	return out, nil
+}
+
+func (s *Server) pageStatus(path, dir string) PageStatus {
+	s.mu.Lock()
+	l, open := s.pages[path]
+	attached := maps.Clone(s.attached[path])
+	s.mu.Unlock()
+	if open {
+		readers := s.status(path, l)
+		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
+		return PageStatus{Path: path, Readers: readers}
+	}
+	cursors, pending, err := eventlog.Summary(dir)
+	if err != nil {
+		return PageStatus{Path: path, Error: err.Error()}
+	}
+	names := map[string]bool{"agent": true}
+	for r := range cursors {
+		names[r] = true
+	}
+	for r := range attached {
+		names[r] = true
+	}
+	var readers []ReaderStatus
+	for r := range names {
+		since, on := attached[r]
+		readers = append(readers, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: cursors[r], Pending: pending(r)})
+	}
+	slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
+	return PageStatus{Path: path, Readers: readers}
 }

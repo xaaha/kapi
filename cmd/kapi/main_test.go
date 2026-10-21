@@ -238,3 +238,22 @@ func TestHomeViewWithNoPages(t *testing.T) {
 		t.Errorf("home view:\n%s", out)
 	}
 }
+
+func TestHomeViewShowsBrokenPagesAndQuotesOddPaths(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{
+		{Path: "/w/bad.html", Error: "events.ndjson line 1: invalid character"},
+		{Path: "/w/two\nlines.html", Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 1}}},
+	}}}
+	out, err := run(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  /w/bad.html: error: events.ndjson line 1: invalid character\n",
+		"  \"/w/two\\nlines.html\": agent 1 unread\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("home view missing %q:\n%s", want, out)
+		}
+	}
+}

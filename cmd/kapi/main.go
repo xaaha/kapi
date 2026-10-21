@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -227,6 +228,14 @@ func homeView(c api, out io.Writer) error {
 	} else {
 		fmt.Fprintf(&b, "pages[%d]:\n", len(resp.Pages))
 		for _, p := range resp.Pages {
+			path := p.Path
+			if strings.ContainsAny(path, "\n\r\t") {
+				path = strconv.Quote(path)
+			}
+			if p.Error != "" {
+				fmt.Fprintf(&b, "  %s: error: %s\n", path, p.Error)
+				continue
+			}
 			readers := make([]string, 0, len(p.Readers))
 			for _, r := range p.Readers {
 				s := fmt.Sprintf("%s %d unread", r.Reader, r.Pending)
@@ -235,7 +244,7 @@ func homeView(c api, out io.Writer) error {
 				}
 				readers = append(readers, s)
 			}
-			fmt.Fprintf(&b, "  %s: %s\n", p.Path, strings.Join(readers, ", "))
+			fmt.Fprintf(&b, "  %s: %s\n", path, strings.Join(readers, ", "))
 		}
 	}
 	b.WriteString(`next:
