@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+
+	"github.com/xaaha/kapi/internal/render"
 )
 
 var (
@@ -78,7 +80,10 @@ func Open(home, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	src := assignIDs(raw)
+	src, err := normalize(raw)
+	if err != nil {
+		return nil, err
+	}
 	if s.rev == 0 {
 		err = s.commit(src, !bytes.Equal(raw, src), 1, nil)
 	} else if s.src, err = os.ReadFile(s.revPath(s.rev)); err == nil {
@@ -109,7 +114,11 @@ func (s *Store) Refresh() (Summary, bool, error) {
 	if err != nil || bytes.Equal(raw, s.src) {
 		return Summary{}, false, err
 	}
-	old, src := s.src, assignIDs(raw)
+	old := s.src
+	src, err := normalize(raw)
+	if err != nil {
+		return Summary{}, false, err
+	}
 	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
 		return Summary{}, false, err
 	}
@@ -152,6 +161,9 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		return s.rev, Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}, nil
 	}
 	src, sum, err := apply(s.src, op)
+	if err == nil {
+		src, err = normalize(src)
+	}
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
@@ -159,6 +171,14 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		return s.rev, Summary{}, err
 	}
 	return s.rev, sum, nil
+}
+
+func normalize(raw []byte) ([]byte, error) {
+	src, err := render.Canonical(raw)
+	if err != nil {
+		return nil, err
+	}
+	return assignIDs(src), nil
 }
 
 func (s *Store) revPath(rev uint64) string {
@@ -273,7 +293,7 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	if root.id == "" {
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
-	return assignIDs(splice(src, e.start, e.end, string(frag))), nil
+	return splice(src, e.start, e.end, string(frag)), nil
 }
 
 func move(src []byte, els []element, e *element, before string) ([]byte, error) {

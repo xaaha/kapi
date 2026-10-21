@@ -9,6 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
+
+	"github.com/xaaha/kapi/internal/render"
 )
 
 func newPage(t *testing.T, src string) (home, path string) {
@@ -388,5 +393,101 @@ func TestFormIDAndOuter(t *testing.T) {
 	}
 	if _, err := Outer(src, "cccccccc"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Outer of an unknown id: err = %v", err)
+	}
+}
+
+const hoistRepro = `<p data-kapi-id="aaaaaaaa">before <kapi-callout data-kapi-id="bbbbbbbb">keep me</kapi-callout> after</p>`
+
+func renderedBlocks(t *testing.T, src []byte) []string {
+	t.Helper()
+	out, err := render.Render(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(bytes.NewReader(out), body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	seen := map[string]bool{}
+	for _, n := range nodes {
+		if n.Type != html.ElementNode {
+			continue
+		}
+		id := ""
+		for _, a := range n.Attr {
+			if a.Key == idAttr {
+				id = a.Val
+			}
+		}
+		if id == "" || seen[id] {
+			t.Errorf("rendered <%s> has id %q, want a unique one:\n%s", n.Data, id, out)
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func TestOpenSplitsPresetsOutOfProseInTheSource(t *testing.T) {
+	home, path := newPage(t, hoistRepro+"\n")
+	s := open(t, home, path)
+	src, _ := s.Source()
+	ids := renderedBlocks(t, src)
+	if len(ids) != 3 || ids[0] != "aaaaaaaa" || ids[1] != "bbbbbbbb" {
+		t.Fatalf("blocks = %v, want #aaaaaaaa, #bbbbbbbb and a fresh id:\n%s", ids, src)
+	}
+	if got := onDisk(t, path); got != string(src) {
+		t.Errorf("split source was not written back:\n%s", got)
+	}
+}
+
+func TestEditAfterASplitKeepsEverything(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	s := open(t, home, path)
+	src, _ := s.Source()
+	block, err := render.Block(src, "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(block), "before", "before, edited", 1)
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: edited})
+	got, _ := s.Source()
+	for _, want := range []string{"before, edited", `data-kapi-id="bbbbbbbb"`, "keep me", "after"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("source lost %q after editing #aaaaaaaa:\n%s", want, got)
+		}
+	}
+	renderedBlocks(t, got)
+}
+
+func TestRefreshAndOpsKeepTheSourceCanonical(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n"+hoistRepro[:3]+` data-kapi-id="cccccccc"`+hoistRepro[strings.Index(hoistRepro, ">"):])
+	if _, ok, err := s.Refresh(); err != nil || !ok {
+		t.Fatalf("Refresh = %v, %v", ok, err)
+	}
+	src, _ := s.Source()
+	if ids := renderedBlocks(t, src); len(ids) != 4 {
+		t.Errorf("after refresh blocks = %v:\n%s", ids, src)
+	}
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<div data-kapi-id="aaaaaaaa" onclick="x()">ok<script>alert(1)</script></div>`})
+	src, _ = s.Source()
+	if want := `<div data-kapi-id="aaaaaaaa">ok</div>`; !strings.Contains(string(src), want) {
+		t.Errorf("edit result is not canonical, want %s in:\n%s", want, src)
+	}
+	if ids := renderedBlocks(t, src); len(ids) != 4 {
+		t.Errorf("after edit blocks = %v:\n%s", ids, src)
+	}
+}
+
+func TestOpenGivesFormattingCopiesFreshIDs(t *testing.T) {
+	home, path := newPage(t, `<b data-kapi-id="aaaaaaaa">bold<div>block</b>after</div>`)
+	src, _ := open(t, home, path).Source()
+	renderedBlocks(t, src)
+	if n := strings.Count(string(src), `"aaaaaaaa"`); n != 1 {
+		t.Errorf("id kept %d times:\n%s", n, src)
 	}
 }
