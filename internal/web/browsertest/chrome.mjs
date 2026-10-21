@@ -32,14 +32,19 @@ export async function launch() {
     "--disable-gpu",
     "--no-sandbox",
     "about:blank",
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  proc.stderr.on("data", (d) => (stderr = (stderr + d).slice(-4000)));
 
   let port;
-  for (let i = 0; i < 200 && !port; i++) {
+  for (let i = 0; i < 600 && !port && proc.exitCode === null; i++) {
     await sleep(50);
     port = await readFile(join(profile, "DevToolsActivePort"), "utf8").then((s) => s.split("\n")[0], () => null);
   }
-  if (!port) throw new Error("Chrome did not start");
+  if (!port) {
+    proc.kill("SIGKILL");
+    throw new Error(`Chrome at ${bin} did not start (exit ${proc.exitCode}):\n${stderr}`);
+  }
   const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
   const ws = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -125,8 +130,11 @@ export async function launch() {
     },
     async close() {
       ws.close();
-      proc.kill();
-      await new Promise((resolve) => proc.once("exit", resolve));
+      if (proc.exitCode === null) {
+        const exited = new Promise((resolve) => proc.once("exit", resolve));
+        proc.kill();
+        await exited;
+      }
       await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
