@@ -1,0 +1,339 @@
+:root {
+  --kapi-panel-width: 340px;
+  --kapi-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --kapi-bg: #ffffff;
+  --kapi-surface: #f7f7f5;
+  --kapi-border: #e3e3de;
+  --kapi-text: #1f2328;
+  --kapi-muted: #6a6f76;
+  --kapi-accent: #3d6fd6;
+  --kapi-accent-soft: #e9effb;
+  --kapi-ok: #2e9d6a;
+  --kapi-busy: #d6951b;
+  --kapi-off: #a7abb1;
+  --kapi-error: #c2413a;
+  --kapi-error-soft: #fbeceb;
+  --kapi-radius: 8px;
+  --kapi-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
+}
+
+html.kapi-panel-open {
+  padding-right: var(--kapi-panel-width);
+}
+
+#kapi-page [data-kapi-selected] {
+  outline: 2px solid var(--kapi-accent);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+#kapi-page [contenteditable="true"] {
+  outline: 2px solid var(--kapi-accent);
+  outline-offset: 4px;
+  background-color: var(--kapi-accent-soft);
+  caret-color: var(--kapi-accent);
+}
+
+#kapi-chrome,
+#kapi-chrome * {
+  box-sizing: border-box;
+}
+
+#kapi-chrome {
+  font: 13px/1.45 var(--kapi-font);
+  color: var(--kapi-text);
+}
+
+#kapi-chrome button {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--kapi-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#kapi-chrome button:hover:not(:disabled) {
+  background: var(--kapi-surface);
+}
+
+#kapi-chrome button:focus-visible {
+  outline: 2px solid var(--kapi-accent);
+  outline-offset: 1px;
+}
+
+#kapi-chrome button:disabled {
+  color: var(--kapi-off);
+  cursor: default;
+}
+
+#kapi-chrome [hidden] {
+  display: none !important;
+}
+
+.kapi-bar {
+  position: fixed;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--kapi-bg);
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  box-shadow: var(--kapi-shadow);
+}
+
+.kapi-bar-label {
+  padding: 0 8px 0 6px;
+  font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--kapi-muted);
+}
+
+.kapi-panel {
+  position: fixed;
+  z-index: 2147483001;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--kapi-panel-width);
+  display: flex;
+  flex-direction: column;
+  background: var(--kapi-bg);
+  border-left: 1px solid var(--kapi-border);
+}
+
+html:not(.kapi-panel-open) .kapi-panel,
+html.kapi-panel-open #kapi-chrome .kapi-opener {
+  display: none;
+}
+
+.kapi-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid var(--kapi-border);
+}
+
+.kapi-status {
+  flex: 1;
+  color: var(--kapi-muted);
+}
+
+.kapi-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--kapi-off);
+}
+
+.kapi-dot[data-state="watching"] {
+  background: var(--kapi-ok);
+}
+
+.kapi-dot[data-state="busy"] {
+  background: var(--kapi-busy);
+  animation: kapi-pulse 1.4s ease-in-out infinite;
+}
+
+.kapi-dot[data-state="disconnected"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--kapi-error);
+}
+
+.kapi-dot[data-state="connecting"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--kapi-off);
+}
+
+@keyframes kapi-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kapi-dot[data-state="busy"] {
+    animation: none;
+  }
+}
+
+.kapi-notice {
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--kapi-accent-soft);
+  cursor: pointer;
+}
+
+.kapi-notice[data-kind="error"] {
+  background: var(--kapi-error-soft);
+  color: var(--kapi-error);
+}
+
+.kapi-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.kapi-empty {
+  margin: 24px 8px;
+  color: var(--kapi-muted);
+  text-align: center;
+}
+
+.kapi-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kapi-msg {
+  max-width: 92%;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: var(--kapi-surface);
+}
+
+.kapi-msg[data-author="human"] {
+  align-self: flex-end;
+  background: var(--kapi-accent-soft);
+}
+
+.kapi-msg.kapi-answer {
+  border: 1px dashed var(--kapi-border);
+  background: var(--kapi-bg);
+}
+
+.kapi-msg-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 11.5px;
+  color: var(--kapi-muted);
+}
+
+.kapi-author {
+  font-weight: 600;
+  color: var(--kapi-text);
+}
+
+#kapi-chrome .kapi-ref {
+  padding: 0 4px;
+  font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--kapi-accent);
+}
+
+.kapi-msg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#kapi-chrome .kapi-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 0;
+  border-top: 1px solid var(--kapi-border);
+  border-radius: 0;
+  background: var(--kapi-bg);
+}
+
+#kapi-chrome .kapi-target {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--kapi-accent-soft);
+  color: var(--kapi-accent);
+  font-size: 12px;
+}
+
+.kapi-composer textarea {
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  padding: 8px 10px;
+  resize: vertical;
+  border: 1px solid var(--kapi-border);
+  border-radius: 6px;
+  background: var(--kapi-bg);
+  font: inherit;
+  color: inherit;
+}
+
+.kapi-composer textarea:focus {
+  outline: none;
+  border-color: var(--kapi-accent);
+  box-shadow: 0 0 0 3px var(--kapi-accent-soft);
+}
+
+.kapi-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kapi-hint {
+  font-size: 11.5px;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-primary {
+  padding: 5px 14px;
+  background: var(--kapi-accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+#kapi-chrome .kapi-primary:hover:not(:disabled) {
+  background: var(--kapi-accent);
+  filter: brightness(1.08);
+}
+
+#kapi-chrome .kapi-primary:disabled {
+  background: var(--kapi-off);
+  color: #fff;
+}
+
+#kapi-chrome .kapi-opener {
+  position: fixed;
+  z-index: 2147483001;
+  right: 16px;
+  bottom: 16px;
+  padding: 7px 14px;
+  background: var(--kapi-bg);
+  border: 1px solid var(--kapi-border);
+  border-radius: 999px;
+  box-shadow: var(--kapi-shadow);
+}
+
+@media (max-width: 760px) {
+  html.kapi-panel-open {
+    padding-right: 0;
+    padding-bottom: 55vh;
+  }
+
+  .kapi-panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    height: 55vh;
+    border-left: 0;
+    border-top: 1px solid var(--kapi-border);
+    box-shadow: var(--kapi-shadow);
+  }
+}
