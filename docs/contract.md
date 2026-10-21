@@ -45,6 +45,17 @@ load and writes the file back. Ids never change after that.
 
 Unknown `kapi-*` elements render as a visible error box, never silently.
 
+The renderer puts `data-kapi-preset="<name>"` on the outer element of every
+rendered preset. Prose elements render to the same HTML as their source.
+
+### Editing
+
+Prose elements (no `data-kapi-preset`) are edited in place and saved as an
+`edit` op with the element's outer HTML. Preset elements are edited as source:
+the browser fetches `GET /p/{id}/source/{block}`, shows it in a textarea, and
+saves the textarea as the `edit` op's `HTML`. Rendered preset HTML is never
+sent back.
+
 ## Go interfaces
 
 ```go
@@ -91,6 +102,7 @@ an `HttpOnly`, `SameSite=Strict` cookie. Requests whose `Host` is not
 |---|---|---|
 | `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
+| `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev` |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |
