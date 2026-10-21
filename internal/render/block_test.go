@@ -229,3 +229,20 @@ func TestCSSCoversEveryPreset(t *testing.T) {
 		t.Error("CSS returns a shared buffer")
 	}
 }
+
+func TestTableRefusesContentBesideTheTable(t *testing.T) {
+	for _, src := range []string{
+		`<kapi-table>Caption text <table><tr><td>1</td></tr></table></kapi-table>`,
+		`<kapi-table><table><tr><td>1</td></tr></table> trailing words</kapi-table>`,
+		`<kapi-table><table><tr><td>1</td></tr></table><p>a note</p></kapi-table>`,
+		`<kapi-table><table><tr><td>1</td></tr></table><table><tr><td>2</td></tr></table></kapi-table>`,
+	} {
+		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+			t.Errorf("Render(%q) = %q, want an error box instead of dropping content", src, out)
+		}
+	}
+	ok := "<kapi-table>\n  <!-- note -->\n  <table><tr><td>1</td></tr></table>\n</kapi-table>"
+	if out := render(t, ok); strings.Contains(out, "kapi-error") {
+		t.Errorf("whitespace and comments beside the table should be fine: %s", out)
+	}
+}
