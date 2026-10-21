@@ -972,3 +972,11 @@ func TestDuplicateIDsFollowThePreviousRevision(t *testing.T) {
 		renderedBlocks(t, src)
 	}
 }
+
+func TestAValuelessIDGetsAWellFormedValue(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id class=\"x\">hi</p>\n")
+	open(t, home, path)
+	if got := onDisk(t, path); !regexp.MustCompile(`^<p data-kapi-id="[a-z2-7]{8}" class="x">hi</p>\n$`).MatchString(got) {
+		t.Errorf("file = %q", got)
+	}
+}

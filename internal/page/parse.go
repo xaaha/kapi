@@ -300,13 +300,13 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 		for i < len(tag) && !isSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
 			i++
 		}
-		name := strings.ToLower(string(tag[nameStart:i]))
+		name, nameEnd := strings.ToLower(string(tag[nameStart:i])), i
 		for i < len(tag) && isSpace(tag[i]) {
 			i++
 		}
 		if i >= len(tag) || tag[i] != '=' {
 			if name == key {
-				return i, i, true
+				return nameEnd, nameEnd, true
 			}
 			continue
 		}
