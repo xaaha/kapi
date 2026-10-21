@@ -221,3 +221,21 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchDoesNotEchoTheAgentsOwnMessages(t *testing.T) {
+	e := newE2E(t)
+	w := e.watch()
+	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	e.kapi("say", e.page, "my own reply")
+	e.kapi("send", e.page, "the human answers")
+	if got := w.event(t); got != "human message: the human answers" {
+		t.Fatalf("watch printed %q, want the human's message and not the agent's own reply", got)
+	}
+	waitFor(t, "the ack", func() bool { return e.kapi("pending", e.page) == "" })
+	if got := e.kapi(); !strings.Contains(got, "agent 0 unread (watching)") {
+		t.Errorf("home view = %q, want the agent's own reply left out of its unread count", got)
+	}
+	if got := e.kapi("pending", "--reader", "human", e.page); !strings.Contains(got, "agent message: my own reply") || strings.Contains(got, "the human answers") {
+		t.Errorf("human pending = %q, want the agent's reply and not the human's own message", got)
+	}
+}

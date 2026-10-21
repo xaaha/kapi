@@ -177,6 +177,11 @@ Ops reach the agent through the existing event log, so `kapi watch` shows
 `#12 human revision on #k3f9a2bq: deleted` with no new command. Agent-side
 `kapi op` and `kapi get` are phase 3.
 
+A reader never gets its own events back: `kapi watch` skips events whose
+author is the reader and acknowledges them once everything before them is
+acknowledged, and `kapi pending` and the home view's unread counts leave them
+out.
+
 ## Out of scope for phase 2
 
 Slides, the editable whiteboard, attachments, `kapi op`/`kapi get`.

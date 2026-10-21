@@ -114,6 +114,22 @@ func TestPagesListsEveryKnownPage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	l, err := s.page("/tmp/a.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Append(&eventlog.Event{Author: "agent", Kind: "message", Text: "own reply"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, from := range []*Server{s, New(home)} {
+		got, err := from.listPages()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[0].Readers[0].Reader != "agent" || got[0].Readers[0].Pending != 2 {
+			t.Errorf("readers = %+v, want the agent's own reply left out of its unread count", got[0].Readers)
+		}
+	}
 	got, err := New(home).listPages()
 	if err != nil {
 		t.Fatal(err)

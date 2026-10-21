@@ -466,6 +466,15 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	s.attach(req.Page, req.Reader, l)
 	defer s.detach(req.Page, req.Reader, l)
 
+	ack := func(seq uint64) {
+		if err := l.Ack(req.Reader, seq); err != nil {
+			log.Printf("ack %s %d: %v", req.Reader, seq, err)
+		}
+	}
+	var mu sync.Mutex
+	sent := l.Cursor(req.Reader)
+	delivered, acked, ownAfter := sent, sent, uint64(0)
+
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -474,20 +483,39 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			if err := dec.Decode(&a); err != nil {
 				return
 			}
-			if err := l.Ack(req.Reader, a.Seq); err != nil {
-				log.Printf("ack %s %d: %v", req.Reader, a.Seq, err)
+			mu.Lock()
+			acked = max(acked, a.Seq)
+			through := a.Seq
+			if a.Seq >= delivered {
+				through = max(through, ownAfter)
 			}
+			mu.Unlock()
+			ack(through)
 		}
 	}()
 
-	sent := l.Cursor(req.Reader)
 	for {
 		events, changed := l.After(sent)
 		for _, e := range events {
 			sent = e.Seq
+			if e.Author == req.Reader {
+				mu.Lock()
+				caughtUp := acked >= delivered
+				if !caughtUp {
+					ownAfter = e.Seq
+				}
+				mu.Unlock()
+				if caughtUp {
+					ack(e.Seq)
+				}
+				continue
+			}
 			if e.Kind == eventlog.KindPresence {
 				continue
 			}
+			mu.Lock()
+			delivered = e.Seq
+			mu.Unlock()
 			if err := enc.Encode(Response{Event: &e}); err != nil {
 				return
 			}

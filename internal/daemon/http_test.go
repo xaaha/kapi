@@ -193,14 +193,84 @@ func TestWatchingReportsPresenceAndNeverDeliversIt(t *testing.T) {
 
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "done"})
 	waitPresence(t, l, "agent watching", "agent busy", "agent watching")
-
-	if err := json.NewDecoder(conn).Decode(&got); err != nil || got.Event.Text != "done" {
-		t.Fatalf("watch delivered %+v, %v; want the agent's reply", got.Event, err)
-	}
 	conn.Close()
 	waitPresence(t, l, "agent watching", "agent busy", "agent watching", "agent none")
-	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "done" {
-		t.Errorf("pending = %+v, want only the agent's own reply", p.Events)
+}
+
+func TestWatchSkipsAndAcknowledgesTheReadersOwnEvents(t *testing.T) {
+	home, s, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := attachWatcher(t, home, path)
+	waitPresence(t, l, "agent watching")
+	dec, enc := json.NewDecoder(conn), json.NewEncoder(conn)
+
+	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "mine"})
+	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "theirs"})
+	var got Response
+	if err := dec.Decode(&got); err != nil || got.Event.Text != "theirs" {
+		t.Fatalf("watch delivered %+v, %v; want the human's message and not the agent's own", got.Event, err)
+	}
+	if err := enc.Encode(Request{Op: "ack", Seq: got.Event.Seq}); err != nil {
+		t.Fatal(err)
+	}
+	mine := call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "mine again"}).Event.Seq
+	deadline := time.Now().Add(2 * time.Second)
+	for l.Cursor("agent") < mine {
+		if time.Now().After(deadline) {
+			t.Fatalf("cursor = %d, want the agent's own message #%d acknowledged", l.Cursor("agent"), mine)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 0 {
+		t.Errorf("pending = %+v, want nothing", p.Events)
+	}
+}
+
+func TestAnOwnEventIsNotAcknowledgedPastAnUnacknowledgedOne(t *testing.T) {
+	home, s, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := attachWatcher(t, home, path)
+	waitPresence(t, l, "agent watching")
+	dec, enc := json.NewDecoder(conn), json.NewEncoder(conn)
+
+	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "unread"})
+	var got Response
+	if err := dec.Decode(&got); err != nil || got.Event.Text != "unread" {
+		t.Fatalf("watch delivered %+v, %v", got.Event, err)
+	}
+	human := got.Event.Seq
+	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "mine"})
+	call(t, home, &Request{Op: "append", Page: path, Author: "kapi", Kind: "note", Text: "sync"})
+	if err := dec.Decode(&got); err != nil || got.Event.Text != "sync" {
+		t.Fatalf("watch delivered %+v, %v", got.Event, err)
+	}
+	if c := l.Cursor("agent"); c >= human {
+		t.Fatalf("cursor = %d before any ack, passed the unacknowledged #%d", c, human)
+	}
+	if err := enc.Encode(Request{Op: "ack", Seq: human}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for l.Cursor("agent") < human {
+		if time.Now().After(deadline) {
+			t.Fatalf("cursor = %d, want #%d acknowledged", l.Cursor("agent"), human)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if c := l.Cursor("agent"); c != human {
+		t.Fatalf("cursor = %d, passed the unacknowledged #%d", c, got.Event.Seq)
+	}
+	conn.Close()
+	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "sync" {
+		t.Errorf("pending = %+v, want the unacknowledged sync event", p.Events)
 	}
 }
 

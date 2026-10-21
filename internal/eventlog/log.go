@@ -69,7 +69,7 @@ func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
 		if c >= uint64(len(events)) {
 			return 0
 		}
-		return len(unread(events[c:]))
+		return len(unread(events[c:], reader))
 	}
 	return cursors, pending, nil
 }
@@ -133,16 +133,16 @@ func (l *Log) Ack(reader string, seq uint64) error {
 	return writeCursors(filepath.Join(l.dir, cursorsFile), l.cursors)
 }
 
-// Pending returns the events a reader has not acknowledged, leaving out presence events.
+// Pending returns the events a reader has not acknowledged, leaving out presence events and the reader's own.
 func (l *Log) Pending(reader string) []Event {
 	events, _ := l.After(l.Cursor(reader))
-	return unread(events)
+	return unread(events, reader)
 }
 
 const KindPresence = "presence"
 
-func unread(events []Event) []Event {
-	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence })
+func unread(events []Event, reader string) []Event {
+	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
 }
 
 func readEvents(path string) ([]Event, error) {
