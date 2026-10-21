@@ -184,3 +184,31 @@ func FuzzCanonical(f *testing.F) {
 		checkCanonical(t, "fuzz", src)
 	})
 }
+
+func TestDroppedNamesWhatCanonicalRemoves(t *testing.T) {
+	cases := map[string]string{
+		"<!doctype html><html lang=\"en\"><head><title>t</title><style>p{}</style></head><body class=\"x\">" +
+			`<script>a()</script><p onclick="b()" style="color:red">hi</p><script src="c.js"></script></body></html>`: "2 script, 1 body, 1 doctype, 1 head, 1 html, 1 style, 1 title, 4 attributes",
+		`<kapi-callout kind="note" onclick="x()">a</kapi-callout><custom-tag>text kept</custom-tag>`: "1 custom-tag, 1 attribute",
+		`<svg><circle r="1"></circle></svg><p>x</p>`: "1 svg",
+	}
+	for src, want := range cases {
+		r, err := Dropped([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Empty() || r.String() != want {
+			t.Errorf("Dropped(%q) = %q, want %q", src, r.String(), want)
+		}
+	}
+	for _, src := range []string{
+		`<h1 data-kapi-id="aaaaaaaa">Plan</h1><p class=lead>Text &amp; <a href="https://e.test/">link</a></p>`,
+		`<p data-kapi-id="aaaaaaaa">before <kapi-callout data-kapi-id="bbbbbbbb">kept</kapi-callout> after</p>`,
+		`<p>one</p><p>two</p><table><tr><td>implied tbody</td></tr></table><br/>`,
+		`<kapi-code lang="go"><div>raw body</div></kapi-code><!-- comment -->`,
+	} {
+		if r, err := Dropped([]byte(src)); err != nil || !r.Empty() {
+			t.Errorf("Dropped(%q) = %q, %v; want nothing dropped", src, r.String(), err)
+		}
+	}
+}

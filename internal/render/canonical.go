@@ -51,14 +51,7 @@ func canonicalNode(b *bytes.Buffer, n *html.Node) {
 		writeProse(b, n, canonicalNode)
 		return
 	}
-	keep := presetSourceAttrs[n.Data]
-	var attrs []html.Attribute
-	for _, a := range n.Attr {
-		if a.Namespace == "" && (keep[a.Key] || (isDataAttr(a.Key) && a.Key != "data-kapi-preset")) {
-			attrs = append(attrs, a)
-		}
-	}
-	writeStart(b, n.Data, attrs)
+	writeStart(b, n.Data, keptPresetAttrs(n))
 	if rawPresets[n.Data] {
 		b.WriteString(rawEscaper.Replace(rawText(n)))
 	} else {
@@ -67,4 +60,15 @@ func canonicalNode(b *bytes.Buffer, n *html.Node) {
 		}
 	}
 	writeEnd(b, n.Data)
+}
+
+func keptPresetAttrs(n *html.Node) []html.Attribute {
+	keep := presetSourceAttrs[n.Data]
+	var attrs []html.Attribute
+	for _, a := range n.Attr {
+		if a.Namespace == "" && (keep[a.Key] || (isDataAttr(a.Key) && a.Key != "data-kapi-preset")) {
+			attrs = append(attrs, a)
+		}
+	}
+	return attrs
 }
