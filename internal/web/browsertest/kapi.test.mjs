@@ -241,6 +241,24 @@ test("renders markup from events as literal text", async () => {
   assert.equal(await page.eval(`window.pwned`), undefined);
 });
 
+test("chrome styles do not reach page content that reuses chrome class names", async () => {
+  const leaks = await page.eval(`(() => {
+    const names = [...new Set([...document.querySelectorAll("#kapi-chrome [class]")].flatMap((e) => [...e.classList]))];
+    const probe = document.createElement("div");
+    document.getElementById("kapi-page").append(probe);
+    const styles = () => {
+      const s = getComputedStyle(probe);
+      return JSON.stringify([...s].map((k) => s[k]));
+    };
+    const plain = styles();
+    return names.filter((n) => {
+      probe.className = n;
+      return styles() !== plain;
+    });
+  })()`);
+  assert.deepEqual(leaks, []);
+});
+
 test("refetches other changed blocks while one is being edited", async () => {
   await select("aaaaaaaa");
   await click('.kapi-bar [data-action="edit"]');
