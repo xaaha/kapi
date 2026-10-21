@@ -85,6 +85,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     streams: new Set(),
     requests: [],
     refuseEvents: false,
+    restarted: "",
     refused: 0,
   };
 
@@ -148,6 +149,9 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
 
     const prefix = `/${TOKEN}/`;
     if (!url.pathname.startsWith(prefix)) return json(res, 403, { error: "bad token" });
+    if (state.restarted && !url.pathname.startsWith(`${prefix}static/`)) {
+      return json(res, 403, { error: "kapi restarted", reopen: state.restarted });
+    }
     const path = url.pathname.slice(prefix.length - 1);
     if (req.method === "POST" && (req.headers["content-type"] !== "application/json" || req.headers.origin !== `http://${req.headers.host}`)) {
       return json(res, 403, { error: "cross-site request" });
