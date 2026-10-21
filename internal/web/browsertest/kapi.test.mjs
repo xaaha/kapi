@@ -275,6 +275,7 @@ test("refetches other changed blocks while one is being edited", async () => {
   await until(async () => (await text("cccccccc")) === "Agent rewrote this");
   assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0);
   assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "aaaaaaaa");
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
   await page.key("Escape");
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
