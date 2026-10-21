@@ -299,7 +299,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 					return nil, false, err
 				}
 			}
-			hb, err := json.Marshal(hobj)
+			hb, err := marshal(hobj)
 			if err != nil {
 				return nil, false, err
 			}
@@ -307,7 +307,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 			if err := gobj.setValue("hooks", entries); err != nil {
 				return nil, false, err
 			}
-			gb, err := json.Marshal(gobj)
+			gb, err := marshal(gobj)
 			if err != nil {
 				return nil, false, err
 			}
@@ -336,7 +336,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 		if err := group.setValue("hooks", []*object{entry}); err != nil {
 			return nil, false, err
 		}
-		gb, err := json.Marshal(group)
+		gb, err := marshal(group)
 		if err != nil {
 			return nil, false, err
 		}
@@ -402,7 +402,7 @@ func sessionStartRemoval(content []byte) ([]byte, bool, error) {
 			if err := gobj.setValue("hooks", kept); err != nil {
 				return nil, false, err
 			}
-			gb, err := json.Marshal(gobj)
+			gb, err := marshal(gobj)
 			if err != nil {
 				return nil, false, err
 			}
@@ -448,7 +448,7 @@ func copilotUpdate(content []byte, command string, timeout int) ([]byte, bool, e
 			return nil, false, err
 		}
 	}
-	eb, err := json.Marshal(entry)
+	eb, err := marshal(entry)
 	if err != nil {
 		return nil, false, err
 	}

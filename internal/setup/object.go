@@ -81,7 +81,7 @@ func (o *object) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		key, err := json.Marshal(k)
+		key, err := marshal(k)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +94,7 @@ func (o *object) MarshalJSON() ([]byte, error) {
 }
 
 func (o *object) setValue(key string, v any) error {
-	b, err := json.Marshal(v)
+	b, err := marshal(v)
 	if err != nil {
 		return err
 	}
@@ -102,8 +102,18 @@ func (o *object) setValue(key string, v any) error {
 	return nil
 }
 
+func marshal(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+}
+
 func indent(v any) ([]byte, error) {
-	raw, err := json.Marshal(v)
+	raw, err := marshal(v)
 	if err != nil {
 		return nil, err
 	}

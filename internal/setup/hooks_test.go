@@ -253,3 +253,18 @@ func TestReviewH2InstallRefusesAnOpenCodePluginItDidNotWrite(t *testing.T) {
 		t.Error("unmanaged plugin overwritten")
 	}
 }
+
+func TestReviewH3OtherValuesKeepHTMLCharacters(t *testing.T) {
+	o := opts(t)
+	claude, _, _, _, copilot := o.paths()
+	const rule = `"Bash(a && b <c> d)"`
+	write(t, claude, `{"permissions": {"allow": [`+rule+`]}}`)
+	write(t, copilot, `{"hooks": {"sessionStart": [{"bash": "x && y <z>"}]}}`)
+	Install(o)
+	if s := read(t, claude); !strings.Contains(s, rule) {
+		t.Errorf("claude settings:\n%s", s)
+	}
+	if s := read(t, copilot); !strings.Contains(s, `"x && y <z>"`) {
+		t.Errorf("copilot hooks:\n%s", s)
+	}
+}
