@@ -125,15 +125,15 @@ func TestDocumentIsSelfContained(t *testing.T) {
 }
 
 func TestPutRetriesServerErrorsWithBackoff(t *testing.T) {
-	h := &hub{statuses: []int{500, 503, 429}}
+	h := &hub{statuses: []int{500, 503, 429, 408}}
 	c, waits := newClient(t, h)
 	if err := c.Put(context.Background(), pageID, 1, "t", []byte("x")); err != nil {
 		t.Fatal(err)
 	}
-	if h.count() != 4 {
-		t.Errorf("requests = %d, want 4", h.count())
+	if h.count() != 5 {
+		t.Errorf("requests = %d, want 5", h.count())
 	}
-	want := defaultBackoff[:3]
+	want := defaultBackoff[:4]
 	if fmt.Sprint(*waits) != fmt.Sprint(want) {
 		t.Errorf("waits = %v, want %v", *waits, want)
 	}
