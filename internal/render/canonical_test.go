@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -35,6 +36,7 @@ var messySources = []string{
 	`<font color=red><div>font around a block</div></font>`,
 	`<a href="#x"><div>block in a link</div></a>`,
 	`<custom-element><p>unknown wrapper</p></custom-element>`,
+	`<b data-kapi-id="dupedupe">bold<div>block</b>after</div><i data-kapi-id="iiiiiiii"><p>x<p>y</i>`,
 }
 
 func canonical(t *testing.T, src string) string {
@@ -110,6 +112,34 @@ func checkCanonical(t *testing.T, name, src string) {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
 	}
 	assertParseStable(t, name, r)
+	for _, out := range []string{c, r} {
+		seen := map[string]bool{}
+		for _, m := range kapiIDAttr.FindAllStringSubmatch(out, -1) {
+			if seen[m[1]] {
+				t.Errorf("%s: data-kapi-id %q appears twice:\n%s", name, m[1], out)
+			}
+			seen[m[1]] = true
+		}
+	}
+}
+
+var kapiIDAttr = regexp.MustCompile(`data-kapi-id="([^"]*)"`)
+
+func TestCanonicalKeepsTheFirstOfDuplicateIDs(t *testing.T) {
+	cases := map[string]string{
+		`<b data-kapi-id="xxxxxxxx">bold<div>block</div>tail</b>`:                                                      `xxxxxxxx`,
+		`<p data-kapi-id="yyyyyyyy">one</p><p data-kapi-id="yyyyyyyy">two</p>`:                                         `yyyyyyyy`,
+		`<kapi-callout data-kapi-id="zzzzzzzz">a</kapi-callout><kapi-callout data-kapi-id="zzzzzzzz">b</kapi-callout>`: `zzzzzzzz`,
+	}
+	for src, id := range cases {
+		c := canonical(t, src)
+		if n := strings.Count(c, `data-kapi-id="`+id+`"`); n != 1 {
+			t.Errorf("Canonical(%q) = %q has the id %d times, want 1", src, c, n)
+		}
+		if strings.Index(c, id) > strings.Index(c, ">") {
+			t.Errorf("Canonical(%q) = %q moved the id off the first element", src, c)
+		}
+	}
 }
 
 func TestCanonical(t *testing.T) {

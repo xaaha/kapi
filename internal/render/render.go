@@ -60,7 +60,30 @@ func parse(src []byte) (*html.Node, error) {
 	for _, n := range blocks {
 		hoist(n)
 	}
+	dropDuplicateIDs(body, map[string]bool{})
 	return body, nil
+}
+
+func dropDuplicateIDs(n *html.Node, seen map[string]bool) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		kept := c.Attr[:0]
+		for _, a := range c.Attr {
+			if a.Namespace == "" && a.Key == "data-kapi-id" {
+				if seen[a.Val] {
+					continue
+				}
+				seen[a.Val] = true
+			}
+			kept = append(kept, a)
+		}
+		c.Attr = kept
+		if !rawPresets[c.Data] {
+			dropDuplicateIDs(c, seen)
+		}
+	}
 }
 
 var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form")
