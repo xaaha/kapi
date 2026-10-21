@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -108,7 +109,7 @@ func checkCanonical(t *testing.T, name, src string) {
 	if rc := render(t, c); rc != r {
 		t.Errorf("%s: Render(Canonical(src)) differs from Render(src)\nsrc:       %s\ncanonical: %s\nrender:    %s\nviaCanon:  %s", name, src, c, r, rc)
 	}
-	if pr, pc := proseOnly(t, r, renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
+	if pr, pc := proseOnly(t, r, renderedPreset), proseOnly(t, string(escapeRawBodies([]byte(c))), sourcePreset); pr != pc {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
 	}
 	assertParseStable(t, name, r)
@@ -211,4 +212,68 @@ func TestDroppedNamesWhatCanonicalRemoves(t *testing.T) {
 			t.Errorf("Dropped(%q) = %q, %v; want nothing dropped", src, r.String(), err)
 		}
 	}
+}
+
+func TestCodeBodiesAreRawSource(t *testing.T) {
+	bodies := []string{
+		"\nstd::vector<int> v;\nif (a < b && c > d) { v.push_back(1); }\n",
+		"<table><tr><td data-kapi-id=\"aaaaaaaa\">cell</td></tr></table>",
+		"x &lt; y &amp; <kapi-callout>not a preset</kapi-callout> <!-- c --> </pre>",
+		"@@ -1 +1 @@\n-std::map<K, V> m;\n+std::unordered_map<K, V> m;",
+	}
+	for _, tag := range []string{"kapi-code", "kapi-diff"} {
+		for _, body := range bodies {
+			src := `<p>before</p><` + tag + ` lang="cpp">` + body + `</` + tag + `><p>after</p>`
+			c := canonical(t, src)
+			if !strings.Contains(c, ">"+body+"</"+tag+">") {
+				t.Errorf("Canonical lost the %s body bytes\nbody: %q\ngot:  %q", tag, body, c)
+			}
+			out := render(t, src)
+			text := textContent(t, out)
+			for _, line := range strings.Split(strings.TrimSpace(body), "\n") {
+				line = strings.TrimLeft(line, "+- @")
+				if !strings.Contains(text, strings.TrimSpace(line)) {
+					t.Errorf("Render of %s does not show %q:\n%s", tag, line, out)
+				}
+			}
+			if strings.Contains(out, "kapi-error") || strings.Contains(out, `data-kapi-id="aaaaaaaa"`) {
+				t.Errorf("code body was parsed as markup:\n%s", out)
+			}
+			if _, err := Block([]byte(src), "aaaaaaaa"); !errors.Is(err, ErrNotFound) {
+				t.Errorf("Block found an id inside a %s body", tag)
+			}
+		}
+	}
+}
+
+func TestMaskRawBodiesKeepsOffsets(t *testing.T) {
+	src := []byte(`<kapi-code>a<b>c</b></kapi-code><p data-kapi-id="x">y</p><KAPI-DIFF>-<i>
++</i></Kapi-Diff >tail`)
+	m := MaskRawBodies(src)
+	if len(m) != len(src) || bytes.Count(m, []byte("<")) != 6 {
+		t.Errorf("MaskRawBodies(%q) = %q; want the same length and only the real tags left", src, m)
+	}
+}
+
+func textContent(t *testing.T, out string) string {
+	t.Helper()
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(out), body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
+	return b.String()
 }

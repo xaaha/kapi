@@ -35,7 +35,7 @@
 func (s *Store) Source() ([]byte, uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rev &lt; 1 &amp;&amp; len(s.src) == 0 {
+	if s.rev < 1 && len(s.src) == 0 {
 		return nil, 0
 	}
 	return bytes.Clone(s.src), s.rev

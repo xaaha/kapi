@@ -18,12 +18,12 @@ var catalog = []Preset{
 		Summary: "Highlighted source with line numbers and an optional file label",
 		Example: `<!-- lang: a language name (go, ts, python, sql, ...). file: label shown above, also picks the language when lang is missing.
      lines: first-last line numbers in the original file, like 10-24; numbering starts at the first.
-     Body: the raw source. Escape < as &lt; and & as &amp;. Common indentation is removed. -->
+     Body: the raw source exactly as it is; nothing needs escaping. Common indentation is removed. -->
 <kapi-code lang="go" file="internal/page/store.go" lines="41-47">
 func (s *Store) Source() ([]byte, uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rev &lt; 1 {
+	if s.rev < 1 {
 		return nil, 0
 	}
 	return s.src, s.rev
@@ -33,7 +33,7 @@ func (s *Store) Source() ([]byte, uint64) {
 	{
 		Name:    "kapi-diff",
 		Summary: "A unified diff with added, removed and context lines, hunk headers and highlighting",
-		Example: `<!-- Body: a unified diff as git diff prints it. Escape < as &lt; and & as &amp;.
+		Example: `<!-- Body: a unified diff exactly as git diff prints it; nothing needs escaping.
      file: label shown above; defaults to the +++ path. lang: highlight the code; defaults to the file's language. -->
 <kapi-diff file="internal/page/store.go">
 @@ -12,6 +12,7 @@ type Store struct {

@@ -48,7 +48,7 @@ func load(src []byte) (*html.Node, error) {
 
 func parse(src []byte) (*html.Node, error) {
 	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(bytes.NewReader(src), body)
+	nodes, err := html.ParseFragment(bytes.NewReader(escapeRawBodies(src)), body)
 	if err != nil {
 		return nil, err
 	}

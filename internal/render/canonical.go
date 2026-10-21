@@ -53,7 +53,11 @@ func canonicalNode(b *bytes.Buffer, n *html.Node) {
 	}
 	writeStart(b, n.Data, keptPresetAttrs(n))
 	if rawPresets[n.Data] {
-		b.WriteString(rawEscaper.Replace(rawText(n)))
+		if rawSource[n.Data] {
+			b.WriteString(rawText(n))
+		} else {
+			b.WriteString(rawEscaper.Replace(rawText(n)))
+		}
 	} else {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			canonicalNode(b, c)

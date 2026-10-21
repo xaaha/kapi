@@ -126,7 +126,7 @@ func TestSanitizerKeepsSafeContent(t *testing.T) {
 		`<img src="data:image/png;base64,AAAA">`:    `src="data:image/png;base64,AAAA"`,
 		`<p data-kapi-state="done">x</p>`:           `data-kapi-state="done"`,
 		`<p aria-label="label">x</p>`:               `aria-label="label"`,
-		`<kapi-code>&lt;b&gt;</kapi-code>`:          `&lt;b&gt;`,
+		`<kapi-code><b></kapi-code>`:                `&lt;b&gt;`,
 	}
 	for src, want := range cases {
 		if got := render(t, src); !strings.Contains(got, want) {
