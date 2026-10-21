@@ -476,7 +476,7 @@ test("on phones Send sits to the right of the composer on the same row", async (
   const row = `(() => {
     const t = document.querySelector(".kapi-composer textarea").getBoundingClientRect();
     const s = document.querySelector(".kapi-composer .kapi-primary").getBoundingClientRect();
-    return { right: s.left >= t.right, sameRow: s.top < t.bottom && t.top < s.bottom, edge: innerWidth - s.right };
+    return { right: s.left >= t.right, sameRow: s.top < t.bottom && t.top < s.bottom, edge: document.documentElement.clientWidth - s.right };
   })()`;
   try {
     assert.deepEqual(await phone.eval(row), { right: true, sameRow: true, edge: 12 });
