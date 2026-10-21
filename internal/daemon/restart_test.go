@@ -104,6 +104,60 @@ func TestARestartedDaemonKeepsThePortWithANewTokenAndTheStreamResumes(t *testing
 	}
 }
 
+func freePort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func TestOnlyAWellFormedHTTPURLHasItsPortReused(t *testing.T) {
+	const tok = "0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		name  string
+		saved func(port string) string
+		reuse bool
+	}{
+		{"well formed", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/\n" }, true},
+		{"all interfaces", func(p string) string { return "http://0.0.0.0:" + p + "/" + tok + "/\n" }, false},
+		{"ipv6 loopback", func(p string) string { return "http://[::1]:" + p + "/" + tok + "/\n" }, false},
+		{"localhost", func(p string) string { return "http://localhost:" + p + "/" + tok + "/\n" }, false},
+		{"short token", func(p string) string { return "http://127.0.0.1:" + p + "/0123abcd/\n" }, false},
+		{"non-hex token", func(p string) string { return "http://127.0.0.1:" + p + "/" + strings.Repeat("z", 32) + "/\n" }, false},
+		{"junk after the url", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/x\n" }, false},
+		{"junk after the newline", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/\njunk" }, false},
+		{"junk before the url", func(p string) string { return "x http://127.0.0.1:" + p + "/" + tok + "/\n" }, false},
+		{"https", func(p string) string { return "https://127.0.0.1:" + p + "/" + tok + "/\n" }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := shortHome(t)
+			port := freePort(t)
+			if err := os.WriteFile(HTTPURLPath(home), []byte(tc.saved(port)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, stop := servingAt(t, home)
+			defer stop()
+			got, err := url.Parse(httpURL(t, home))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Hostname() != "127.0.0.1" || strings.Contains(got.Path, tok) {
+				t.Fatalf("http.url = %s, want 127.0.0.1 and a fresh token", got)
+			}
+			if reused := got.Port() == port; reused != tc.reuse {
+				t.Errorf("from %q: http.url = %s, port reused = %v, want %v", tc.saved(port), got, reused, tc.reuse)
+			}
+		})
+	}
+}
+
 func TestATakenPortGetsANewPortAndANewToken(t *testing.T) {
 	home := shortHome(t)
 	_, stop := servingAt(t, home)
