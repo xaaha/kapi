@@ -45,4 +45,4 @@ jobs:
         with:
           node-version: 24
       - name: Run Worker tests
-        run: node --test
+        run: npm test

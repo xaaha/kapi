@@ -96,7 +96,7 @@ too: it usually means Access is intercepting `/api/`, so check step 5.
 The tests use Node's built-in runner and a fake R2 bucket. Nothing to install.
 
 ```sh
-node --test
+npm test
 ```
 
 To run the Worker locally, put `KAPI_HUB_TOKEN=dev-token` in `.dev.vars` and
