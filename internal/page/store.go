@@ -166,7 +166,7 @@ func (s *Store) revPath(rev uint64) string {
 }
 
 func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error {
-	if err := os.WriteFile(s.revPath(rev), src, 0o600); err != nil {
+	if err := writeAtomic(s.revPath(rev), src); err != nil {
 		return err
 	}
 	if write {
@@ -200,6 +200,10 @@ func writeAtomic(path string, b []byte) error {
 		return err
 	}
 	if err := f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
 		f.Close()
 		return err
 	}
