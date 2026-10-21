@@ -52,7 +52,7 @@ func (e *e2e) kapi(args ...string) string {
 }
 
 func (e *e2e) killDaemon() {
-	if out, err := exec.Command("pkill", "-f", e.bin+" daemon").CombinedOutput(); err != nil && len(out) > 0 { //nolint:gosec // runs the kapi binary this test just built
+	if out, err := exec.Command("pkill", "-f", e.bin+" daemon").CombinedOutput(); err != nil && len(out) > 0 { //nolint:gosec // matches only the kapi binary this test just built
 		e.t.Logf("pkill: %v %s", err, out)
 	}
 }
