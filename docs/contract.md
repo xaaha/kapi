@@ -96,9 +96,17 @@ assigns missing ids, and bumps the revision as if an `edit` happened.
 
 ## HTTP
 
-The daemon also listens on `127.0.0.1` on a random port and writes
+The daemon also listens on `127.0.0.1` and writes
 `http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
 `kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
+
+On start the daemon reuses the port from a well-formed `http.url` when that
+port is free, and picks a random one otherwise. The token is new on every
+start, never reused: while the daemon is down any local program can bind the
+old port and read a reconnecting tab's token. A request with a wrong token to
+`p/{id}/` or `p/{id}/events` gets 403 with
+`{"error":"kapi restarted","reopen":"kapi open <page path>"}`, where the page
+path is filled in only for a page id kapi knows; the body never holds a token.
 
 The token is the first path segment of every URL, including static files. No
 cookies: browsers send cookies to every port on `127.0.0.1`, so a cookie would
