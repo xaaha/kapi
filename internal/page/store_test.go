@@ -465,7 +465,7 @@ func TestEditAfterASplitKeepsEverything(t *testing.T) {
 func TestRefreshAndOpsKeepTheSourceCanonical(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s := open(t, home, path)
-	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n"+hoistRepro[:3]+` data-kapi-id="cccccccc"`+hoistRepro[strings.Index(hoistRepro, ">"):])
+	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n"+strings.ReplaceAll(hoistRepro, "aaaaaaaa", "cccccccc"))
 	if _, ok, err := s.Refresh(); err != nil || !ok {
 		t.Fatalf("Refresh = %v, %v", ok, err)
 	}
