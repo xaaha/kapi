@@ -153,4 +153,12 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w2.next(t); got != "#4 human message: after the daemon restarted" {
 		t.Fatalf("after daemon restart, event = %q", got)
 	}
+
+	e.kapi("send", e.page, "fifth")
+	e.kapi("send", e.page, "sixth")
+	for _, want := range []string{"#5 human message: fifth", "#6 human message: sixth"} {
+		if got := w2.next(t); got != want {
+			t.Fatalf("live event = %q, want %q (each event exactly once)", got, want)
+		}
+	}
 }

@@ -1,6 +1,8 @@
 package eventlog
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -78,5 +80,15 @@ func TestAckIsMonotonic(t *testing.T) {
 	}
 	if err := l.Ack("r", 9); err == nil {
 		t.Fatal("ack past end should fail")
+	}
+}
+
+func TestCorruptCursorsFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err == nil {
+		t.Error("Open accepted a corrupt cursors file, which would replay every event")
 	}
 }

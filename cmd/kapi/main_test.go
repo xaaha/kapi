@@ -118,18 +118,18 @@ func TestD10WatchReconnectsAfterLostConnection(t *testing.T) {
 
 func TestD10PendingAndStatus(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{
-		Events:  []eventlog.Event{{Seq: 1, Author: "human", Kind: "message", Text: "hi"}},
-		Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 1}},
+		Events:  []eventlog.Event{{Seq: 1, Author: "human", Kind: "message", Text: "hi"}, {Seq: 2, Author: "agent", Kind: "message", Text: "yo"}},
+		Readers: []daemon.ReaderStatus{{Reader: "agent", Pending: 1}, {Reader: "codex", Attached: true, Since: time.Date(2026, 1, 2, 3, 4, 5, 0, time.Local)}},
 	}}
 	out, err := run(t, f, "pending", "plan.html", "--reader", "codex")
-	if err != nil || out != "#1 human message: hi\n" {
+	if err != nil || out != "#1 human message: hi\n#2 agent message: yo\n" {
 		t.Fatalf("pending = %q, %v", out, err)
 	}
 	if f.requests[0].Reader != "codex" || f.requests[0].Op != "pending" {
 		t.Errorf("pending request = %+v", f.requests[0])
 	}
 	out, err = run(t, f, "status", "plan.html")
-	if err != nil || out != "agent: not attached, 1 unread\n" {
+	if err != nil || out != "agent: not attached, 1 unread\ncodex: attached since 03:04:05, 0 unread\n" {
 		t.Fatalf("status = %q, %v", out, err)
 	}
 }
@@ -147,6 +147,10 @@ func TestD10HelpAndCompletion(t *testing.T) {
 	out, err = run(t, &fakeAPI{}, "completion", "bash")
 	if err != nil || !strings.Contains(out, "complete -F _kapi kapi") {
 		t.Fatalf("bash completion = %v:\n%s", err, out)
+	}
+	out, err = run(t, &fakeAPI{}, "completion", "zsh")
+	if err != nil || !strings.HasPrefix(out, "#compdef kapi\n") {
+		t.Fatalf("zsh completion = %v:\n%s", err, out)
 	}
 	if _, err := run(t, &fakeAPI{}, "bogus"); err == nil || !strings.Contains(err.Error(), `unknown command "bogus" for kapi`) {
 		t.Errorf("unknown command error = %v", err)
