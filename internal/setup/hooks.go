@@ -16,6 +16,8 @@ const Marker = "kapi"
 
 const openCodeManagedPrefix = "kapi managed opencode plugin:"
 
+var errUnmanagedOpenCode = errors.New("refusing to change an OpenCode plugin kapi did not write")
+
 // Options says where the agent harnesses keep their settings and which
 // command the hooks run.
 type Options struct {
@@ -68,6 +70,9 @@ func Install(o Options) []Result {
 			return []byte(s), changed, nil
 		}),
 		rewriteFile("OpenCode", openCode, func(b []byte) ([]byte, bool, error) {
+			if len(b) > 0 && !bytes.Contains(b, []byte(openCodeManagedPrefix)) {
+				return nil, false, errUnmanagedOpenCode
+			}
 			next := []byte(openCodePlugin(o.Command, o.timeout()))
 			return next, !bytes.Equal(b, next), nil
 		}),
@@ -94,7 +99,7 @@ func Remove(o Options) []Result {
 	case err != nil:
 		r.Err = err
 	case !strings.Contains(string(b), openCodeManagedPrefix):
-		r.Err = fmt.Errorf("refusing to remove an OpenCode plugin kapi did not write")
+		r.Err = errUnmanagedOpenCode
 	default:
 		r.Err = os.Remove(openCode)
 		r.Status = "removed"

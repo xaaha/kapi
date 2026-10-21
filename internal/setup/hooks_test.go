@@ -241,3 +241,15 @@ func TestReviewH1TrailingContentIsAnErrorAndLeavesTheFile(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewH2InstallRefusesAnOpenCodePluginItDidNotWrite(t *testing.T) {
+	o := opts(t)
+	_, _, _, openCode, _ := o.paths()
+	write(t, openCode, "export default {}\n")
+	if s := statuses(Install(o))["OpenCode"]; !strings.HasPrefix(s, "error: refusing") {
+		t.Errorf("OpenCode: %s", s)
+	}
+	if read(t, openCode) != "export default {}\n" {
+		t.Error("unmanaged plugin overwritten")
+	}
+}
