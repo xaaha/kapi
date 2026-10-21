@@ -286,7 +286,10 @@ test("a whole-page refresh waits until the edit ends", async () => {
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.type(" Mine.");
   const loads = pageLoads();
+  const streams = requests("GET", "/events").length;
   server.push({ kind: "revision", target: "", text: "file changed" });
+  server.dropStreams();
+  await until(() => requests("GET", "/events").length > streams);
   await new Promise((r) => setTimeout(r, 200));
   assert.equal(pageLoads(), loads);
   assert.match(await text("bbbbbbbb"), /Mine\.$/);
