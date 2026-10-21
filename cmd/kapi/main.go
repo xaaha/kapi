@@ -104,13 +104,14 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	on := fs.String("on", "", "Element id the message is about")
 	return &cli.Command{
-		Name:  name,
-		Short: short,
-		Long:  short + ". Prints the event number.",
-		Flags: fs,
-		Args:  []cli.ArgDef{pageArg, {Name: "text", Required: true, Desc: "Message text; several words are joined"}},
+		Name:       name,
+		Short:      short,
+		Long:       short + ". Prints the event number. Flags go before the page; every word after it is message text.",
+		Flags:      fs,
+		FlagsFirst: true,
+		Args:       []cli.ArgDef{pageArg, {Name: "text", Required: true, Desc: "Message text; several words are joined"}},
 		Examples: []cli.Example{
-			{Command: "kapi " + name + ` plan.html --on cutover "is this still true?"`, Description: "Message about one element"},
+			{Command: "kapi " + name + ` --on cutover plan.html "is this still true?"`, Description: "Message about one element"},
 		},
 		Run: func(args []string) error {
 			page, err := pagePath(args, 2, name)

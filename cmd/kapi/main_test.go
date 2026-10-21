@@ -57,7 +57,6 @@ func TestD10SendAndSayBuildMessages(t *testing.T) {
 		wantTarget string
 	}{
 		{"send with flag first", []string{"send", "--on", "cutover", "plan.html", "is", "this", "true?"}, "human", "cutover"},
-		{"send with flag last", []string{"send", "plan.html", "is", "this", "true?", "--on", "cutover"}, "human", "cutover"},
 		{"say", []string{"say", "plan.html", "is", "this", "true?"}, "agent", ""},
 	}
 	for _, tc := range cases {
@@ -151,5 +150,15 @@ func TestD10HelpAndCompletion(t *testing.T) {
 	}
 	if _, err := run(t, &fakeAPI{}, "bogus"); err == nil || !strings.Contains(err.Error(), `unknown command "bogus" for kapi`) {
 		t.Errorf("unknown command error = %v", err)
+	}
+}
+
+func TestReviewF1MessageWordsStartingWithADashAreText(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 1}}}
+	if _, err := run(t, f, "say", "--on", "cutover", "plan.html", "-", "item", "-5", "--on", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.requests[0]; got.Text != "- item -5 --on x" || got.Target != "cutover" {
+		t.Errorf("request = %+v", got)
 	}
 }
