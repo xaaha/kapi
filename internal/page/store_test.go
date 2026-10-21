@@ -50,6 +50,38 @@ func externalWrite(t *testing.T, path, src string) {
 	}
 }
 
+func externalWriteKeepingStamp(t *testing.T, path, src string) {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, fi.ModTime(), fi.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnEditWithTheSameSizeAndMtimeIsNotOverwritten(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	externalWriteKeepingStamp(t, path, `<p data-kapi-id="aaaaaaaa">b</p>`)
+	if _, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+		t.Fatalf("Apply over a same-stamp edit: err = %v, want ErrStale", err)
+	}
+	if got := onDisk(t, path); got != `<p data-kapi-id="aaaaaaaa">b</p>` {
+		t.Fatalf("file = %s, want the external edit kept", got)
+	}
+	if _, changed, err := s.Refresh(); err != nil || !changed {
+		t.Fatalf("Refresh: changed=%v err=%v, want the edit picked up", changed, err)
+	}
+	if src, rev := s.Source(); rev != 2 || string(src) != `<p data-kapi-id="aaaaaaaa">b</p>` {
+		t.Errorf("after Refresh rev %d source %s", rev, src)
+	}
+}
+
 func mustApply(t *testing.T, s *Store, op Op) Summary {
 	t.Helper()
 	_, rev := s.Source()

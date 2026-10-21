@@ -7,13 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"sync"
-	"time"
 )
 
 var (
@@ -42,12 +40,6 @@ type Store struct {
 	src   []byte
 	rev   uint64
 	undo  []uint64
-	stamp stamp
-}
-
-type stamp struct {
-	mod  time.Time
-	size int64
 }
 
 type state struct {
@@ -81,7 +73,7 @@ func Open(home, path string) (*Store, error) {
 		}
 		s.rev, s.undo = st.Rev, st.Undo
 	}
-	raw, st, err := s.read()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +82,6 @@ func Open(home, path string) (*Store, error) {
 		err = s.commit(src, !bytes.Equal(raw, src), 1, nil)
 	} else if s.src, err = os.ReadFile(s.revPath(s.rev)); err == nil {
 		if bytes.Equal(raw, s.src) {
-			s.stamp = st
 			return s, nil
 		}
 		err = s.commit(src, !bytes.Equal(raw, src), s.rev+1, append(s.undo, s.rev))
@@ -113,20 +104,9 @@ func (s *Store) Source() ([]byte, uint64) {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fi, err := os.Stat(s.path)
-	if err != nil {
+	raw, err := os.ReadFile(s.path)
+	if err != nil || bytes.Equal(raw, s.src) {
 		return Summary{}, false, err
-	}
-	if (stamp{fi.ModTime(), fi.Size()}) == s.stamp {
-		return Summary{}, false, nil
-	}
-	raw, st, err := s.read()
-	if err != nil {
-		return Summary{}, false, err
-	}
-	if bytes.Equal(raw, s.src) {
-		s.stamp = st
-		return Summary{}, false, nil
 	}
 	old, src := s.src, assignIDs(raw)
 	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, append(s.undo, s.rev)); err != nil {
@@ -141,11 +121,11 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	if rev != s.rev {
 		return s.rev, Summary{}, ErrStale
 	}
-	fi, err := os.Stat(s.path)
+	raw, err := os.ReadFile(s.path)
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
-	if (stamp{fi.ModTime(), fi.Size()}) != s.stamp {
+	if !bytes.Equal(raw, s.src) {
 		return s.rev, Summary{}, ErrStale
 	}
 	if op.Kind == "undo" {
@@ -173,20 +153,6 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	return s.rev, sum, nil
 }
 
-func (s *Store) read() ([]byte, stamp, error) {
-	f, err := os.Open(s.path)
-	if err != nil {
-		return nil, stamp{}, err
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, stamp{}, err
-	}
-	b, err := io.ReadAll(f)
-	return b, stamp{fi.ModTime(), fi.Size()}, err
-}
-
 func (s *Store) revPath(rev uint64) string {
 	return filepath.Join(s.dir, "revs", strconv.FormatUint(rev, 10)+".html")
 }
@@ -200,10 +166,6 @@ func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error 
 			return err
 		}
 	}
-	fi, err := os.Stat(s.path)
-	if err != nil {
-		return err
-	}
 	b, err := json.Marshal(state{Rev: rev, Undo: undo})
 	if err != nil {
 		return err
@@ -211,7 +173,7 @@ func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error 
 	if err := writeAtomic(filepath.Join(s.dir, "state.json"), b); err != nil {
 		return err
 	}
-	s.src, s.rev, s.undo, s.stamp = src, rev, undo, stamp{fi.ModTime(), fi.Size()}
+	s.src, s.rev, s.undo = src, rev, undo
 	return nil
 }
 

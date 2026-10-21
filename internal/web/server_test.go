@@ -338,15 +338,36 @@ func TestOpsApplyAndLogARevision(t *testing.T) {
 }
 
 func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
-	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa">a, edited by the agent</p>`)
-	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`)
-	if code != http.StatusConflict || out["rev"] != 2.0 {
-		t.Fatalf("op over a file edit: %d %v, want 409 rev 2", code, out)
+	for name, edit := range map[string]func(t *testing.T, path, src string){"new mtime": editFile, "same size and mtime": editKeepingStamp} {
+		t.Run(name, func(t *testing.T) {
+			s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+			edit(t, s.path, `<p data-kapi-id="aaaaaaaa">b</p>`)
+			code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`)
+			if code != http.StatusConflict || out["rev"] != 2.0 {
+				t.Fatalf("op over a file edit: %d %v, want 409 rev 2", code, out)
+			}
+			if b, _ := os.ReadFile(s.path); string(b) != `<p data-kapi-id="aaaaaaaa">b</p>` {
+				t.Errorf("file = %s, want the agent's edit kept", b)
+			}
+			ev := s.events()
+			if len(ev) != 1 || ev[0].Author != "agent" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
+				t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
+			}
+		})
 	}
-	ev := s.events()
-	if len(ev) != 1 || ev[0].Author != "agent" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
-		t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
+}
+
+func editKeepingStamp(t *testing.T, path, src string) {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, fi.ModTime(), fi.ModTime()); err != nil {
+		t.Fatal(err)
 	}
 }
 
