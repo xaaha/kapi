@@ -50,6 +50,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 	root := &cli.Command{
 		Name:   "kapi",
 		Long:   "kapi: shared HTML pages for you and your agent.",
+		Flags:  flag.NewFlagSet("kapi", flag.ContinueOnError),
 		Config: &cli.Config{Out: out},
 		SubCommands: []*cli.Command{
 			watchCmd(c, out, sleep),
@@ -159,6 +160,7 @@ func statusCmd(c api, out io.Writer) *cli.Command {
 	return &cli.Command{
 		Name:  "status",
 		Short: "Show who is attached to a page",
+		Flags: flag.NewFlagSet("status", flag.ContinueOnError),
 		Args:  []cli.ArgDef{pageArg},
 		Run: func(args []string) error {
 			page, err := pagePath(args, 1, "status")
@@ -187,6 +189,7 @@ func daemonCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
+		Flags: flag.NewFlagSet("daemon", flag.ContinueOnError),
 		Long:  "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.",
 		Run: func([]string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

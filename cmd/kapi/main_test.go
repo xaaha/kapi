@@ -162,3 +162,15 @@ func TestReviewF1MessageWordsStartingWithADashAreText(t *testing.T) {
 		t.Errorf("request = %+v", got)
 	}
 }
+
+func TestReviewF2F3UnknownFlagsAreErrors(t *testing.T) {
+	for _, args := range [][]string{{"status", "--reader", "agent", "plan.html"}, {"--bogus"}} {
+		f := &fakeAPI{}
+		if _, err := run(t, f, args...); err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
+			t.Errorf("%v: error = %v", args, err)
+		}
+		if len(f.requests) != 0 {
+			t.Errorf("%v: sent %d requests", args, len(f.requests))
+		}
+	}
+}
