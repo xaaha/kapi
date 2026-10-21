@@ -68,6 +68,27 @@
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
   const peers = (el) => [...el.parentElement.children].filter((c) => c.hasAttribute("data-kapi-id"));
 
+  function describe(id) {
+    const el = find(id);
+    if (!el) return "a block no longer on the page";
+    const text = el.textContent.replace(/\s+/g, " ").trim();
+    const short = text.length > 40 ? `${text.slice(0, 39).trimEnd()}\u2026` : text;
+    const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
+    if (!preset) return short || "an empty block";
+    const named = el.getAttribute("title") || el.getAttribute("data-file");
+    return named || short ? `${preset}: ${named || short}` : preset;
+  }
+
+  const humanize = (text) => text.replace(/#([a-z2-7]{8})\b/g, (m, id) => (find(id) ? `\u201c${describe(id)}\u201d` : m));
+
+  function flash(el) {
+    select(el);
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    ring.removeAttribute("data-flash");
+    void ring.offsetWidth;
+    ring.setAttribute("data-flash", "");
+  }
+
   function setStatus(state) {
     for (const d of root.querySelectorAll(".kapi-dot")) d.dataset.state = state;
     statusText.textContent = STATUS[state] || STATUS.none;
@@ -76,7 +97,7 @@
 
   function say(text, kind = "info") {
     clearTimeout(noticeTimer);
-    notice.textContent = text;
+    notice.textContent = humanize(text);
     notice.dataset.kind = kind;
     notice.hidden = false;
     if (kind === "info") noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
@@ -88,7 +109,8 @@
     selected = el;
     el?.setAttribute("data-kapi-selected", "");
     targetChip.hidden = !el;
-    targetChip.textContent = el ? `About #${idOf(el)}  ×` : "";
+    targetChip.textContent = el ? `About: ${describe(idOf(el))}  ×` : "";
+    targetChip.title = el ? `#${idOf(el)}` : "";
     renderBar();
   }
 
@@ -126,6 +148,7 @@
       ring.style.width = `${r.width + 8}px`;
       ring.style.height = `${r.height + 8}px`;
       ring.toggleAttribute("data-editing", !!editing);
+      if (editing) ring.removeAttribute("data-flash");
     }
   }
 
@@ -328,7 +351,9 @@
       const t = new Date(ev.time);
       if (!isNaN(t)) meta.append(h("time", { datetime: ev.time, text: t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }));
     }
-    if (ev.target) meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": ev.target, text: `#${ev.target}` }));
+    if (ev.target) {
+      meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": ev.target, title: `#${ev.target}`, text: describe(ev.target) }));
+    }
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
     empty.hidden = true;
     if (near) log.parentElement.scrollTop = log.parentElement.scrollHeight;
@@ -401,10 +426,8 @@
     const ref = e.target.closest("[data-ref]");
     if (ref) {
       const el = find(ref.dataset.ref);
-      if (el) {
-        select(el);
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
-      } else say(`Block #${ref.dataset.ref} is no longer on the page.`);
+      if (el) flash(el);
+      else say("That block is no longer on the page.");
       return;
     }
     if (e.target === targetChip) return select(null);

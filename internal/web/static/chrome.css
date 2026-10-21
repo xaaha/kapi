@@ -99,6 +99,22 @@
   box-shadow: 0 0 0 2px var(--kapi-accent);
 }
 
+#kapi-chrome .kapi-ring[data-flash] {
+  animation: kapi-flash 0.9s ease-out 2;
+}
+
+@keyframes kapi-flash {
+  0% {
+    background: color-mix(in srgb, var(--kapi-accent) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-chrome .kapi-ring[data-flash] {
+    animation: none;
+  }
+}
+
 #kapi-chrome .kapi-ring[data-editing] {
   background: color-mix(in srgb, var(--kapi-accent) 6%, transparent);
 }

@@ -111,7 +111,7 @@ test("on 409 it refetches the page and tells the user", async () => {
 test("shows the 422 inbound-link error and keeps the block", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="delete"]');
-  await until(async () => (await notice()) === "#bbbbbbbb is linked from #dddddddd");
+  await until(async () => (await notice()) === "“Move the session store to the new clust…” is linked from “See the summary before starting.”");
   assert.equal(await page.eval(`document.querySelector(".kapi-notice").dataset.kind`), "error");
   assert.notEqual(await text("bbbbbbbb"), null);
   await click('.kapi-bar [data-action="edit"]');
@@ -135,14 +135,16 @@ test("sends a chat message with Ctrl+Enter, targeted at the selected block", asy
   await page.waitFor(`document.querySelector(".kapi-composer textarea").value === ""`);
 
   await select("bbbbbbbb");
-  assert.match(await page.eval(`document.querySelector(".kapi-target").textContent`), /#bbbbbbbb/);
+  assert.equal(await page.eval(`document.querySelector(".kapi-target").textContent`), "About: Move the session store to the new clust…  ×");
+  assert.equal(await page.eval(`document.querySelector(".kapi-target").title`), "#bbbbbbbb");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("Why two steps?");
   await click(".kapi-composer .kapi-primary");
   await until(() => requests("POST", "/messages").length === 2);
   assert.deepEqual(requests("POST", "/messages")[1].body, { kind: "message", target: "bbbbbbbb", text: "Why two steps?" });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
-  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").textContent`), "#bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").textContent`), "Move the session store to the new clust…");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").title`), "#bbbbbbbb");
 });
 
 test("edits a block in place and posts its new outer HTML", async () => {
@@ -240,7 +242,8 @@ test("renders markup from events as literal text", async () => {
   assert.equal(await page.eval(`document.querySelectorAll("img").length`), 0);
   assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-msg-text").textContent`), evil);
   assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-author").textContent`), evil);
-  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-ref").textContent`), `#${evil}`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-ref").title`), `#${evil}`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-ref").textContent`), "a block no longer on the page");
   assert.match(await page.eval(`document.querySelector(".kapi-answer .kapi-msg-text").textContent`), /onerror=/);
   assert.equal(await page.eval(`window.pwned`), undefined);
 });
@@ -450,5 +453,15 @@ test("the block toolbar never covers page content", async () => {
   } finally {
     await phone.close();
   }
+});
+
+test("block tags name presets and jump to and flash the block", async () => {
+  server.push({ kind: "message", target: "ffffffff", text: "Is this window right?" });
+  await page.waitFor(`!!document.querySelector(".kapi-ref")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-ref").textContent`), "callout: Copy during the quiet window.");
+  await click(".kapi-ref");
+  await page.waitFor(`document.querySelector('[data-kapi-id="ffffffff"]').hasAttribute("data-kapi-selected")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-ring").hasAttribute("data-flash")`), true);
+  await page.waitFor(`(r => r.top >= 0 && r.bottom <= innerHeight)(document.querySelector('[data-kapi-id="ffffffff"]').getBoundingClientRect())`);
 });
 
