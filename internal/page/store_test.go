@@ -973,6 +973,20 @@ func TestDuplicateIDsFollowThePreviousRevision(t *testing.T) {
 	}
 }
 
+func TestAnEditThatSplitsSavesItsInput(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n")
+	s := open(t, home, path)
+	sum := mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`})
+	_, rev := s.Source()
+	saved := filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+	if !strings.Contains(sum.Text, "raw input saved to "+saved) {
+		t.Errorf("summary = %q, want it to name %s", sum.Text, saved)
+	}
+	if b, err := os.ReadFile(saved); err != nil || !strings.Contains(string(b), `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`) {
+		t.Errorf("saved input = %q, %v", b, err)
+	}
+}
+
 func TestAValuelessIDGetsAWellFormedValue(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id class=\"x\">hi</p>\n")
 	open(t, home, path)

@@ -272,7 +272,10 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
-		src, _, err = prepare(src, s.src)
+		var text string
+		if src, text, err = s.absorb(src, s.rev+1); text != "" {
+			sum.Text += "; " + text
+		}
 	}
 	if err == nil && op.Kind == "edit" {
 		if _, lost := render.Block(src, op.ID); errors.Is(lost, render.ErrNotFound) {
