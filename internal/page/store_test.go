@@ -82,6 +82,34 @@ func TestAnEditWithTheSameSizeAndMtimeIsNotOverwritten(t *testing.T) {
 	}
 }
 
+func TestApplyReplacesTheFileInsteadOfWritingIntoIt(t *testing.T) {
+	orig := `<p data-kapi-id="aaaaaaaa">a</p>`
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	reader := path + ".reader"
+	if err := os.Link(path, reader); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	if got := onDisk(t, reader); got != orig {
+		t.Errorf("a reader holding the old file saw %q; the write went into the file in place", got)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %v, want 0640 kept", fi.Mode().Perm())
+	}
+	left, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".*kapi-*"))
+	if err != nil || len(left) != 0 {
+		t.Errorf("temp files left behind: %v %v", left, err)
+	}
+}
+
 func mustApply(t *testing.T, s *Store, op Op) Summary {
 	t.Helper()
 	_, rev := s.Source()
