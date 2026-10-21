@@ -71,7 +71,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			newOpenCmd(c, out),
 		},
 	}
-	root.SubCommands = append(root.SubCommands, completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
+	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
 	return root
 }
 

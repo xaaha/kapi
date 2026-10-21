@@ -1,0 +1,70 @@
+---
+version: 2
+before:
+  hooks:
+    - mkdir -p completions
+    - sh -c "go run ./cmd/kapi completion zsh > completions/kapi.zsh"
+    - sh -c "go run ./cmd/kapi completion bash > completions/kapi.bash"
+builds:
+  - main: ./cmd/kapi
+    binary: kapi
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+archives:
+  - formats:
+      - tar.gz
+    files:
+      - completions/kapi.zsh
+      - completions/kapi.bash
+    name_template: '{{ .ProjectName }}_ {{- .Version }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else }}{{ .Arch }}{{ end }}'
+checksum:
+  name_template: checksums.txt
+homebrew_casks:
+  - repository:
+      owner: xaaha
+      name: homebrew-tap
+      token: "{{ .Env.GH_PAT }}"
+    homepage: https://github.com/xaaha/kapi
+    description: Shared HTML pages for you and your coding agent
+    license: MIT
+    # Go 1.27 builds target macOS 13. Without this, Homebrew installs happily
+    # on 12 and the binary refuses to launch. The on_macos block is load
+    # bearing: a top-level depends_on macos: sets macos_required, which makes
+    # the cask refuse to install on Linux Homebrew even though it ships a
+    # working on_linux block.
+
+    # The staged-path token is escaped because goreleaser renders this file as a
+    # Go template before Homebrew sees it. Unescaping it fails the release
+    # build, which no CI job runs.
+    custom_block: |
+      on_macos do
+        depends_on macos: :ventura
+      end
+
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "{{ `{{staged_path}}` }}/kapi"]
+        end
+      end
+    binaries:
+      - kapi
+    completions:
+      bash: completions/kapi.bash
+      zsh: completions/kapi.zsh
+    caveats: |
+      The binary is not signed or notarized. macOS quarantine has been automatically removed.
+changelog:
+  # GitHub generates the release body from .github/release.yml after this
+  # workflow runs (see the "Refresh release notes" step in release.yml).
+  # Disable goreleaser's own commit-based changelog so it doesn't get
+  # overwritten on every release.
+  disable: true

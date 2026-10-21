@@ -1,0 +1,50 @@
+---
+name: Release
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Generate token for Homebrew tap
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          repositories: homebrew-tap
+          owner: xaaha
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: ~> v2
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ steps.app-token.outputs.token }}
+      - name: Refresh release notes from .github/release.yml
+        # goreleaser creates the release with an empty body (its own
+        # changelog is disabled). This step fetches GitHub's auto-notes
+        # (which group merged PRs by label per .github/release.yml) and
+        # writes them as the release body. Skipped on workflow_dispatch.
+        # That path uses --snapshot and doesn't publish a release.
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="${{ github.ref_name }}" \
+            --jq .body \
+            | gh release edit "${{ github.ref_name }}" --notes-file -
