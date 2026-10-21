@@ -24,6 +24,8 @@ var parents = map[string]string{
 func init() {
 	presets = map[string]presetFunc{
 		"kapi-callout":  renderCallout,
+		"kapi-code":     renderCode,
+		"kapi-diff":     renderDiff,
 		"kapi-table":    renderTable,
 		"kapi-compare":  renderCompare,
 		"kapi-option":   renderOption,
