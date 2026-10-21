@@ -80,27 +80,33 @@ func Open(home, path string) (*Store, error) {
 		}
 		s.rev, s.undo = st.Rev, st.Undo
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
 	if s.rev > 0 {
 		if s.src, err = os.ReadFile(s.revPath(s.rev)); err != nil {
 			return nil, err
 		}
 	}
-	src, text, err := s.absorb(raw, s.rev+1)
-	if err != nil {
-		return nil, err
-	}
-	if s.rev > 0 && bytes.Equal(raw, s.src) && bytes.Equal(src, raw) {
+	for attempt := 0; ; attempt++ {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		src, text, err := s.absorb(raw, s.rev+1)
+		if err != nil {
+			return nil, err
+		}
+		if s.rev > 0 && bytes.Equal(raw, s.src) && bytes.Equal(src, raw) {
+			return s, nil
+		}
+		err = s.commit(src, raw, s.rev+1, s.undo)
+		if errors.Is(err, errFileChanged) && attempt < 10 {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		s.conversion = text
 		return s, nil
 	}
-	s.conversion = text
-	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
-		return nil, err
-	}
-	return s, nil
 }
 
 func (s *Store) Path() string { return s.path }
@@ -200,23 +206,30 @@ func (s *Store) Source() ([]byte, uint64) {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := os.ReadFile(s.path)
-	if err != nil || bytes.Equal(raw, s.src) {
-		return Summary{}, false, err
+	for attempt := 0; attempt < 10; attempt++ {
+		raw, err := os.ReadFile(s.path)
+		if err != nil || bytes.Equal(raw, s.src) {
+			return Summary{}, false, err
+		}
+		old := s.src
+		src, text, err := s.absorb(raw, s.rev+1)
+		if err != nil {
+			return Summary{}, false, err
+		}
+		summary := "edited in the file"
+		if text != "" {
+			summary += "; " + text
+		}
+		err = s.commit(src, raw, s.rev+1, s.undo)
+		if errors.Is(err, errFileChanged) {
+			continue
+		}
+		if err != nil {
+			return Summary{}, false, err
+		}
+		return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
 	}
-	old := s.src
-	src, text, err := s.absorb(raw, s.rev+1)
-	if err != nil {
-		return Summary{}, false, err
-	}
-	summary := "edited in the file"
-	if text != "" {
-		summary += "; " + text
-	}
-	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
-		return Summary{}, false, err
-	}
-	return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
+	return Summary{}, false, nil
 }
 
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
@@ -249,8 +262,8 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		if err != nil {
 			return s.rev, Summary{}, err
 		}
-		if err := s.commit(src, true, s.rev+1, s.undo[:n-1]); err != nil {
-			return s.rev, Summary{}, err
+		if err := s.commit(src, raw, s.rev+1, s.undo[:n-1]); err != nil {
+			return s.rev, Summary{}, stale(err)
 		}
 		return s.rev, Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}, nil
 	}
@@ -261,24 +274,33 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
-	if err := s.commit(src, true, s.rev+1, append(s.undo, s.rev)); err != nil {
-		return s.rev, Summary{}, err
+	if err := s.commit(src, raw, s.rev+1, append(s.undo, s.rev)); err != nil {
+		return s.rev, Summary{}, stale(err)
 	}
 	return s.rev, sum, nil
+}
+
+func stale(err error) error {
+	if errors.Is(err, errFileChanged) {
+		return ErrStale
+	}
+	return err
 }
 
 func (s *Store) revPath(rev uint64) string {
 	return filepath.Join(s.dir, "revs", strconv.FormatUint(rev, 10)+".html")
 }
 
-func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error {
-	if err := writeAtomic(s.revPath(rev), src); err != nil {
-		return err
-	}
-	if write {
-		if err := writeAtomic(s.path, src); err != nil {
+var errFileChanged = errors.New("the file changed while kapi was writing it")
+
+func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
+	if !bytes.Equal(src, base) {
+		if err := replaceFile(s.path, src, base); err != nil {
 			return err
 		}
+	}
+	if err := writeAtomic(s.revPath(rev), src); err != nil {
+		return err
 	}
 	b, err := json.Marshal(state{Rev: rev, Undo: undo})
 	if err != nil {
@@ -292,6 +314,10 @@ func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error 
 }
 
 func writeAtomic(path string, b []byte) error {
+	return replaceFile(path, b, nil)
+}
+
+func replaceFile(path string, b, expect []byte) error {
 	mode := os.FileMode(0o600)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
@@ -315,6 +341,15 @@ func writeAtomic(path string, b []byte) error {
 	}
 	if err := f.Close(); err != nil {
 		return err
+	}
+	if expect != nil {
+		cur, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(cur, expect) {
+			return errFileChanged
+		}
 	}
 	return os.Rename(f.Name(), path)
 }

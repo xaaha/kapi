@@ -3,6 +3,7 @@ package page
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -624,5 +625,45 @@ func TestOpenLabelsBlocksTheParserInvents(t *testing.T) {
 	}
 	if !strings.Contains(s.Conversion(), "raw input saved to") {
 		t.Errorf("conversion = %q", s.Conversion())
+	}
+}
+
+func TestAnAgentWritingInALoopAlwaysWins(t *testing.T) {
+	for trial := 0; trial < 30; trial++ {
+		home, path := newPage(t, "<p data-kapi-id='q0000001'>start</p>\n")
+		s := open(t, home, path)
+		version := func(i int) string {
+			return fmt.Sprintf("<p data-kapi-id='q0000001'>v%d</p>\n<p>needs an id %d</p>\n", i, i)
+		}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for i := 0; i < 40; i++ {
+				if err := os.WriteFile(path, []byte(version(i)), 0o600); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+	poll:
+		for {
+			select {
+			case <-done:
+				break poll
+			default:
+				if _, _, err := s.Refresh(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		for i := 0; i < 10; i++ {
+			if _, changed, err := s.Refresh(); err != nil || !changed {
+				break
+			}
+		}
+		got := onDisk(t, path)
+		if stripped := regexp.MustCompile(` data-kapi-id="[a-z2-7]{8}"`).ReplaceAllString(got, ""); stripped != version(39) {
+			t.Fatalf("trial %d: the agent's last write was lost:\n%s", trial, got)
+		}
 	}
 }
