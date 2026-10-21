@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 24
       - name: Run browser tests
-        run: node --test --test-concurrency=1 internal/web/browsertest/kapi.test.mjs
+        run: node --test --test-concurrency=1 --test-timeout=60000 internal/web/browsertest/kapi.test.mjs
   lint:
     runs-on: ubuntu-latest
     steps:
