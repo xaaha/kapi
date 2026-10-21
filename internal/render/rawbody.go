@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -63,20 +64,45 @@ func asciiEqualFold(b []byte, s string) bool {
 	return true
 }
 
-func escapeRawBodies(src []byte) []byte {
+func markRawBodies(src []byte) ([]byte, map[string]string) {
 	bodies := rawBodies(src)
 	if len(bodies) == 0 {
-		return src
+		return src, nil
 	}
+	prefix := "kapi-raw-body-"
+	for bytes.Contains(src, []byte(prefix)) {
+		prefix += "x"
+	}
+	table := make(map[string]string, len(bodies))
 	var b bytes.Buffer
 	last := 0
-	for _, r := range bodies {
+	for i, r := range bodies {
+		key := prefix + strconv.Itoa(i)
+		table[key] = string(src[r[0]:r[1]])
 		b.Write(src[last:r[0]])
-		b.WriteString(rawEscaper.Replace(string(src[r[0]:r[1]])))
+		b.WriteString(key)
 		last = r[1]
 	}
 	b.Write(src[last:])
-	return b.Bytes()
+	return b.Bytes(), table
+}
+
+func restoreRawBodies(n *html.Node, table map[string]string) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		if rawSource[c.Data] && c.Namespace == "" {
+			if body, ok := table[rawText(c)]; ok {
+				for c.FirstChild != nil {
+					c.RemoveChild(c.FirstChild)
+				}
+				c.AppendChild(&html.Node{Type: html.TextNode, Data: body})
+			}
+			continue
+		}
+		restoreRawBodies(c, table)
+	}
 }
 
 func MaskRawBodies(src []byte) []byte {

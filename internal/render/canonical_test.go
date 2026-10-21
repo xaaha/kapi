@@ -63,8 +63,9 @@ func canonicalSources(t *testing.T) map[string]string {
 
 func proseOnly(t *testing.T, out string, isPreset func(*html.Node) bool) string {
 	t.Helper()
+	marked, bodies := markRawBodies([]byte(out))
 	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(out), body)
+	nodes, err := html.ParseFragment(bytes.NewReader(marked), body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +86,7 @@ func proseOnly(t *testing.T, out string, isPreset func(*html.Node) bool) string 
 	for _, n := range nodes {
 		root.AppendChild(n)
 	}
+	restoreRawBodies(root, bodies)
 	replace(root)
 	var b bytes.Buffer
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
@@ -109,7 +111,7 @@ func checkCanonical(t *testing.T, name, src string) {
 	if rc := render(t, c); rc != r {
 		t.Errorf("%s: Render(Canonical(src)) differs from Render(src)\nsrc:       %s\ncanonical: %s\nrender:    %s\nviaCanon:  %s", name, src, c, r, rc)
 	}
-	if pr, pc := proseOnly(t, r, renderedPreset), proseOnly(t, string(escapeRawBodies([]byte(c))), sourcePreset); pr != pc {
+	if pr, pc := proseOnly(t, r, renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
 	}
 	assertParseStable(t, name, r)
@@ -310,6 +312,18 @@ func TestUnlabeledCountsBlocksWithoutAnID(t *testing.T) {
 	for src, want := range cases {
 		if got, err := Unlabeled([]byte(src)); err != nil || got != want {
 			t.Errorf("Unlabeled(%q) = %d, %v; want %d", src, got, err, want)
+		}
+	}
+}
+
+func TestCodeBodiesKeepEveryByte(t *testing.T) {
+	for _, body := range []string{"a\r\nb\x00c", "\r\n\r\nx\ry\n", "tab\tthen \ufffd and \ue000 marker"} {
+		for _, tag := range []string{"kapi-code", "kapi-diff"} {
+			src := "<p>x <" + tag + ">" + body + "</" + tag + "> y</p><table><" + tag + ">" + body + "</" + tag + "></table>"
+			c := canonical(t, src)
+			if n := strings.Count(c, ">"+body+"</"+tag+">"); n != 2 {
+				t.Errorf("Canonical kept the %s body %q intact %d of 2 times:\n%q", tag, body, n, c)
+			}
 		}
 	}
 }

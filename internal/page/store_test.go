@@ -924,3 +924,12 @@ func TestAnAgentRenameInsideTheWriteWindowWins(t *testing.T) {
 		}
 	}
 }
+
+func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
+	body := "a\r\nb\x00c"
+	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")
+	open(t, home, path)
+	if got := onDisk(t, path); !strings.Contains(got, ">"+body+"</kapi-code>") {
+		t.Errorf("split changed the code body:\n%q", got)
+	}
+}

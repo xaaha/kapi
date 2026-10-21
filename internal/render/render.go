@@ -48,13 +48,15 @@ func load(src []byte) (*html.Node, error) {
 
 func parse(src []byte) (*html.Node, error) {
 	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(bytes.NewReader(escapeRawBodies(src)), body)
+	marked, bodies := markRawBodies(src)
+	nodes, err := html.ParseFragment(bytes.NewReader(marked), body)
 	if err != nil {
 		return nil, err
 	}
 	for _, n := range nodes {
 		body.AppendChild(n)
 	}
+	restoreRawBodies(body, bodies)
 	var blocks []*html.Node
 	collectBlocks(body, &blocks)
 	for _, n := range blocks {
@@ -236,7 +238,7 @@ func writeEnd(b *bytes.Buffer, tag string) {
 }
 
 var (
-	textEscaper = strings.NewReplacer("&", "&amp;", "\u00a0", "&nbsp;", "<", "&lt;", ">", "&gt;")
+	textEscaper = strings.NewReplacer("&", "&amp;", "\u00a0", "&nbsp;", "<", "&lt;", ">", "&gt;", "\x00", "\ufffd")
 	attrEscaper = strings.NewReplacer("&", "&amp;", "\u00a0", "&nbsp;", `"`, "&quot;")
 )
 
