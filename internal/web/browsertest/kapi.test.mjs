@@ -225,3 +225,18 @@ test("ignores Escape and a second save while a save is in flight", async () => {
   assert.equal(requests("POST", "/ops").length, 1);
   assert.equal(await notice(), "");
 });
+
+test("renders markup from events as literal text", async () => {
+  const evil = `<img src=x onerror="window.pwned=1">`;
+  server.push({ author: evil, kind: "message", target: evil, text: evil });
+  server.push({ kind: "answer", text: evil });
+  server.push({ kind: "revision", target: "", text: evil });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
+  await until(() => pageLoads() === 2);
+  assert.equal(await page.eval(`document.querySelectorAll("img").length`), 0);
+  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-msg-text").textContent`), evil);
+  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-author").textContent`), evil);
+  assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-ref").textContent`), `#${evil}`);
+  assert.match(await page.eval(`document.querySelector(".kapi-answer .kapi-msg-text").textContent`), /onerror=/);
+  assert.equal(await page.eval(`window.pwned`), undefined);
+});
