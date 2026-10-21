@@ -22,9 +22,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  assert.deepEqual(page.errors, []);
+  const errors = page.errors;
   await page.close();
   await server.close();
+  assert.deepEqual(errors, []);
 });
 
 const requests = (method, suffix) =>

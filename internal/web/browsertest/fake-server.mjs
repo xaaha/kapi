@@ -215,8 +215,9 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.rev++;
     },
     close() {
-      for (const res of state.streams) res.destroy();
-      return new Promise((resolve) => server.close(resolve));
+      const closed = new Promise((resolve) => server.close(resolve));
+      server.closeAllConnections();
+      return closed;
     },
   };
 }

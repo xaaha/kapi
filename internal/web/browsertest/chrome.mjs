@@ -61,7 +61,15 @@ export async function launch() {
   const send = (method, params = {}, sessionId) =>
     new Promise((resolve, reject) => {
       const id = nextId++;
-      waiting.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        waiting.delete(id);
+        reject(new Error(`${method} got no reply in 5s`));
+      }, 5000);
+      const settle = (fn) => (v) => {
+        clearTimeout(timer);
+        fn(v);
+      };
+      waiting.set(id, { resolve: settle(resolve), reject: settle(reject) });
       ws.send(JSON.stringify({ id, method, params, sessionId }));
     });
 
