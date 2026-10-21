@@ -3,7 +3,7 @@ package daemon
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +12,7 @@ import (
 	"log"
 	"maps"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,6 +22,8 @@ import (
 	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/web"
 )
 
 var ErrAlreadyRunning = errors.New("daemon already running")
@@ -42,6 +45,7 @@ type Response struct {
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Readers []ReaderStatus   `json:"readers,omitempty"`
 	Pages   []PageStatus     `json:"pages,omitempty"`
+	URL     string           `json:"url,omitempty"`
 }
 
 type PageStatus struct {
@@ -63,12 +67,24 @@ type Server struct {
 
 	mu       sync.Mutex
 	pages    map[string]*eventlog.Log
+	stores   map[string]*page.Store
 	attached map[string]map[string]time.Time
+	presence map[string]map[string]string
+	baseURL  string
+	token    string
 }
 
 func New(home string) *Server {
-	return &Server{home: home, pages: map[string]*eventlog.Log{}, attached: map[string]map[string]time.Time{}}
+	return &Server{
+		home:     home,
+		pages:    map[string]*eventlog.Log{},
+		stores:   map[string]*page.Store{},
+		attached: map[string]map[string]time.Time{},
+		presence: map[string]map[string]string{},
+	}
 }
+
+func HTTPURLPath(home string) string { return filepath.Join(home, "http.url") }
 
 const maxSocketPath = 103
 
@@ -105,6 +121,12 @@ func (s *Server) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	stopHTTP, err := s.serveHTTP(ctx)
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	defer stopHTTP()
 	go func() {
 		<-ctx.Done()
 		ln.Close()
@@ -121,6 +143,50 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
+func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		ln.Close()
+		return nil, err
+	}
+	host := ln.Addr().String()
+	s.mu.Lock()
+	s.baseURL, s.token = "http://"+host, hex.EncodeToString(b)
+	s.mu.Unlock()
+	h := web.New(s, s.token, host)
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
+	go func() {
+		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("http: %v", err)
+		}
+	}()
+	pollCtx, stopPoll := context.WithCancel(ctx)
+	go h.Poll(pollCtx, 300*time.Millisecond)
+	urlFile := HTTPURLPath(s.home)
+	if err := writeFile(urlFile, s.baseURL+"/?t="+s.token+"\n"); err != nil {
+		stopPoll()
+		srv.Close()
+		return nil, err
+	}
+	return func() {
+		stopPoll()
+		srv.Close()
+		os.Remove(urlFile)
+	}, nil
+}
+
+func writeFile(path, text string) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 func (s *Server) page(path string) (*eventlog.Log, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("page path must be absolute: %q", path)
@@ -130,8 +196,7 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	if l, ok := s.pages[path]; ok {
 		return l, nil
 	}
-	sum := sha256.Sum256([]byte(path))
-	dir := filepath.Join(s.home, "pages", hex.EncodeToString(sum[:8]))
+	dir := filepath.Join(s.home, "pages", page.ID(path))
 	l, err := eventlog.Open(dir)
 	if err != nil {
 		return nil, err
@@ -139,8 +204,78 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	if err := os.WriteFile(filepath.Join(dir, "page.txt"), []byte(path+"\n"), 0o600); err != nil {
 		return nil, err
 	}
+	if err := clearPresence(l); err != nil {
+		return nil, err
+	}
 	s.pages[path] = l
 	return l, nil
+}
+
+func clearPresence(l *eventlog.Log) error {
+	events, _ := l.After(0)
+	last := map[string]string{}
+	var readers []string
+	for _, e := range events {
+		if e.Kind == eventlog.KindPresence {
+			if _, ok := last[e.Author]; !ok {
+				readers = append(readers, e.Author)
+			}
+			last[e.Author] = e.Text
+		}
+	}
+	for _, r := range readers {
+		if last[r] == "none" {
+			continue
+		}
+		if _, err := l.Append(&eventlog.Event{Author: r, Kind: eventlog.KindPresence, Text: "none"}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) store(path string) (*page.Store, *eventlog.Log, error) {
+	l, err := s.page(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st, ok := s.stores[path]; ok {
+		return st, l, nil
+	}
+	st, err := page.Open(s.home, path)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.stores[path] = st
+	return st, l, nil
+}
+
+// Page finds a page kapi has seen by its 16-hex id, for the browser.
+func (s *Server) Page(id string) (*page.Store, *eventlog.Log, error) {
+	b, err := os.ReadFile(filepath.Join(s.home, "pages", id, "page.txt"))
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.store(strings.TrimSuffix(string(b), "\n"))
+}
+
+func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {
+	s.mu.Lock()
+	if s.presence[path] == nil {
+		s.presence[path] = map[string]string{}
+	}
+	prev := s.presence[path][reader]
+	if prev == state || (prev == "" && state == "none") {
+		s.mu.Unlock()
+		return
+	}
+	s.presence[path][reader] = state
+	s.mu.Unlock()
+	if _, err := l.Append(&eventlog.Event{Author: reader, Kind: eventlog.KindPresence, Text: state}); err != nil {
+		log.Printf("presence %s %s: %v", reader, state, err)
+	}
 }
 
 func (s *Server) handle(conn net.Conn) {
@@ -152,6 +287,10 @@ func (s *Server) handle(conn net.Conn) {
 		if !errors.Is(err, io.EOF) {
 			reply(enc, &Response{Error: err.Error()})
 		}
+		return
+	}
+	if req.Op == "open" {
+		s.open(enc, req.Page)
 		return
 	}
 	if req.Op == "pages" {
@@ -175,6 +314,9 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
+		if e.Kind == "message" && s.presenceOf(req.Page, e.Author) == "busy" {
+			s.setPresence(req.Page, e.Author, "watching", l)
+		}
 		reply(enc, &Response{Event: &e})
 	case "pending":
 		reply(enc, &Response{Events: l.Pending(req.Reader)})
@@ -193,6 +335,23 @@ func (s *Server) handle(conn net.Conn) {
 	}
 }
 
+func (s *Server) open(enc *json.Encoder, path string) {
+	if _, _, err := s.store(path); err != nil {
+		reply(enc, &Response{Error: err.Error()})
+		return
+	}
+	s.mu.Lock()
+	url := s.baseURL + "/p/" + page.ID(path) + "/?t=" + s.token
+	s.mu.Unlock()
+	reply(enc, &Response{URL: url})
+}
+
+func (s *Server) presenceOf(path, reader string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.presence[path][reader]
+}
+
 func reply(enc *json.Encoder, resp *Response) {
 	if err := enc.Encode(resp); err != nil {
 		log.Printf("reply: %v", err)
@@ -206,6 +365,8 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	}
 	s.setAttached(req.Page, req.Reader, true)
 	defer s.setAttached(req.Page, req.Reader, false)
+	s.setPresence(req.Page, req.Reader, "watching", l)
+	defer s.setPresence(req.Page, req.Reader, "none", l)
 
 	gone := make(chan struct{})
 	go func() {
@@ -225,10 +386,16 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	for {
 		events, changed := l.After(sent)
 		for _, e := range events {
+			sent = e.Seq
+			if e.Kind == eventlog.KindPresence {
+				continue
+			}
 			if err := enc.Encode(Response{Event: &e}); err != nil {
 				return
 			}
-			sent = e.Seq
+			if e.Author == "human" && (e.Kind == "message" || e.Kind == "answer") {
+				s.setPresence(req.Page, req.Reader, "busy", l)
+			}
 		}
 		select {
 		case <-changed:
