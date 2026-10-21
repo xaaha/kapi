@@ -184,7 +184,6 @@ func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
 		{Kind: "done", ID: "aaaaaaaa"},
 		{Kind: "archive", ID: "aaaaaaaa"},
 		{Kind: "delete", ID: "aaaaaaaa"},
-		{Kind: "move", ID: "aaaaaaaa"},
 	} {
 		t.Run(op.Kind, func(t *testing.T) {
 			home, path := newPage(t, orig)
@@ -221,6 +220,20 @@ func TestUndoAtAnOldRevDoesNotUndoAnotherTabsOp(t *testing.T) {
 	}
 	if got := onDisk(t, path); strings.Contains(got, "bbbbbbbb") {
 		t.Errorf("a stale undo brought b back:\n%s", got)
+	}
+}
+
+func TestAMoveAtAnOldRevIsStaleEvenWhenTheBlockIsUnchanged(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "move", ID: "cccccccc", Before: "aaaaaaaa"})
+	moved := onDisk(t, path)
+	if _, _, err := s.Apply(1, Op{Kind: "move", ID: "aaaaaaaa", Before: "cccccccc"}); !errors.Is(err, ErrStale) {
+		t.Fatalf("move at rev 1 after another tab's move: err = %v, want ErrStale", err)
+	}
+	if got := onDisk(t, path); got != moved {
+		t.Errorf("a stale move changed the order:\n%s", got)
 	}
 }
 

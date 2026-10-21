@@ -162,7 +162,9 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 }
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
-	if op.Kind == "undo" {
+	switch op.Kind {
+	case "edit", "done", "archive", "delete":
+	default:
 		return false
 	}
 	then, err := os.ReadFile(s.revPath(rev))
