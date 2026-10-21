@@ -364,6 +364,16 @@ test("Undo renders as a quiet bordered button", async () => {
   assert.deepEqual(styles, [["Undo", "1px", "solid"]]);
 });
 
+test("printing hides all chrome and the space it reserves", async () => {
+  await select("bbbbbbbb");
+  await page.call("Emulation.setEmulatedMedia", { media: "print" });
+  const shown = await page.eval(`[...document.querySelectorAll("#kapi-chrome, #kapi-chrome *")].filter((e) => e.checkVisibility()).length`);
+  const pad = await page.eval(`getComputedStyle(document.documentElement).paddingRight + " " + getComputedStyle(document.documentElement).paddingBottom`);
+  await page.call("Emulation.setEmulatedMedia", { media: "" });
+  assert.equal(shown, 0);
+  assert.equal(pad, "0px 0px");
+});
+
 test("every request carries the token prefix and every POST is JSON", async () => {
   await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
   await click(".kapi-composer .kapi-primary");

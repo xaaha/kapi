@@ -387,3 +387,13 @@
     height: 40vh;
   }
 }
+
+@media print {
+  html {
+    padding: 0 !important;
+  }
+
+  #kapi-chrome {
+    display: none !important;
+  }
+}
