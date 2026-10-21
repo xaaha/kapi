@@ -271,3 +271,32 @@ test("refetches other changed blocks while one is being edited", async () => {
   await page.key("Escape");
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
+
+test("edits a preset block as source in a textarea", async () => {
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  assert.equal(requests("GET", "/source/ffffffff").length, 1);
+  assert.equal(await page.eval(`document.activeElement.value`), server.state.blocks[5].source);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
+  assert.equal(await page.eval(`getComputedStyle(document.activeElement).fontFamily.includes("mono")`), true);
+
+  const next = '<kapi-callout data-kapi-id="ffffffff" kind="warning">Copy at night.</kapi-callout>';
+  await page.eval(`document.activeElement.value = ${JSON.stringify(next)}`);
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "ffffffff", html: next } });
+  await until(async () => (await text("ffffffff")) === "Copy at night.");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
+});
+
+test("Escape cancels a source edit and shows the block again", async () => {
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  await page.type("junk");
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-source")`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').checkVisibility()`), true);
+  assert.equal(requests("POST", "/ops").length, 0);
+});

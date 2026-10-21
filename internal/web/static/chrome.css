@@ -34,6 +34,27 @@ html.kapi-panel-open {
   caret-color: var(--kapi-accent);
 }
 
+#kapi-page [data-kapi-editing-source] {
+  display: none !important;
+}
+
+#kapi-page textarea.kapi-source {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--kapi-accent);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--kapi-accent-soft);
+  background: var(--kapi-bg);
+  color: var(--kapi-text);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  tab-size: 2;
+}
+
 #kapi-chrome,
 #kapi-chrome * {
   box-sizing: border-box;

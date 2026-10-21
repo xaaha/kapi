@@ -12,6 +12,8 @@ body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #fff; 
 h1 { font-size: 30px; line-height: 1.2; }
 [data-kapi-state="done"] { opacity: .55; }
 [data-kapi-state="archived"] { display: none; }
+.callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
+.callout p { margin: 0; }
 form { display: grid; gap: 10px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
 `;
 
@@ -23,7 +25,7 @@ export const SAMPLE = [
   {
     id: "eeeeeeee",
     html:
-      '<kapi-form data-kapi-id="eeeeeeee" name="rollout"><form name="rollout">' +
+      '<kapi-form data-kapi-id="eeeeeeee" data-kapi-preset="kapi-form" name="rollout"><form name="rollout">' +
       '<label><input type="radio" name="when" value="now"> Now</label>' +
       '<label><input type="radio" name="when" value="later"> Later</label>' +
       '<label><input type="checkbox" name="envs" value="staging"> Staging</label>' +
@@ -31,12 +33,24 @@ export const SAMPLE = [
       '<label>Notes <input type="text" name="notes"></label>' +
       '<button type="submit">Send answer</button></form></kapi-form>',
   },
+  {
+    id: "ffffffff",
+    source: '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window.</kapi-callout>',
+  },
 ];
+
+const renderCallout = (src) =>
+  src.replace(
+    /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
+    '<aside$1 data-kapi-preset="kapi-callout" class="callout"><p>$2</p></aside>',
+  );
+
+const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderCallout(b.source) } : { ...b });
 
 export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const state = {
     rev: 1,
-    blocks: blocks.map((b) => ({ ...b })),
+    blocks: blocks.map(withHTML),
     opDelay: 0,
     history: [],
     events: [],
@@ -67,7 +81,10 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (linked) return { status: 422, body: { error: `#${op.id} is linked from #${linked.id}` } };
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
-    if (op.kind === "edit") state.blocks[i].html = op.html;
+    if (op.kind === "edit" && state.blocks[i].source) {
+      state.blocks[i].source = op.html;
+      state.blocks[i].html = renderCallout(op.html);
+    } else if (op.kind === "edit") state.blocks[i].html = op.html;
     else if (op.kind === "delete") state.blocks.splice(i, 1);
     else if (op.kind === "done" || op.kind === "archive") {
       const value = op.kind === "done" ? "done" : "archived";
@@ -120,6 +137,12 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (!b) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev) });
       return res.end(b.html);
+    }
+    if (req.method === "GET" && rest.startsWith("source/")) {
+      const b = state.blocks.find((x) => x.id === rest.slice(7));
+      if (!b) return json(res, 404, { error: "no block" });
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Kapi-Rev": String(state.rev) });
+      return res.end(b.source ?? b.html);
     }
     if (req.method === "GET" && rest === "events") {
       if (state.refuseEvents) {

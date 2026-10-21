@@ -120,7 +120,7 @@
 
   function placeBar() {
     if (bar.hidden || !selected) return;
-    const r = selected.getBoundingClientRect();
+    const r = (editing?.area || selected).getBoundingClientRect();
     const top = r.top - bar.offsetHeight - 8;
     bar.style.top = `${Math.max(8, top < 8 ? r.bottom + 8 : top)}px`;
     const right = document.documentElement.clientWidth - 8;
@@ -168,20 +168,43 @@
     }
   }
 
-  function startEdit() {
-    if (!selected || editing) return;
-    editing = { el: selected, original: selected.innerHTML };
-    selected.contentEditable = "true";
-    selected.focus();
-    getSelection().selectAllChildren(selected);
-    getSelection().collapseToEnd();
+  async function startEdit() {
+    if (!selected || editing || busy) return;
+    const el = selected;
+    if (!el.hasAttribute("data-kapi-preset")) {
+      editing = { el, original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
+      el.contentEditable = "true";
+      el.focus();
+      getSelection().selectAllChildren(el);
+      getSelection().collapseToEnd();
+      return renderBar();
+    }
+    busy = true;
+    renderBar();
+    const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}`)
+      .then((res) => (res.ok ? res.text() : null), () => null);
+    busy = false;
+    if (src === null) say("Could not load the source of this block.", "error");
+    if (src === null || selected !== el || editing) return renderBar();
+    const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of #${idOf(el)}` });
+    area.value = src;
+    area.rows = Math.min(24, src.split("\n").length + 2);
+    el.before(area);
+    el.setAttribute("data-kapi-editing-source", "");
+    editing = { el, area, initial: src, read: () => area.value };
+    area.focus();
     renderBar();
   }
 
   function endEdit(restore) {
-    const { el, original } = editing;
-    if (restore) el.innerHTML = original;
-    el.removeAttribute("contenteditable");
+    const { el, area, original } = editing;
+    if (area) {
+      area.remove();
+      el.removeAttribute("data-kapi-editing-source");
+    } else {
+      if (restore) el.innerHTML = original;
+      el.removeAttribute("contenteditable");
+    }
     editing = null;
     renderBar();
     if (pending) scheduleFlush();
@@ -201,10 +224,10 @@
   async function saveEdit() {
     if (!editing || busy) return;
     const session = editing;
-    const { el, original } = session;
-    if (el.innerHTML === original) return endEdit(false);
-    const id = idOf(el);
-    const res = await op("edit", { id, html: outerHTMLOf(el) });
+    const html = session.read();
+    if (html === session.initial) return endEdit(false);
+    const id = idOf(session.el);
+    const res = await op("edit", { id, html });
     if (editing !== session) return;
     if (res?.ok) {
       endEdit(false);
