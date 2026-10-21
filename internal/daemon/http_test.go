@@ -1,9 +1,9 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -26,6 +26,12 @@ func serving(t *testing.T) (home string, s *Server, stop func()) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(home) })
+	s, stop = servingAt(t, home)
+	return home, s, stop
+}
+
+func servingAt(t *testing.T, home string) (s *Server, stop func()) {
+	t.Helper()
 	s = New(home)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -47,7 +53,7 @@ func serving(t *testing.T) (home string, s *Server, stop func()) {
 		if _, err := os.Stat(HTTPURLPath(home)); err == nil {
 			if conn, err := net.Dial("unix", SocketPath(home)); err == nil {
 				conn.Close()
-				return home, s, stop
+				return s, stop
 			}
 		}
 		if time.Now().After(deadline) {
@@ -123,8 +129,8 @@ func TestDaemonServesPagesOverHTTPAndWritesTheURL(t *testing.T) {
 	}
 
 	stop()
-	if _, err := os.Stat(HTTPURLPath(home)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("http.url left after shutdown: %v", err)
+	if after, err := os.ReadFile(HTTPURLPath(home)); err != nil || !bytes.Equal(after, b) {
+		t.Errorf("http.url after shutdown = %q, %v; want it kept for the next start", after, err)
 	}
 }
 

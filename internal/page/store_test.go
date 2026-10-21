@@ -176,6 +176,119 @@ func TestApplyRefusesAStaleRevision(t *testing.T) {
 	}
 }
 
+func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c</p>\n"
+	const agents = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c, by the agent</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
+		{Kind: "done", ID: "aaaaaaaa"},
+		{Kind: "archive", ID: "aaaaaaaa"},
+		{Kind: "delete", ID: "aaaaaaaa"},
+	} {
+		t.Run(op.Kind, func(t *testing.T) {
+			home, path := newPage(t, orig)
+			s := open(t, home, path)
+			externalWrite(t, path, agents)
+			if _, _, err := s.Refresh(); err != nil {
+				t.Fatal(err)
+			}
+			rev, _, err := s.Apply(1, op)
+			if err != nil {
+				t.Fatalf("%s at rev 1 after the agent changed another block: %v", op.Kind, err)
+			}
+			if rev != 3 {
+				t.Errorf("rev = %d, want 3", rev)
+			}
+			if got := onDisk(t, path); !strings.Contains(got, "c, by the agent") {
+				t.Errorf("the agent's edit was lost:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestUndoAtAnOldRevDoesNotUndoAnotherTabsOp(t *testing.T) {
+	home, path := newPage(t, "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	if _, _, err := s.Apply(1, Op{Kind: "delete", ID: "bbbbbbbb"}); err != nil {
+		t.Fatalf("tab 2 deletes b at rev 1: %v", err)
+	}
+	for _, id := range []string{"", "hhhhhhhh"} {
+		if _, _, err := s.Apply(2, Op{Kind: "undo", ID: id}); !errors.Is(err, ErrStale) {
+			t.Fatalf("tab 1 undoes at rev 2 with id %q: err = %v, want ErrStale", id, err)
+		}
+	}
+	if got := onDisk(t, path); strings.Contains(got, "bbbbbbbb") {
+		t.Errorf("a stale undo brought b back:\n%s", got)
+	}
+}
+
+func TestAMoveAtAnOldRevIsStaleEvenWhenTheBlockIsUnchanged(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "move", ID: "cccccccc", Before: "aaaaaaaa"})
+	moved := onDisk(t, path)
+	if _, _, err := s.Apply(1, Op{Kind: "move", ID: "aaaaaaaa", Before: "cccccccc"}); !errors.Is(err, ErrStale) {
+		t.Fatalf("move at rev 1 after another tab's move: err = %v, want ErrStale", err)
+	}
+	if got := onDisk(t, path); got != moved {
+		t.Errorf("a stale move changed the order:\n%s", got)
+	}
+}
+
+func TestOpsWithoutAnIDAreRefused(t *testing.T) {
+	const orig = "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n"
+	for _, kind := range []string{"edit", "done", "archive", "delete", "move"} {
+		home, path := newPage(t, orig)
+		s := open(t, home, path)
+		_, _, err := s.Apply(1, Op{Kind: kind, HTML: "<b>x</b>"})
+		if err == nil || errors.Is(err, ErrStale) {
+			t.Errorf("%s with no id: err = %v, want a refusal", kind, err)
+		}
+		if got := onDisk(t, path); got != orig {
+			t.Errorf("%s with no id changed the file:\n%s", kind, got)
+		}
+	}
+}
+
+func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
+		{Kind: "done", ID: "aaaaaaaa"},
+		{Kind: "archive", ID: "aaaaaaaa"},
+		{Kind: "delete", ID: "aaaaaaaa"},
+		{Kind: "move", ID: "aaaaaaaa"},
+	} {
+		t.Run(op.Kind, func(t *testing.T) {
+			home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+			s := open(t, home, path)
+			const agents = "<p data-kapi-id=\"aaaaaaaa\">a, by the agent</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+			externalWrite(t, path, agents)
+			if _, _, err := s.Refresh(); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.Apply(1, op); !errors.Is(err, ErrStale) {
+				t.Fatalf("%s on a block the agent changed: err = %v, want ErrStale", op.Kind, err)
+			}
+			if got := onDisk(t, path); got != agents {
+				t.Errorf("stale op changed the file:\n%s", got)
+			}
+		})
+	}
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	for _, rev := range []uint64{0, 3} {
+		if _, _, err := s.Apply(rev, Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+			t.Errorf("rev %d: err = %v, want ErrStale", rev, err)
+		}
+	}
+	if _, _, err := s.Apply(1, Op{Kind: "undo"}); !errors.Is(err, ErrStale) {
+		t.Errorf("undo at an old rev: err = %v, want ErrStale", err)
+	}
+}
+
 func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">old</p>\n<p data-kapi-id=\"bbbbbbbb\">keep</p>\n")
 	s := open(t, home, path)
@@ -191,6 +304,32 @@ func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	if err != nil || !strings.Contains(string(snap), ">old</p>") {
 		t.Errorf("revs/1.html = %q, %v; want the source before the edit", snap, err)
 	}
+}
+
+func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a <kapi-code data-kapi-id=\"cccccccc\" lang=\"go\">x</kapi-code></p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#cccccccc\">code</a> and <a href=\"#gone0000\">old</a></p>\n"
+	for _, tc := range []struct {
+		name, id, html, dangling string
+	}{
+		{"adds a link to a missing id", "aaaaaaaa", `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">x</kapi-code> <a href="#zzzzzzzz">z</a> <a href="#yyyyyyyy">y</a></p>`, "#yyyyyyyy, #zzzzzzzz"},
+		{"removes a linked element", "aaaaaaaa", `<p>a, no code</p>`, "#cccccccc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, path := newPage(t, orig)
+			s := open(t, home, path)
+			_, _, err := s.Apply(1, Op{Kind: "edit", ID: tc.id, HTML: tc.html})
+			if !errors.Is(err, ErrDanglingLinks) || !strings.HasSuffix(err.Error(), ": "+tc.dangling) {
+				t.Fatalf("err = %v, want ErrDanglingLinks naming %s", err, tc.dangling)
+			}
+			if got := onDisk(t, path); got != orig {
+				t.Errorf("refused edit changed the file:\n%s", got)
+			}
+		})
+	}
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "edit", ID: "bbbbbbbb", HTML: `<p>see <a href="#cccccccc">the code</a> and <a href="#gone0000">old</a></p>`})
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">y</kapi-code> <a href="#bbbbbbbb">b</a></p>`})
 }
 
 func TestEditRejectsBadHTML(t *testing.T) {

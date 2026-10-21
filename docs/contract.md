@@ -82,8 +82,20 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
 `delete` fails with `ErrInboundLinks` when another element links to `#<id>`.
+`edit` follows the same rule: it fails with `ErrDanglingLinks` (422, naming
+the ids) when it adds a link to a missing id or removes an element that other
+elements link to.
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
+
+An op whose `rev` is older than the current revision still applies when its
+target element's outer source at that `rev` (from `revs/<rev>.html`) equals
+its current outer source, so edits to other blocks never refuse a save.
+This applies to `edit`, `done`, `archive` and `delete` only. `move` and `undo`
+depend on the whole page, so they need the exact current `rev`. `ErrStale`
+(409) means the target element itself changed, or a `move` or `undo` came at
+an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
+422.
 
 `undo` reverts only the browser's own ops. When the file changed outside the
 browser after the op being undone, `undo` fails with 422 instead of discarding
@@ -96,9 +108,20 @@ assigns missing ids, and bumps the revision as if an `edit` happened.
 
 ## HTTP
 
-The daemon also listens on `127.0.0.1` on a random port and writes
+The daemon also listens on `127.0.0.1` and writes
 `http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
 `kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
+
+On start the daemon reuses the port from a well-formed `http.url` when that
+port is free, and picks a random one otherwise. The token is new on every
+start, never reused: while the daemon is down any local program can bind the
+old port and read a reconnecting tab's token. A request with a wrong token to
+`p/{id}/` or `p/{id}/events` gets 403 with
+`{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
+is filled in only for a page id kapi knows and only when the segment is one of
+the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
+`$KAPI_HOME/previous-tokens`, mode 0600); otherwise `reopen` is
+`kapi open <page>`. The body never holds a token.
 
 The token is the first path segment of every URL, including static files. No
 cookies: browsers send cookies to every port on `127.0.0.1`, so a cookie would
