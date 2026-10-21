@@ -92,3 +92,29 @@ func TestCorruptCursorsFileIsAnError(t *testing.T) {
 		t.Error("Open accepted a corrupt cursors file, which would replay every event")
 	}
 }
+
+func TestPresenceIsNeverPending(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []Event{{Kind: KindPresence, Text: "watching"}, {Kind: "message", Text: "hi"}, {Kind: KindPresence, Text: "none"}} {
+		if _, err := l.Append(&e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p := l.Pending("agent"); len(p) != 1 || p[0].Seq != 2 {
+		t.Errorf("Pending = %+v, want only the message", p)
+	}
+	_, pending, err := Summary(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := pending("agent"); n != 1 {
+		t.Errorf("Summary pending = %d, want 1", n)
+	}
+	if events, _ := l.After(0); len(events) != 3 {
+		t.Errorf("After(0) has %d events, want all 3", len(events))
+	}
+}
