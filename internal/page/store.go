@@ -34,12 +34,12 @@ type Summary struct {
 }
 
 type Store struct {
-	mu    sync.Mutex
-	path  string
-	dir   string
-	src   []byte
-	rev   uint64
-	undo  []uint64
+	mu   sync.Mutex
+	path string
+	dir  string
+	src  []byte
+	rev  uint64
+	undo []uint64
 }
 
 type state struct {
