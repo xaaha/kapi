@@ -113,6 +113,9 @@ test("shows the 422 inbound-link error and keeps the block", async () => {
   await until(async () => (await notice()) === "#bbbbbbbb is linked from #dddddddd");
   assert.equal(await page.eval(`document.querySelector(".kapi-notice").dataset.kind`), "error");
   assert.notEqual(await text("bbbbbbbb"), null);
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  assert.equal(await notice(), "");
 });
 
 test("deletes an unlinked block", async () => {
