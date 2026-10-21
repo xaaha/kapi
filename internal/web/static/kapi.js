@@ -41,6 +41,7 @@
     h("button", { type: "button", "data-action": action, title, text: label });
 
   const dot = h("span", { class: "kapi-dot", "data-state": "connecting" });
+  const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
   const statusText = h("span", { class: "kapi-status", text: STATUS.connecting });
   const notice = h("div", { class: "kapi-notice", role: "status", hidden: "" });
   const log = h("ol", { class: "kapi-log", "aria-live": "polite" });
@@ -55,10 +56,9 @@
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, dot, statusText,
       button("Undo", "undo", "Undo the last change")),
-    notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), composer);
-  const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
+    notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, ring, bar, panel);
+  const root = h("div", { id: "kapi-chrome" }, ring, panel);
   document.body.append(root);
 
   if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
@@ -95,7 +95,7 @@
   function renderBar() {
     if (!selected || !selected.isConnected) {
       bar.hidden = true;
-      return placeBar();
+      return placeRing();
     }
     if (editing) {
       bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }),
@@ -106,7 +106,7 @@
       const state = selected.getAttribute("data-kapi-state");
       bar.replaceChildren(button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
-        button("Delete", "delete"), button("Ask", "ask", "Ask the agent about this block"));
+        button("Delete", "delete"));
       bar.querySelector('[data-action="done"]').disabled = state === "done";
       bar.querySelector('[data-action="archive"]').disabled = state === "archived";
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
@@ -114,24 +114,19 @@
     }
     for (const b of bar.querySelectorAll("button")) b.disabled ||= busy;
     bar.hidden = false;
-    placeBar();
+    placeRing();
   }
 
-  function placeBar() {
+  function placeRing() {
     ring.hidden = bar.hidden || !selected || !!editing?.area;
-    if (bar.hidden || !selected) return;
-    const r = (editing?.area || selected).getBoundingClientRect();
     if (!ring.hidden) {
+      const r = selected.getBoundingClientRect();
       ring.style.left = `${r.left - 4}px`;
       ring.style.top = `${r.top - 4}px`;
       ring.style.width = `${r.width + 8}px`;
       ring.style.height = `${r.height + 8}px`;
       ring.toggleAttribute("data-editing", !!editing);
     }
-    const top = r.top - bar.offsetHeight - 8;
-    bar.style.top = `${Math.max(8, top < 8 ? r.bottom + 8 : top)}px`;
-    const right = document.documentElement.clientWidth - 8;
-    bar.style.left = `${Math.max(8, Math.min(r.right - bar.offsetWidth, right - bar.offsetWidth))}px`;
   }
 
   async function request(path, body) {
@@ -252,7 +247,6 @@
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
-    if (name === "ask") return input.focus();
     if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
     if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
     const list = peers(selected);
@@ -476,10 +470,15 @@
     }
   });
 
-  addEventListener("scroll", placeBar, { passive: true });
-  addEventListener("resize", placeBar);
-  document.addEventListener("input", placeBar);
-  new ResizeObserver(placeBar).observe(main);
+  addEventListener("scroll", placeRing, { passive: true });
+  addEventListener("resize", placeRing);
+  document.addEventListener("input", placeRing);
+  new ResizeObserver(placeRing).observe(main);
+  new ResizeObserver(() => {
+    if (!panel.classList.contains("kapi-expanded")) {
+      document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
+    }
+  }).observe(panel);
   notice.addEventListener("click", () => (notice.hidden = true));
   panel.addEventListener("focusin", () => panel.classList.add("kapi-expanded"));
   panel.addEventListener("focusout", (e) => {

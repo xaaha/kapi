@@ -104,16 +104,13 @@
 }
 
 #kapi-chrome .kapi-bar {
-  position: fixed;
-  z-index: 2147483000;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  padding: 3px;
-  background: var(--kapi-bg);
-  border: 1px solid var(--kapi-border);
-  border-radius: var(--kapi-radius);
-  box-shadow: var(--kapi-shadow);
+  padding: 6px 8px;
+  border-top: 1px solid var(--kapi-border);
+  background: var(--kapi-surface);
 }
 
 #kapi-chrome .kapi-bar-label {
@@ -347,12 +344,8 @@
 }
 
 @media screen and (max-width: 760px) {
-  :root {
-    --kapi-bar-height: 104px;
-  }
-
   html {
-    padding-bottom: var(--kapi-bar-height);
+    padding-bottom: var(--kapi-bar-height, 104px);
   }
 
   #kapi-chrome .kapi-panel {

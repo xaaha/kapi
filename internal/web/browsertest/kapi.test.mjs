@@ -424,3 +424,31 @@ test("forms whose names shadow DOM properties still select and submit", async ()
     values: { action: ["ship"], getAttribute: ["ready"], closest: ["x"] },
   });
 });
+
+const OVERLAPS = `(() => {
+  const b = document.querySelector(".kapi-bar").getBoundingClientRect();
+  return [...document.querySelectorAll("#kapi-page *")].filter((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width && r.height && r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
+  }).map((e) => e.tagName + (e.dataset.kapiId ? "#" + e.dataset.kapiId : ""));
+})()`;
+
+test("the block toolbar never covers page content", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-panel").getBoundingClientRect().height`);
+  } finally {
+    await phone.close();
+  }
+});
+
