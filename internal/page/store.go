@@ -19,6 +19,7 @@ var (
 	ErrNotFound      = errors.New("no such element")
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
+	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
 )
 
 type Op struct {
@@ -84,7 +85,7 @@ func Open(home, path string) (*Store, error) {
 		if bytes.Equal(raw, s.src) {
 			return s, nil
 		}
-		err = s.commit(src, !bytes.Equal(raw, src), s.rev+1, append(s.undo, s.rev))
+		err = s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo)
 	}
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		return Summary{}, false, err
 	}
 	old, src := s.src, assignIDs(raw)
-	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, append(s.undo, s.rev)); err != nil {
+	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
 		return Summary{}, false, err
 	}
 	return Summary{Text: "edited in the file", IDs: changedBlocks(old, s.src)}, true, nil
@@ -134,6 +135,13 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 			return s.rev, Summary{}, ErrNothingToUndo
 		}
 		back := s.undo[n-1]
+		after, err := os.ReadFile(s.revPath(back + 1))
+		if err != nil {
+			return s.rev, Summary{}, err
+		}
+		if !bytes.Equal(after, s.src) {
+			return s.rev, Summary{}, ErrUndoConflict
+		}
 		src, err := os.ReadFile(s.revPath(back))
 		if err != nil {
 			return s.rev, Summary{}, err

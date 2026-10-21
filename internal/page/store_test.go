@@ -280,9 +280,12 @@ func TestRefreshPicksUpAnExternalEdit(t *testing.T) {
 		t.Errorf("new h2 got no id: %s", onDisk(t, path))
 	}
 
-	mustApply(t, s, Op{Kind: "undo"})
-	if got := onDisk(t, path); !strings.Contains(got, "b, edited") {
-		t.Errorf("undo of an external edit =\n%s", got)
+	before := onDisk(t, path)
+	if _, _, err := s.Apply(3, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+		t.Errorf("undo with only file edits: err = %v, want ErrNothingToUndo", err)
+	}
+	if onDisk(t, path) != before {
+		t.Error("undo reverted an edit made in the file")
 	}
 }
 
@@ -294,9 +297,32 @@ func TestOpenNoticesAnEditMadeWhileClosed(t *testing.T) {
 	if _, rev := s.Source(); rev != 2 {
 		t.Fatalf("rev = %d, want 2", rev)
 	}
+	if _, _, err := s.Apply(2, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+		t.Errorf("undo of an edit made while closed: err = %v, want ErrNothingToUndo", err)
+	}
+}
+
+func TestUndoRefusesToDiscardAFileEditMadeAfterTheOp(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\" data-kapi-state=\"done\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")
+	if _, changed, err := s.Refresh(); err != nil || !changed {
+		t.Fatalf("Refresh: changed=%v err=%v", changed, err)
+	}
+	mustApply(t, s, Op{Kind: "archive", ID: "bbbbbbbb"})
+
 	mustApply(t, s, Op{Kind: "undo"})
-	if got := onDisk(t, path); got != `<p data-kapi-id="aaaaaaaa">a</p>` {
-		t.Errorf("undo = %s", got)
+	agents := onDisk(t, path)
+	if !strings.Contains(agents, "b, by the agent") || strings.Contains(agents, "archived") {
+		t.Fatalf("undo of the op after the file edit =\n%s", agents)
+	}
+	_, rev := s.Source()
+	if _, _, err := s.Apply(rev, Op{Kind: "undo"}); !errors.Is(err, ErrUndoConflict) {
+		t.Fatalf("undo across a file edit: err = %v, want ErrUndoConflict", err)
+	}
+	if onDisk(t, path) != agents {
+		t.Errorf("refused undo changed the file:\n%s", onDisk(t, path))
 	}
 }
 

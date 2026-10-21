@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -354,6 +355,21 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 				t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
 			}
 		})
+	}
+}
+
+func TestUndoAcrossAFileEditIs422(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`); code != http.StatusOK {
+		t.Fatalf("done: %d", code)
+	}
+	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa" data-kapi-state="done">a, by the agent</p>`)
+	code, out := s.post("/ops", `{"rev":3,"op":{"kind":"undo"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "changed outside the browser") {
+		t.Errorf("undo across a file edit: %d %v, want 422", code, out)
+	}
+	if b, _ := os.ReadFile(s.path); !strings.Contains(string(b), "by the agent") {
+		t.Errorf("file = %s, want the agent's edit kept", b)
 	}
 }
 
