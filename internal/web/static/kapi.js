@@ -58,7 +58,8 @@
   const opener = h("button", { type: "button", class: "kapi-opener", "data-action": "expand", title: "Show chat" },
     h("span", { class: "kapi-dot", "data-state": "connecting" }), "Chat");
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, bar, panel, opener);
+  const ring = h("div", { class: "kapi-ring", hidden: "" });
+  const root = h("div", { id: "kapi-chrome" }, ring, bar, panel, opener);
   document.body.append(root);
   document.documentElement.classList.add("kapi-panel-open");
 
@@ -95,7 +96,7 @@
   function renderBar() {
     if (!selected || !selected.isConnected) {
       bar.hidden = true;
-      return;
+      return placeBar();
     }
     if (editing) {
       bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }),
@@ -118,8 +119,20 @@
   }
 
   function placeBar() {
+    ring.hidden = bar.hidden || !selected || !!editing?.area;
     if (bar.hidden || !selected) return;
     const r = (editing?.area || selected).getBoundingClientRect();
+    if (!ring.hidden) {
+      const s = getComputedStyle(selected);
+      const px = (k) => parseFloat(s[k]) || 0;
+      const left = r.left + px("paddingLeft") + px("borderLeftWidth");
+      const top = r.top + px("paddingTop") + px("borderTopWidth");
+      ring.style.left = `${left}px`;
+      ring.style.top = `${top}px`;
+      ring.style.width = `${r.right - px("paddingRight") - px("borderRightWidth") - left}px`;
+      ring.style.height = `${r.bottom - px("paddingBottom") - px("borderBottomWidth") - top}px`;
+      ring.toggleAttribute("data-editing", !!editing);
+    }
     const top = r.top - bar.offsetHeight - 8;
     bar.style.top = `${Math.max(8, top < 8 ? r.bottom + 8 : top)}px`;
     const right = document.documentElement.clientWidth - 8;
@@ -454,6 +467,8 @@
 
   addEventListener("scroll", placeBar, { passive: true });
   addEventListener("resize", placeBar);
+  document.addEventListener("input", placeBar);
+  new ResizeObserver(placeBar).observe(main);
   notice.addEventListener("click", () => (notice.hidden = true));
 
   connect();

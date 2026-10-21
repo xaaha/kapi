@@ -306,3 +306,17 @@ test("the toolbar does not show the raw block id", async () => {
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
   assert.doesNotMatch(await page.eval(`document.querySelector(".kapi-bar").textContent`), /#/);
 });
+
+test("the selection ring sits on the content box", async () => {
+  await select("cccccccc");
+  await page.waitFor(`!!document.querySelector(".kapi-ring:not([hidden])")`);
+  const [ring, content] = await page.eval(`(() => {
+    const el = document.querySelector('[data-kapi-id="cccccccc"]');
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    const ring = document.querySelector(".kapi-ring").getBoundingClientRect();
+    return [[ring.left, ring.right], [r.left + parseFloat(s.paddingLeft) + parseFloat(s.borderLeftWidth), r.right - parseFloat(s.paddingRight) - parseFloat(s.borderRightWidth)]];
+  })()`);
+  assert.ok(Math.abs(ring[0] - content[0]) <= 1, `ring left ${ring[0]} vs content ${content[0]}`);
+  assert.ok(Math.abs(ring[1] - content[1]) <= 1, `ring right ${ring[1]} vs content ${content[1]}`);
+});

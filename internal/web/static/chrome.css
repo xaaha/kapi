@@ -21,16 +21,8 @@ html.kapi-panel-open {
   padding-right: var(--kapi-panel-width);
 }
 
-#kapi-page [data-kapi-selected] {
-  outline: 2px solid var(--kapi-accent);
-  outline-offset: 4px;
-  border-radius: 2px;
-}
-
 #kapi-page [contenteditable="true"] {
-  outline: 2px solid var(--kapi-accent);
-  outline-offset: 4px;
-  background-color: var(--kapi-accent-soft);
+  outline: none;
   caret-color: var(--kapi-accent);
 }
 
@@ -95,6 +87,18 @@ html.kapi-panel-open {
 
 #kapi-chrome [hidden] {
   display: none !important;
+}
+
+#kapi-chrome .kapi-ring {
+  position: fixed;
+  z-index: 2147482999;
+  pointer-events: none;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--kapi-accent);
+}
+
+#kapi-chrome .kapi-ring[data-editing] {
+  background: color-mix(in srgb, var(--kapi-accent) 6%, transparent);
 }
 
 #kapi-chrome .kapi-bar {
