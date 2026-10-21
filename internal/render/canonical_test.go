@@ -190,7 +190,7 @@ func TestDroppedNamesWhatCanonicalRemoves(t *testing.T) {
 		"<!doctype html><html lang=\"en\"><head><title>t</title><style>p{}</style></head><body class=\"x\">" +
 			`<script>a()</script><p onclick="b()" style="color:red">hi</p><script src="c.js"></script></body></html>`: "2 script, 1 body, 1 doctype, 1 head, 1 html, 1 style, 1 title, 4 attributes",
 		`<kapi-callout kind="note" onclick="x()">a</kapi-callout><custom-tag>text kept</custom-tag>`: "1 custom-tag, 1 attribute",
-		`<svg><circle r="1"></circle></svg><p>x</p>`: "1 svg",
+		`<svg><circle r="1"></circle></svg><p>x</p>`:                                                 "1 svg",
 	}
 	for src, want := range cases {
 		r, err := Dropped([]byte(src))
