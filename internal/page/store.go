@@ -119,7 +119,7 @@ func (s *Store) rawPath(rev uint64) string {
 }
 
 func (s *Store) absorb(raw []byte, rev uint64) ([]byte, string, error) {
-	src, ch, err := prepare(raw)
+	src, ch, err := prepare(raw, s.src)
 	if err != nil || ch.splits == 0 {
 		return src, "", err
 	}
@@ -154,7 +154,7 @@ func (c *change) rewrite(part []byte) ([]byte, error) {
 	return render.Canonical(part)
 }
 
-func prepare(src []byte) ([]byte, change, error) {
+func prepare(src, prev []byte) ([]byte, change, error) {
 	ch := change{dropped: render.Report{Elements: map[string]int{}}}
 	whole := false
 	for range 4 {
@@ -184,7 +184,7 @@ func prepare(src []byte) ([]byte, change, error) {
 			}
 			continue
 		}
-		src = assignIDs(src, els, need)
+		src = assignIDs(src, els, need, prev)
 		missing, err := render.Unlabeled(src)
 		if err != nil || missing == 0 || whole {
 			return src, ch, err
@@ -270,7 +270,7 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
-		src, _, err = prepare(src)
+		src, _, err = prepare(src, s.src)
 	}
 	if err == nil && op.Kind == "edit" {
 		if _, lost := render.Block(src, op.ID); errors.Is(lost, render.ErrNotFound) {

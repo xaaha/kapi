@@ -685,3 +685,17 @@ func TestEditRefusesAResultThatLosesItsID(t *testing.T) {
 		t.Errorf("refused edit changed the file: %s", got)
 	}
 }
+
+func TestAPastedDuplicateKeepsTheIDOnTheOriginal(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"xxxxxxxx\">original</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n")
+	s := open(t, home, path)
+	externalWrite(t, path, "<p data-kapi-id=\"xxxxxxxx\">pasted copy</p>\n<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"xxxxxxxx\">original</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n")
+	if _, _, err := s.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	src, _ := s.Source()
+	if b, err := Outer(src, "xxxxxxxx"); err != nil || string(b) != `<p data-kapi-id="xxxxxxxx">original</p>` {
+		t.Errorf("#xxxxxxxx is now %q, %v; want the original block\n%s", b, err, src)
+	}
+	renderedBlocks(t, src)
+}

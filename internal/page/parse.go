@@ -175,22 +175,68 @@ func units(els []element) []int {
 	return out
 }
 
-func assignIDs(src []byte, els []element, need map[int]bool) []byte {
+func assignIDs(src []byte, els []element, need map[int]bool, prev []byte) []byte {
 	taken := map[string]bool{}
-	first := map[string]int{}
+	keep := map[string]int{}
 	for i, e := range els {
-		if _, ok := first[e.id]; e.id != "" && !ok {
+		if _, ok := keep[e.id]; e.id != "" && !ok {
 			taken[e.id] = true
-			first[e.id] = i
+			keep[e.id] = i
 		}
+	}
+	for id, i := range keepByPosition(els, prev) {
+		keep[id] = i
 	}
 	for i := len(els) - 1; i >= 0; i-- {
 		e := &els[i]
-		if (need[i] || strings.HasPrefix(e.name, "kapi-")) && (e.id == "" || first[e.id] != i) {
+		if (need[i] || strings.HasPrefix(e.name, "kapi-")) && (e.id == "" || keep[e.id] != i) {
 			src = setAttr(src, e, idAttr, newID(taken))
 		}
 	}
 	return src
+}
+
+func keepByPosition(els []element, prev []byte) map[string]int {
+	if prev == nil {
+		return nil
+	}
+	before, after := map[string]string{}, map[string]string{}
+	prevEls := parse(prev)
+	prevUnits := units(prevEls)
+	for k, i := range prevUnits {
+		if k > 0 {
+			before[prevEls[i].id] = prevEls[prevUnits[k-1]].id
+		}
+		if k+1 < len(prevUnits) {
+			after[prevEls[i].id] = prevEls[prevUnits[k+1]].id
+		}
+	}
+	cur := units(els)
+	copies := map[string]int{}
+	for _, i := range cur {
+		copies[els[i].id]++
+	}
+	score := func(k int) int {
+		id, n := els[cur[k]].id, 0
+		if k > 0 && before[id] != "" && els[cur[k-1]].id == before[id] {
+			n++
+		}
+		if k+1 < len(cur) && after[id] != "" && els[cur[k+1]].id == after[id] {
+			n++
+		}
+		return n
+	}
+	out, best := map[string]int{}, map[string]int{}
+	for k, i := range cur {
+		id := els[i].id
+		if id == "" || copies[id] < 2 {
+			continue
+		}
+		if n := score(k); n > best[id] {
+			best[id], out[id] = n, i
+		}
+	}
+	return out
 }
 
 func setAttr(src []byte, e *element, key, val string) []byte {
