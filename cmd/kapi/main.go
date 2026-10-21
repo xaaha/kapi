@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -67,6 +68,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			daemonCmd(),
 			newPresetCmd(out),
 			newPublishCmd(out),
+			newOpenCmd(c, out),
 		},
 	}
 	root.SubCommands = append(root.SubCommands, completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
@@ -241,6 +243,47 @@ func newPublishCmd(out io.Writer) *cli.Command {
 			}
 			_, err = fmt.Fprintln(out, url)
 			return err
+		},
+	}
+}
+
+var openBrowser = func(url string) error {
+	name := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		name = "open"
+	}
+	return exec.Command(name, url).Run() //nolint:gosec // the URL comes from the local daemon
+}
+
+func newOpenCmd(c api, out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("open", flag.ContinueOnError)
+	printOnly := fs.Bool("print", false, "Print the URL without opening a browser")
+	return &cli.Command{
+		Name:  "open",
+		Short: "Open a page in the browser",
+		Long:  "Print the page's local URL and open it in the default browser. The URL holds a token, so treat it like a password.",
+		Flags: fs,
+		Args:  []cli.ArgDef{pageArg},
+		Examples: []cli.Example{
+			{Command: "kapi open plan.html", Description: "Open plan.html in the browser"},
+			{Command: "kapi open --print plan.html", Description: "Only print the URL"},
+		},
+		Run: func(args []string) error {
+			page, err := pagePath(args, 1, "open")
+			if err != nil {
+				return err
+			}
+			resp, err := c.Do(&daemon.Request{Op: "open", Page: page})
+			if err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintln(out, resp.URL); err != nil {
+				return err
+			}
+			if *printOnly {
+				return nil
+			}
+			return openBrowser(resp.URL)
 		},
 	}
 }
