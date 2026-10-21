@@ -168,19 +168,22 @@
     return { status: res.status, ok: res.ok, data };
   }
 
-  async function op(kind, fields = {}) {
+  const STALE = "The page changed before your change landed. This is the latest version, so try again.";
+  const STALE_EDIT = "The page changed while you were editing. Your text is still here: save again to replace the newer version, or press Escape to discard yours.";
+
+  async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
     notice.hidden = true;
     busy = true;
     renderBar();
     try {
-      const res = await request("/ops", { rev: Number(main.dataset.rev), op: { kind, ...fields } });
+      const res = await request("/ops", { rev, op: { kind, ...fields } });
       if (!res || res.ok) {
         if (res) main.dataset.rev = res.data.rev;
         return res;
       }
       if (res.status === 409) {
         await refresh(null);
-        say("The page changed before your change landed. This is the latest version, so try again.", "error");
+        say(stale, "error");
       } else if (res.status === 422) {
         say(res.data.error || "kapi refused that change.", "error");
       } else {
@@ -198,7 +201,7 @@
     const el = selected;
     notice.hidden = true;
     if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) {
-      editing = { el, original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
+      editing = { el, rev: Number(main.dataset.rev), original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
       el.contentEditable = "true";
       el.focus();
       getSelection().selectAllChildren(el);
@@ -207,8 +210,13 @@
     }
     busy = true;
     renderBar();
+    let rev = Number(main.dataset.rev);
     const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}`)
-      .then((res) => (res.ok ? res.text() : null), () => null);
+      .then((res) => {
+        if (!res.ok) return null;
+        rev = Number(res.headers.get("Kapi-Rev") || rev);
+        return res.text();
+      }, () => null);
     busy = false;
     if (src === null) say("Could not load the source of this block.", "error");
     if (src === null || selected !== el || editing) return renderBar();
@@ -222,7 +230,7 @@
     box.style.marginBottom = style.marginBottom;
     el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
-    editing = { el, area, box, initial: src, read: () => area.value };
+    editing = { el, area, box, rev, initial: src, read: () => area.value };
     area.focus();
     renderBar();
   }
@@ -258,13 +266,13 @@
     const html = session.read();
     if (html === session.initial) return endEdit(false);
     const id = idOf(session.el);
-    const res = await op("edit", { id, html });
+    const res = await op("edit", { id, html }, { rev: session.rev, stale: STALE_EDIT });
     if (editing !== session) return;
     if (res?.ok) {
       endEdit(false);
       await refresh([id]);
     } else if (res?.status === 409) {
-      endEdit(true);
+      session.rev = res.data.rev;
     }
   }
 

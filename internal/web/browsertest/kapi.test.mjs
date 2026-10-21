@@ -280,6 +280,46 @@ test("refetches other changed blocks while one is being edited", async () => {
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
 
+test("a save sends the rev from when the edit started, and a stale save keeps the text", async () => {
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  server.bumpBehindBrowser("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Other tab wrote this.</p>');
+  server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  server.push({ kind: "revision", target: "cccccccc", text: "edited" });
+  await until(async () => (await text("cccccccc")) === "Agent rewrote this");
+
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.equal(requests("POST", "/ops")[0].body.rev, 1);
+  await until(async () => /changed/.test(await notice()));
+  assert.equal(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, '<p data-kapi-id="bbbbbbbb">Other tab wrote this.</p>');
+  assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "bbbbbbbb");
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.equal(requests("POST", "/ops")[1].body.rev, 3);
+  await until(async () => /Mine\.<\/p>$/.test(server.state.blocks.find((b) => b.id === "bbbbbbbb").html));
+});
+
+test("a stale source save keeps the source text", async () => {
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  const mine = '<kapi-callout data-kapi-id="ffffffff" kind="note">Mine.</kapi-callout>';
+  await page.eval(`document.activeElement.value = ${JSON.stringify(mine)}`);
+  server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  server.push({ kind: "revision", target: "cccccccc", text: "edited" });
+  await until(async () => (await text("cccccccc")) === "Agent rewrote this");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.equal(requests("POST", "/ops")[0].body.rev, 1);
+  await until(async () => /changed/.test(await notice()));
+  assert.equal(await page.eval(`document.querySelector(".kapi-source")?.value`), mine);
+});
+
 test("a whole-page refresh waits until the edit ends", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="edit"]');
