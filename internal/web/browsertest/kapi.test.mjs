@@ -328,6 +328,7 @@ test("the selection ring sits on the content box", async () => {
 test("chat is always docked on the right on wide screens, with no hide control", async () => {
   const [r, w, hgt] = await page.eval(`[(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-panel").getBoundingClientRect()), document.documentElement.clientWidth, document.documentElement.clientHeight]`);
   assert.deepEqual(r, { left: w - 340, right: w, top: 0, bottom: hgt });
+  assert.equal(await page.eval(`getComputedStyle(document.documentElement).paddingRight`), "340px");
   assert.equal(await page.eval(`document.querySelectorAll('#kapi-chrome [data-action="collapse"], #kapi-chrome [data-action="expand"]').length`), 0);
 });
 
