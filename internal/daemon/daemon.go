@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -119,17 +120,16 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		return err
 	}
+	stopHTTP, err := s.serveHTTP(ctx)
+	if err != nil {
+		return err
+	}
+	defer stopHTTP()
 	os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		return err
 	}
-	stopHTTP, err := s.serveHTTP(ctx)
-	if err != nil {
-		ln.Close()
-		return err
-	}
-	defer stopHTTP()
 	go func() {
 		<-ctx.Done()
 		ln.Close()
@@ -146,18 +146,40 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
+var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/([0-9a-f]{32})/\n$`)
+
+func (s *Server) listenHTTP() (net.Listener, string, error) {
+	addr, token := "127.0.0.1:0", ""
+	if b, err := os.ReadFile(HTTPURLPath(s.home)); err == nil {
+		if m := savedURL.FindSubmatch(b); m != nil {
+			addr, token = string(m[1]), string(m[2])
+		}
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil && addr != "127.0.0.1:0" {
+		log.Printf("http: %s is taken (%v); moving to a new port, so open tabs need kapi open again", addr, err)
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if token == "" {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err != nil {
+			ln.Close()
+			return nil, "", err
+		}
+		token = hex.EncodeToString(b)
+	}
+	return ln, token, nil
+}
+
 func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, token, err := s.listenHTTP()
 	if err != nil {
 		return nil, err
 	}
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		ln.Close()
-		return nil, err
-	}
 	host := ln.Addr().String()
-	token := hex.EncodeToString(b)
 	s.mu.Lock()
 	s.baseURL = "http://" + host + "/" + token + "/"
 	s.mu.Unlock()
@@ -179,7 +201,6 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 	return func() {
 		stopPoll()
 		srv.Close()
-		os.Remove(urlFile)
 	}, nil
 }
 
