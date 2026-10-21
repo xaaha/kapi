@@ -57,3 +57,16 @@ func TestOpenReportsABrowserFailure(t *testing.T) {
 		t.Errorf("err = %v, want the browser error", err)
 	}
 }
+
+func TestOpenPrintsAConversionNotice(t *testing.T) {
+	stubBrowser(t, nil)
+	notice := "split 1 block(s) so each has its own id; raw input saved to /home/.kapi/pages/x/raw/1.html"
+	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/tok/p/x/", Notice: notice}}
+	out, err := run(t, f, "open", "plan.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "http://127.0.0.1:5000/tok/p/x/\n" + notice + "\n"; out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}

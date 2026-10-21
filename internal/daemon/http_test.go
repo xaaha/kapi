@@ -320,3 +320,36 @@ func TestARestartedDaemonClearsPresenceLeftBehind(t *testing.T) {
 		t.Errorf("presence after restart = %s", got)
 	}
 }
+
+func TestOpenReportsASplit(t *testing.T) {
+	home, _, stop := serving(t)
+	defer stop()
+	raw := "<p>before <kapi-callout>c</kapi-callout> after<script>x()</script></p>\n"
+	path := writePage(t, raw)
+	resp := call(t, home, &Request{Op: "open", Page: path})
+	prefix := "split 1 block(s) so each has its own id; removed 1 script; raw input saved to "
+	if resp.Error != "" || !strings.HasPrefix(resp.Notice, prefix) {
+		t.Fatalf("open = %+v, want a notice starting %q", resp, prefix)
+	}
+	if saved, err := os.ReadFile(strings.TrimPrefix(resp.Notice, prefix)); err != nil || string(saved) != raw {
+		t.Errorf("saved raw input = %q, %v", saved, err)
+	}
+	pending := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"})
+	found := false
+	for _, e := range pending.Events {
+		found = found || (e.Kind == "revision" && e.Text == resp.Notice)
+	}
+	if !found {
+		t.Errorf("no revision event with the notice in %+v", pending.Events)
+	}
+	if again := call(t, home, &Request{Op: "open", Page: path}); again.Notice != "" {
+		t.Errorf("second open repeats the notice: %+v", again)
+	}
+	clean := writePage(t, "<p>clean</p>\n<script>kept()</script>\n")
+	if resp := call(t, home, &Request{Op: "open", Page: clean}); resp.Notice != "" {
+		t.Errorf("clean page open = %+v", resp)
+	}
+	if b, _ := os.ReadFile(clean); !strings.Contains(string(b), "<script>kept()</script>") {
+		t.Errorf("open dropped a script from the file: %s", b)
+	}
+}

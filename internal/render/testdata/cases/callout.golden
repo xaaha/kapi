@@ -1,0 +1,5 @@
+<aside class="kapi-callout kapi-callout-note" data-kapi-preset="callout" role="note" data-kapi-id="c0000001"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">Defaults to a note.</div></aside>
+<aside class="kapi-callout kapi-callout-note" data-kapi-preset="callout" role="note" data-kapi-id="c0000002"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body"><p>A note with <a href="#c0000001">a link</a>.</p></div></aside>
+<aside class="kapi-callout kapi-callout-warning" data-kapi-preset="callout" role="note" data-kapi-id="c0000003" data-kapi-state="done"><div class="kapi-callout-label">Warning</div><div class="kapi-callout-body"><p>A warning.</p><ul><li>with a list</li></ul></div></aside>
+<aside class="kapi-callout kapi-callout-key" data-kapi-preset="callout" role="note" data-kapi-id="c0000004"><div class="kapi-callout-label">Key point</div><div class="kapi-callout-body"><p>The key point.</p></div></aside>
+<div class="kapi-error" data-kapi-preset="callout" role="alert" data-kapi-id="c0000005"><span class="kapi-error-tag">&lt;kapi-callout&gt;</span> kind must be note, warning or key, not "danger"</div>

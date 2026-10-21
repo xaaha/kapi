@@ -1,0 +1,121 @@
+<h1 data-kapi-id="a1b2c3d4">Page store cutover plan</h1>
+<p data-kapi-id="e5f6g7h2">This page walks through moving page state into the Go daemon. It uses every kapi preset, so it doubles as the visual reference for the design system. See <a href="#k3f9a2bq">the risky step</a> before you start, and <a href="https://github.com/xaaha/kapi">the repo</a> for context.</p>
+
+<kapi-callout kind="note" data-kapi-id="n0teaaaa"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></kapi-callout>
+<kapi-callout kind="warning" data-kapi-id="warnaaaa"><p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p></kapi-callout>
+<kapi-callout kind="key" data-kapi-id="keyaaaaa"><p>Go owns all state. The browser keeps nothing and refetches after any reconnect.</p></kapi-callout>
+
+<h2 data-kapi-id="h2aaaaaa">Where the state lives</h2>
+<kapi-diagram type="flow" data-kapi-id="flowaaaa">
+  agent -> page file: writes
+  page file -> daemon: mtime change
+  daemon -> event log: appends
+  daemon -> browser: revision event
+  browser -> daemon: op
+  daemon -> page file: applies
+  event log -> kapi watch: streams
+</kapi-diagram>
+
+<p data-kapi-id="p2aaaaaa">An op from the browser takes this path:</p>
+<kapi-diagram type="sequence" data-kapi-id="seqaaaaa">
+  browser
+  daemon
+  store
+  browser -> daemon: POST /p/{id}/ops
+  daemon -> store: Apply(rev, op)
+  store -> store: save revs/N.html
+  store --> daemon: new rev, summary
+  daemon --> browser: 200 {"rev":N}
+  daemon -> browser: revision event
+</kapi-diagram>
+
+<h2 data-kapi-id="h2bbbbbb">The code</h2>
+<kapi-code lang="go" file="internal/page/store.go" lines="41-52" data-kapi-id="codeaaaa">
+// Source returns the current page source and its revision.
+func (s *Store) Source() ([]byte, uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rev < 1 && len(s.src) == 0 {
+		return nil, 0
+	}
+	return bytes.Clone(s.src), s.rev
+}
+
+const maxRevs = 200 // keep the last 200 revisions
+</kapi-code>
+
+<kapi-diff file="internal/page/store.go" data-kapi-id="diffaaaa">
+diff --git a/internal/page/store.go b/internal/page/store.go
+--- a/internal/page/store.go
++++ b/internal/page/store.go
+@@ -12,7 +12,8 @@ type Store struct {
+ 	mu   sync.Mutex
+ 	path string
+-	rev  int
++	rev  uint64
++	mod  time.Time
+ 	src  []byte
+ }
+
+@@ -88,4 +89,4 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
+ 	if rev != s.rev {
+-		return 0, Summary{}, errors.New("stale")
++		return s.rev, Summary{}, ErrStale
+ 	}
+</kapi-diff>
+
+<h2 data-kapi-id="h2cccccc">Latency so far</h2>
+<kapi-table sort="on" data-kapi-id="tableaaa">
+  <table>
+    <thead><tr><th>Endpoint</th><th>p50 ms</th><th>p99 ms</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /p/{id}/</code></td><td>4</td><td>11</td><td>Full render with CSS</td></tr>
+      <tr><td><code>GET /p/{id}/blocks/{block}</code></td><td>1</td><td>3</td><td>One element</td></tr>
+      <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision</td></tr>
+    </tbody>
+  </table>
+</kapi-table>
+
+<h2 data-kapi-id="h2dddddd">Transport options</h2>
+<kapi-compare data-kapi-id="compaaaa">
+  <kapi-option title="Server-sent events" data-kapi-id="optaaaaa">
+    <p>One long GET per tab. Built into every browser and reconnects with <code>Last-Event-ID</code>.</p>
+    <ul><li>No new dependency</li><li>Plain HTTP, easy to curl</li></ul>
+  </kapi-option>
+  <kapi-option title="WebSocket" data-kapi-id="optbbbbb">
+    <p>Two-way, but needs its own reconnect and replay logic.</p>
+    <ul><li>Needs a library or hand-rolled framing</li></ul>
+  </kapi-option>
+  <kapi-option title="Polling" data-kapi-id="optccccc">
+    <p>Simplest to build. Adds up to a second of lag and wakes the daemon for nothing.</p>
+  </kapi-option>
+</kapi-compare>
+
+<h2 data-kapi-id="h2eeeeee">Steps</h2>
+<kapi-plan data-kapi-id="planaaaa">
+  <kapi-step data-kapi-id="stepaaaa">Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step data-kapi-id="k3f9a2bq">Switch the daemon to serve rendered pages and single blocks.</kapi-step>
+  <kapi-risk data-kapi-id="riskaaaa">An agent editing the file mid-request can race a browser op. The store must compare mtimes before it writes.</kapi-risk>
+  <kapi-step data-kapi-id="stepcccc">Delete the old static page handler.</kapi-step>
+  <kapi-question data-kapi-id="quesaaaa">Should <em>undo</em> cross an agent edit, or stop at it?</kapi-question>
+</kapi-plan>
+
+<h2 data-kapi-id="h2ffffff">Your call</h2>
+<kapi-form name="cutover" data-kapi-id="formaaaa">
+  <kapi-choice name="window" data-kapi-id="choiaaaa">When should the cutover run?
+    <kapi-opt value="tonight">Tonight, 22:00</kapi-opt>
+    <kapi-opt value="weekend">Saturday morning</kapi-opt>
+  </kapi-choice>
+  <kapi-choice name="notify" multiple data-kapi-id="choibbbb">Who needs a heads-up?
+    <kapi-opt value="support">Support</kapi-opt>
+    <kapi-opt value="sales">Sales</kapi-opt>
+    <kapi-opt value="oncall">The on-call engineer</kapi-opt>
+  </kapi-choice>
+  <kapi-text name="notes" data-kapi-id="textaaaa">Anything else?</kapi-text>
+</kapi-form>
+
+<h2 data-kapi-id="h2gggggg">Mistakes render visibly</h2>
+<kapi-chart data-kapi-id="erraaaaa">bar chart</kapi-chart>
+<p data-kapi-id="p3aaaaaa" onclick="alert(1)" style="color:red">This paragraph had an <code>onclick</code> and a <code>style</code> in its source; both are gone.<script>alert(1)</script></p>
+<blockquote data-kapi-id="bqaaaaaa"><p>Prose tags keep their meaning: quotes, <em>emphasis</em>, <strong>strong text</strong>, and lists.</p></blockquote>
+<ol data-kapi-id="olaaaaaa"><li>First</li><li>Second, with a nested list<ul><li>Nested item</li></ul></li></ol>

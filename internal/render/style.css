@@ -1,0 +1,456 @@
+:root {
+  --kapi-bg: #fbfaf7;
+  --kapi-surface: #ffffff;
+  --kapi-sunken: #f4f2ed;
+  --kapi-fg: #1f2328;
+  --kapi-muted: #565e69;
+  --kapi-faint: #8b929b;
+  --kapi-border: #e5e1d8;
+  --kapi-border-strong: #cdc6b9;
+  --kapi-accent: #2b6a8a;
+  --kapi-accent-strong: #1f5370;
+  --kapi-accent-soft: #e8f1f6;
+  --kapi-note: #2b6a8a;
+  --kapi-note-bg: #eef5f9;
+  --kapi-warning: #9a5800;
+  --kapi-warning-bg: #fdf5e6;
+  --kapi-key: #5a49b0;
+  --kapi-key-bg: #f3f1fb;
+  --kapi-add: #1a7f37;
+  --kapi-add-bg: #e9f6ec;
+  --kapi-add-gutter: #d3eedb;
+  --kapi-del: #b42318;
+  --kapi-del-bg: #fcecec;
+  --kapi-del-gutter: #f7d7d5;
+  --kapi-error: #b42318;
+  --kapi-error-bg: #fdeeed;
+  --kapi-error-border: #f0bbb6;
+  --kapi-code-bg: #fcfcfb;
+  --kapi-diagram-node: #f2f7fa;
+  --kapi-diagram-stroke: #93adbd;
+  --kapi-diagram-edge: #7b858f;
+  --kapi-radius: 8px;
+  --kapi-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --kapi-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --kapi-measure: 48rem;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--kapi-bg);
+  color: var(--kapi-fg);
+  font-family: var(--kapi-font);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+:where(#kapi-page) {
+  display: block;
+  box-sizing: border-box;
+  max-width: var(--kapi-measure);
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+  overflow-wrap: break-word;
+}
+
+:where(#kapi-page) :where([id]) { scroll-margin-top: 1.5rem; }
+:where(#kapi-page) > :first-child { margin-top: 0; }
+
+:where(#kapi-page) :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--kapi-fg);
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+:where(#kapi-page) h1 { font-size: 2rem; margin: 0 0 1rem; font-weight: 700; letter-spacing: -0.02em; }
+:where(#kapi-page) h2 {
+  font-size: 1.4rem;
+  margin: 2.5rem 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--kapi-border);
+}
+:where(#kapi-page) h3 { font-size: 1.13rem; margin: 1.9rem 0 0.5rem; }
+:where(#kapi-page) :where(h4, h5, h6) { font-size: 1rem; margin: 1.5rem 0 0.4rem; }
+:where(#kapi-page) p { margin: 0.75rem 0; }
+:where(#kapi-page) :where(ul, ol) { margin: 0.75rem 0; padding-left: 1.5rem; }
+:where(#kapi-page) li { margin: 0.3rem 0; }
+:where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
+:where(#kapi-page) li::marker { color: var(--kapi-faint); }
+:where(#kapi-page) a {
+  color: var(--kapi-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+:where(#kapi-page) a:hover { color: var(--kapi-accent-strong); text-decoration-thickness: 2px; }
+:where(#kapi-page) :where(strong, b) { font-weight: 650; }
+:where(#kapi-page) :where(code, kbd, samp) { font-family: var(--kapi-mono); font-size: 0.875em; }
+:where(#kapi-page) :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border-radius: 4px;
+  background: var(--kapi-sunken);
+  border: 1px solid var(--kapi-border);
+  overflow-wrap: anywhere;
+}
+:where(#kapi-page) kbd {
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--kapi-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--kapi-surface);
+}
+:where(#kapi-page) pre {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-code-bg);
+  font-family: var(--kapi-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+:where(#kapi-page) blockquote {
+  margin: 1.25rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--kapi-border-strong);
+  color: var(--kapi-muted);
+}
+:where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
+:where(#kapi-page) img { max-width: 100%; height: auto; border-radius: 6px; }
+:where(#kapi-page) mark { background: #fff1a8; color: inherit; padding: 0 0.15em; border-radius: 2px; }
+:where(#kapi-page) del { color: var(--kapi-muted); }
+:where(#kapi-page) details {
+  margin: 1rem 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+:where(#kapi-page) summary { cursor: pointer; font-weight: 600; }
+:where(#kapi-page) dt { font-weight: 600; margin-top: 0.75rem; }
+:where(#kapi-page) dd { margin: 0.2rem 0 0 1.25rem; }
+
+:where(#kapi-page) table {
+  width: 100%;
+  margin: 1.25rem 0;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+  font-variant-numeric: tabular-nums;
+}
+:where(#kapi-page) :where(th, td) {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--kapi-border);
+  text-align: left;
+  vertical-align: top;
+}
+:where(#kapi-page) th {
+  background: var(--kapi-sunken);
+  font-weight: 600;
+  border-bottom-color: var(--kapi-border-strong);
+}
+:where(#kapi-page) caption { caption-side: bottom; padding-top: 0.5rem; color: var(--kapi-muted); font-size: 0.875rem; text-align: left; }
+
+.kapi-table {
+  margin: 1.25rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+.kapi-table table { margin: 0; }
+.kapi-table th { white-space: nowrap; }
+.kapi-table tbody tr:last-child > * { border-bottom: 0; }
+.kapi-table tbody tr:nth-child(even) { background: #fcfbf8; }
+.kapi-table tbody tr:hover { background: var(--kapi-accent-soft); }
+.kapi-table[data-kapi-sort="on"] th { cursor: pointer; user-select: none; }
+.kapi-table[data-kapi-sort="on"] th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-accent); }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-accent); }
+
+.kapi-callout {
+  --kapi-tone: var(--kapi-note);
+  --kapi-tone-bg: var(--kapi-note-bg);
+  margin: 1.25rem 0;
+  padding: 0.75rem 1rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--kapi-tone) 22%, transparent);
+  border-left: 4px solid var(--kapi-tone);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-tone-bg);
+}
+.kapi-callout-warning { --kapi-tone: var(--kapi-warning); --kapi-tone-bg: var(--kapi-warning-bg); }
+.kapi-callout-key { --kapi-tone: var(--kapi-key); --kapi-tone-bg: var(--kapi-key-bg); }
+.kapi-callout-label {
+  margin-bottom: 0.2rem;
+  color: var(--kapi-tone);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.kapi-callout-body > :first-child,
+.kapi-option-body > :first-child,
+.kapi-plan-body > :first-child { margin-top: 0; }
+.kapi-callout-body > :last-child,
+.kapi-option-body > :last-child,
+.kapi-plan-body > :last-child { margin-bottom: 0; }
+
+.kapi-code,
+.kapi-diff {
+  margin: 1.25rem 0;
+  overflow: hidden;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-code-bg);
+}
+.kapi-code-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 0.9rem;
+  padding: 0.45rem 0.9rem;
+  border-bottom: 1px solid var(--kapi-border);
+  background: var(--kapi-sunken);
+  color: var(--kapi-muted);
+  font-family: var(--kapi-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.kapi-code-file { margin-right: auto; color: var(--kapi-fg); font-weight: 600; overflow-wrap: anywhere; }
+.kapi-code-lang { color: var(--kapi-faint); font-size: 11.5px; letter-spacing: 0.04em; text-transform: lowercase; }
+.kapi-diff-stat { white-space: nowrap; font-weight: 600; }
+.kapi-diff-added { color: var(--kapi-add); }
+.kapi-diff-removed { color: var(--kapi-del); }
+
+#kapi-page pre.kapi-hl,
+pre.kapi-hl {
+  --kapi-gutter: 3ch;
+  margin: 0;
+  padding: 0.55rem 0;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--kapi-fg);
+  font-family: var(--kapi-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  tab-size: 4;
+}
+.kapi-hl[data-gutter="1"], .kapi-hl[data-gutter="2"] { --kapi-gutter: 2ch; }
+.kapi-hl[data-gutter="4"] { --kapi-gutter: 4ch; }
+.kapi-hl[data-gutter="5"] { --kapi-gutter: 5ch; }
+.kapi-hl[data-gutter="6"] { --kapi-gutter: 6ch; }
+.kapi-hl > code {
+  display: grid;
+  min-width: max-content;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+.kapi-line { display: block; padding-right: 1.25rem; white-space: pre; }
+.kapi-ln {
+  display: inline-block;
+  box-sizing: content-box;
+  width: var(--kapi-gutter);
+  padding: 0 0.9rem 0 0.75rem;
+  color: var(--kapi-faint);
+  text-align: right;
+  user-select: none;
+}
+.kapi-ln::before { content: attr(data-n); }
+.kapi-src { display: inline-block; }
+.kapi-diff .kapi-ln + .kapi-ln { padding-left: 0; }
+.kapi-diff-sign { display: inline-block; width: 1.5ch; color: var(--kapi-faint); user-select: none; }
+.kapi-diff-add { background: var(--kapi-add-bg); }
+.kapi-diff-add .kapi-ln { background: var(--kapi-add-gutter); color: var(--kapi-add); }
+.kapi-diff-add .kapi-diff-sign { color: var(--kapi-add); }
+.kapi-diff-del { background: var(--kapi-del-bg); }
+.kapi-diff-del .kapi-ln { background: var(--kapi-del-gutter); color: var(--kapi-del); }
+.kapi-diff-del .kapi-diff-sign { color: var(--kapi-del); }
+.kapi-diff-hunk,
+.kapi-diff-file,
+.kapi-diff-meta { padding-left: 0.9rem; }
+.kapi-diff-hunk { margin: 0.2rem 0; background: var(--kapi-accent-soft); color: var(--kapi-accent); }
+.kapi-diff-hunk:first-child { margin-top: -0.55rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.kapi-diff-file { color: var(--kapi-muted); font-weight: 600; }
+.kapi-diff-meta { color: var(--kapi-faint); font-style: italic; }
+
+.kapi-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+.kapi-compare > :not(.kapi-option) { grid-column: 1 / -1; margin: 0; }
+.kapi-option {
+  padding: 0.9rem 1.05rem 1rem;
+  border: 1px solid var(--kapi-border);
+  border-top: 3px solid var(--kapi-accent);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+#kapi-page .kapi-option-title,
+.kapi-option-title {
+  margin: 0 0 0.45rem;
+  padding: 0;
+  border: 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+}
+.kapi-option-body { font-size: 0.95rem; }
+
+.kapi-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+  counter-reset: kapi-step;
+}
+.kapi-plan-item {
+  --kapi-tone: var(--kapi-accent);
+  --kapi-tone-bg: var(--kapi-accent-soft);
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+.kapi-step { counter-increment: kapi-step; }
+.kapi-risk { --kapi-tone: var(--kapi-warning); --kapi-tone-bg: #fbe8c8; background: var(--kapi-warning-bg); border-color: #f0dcb4; }
+.kapi-question { --kapi-tone: var(--kapi-key); --kapi-tone-bg: #e5e0f8; background: var(--kapi-key-bg); border-color: #dcd5f3; }
+.kapi-plan-mark {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: -0.05rem;
+  border-radius: 50%;
+  background: var(--kapi-tone-bg);
+  color: var(--kapi-tone);
+  font-size: 0;
+  font-weight: 700;
+}
+.kapi-plan-mark::before { font-size: 0.82rem; line-height: 1; }
+.kapi-step .kapi-plan-mark::before { content: counter(kapi-step); }
+.kapi-risk .kapi-plan-mark::before { content: "!"; }
+.kapi-question .kapi-plan-mark::before { content: "?"; }
+.kapi-plan-body { min-width: 0; padding-top: 0.05rem; }
+
+.kapi-diagram {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  text-align: center;
+}
+.kapi-diagram svg {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  font-family: var(--kapi-font);
+  vertical-align: top;
+}
+.kapi-diagram text { fill: var(--kapi-fg); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
+.kapi-diagram .kd-node rect { fill: var(--kapi-diagram-node); stroke: var(--kapi-diagram-stroke); stroke-width: 1.2; }
+.kapi-diagram .kd-actor rect { fill: var(--kapi-accent-soft); }
+.kapi-diagram .kd-actor text { font-weight: 600; }
+.kapi-diagram .kd-edge,
+.kapi-diagram .kd-msg { fill: none; stroke: var(--kapi-diagram-edge); stroke-width: 1.4; }
+.kapi-diagram .kd-dashed { stroke-dasharray: 5 4; }
+.kapi-diagram .kd-arrow { fill: var(--kapi-diagram-edge); }
+.kapi-diagram .kd-lifeline { fill: none; stroke: var(--kapi-border-strong); stroke-width: 1; stroke-dasharray: 3 4; }
+.kapi-diagram .kd-label rect { fill: var(--kapi-surface); fill-opacity: 0.92; }
+.kapi-diagram .kd-label text { fill: var(--kapi-muted); font-size: 12px; }
+
+.kapi-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin: 1.25rem 0;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+.kapi-choice { min-width: 0; margin: 0; padding: 0; border: 0; }
+.kapi-choice > legend { margin-bottom: 0.5rem; padding: 0; font-weight: 600; }
+.kapi-choice-opts { display: flex; flex-direction: column; gap: 0.4rem; }
+.kapi-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: 6px;
+  background: var(--kapi-bg);
+  cursor: pointer;
+}
+.kapi-opt:hover { border-color: var(--kapi-border-strong); }
+.kapi-opt:has(input:checked) { border-color: var(--kapi-accent); background: var(--kapi-accent-soft); }
+.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-accent); }
+.kapi-text { display: flex; flex-direction: column; gap: 0.45rem; }
+.kapi-text-label { font-weight: 600; }
+.kapi-text textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 4.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: 6px;
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  font: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+.kapi-form :focus-visible { outline: 2px solid var(--kapi-accent); outline-offset: 2px; }
+.kapi-form-actions { display: flex; justify-content: flex-end; }
+.kapi-form-actions button {
+  padding: 0.5rem 1.1rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--kapi-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kapi-form-actions button:hover { background: var(--kapi-accent-strong); }
+
+.kapi-error {
+  margin: 1.25rem 0;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--kapi-error-border);
+  border-left: 4px solid var(--kapi-error);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-error-bg);
+  color: var(--kapi-error);
+  font-size: 0.92rem;
+}
+span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.4em; border-left-width: 1px; border-radius: 4px; font-size: 0.85em; }
+.kapi-error-tag { font-family: var(--kapi-mono); font-weight: 700; }
+
+@media (max-width: 640px) {
+  body { font-size: 15.5px; }
+  :where(#kapi-page) { padding: 1.25rem 0.9rem 4rem; }
+  :where(#kapi-page) h1 { font-size: 1.6rem; }
+  :where(#kapi-page) h2 { font-size: 1.25rem; margin-top: 2rem; }
+  pre.kapi-hl, :where(#kapi-page) pre { font-size: 12px; }
+  .kapi-ln { padding: 0 0.6rem 0 0.5rem; }
+  .kapi-plan-item { gap: 0.6rem; padding: 0.6rem 0.7rem; }
+  .kapi-diagram { padding: 0.6rem; }
+  .kapi-diagram svg { max-width: none; }
+}

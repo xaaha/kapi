@@ -1,0 +1,13 @@
+<form class="kapi-form" data-kapi-preset="form" name="review" data-kapi-form="review" data-kapi-id="f0000001">
+  <p>Intro text.</p>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="verdict" data-kapi-choice="single" data-kapi-id="f0000002"><legend>Ship it?</legend><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt" data-kapi-id="f0000003"><input type="radio" name="verdict" value="yes"><span>Yes</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="verdict" value="no"><span>No, <em>wait</em></span></label></div></fieldset>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="areas" data-kapi-choice="multiple" data-kapi-id="f0000004"><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="areas" value="ui"><span>ui</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="areas" value="api"><span>API</span></label></div></fieldset>
+  <label class="kapi-text" data-kapi-preset="text" data-kapi-field="notes" data-kapi-id="f0000005"><span class="kapi-text-label">Notes</span><textarea name="notes" rows="3"></textarea></label>
+  <div class="kapi-error" data-kapi-preset="choice" role="alert" data-kapi-id="f0000006"><span class="kapi-error-tag">&lt;kapi-choice&gt;</span> needs at least one &lt;kapi-opt value="..."&gt;</div>
+  <div class="kapi-error" data-kapi-preset="choice" role="alert" data-kapi-id="f0000007"><span class="kapi-error-tag">&lt;kapi-choice&gt;</span> needs a name attribute</div>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="noval" data-kapi-choice="single"><div class="kapi-choice-opts"><span class="kapi-error" data-kapi-preset="opt" role="alert" data-kapi-id="f0000008"><span class="kapi-error-tag">&lt;kapi-opt&gt;</span> needs a value attribute</span></div></fieldset>
+  <div class="kapi-error" data-kapi-preset="text" role="alert" data-kapi-id="f0000009"><span class="kapi-error-tag">&lt;kapi-text&gt;</span> needs a name attribute</div>
+<div class="kapi-form-actions"><button type="submit">Send answers</button></div></form>
+<div class="kapi-error" data-kapi-preset="form" role="alert" data-kapi-id="f0000010"><span class="kapi-error-tag">&lt;kapi-form&gt;</span> needs a name attribute</div>
+<div class="kapi-error" data-kapi-preset="text" role="alert" data-kapi-id="f0000011"><span class="kapi-error-tag">&lt;kapi-text&gt;</span> must be a direct child of &lt;kapi-form&gt;</div>
+<div class="kapi-error" data-kapi-preset="opt" role="alert" data-kapi-id="f0000012"><span class="kapi-error-tag">&lt;kapi-opt&gt;</span> must be a direct child of &lt;kapi-choice&gt;</div>

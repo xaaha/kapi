@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/xaaha/kapi/internal/render"
 )
 
 var (
@@ -22,6 +25,8 @@ var (
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
+	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
+	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
 )
 
 type Op struct {
@@ -43,6 +48,8 @@ type Store struct {
 	src  []byte
 	rev  uint64
 	undo []uint64
+
+	conversion string
 }
 
 type state struct {
@@ -76,26 +83,121 @@ func Open(home, path string) (*Store, error) {
 		}
 		s.rev, s.undo = st.Rev, st.Undo
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	if s.rev > 0 {
+		if s.src, err = os.ReadFile(s.revPath(s.rev)); err != nil {
+			return nil, err
+		}
 	}
-	src := assignIDs(raw)
-	if s.rev == 0 {
-		err = s.commit(src, !bytes.Equal(raw, src), 1, nil)
-	} else if s.src, err = os.ReadFile(s.revPath(s.rev)); err == nil {
-		if bytes.Equal(raw, s.src) {
+	for attempt := 0; ; attempt++ {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		src, text, err := s.absorb(raw, s.rev+1)
+		if err != nil {
+			return nil, err
+		}
+		if s.rev > 0 && bytes.Equal(raw, s.src) && bytes.Equal(src, raw) {
 			return s, nil
 		}
-		err = s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo)
+		err = s.commit(src, raw, s.rev+1, s.undo)
+		if errors.Is(err, errFileChanged) && attempt < 10 {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		s.conversion = text
+		return s, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
 }
 
 func (s *Store) Path() string { return s.path }
+
+func (s *Store) Conversion() string { return s.conversion }
+
+func (s *Store) rawPath(rev uint64) string {
+	return filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+}
+
+func (s *Store) absorb(raw []byte, rev uint64) ([]byte, string, error) {
+	src, ch, err := prepare(raw, s.src)
+	if err != nil || ch.splits == 0 {
+		return src, "", err
+	}
+	if err := os.MkdirAll(filepath.Join(s.dir, "raw"), 0o700); err != nil {
+		return nil, "", err
+	}
+	if err := writeAtomic(s.rawPath(rev), raw); err != nil {
+		return nil, "", err
+	}
+	text := fmt.Sprintf("split %d block(s) so each has its own id", ch.splits)
+	if !ch.dropped.Empty() {
+		text += "; removed " + ch.dropped.String()
+	}
+	return src, text + "; raw input saved to " + s.rawPath(rev), nil
+}
+
+type change struct {
+	splits  int
+	dropped render.Report
+}
+
+func (c *change) rewrite(part []byte) ([]byte, error) {
+	d, err := render.Dropped(part)
+	if err != nil {
+		return nil, err
+	}
+	c.splits++
+	for name, n := range d.Elements {
+		c.dropped.Elements[name] += n
+	}
+	c.dropped.Attributes += d.Attributes
+	return render.Canonical(part)
+}
+
+func prepare(src, prev []byte) ([]byte, change, error) {
+	ch := change{dropped: render.Report{Elements: map[string]int{}}}
+	whole := false
+	for range 4 {
+		els := parse(src)
+		need := map[int]bool{}
+		var split []int
+		for _, i := range units(els) {
+			n, err := render.CountBlocks(src[els[i].start:els[i].end])
+			if err != nil {
+				return nil, ch, err
+			}
+			switch {
+			case n > 1:
+				split = append(split, i)
+			case n == 1:
+				need[i] = true
+			}
+		}
+		if len(split) > 0 {
+			for k := len(split) - 1; k >= 0; k-- {
+				e := els[split[k]]
+				c, err := ch.rewrite(src[e.start:e.end])
+				if err != nil {
+					return nil, ch, err
+				}
+				src = splice(src, e.start, e.end, string(c))
+			}
+			continue
+		}
+		src = assignIDs(src, els, need, prev)
+		missing, err := render.Unlabeled(src)
+		if err != nil || missing == 0 || whole {
+			return src, ch, err
+		}
+		whole = true
+		if src, err = ch.rewrite(src); err != nil {
+			return nil, ch, err
+		}
+	}
+	return src, ch, nil
+}
 
 func (s *Store) Source() ([]byte, uint64) {
 	s.mu.Lock()
@@ -107,15 +209,30 @@ func (s *Store) Source() ([]byte, uint64) {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := os.ReadFile(s.path)
-	if err != nil || bytes.Equal(raw, s.src) {
-		return Summary{}, false, err
+	for attempt := 0; attempt < 10; attempt++ {
+		raw, err := os.ReadFile(s.path)
+		if err != nil || bytes.Equal(raw, s.src) {
+			return Summary{}, false, err
+		}
+		old := s.src
+		src, text, err := s.absorb(raw, s.rev+1)
+		if err != nil {
+			return Summary{}, false, err
+		}
+		summary := "edited in the file"
+		if text != "" {
+			summary += "; " + text
+		}
+		err = s.commit(src, raw, s.rev+1, s.undo)
+		if errors.Is(err, errFileChanged) {
+			continue
+		}
+		if err != nil {
+			return Summary{}, false, err
+		}
+		return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
 	}
-	old, src := s.src, assignIDs(raw)
-	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
-		return Summary{}, false, err
-	}
-	return Summary{Text: "edited in the file", IDs: changedBlocks(old, s.src)}, true, nil
+	return Summary{}, false, nil
 }
 
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
@@ -148,19 +265,37 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 		if err != nil {
 			return s.rev, Summary{}, err
 		}
-		if err := s.commit(src, true, s.rev+1, s.undo[:n-1]); err != nil {
-			return s.rev, Summary{}, err
+		if err := s.commit(src, raw, s.rev+1, s.undo[:n-1]); err != nil {
+			return s.rev, Summary{}, stale(err)
 		}
 		return s.rev, Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}, nil
 	}
 	src, sum, err := apply(s.src, op)
+	if err == nil {
+		var text string
+		if src, text, err = s.absorb(src, s.rev+1); text != "" {
+			sum.Text += "; " + text
+		}
+	}
+	if err == nil && op.Kind == "edit" {
+		if _, lost := render.Block(src, op.ID); errors.Is(lost, render.ErrNotFound) {
+			err = ErrEditLostID
+		}
+	}
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
-	if err := s.commit(src, true, s.rev+1, append(s.undo, s.rev)); err != nil {
-		return s.rev, Summary{}, err
+	if err := s.commit(src, raw, s.rev+1, append(s.undo, s.rev)); err != nil {
+		return s.rev, Summary{}, stale(err)
 	}
 	return s.rev, sum, nil
+}
+
+func stale(err error) error {
+	if errors.Is(err, errFileChanged) {
+		return ErrStale
+	}
+	return err
 }
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
@@ -185,14 +320,20 @@ func (s *Store) revPath(rev uint64) string {
 	return filepath.Join(s.dir, "revs", strconv.FormatUint(rev, 10)+".html")
 }
 
-func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error {
-	if err := writeAtomic(s.revPath(rev), src); err != nil {
-		return err
-	}
-	if write {
-		if err := writeAtomic(s.path, src); err != nil {
+var (
+	errFileChanged = errors.New("the file changed while kapi was writing it")
+	errNoSwap      = errors.New("this file system cannot swap files atomically")
+	replaceHook    func(stage string)
+)
+
+func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
+	if !bytes.Equal(src, base) {
+		if err := replaceFile(s.path, src, base); err != nil {
 			return err
 		}
+	}
+	if err := writeAtomic(s.revPath(rev), src); err != nil {
+		return err
 	}
 	b, err := json.Marshal(state{Rev: rev, Undo: undo})
 	if err != nil {
@@ -206,6 +347,10 @@ func (s *Store) commit(src []byte, write bool, rev uint64, undo []uint64) error 
 }
 
 func writeAtomic(path string, b []byte) error {
+	return replaceFile(path, b, nil)
+}
+
+func replaceFile(path string, b, expect []byte) error {
 	mode := os.FileMode(0o600)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
@@ -230,7 +375,69 @@ func writeAtomic(path string, b []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), path)
+	if expect == nil {
+		return os.Rename(f.Name(), path)
+	}
+	return swapIn(f.Name(), path, b, expect)
+}
+
+func swapIn(tmp, path string, ours, expect []byte) error {
+	mine, err := os.Stat(tmp)
+	if err != nil {
+		return err
+	}
+	if replaceHook != nil {
+		replaceHook("swap")
+	}
+	err = swapFiles(tmp, path)
+	if errors.Is(err, errNoSwap) {
+		cur, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(cur, expect) {
+			return errFileChanged
+		}
+		return os.Rename(tmp, path)
+	}
+	if err != nil {
+		return err
+	}
+	if displaced, err := os.ReadFile(tmp); err != nil || bytes.Equal(displaced, expect) {
+		return err
+	}
+	for range 1 << 16 {
+		atPath, err := stamp(path, mine, ours)
+		if err != nil {
+			return err
+		}
+		atTmp, err := stamp(tmp, mine, ours)
+		if err != nil {
+			return err
+		}
+		if !atTmp.After(atPath) {
+			return errFileChanged
+		}
+		if replaceHook != nil {
+			replaceHook("restore")
+		}
+		if err := swapFiles(tmp, path); err != nil {
+			return err
+		}
+	}
+	return errFileChanged
+}
+
+func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
+	fi, err := os.Stat(name)
+	if err != nil || !os.SameFile(fi, mine) {
+		return fi.ModTime(), err
+	}
+	b, err := os.ReadFile(name)
+	if err != nil || bytes.Equal(b, ours) {
+		return time.Time{}, err
+	}
+	return fi.ModTime(), nil
 }
 
 func apply(src []byte, op Op) ([]byte, Summary, error) {
@@ -276,6 +483,13 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !strings.HasPrefix(root.name, "kapi-") {
+		for _, f := range parse(frag) {
+			if _, ok := f.attr("data-kapi-preset"); ok || strings.HasPrefix(f.name, "kapi-") {
+				return nil, ErrPresetInProse
+			}
+		}
+	}
 	if root.id != "" && root.id != e.id {
 		return nil, fmt.Errorf("edit cannot change the id #%s to #%s", e.id, root.id)
 	}
@@ -293,7 +507,7 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	if root.id == "" {
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
-	out := assignIDs(splice(src, e.start, e.end, string(frag)))
+	out := splice(src, e.start, e.end, string(frag))
 	before := dangling(src)
 	var added []string
 	for id := range dangling(out) {
@@ -375,6 +589,11 @@ func changedBlocks(old, cur []byte) []string {
 			}
 		}
 		return ids, outer
+	}
+	old, errOld := render.Canonical(old)
+	cur, errCur := render.Canonical(cur)
+	if errOld != nil || errCur != nil {
+		return nil
 	}
 	oldIDs, oldOuter := blocks(old)
 	curIDs, curOuter := blocks(cur)

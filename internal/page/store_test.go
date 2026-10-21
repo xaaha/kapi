@@ -3,12 +3,19 @@ package page
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
+
+	"github.com/xaaha/kapi/internal/render"
 )
 
 func newPage(t *testing.T, src string) (home, path string) {
@@ -307,12 +314,12 @@ func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 }
 
 func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
-	const orig = "<p data-kapi-id=\"aaaaaaaa\">a <kapi-code data-kapi-id=\"cccccccc\" lang=\"go\">x</kapi-code></p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#cccccccc\">code</a> and <a href=\"#gone0000\">old</a></p>\n"
+	const orig = "<p data-kapi-id=\"aaaaaaaa\">a <span data-kapi-id=\"cccccccc\">x</span></p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#cccccccc\">code</a> and <a href=\"#gone0000\">old</a></p>\n"
 	for _, tc := range []struct {
 		name, id, html, dangling string
 	}{
-		{"adds a link to a missing id", "aaaaaaaa", `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">x</kapi-code> <a href="#zzzzzzzz">z</a> <a href="#yyyyyyyy">y</a></p>`, "#yyyyyyyy, #zzzzzzzz"},
-		{"removes a linked element", "aaaaaaaa", `<p>a, no code</p>`, "#cccccccc"},
+		{"adds a link to a missing id", "aaaaaaaa", `<p>a <span data-kapi-id="cccccccc">x</span> <a href="#zzzzzzzz">z</a> <a href="#yyyyyyyy">y</a></p>`, "#yyyyyyyy, #zzzzzzzz"},
+		{"removes a linked element", "aaaaaaaa", `<p>a, no span</p>`, "#cccccccc"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, path := newPage(t, orig)
@@ -329,7 +336,7 @@ func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
 	home, path := newPage(t, orig)
 	s := open(t, home, path)
 	mustApply(t, s, Op{Kind: "edit", ID: "bbbbbbbb", HTML: `<p>see <a href="#cccccccc">the code</a> and <a href="#gone0000">old</a></p>`})
-	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <kapi-code data-kapi-id="cccccccc" lang="go">y</kapi-code> <a href="#bbbbbbbb">b</a></p>`})
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <span data-kapi-id="cccccccc">y</span> <a href="#bbbbbbbb">b</a></p>`})
 }
 
 func TestEditRejectsBadHTML(t *testing.T) {
@@ -527,5 +534,463 @@ func TestFormIDAndOuter(t *testing.T) {
 	}
 	if _, err := Outer(src, "cccccccc"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Outer of an unknown id: err = %v", err)
+	}
+}
+
+const hoistRepro = `<p data-kapi-id="aaaaaaaa">before <kapi-callout data-kapi-id="bbbbbbbb">keep me</kapi-callout> after</p>`
+
+func renderedBlocks(t *testing.T, src []byte) []string {
+	t.Helper()
+	out, err := render.Render(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(bytes.NewReader(out), body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	seen := map[string]bool{}
+	for _, n := range nodes {
+		if n.Type != html.ElementNode {
+			continue
+		}
+		id := ""
+		for _, a := range n.Attr {
+			if a.Key == idAttr {
+				id = a.Val
+			}
+		}
+		if id == "" || seen[id] {
+			t.Errorf("rendered <%s> has id %q, want a unique one:\n%s", n.Data, id, out)
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func TestOpenSplitsPresetsOutOfProseInTheSource(t *testing.T) {
+	home, path := newPage(t, hoistRepro+"\n")
+	s := open(t, home, path)
+	src, _ := s.Source()
+	ids := renderedBlocks(t, src)
+	if len(ids) != 3 || ids[0] != "aaaaaaaa" || ids[1] != "bbbbbbbb" {
+		t.Fatalf("blocks = %v, want #aaaaaaaa, #bbbbbbbb and a fresh id:\n%s", ids, src)
+	}
+	if got := onDisk(t, path); got != string(src) {
+		t.Errorf("split source was not written back:\n%s", got)
+	}
+}
+
+func TestEditAfterASplitKeepsEverything(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	s := open(t, home, path)
+	src, _ := s.Source()
+	block, err := render.Block(src, "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(block), "before", "before, edited", 1)
+	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: edited})
+	got, _ := s.Source()
+	for _, want := range []string{"before, edited", `data-kapi-id="bbbbbbbb"`, "keep me", "after"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("source lost %q after editing #aaaaaaaa:\n%s", want, got)
+		}
+	}
+	renderedBlocks(t, got)
+}
+
+func TestOpenGivesFormattingCopiesFreshIDs(t *testing.T) {
+	home, path := newPage(t, `<b data-kapi-id="aaaaaaaa">bold<div>block</b>after</div>`)
+	src, _ := open(t, home, path).Source()
+	renderedBlocks(t, src)
+	if n := strings.Count(string(src), `"aaaaaaaa"`); n != 1 {
+		t.Errorf("id kept %d times:\n%s", n, src)
+	}
+}
+
+func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	for _, h := range []string{
+		`<p data-kapi-id="aaaaaaaa">x <kapi-callout>y</kapi-callout></p>`,
+		`<div data-kapi-id="aaaaaaaa"><aside class="kapi-callout" data-kapi-preset="callout">rendered</aside></div>`,
+		`<p data-kapi-id="aaaaaaaa" data-kapi-preset="code">x</p>`,
+	} {
+		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrPresetInProse) {
+			t.Errorf("edit %q: err = %v, want ErrPresetInProse", h, err)
+		}
+	}
+	if got := onDisk(t, path); got != `<p data-kapi-id="aaaaaaaa">a</p>` {
+		t.Errorf("refused edit changed the file: %s", got)
+	}
+}
+
+const lavishPage = "<!doctype html>\n<html><head><style>body{color:red}</style></head><body>\n" +
+	"<h1 class=title>Report</h1>\n<p onclick=\"go()\">Hello &amp; welcome</p>\n<script>go()</script>\n</body></html>\n"
+
+func rawSaves(t *testing.T, s *Store) []string {
+	t.Helper()
+	names, err := filepath.Glob(filepath.Join(s.dir, "raw", "*.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
+}
+
+func TestOpenOfAFullDocumentOnlyAddsIDs(t *testing.T) {
+	home, path := newPage(t, lavishPage)
+	s := open(t, home, path)
+	got := onDisk(t, path)
+	if stripped := regexp.MustCompile(` data-kapi-id="[a-z2-7]{8}"`).ReplaceAllString(got, ""); stripped != lavishPage {
+		t.Fatalf("open changed more than ids:\n%s", got)
+	}
+	src, _ := s.Source()
+	if ids := renderedBlocks(t, src); len(ids) != 2 {
+		t.Errorf("want ids on the h1 and the p, got %v:\n%s", ids, got)
+	}
+	if s.Conversion() != "" || len(rawSaves(t, s)) != 0 {
+		t.Errorf("adding ids alone reported %q and saved %v", s.Conversion(), rawSaves(t, s))
+	}
+}
+
+func TestRefreshKeepsTheAgentsBytes(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	written := "<p data-kapi-id='q0000001' class=x>Fish &amp; chips &copy;</p>\n<script>later()</script>\n<p data-kapi-id='q0000002'>b</p>\n"
+	externalWrite(t, path, written)
+	if _, ok, err := s.Refresh(); err != nil || !ok {
+		t.Fatalf("Refresh = %v, %v", ok, err)
+	}
+	if got := onDisk(t, path); got != written {
+		t.Errorf("refresh rewrote the file:\n%s", got)
+	}
+	src, rev := s.Source()
+	if rev != 2 || string(src) != written {
+		t.Errorf("Source = rev %d %q", rev, src)
+	}
+	if out, _ := render.Render(src); strings.Contains(string(out), "later()") {
+		t.Errorf("served output kept the script: %s", out)
+	}
+}
+
+func TestSplitsSaveTheRawInputEveryTime(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	s := open(t, home, path)
+	if saves := rawSaves(t, s); len(saves) != 1 || !strings.Contains(s.Conversion(), "raw input saved to "+saves[0]) {
+		t.Fatalf("saves %v, conversion %q", saves, s.Conversion())
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.dir, "raw", "1.html")); string(b) != hoistRepro {
+		t.Errorf("raw/1.html = %q, want the untouched input", b)
+	}
+	for i, extra := range []string{"<p>x <kapi-code>c</kapi-code> y<script>s()</script></p>", "<b>bold<div>block</b>after</div>"} {
+		src, _ := s.Source()
+		input := string(src) + "\n" + extra + "\n"
+		externalWrite(t, path, input)
+		sum, ok, err := s.Refresh()
+		if err != nil || !ok {
+			t.Fatalf("Refresh = %v, %v", ok, err)
+		}
+		_, rev := s.Source()
+		saved := filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+		if b, err := os.ReadFile(saved); err != nil || string(b) != input {
+			t.Errorf("edit %d: %s = %q, %v; want the input", i, saved, b, err)
+		}
+		if !strings.Contains(sum.Text, "raw input saved to "+saved) {
+			t.Errorf("edit %d: summary %q does not name %s", i, sum.Text, saved)
+		}
+		got, _ := s.Source()
+		renderedBlocks(t, got)
+	}
+	if len(rawSaves(t, s)) != 3 {
+		t.Errorf("raw saves = %v, want one per split write", rawSaves(t, s))
+	}
+}
+
+func TestOpenProcessesAPageFromBeforeTheStore(t *testing.T) {
+	home, path := newPage(t, hoistRepro)
+	dir := filepath.Join(home, "pages", ID(path))
+	if err := os.MkdirAll(filepath.Join(dir, "revs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "revs", "1.html"), []byte(hoistRepro), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"rev":1,"undo":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := open(t, home, path)
+	src, rev := s.Source()
+	if rev != 2 || !strings.Contains(s.Conversion(), "split 1 block") {
+		t.Errorf("rev %d, conversion %q", rev, s.Conversion())
+	}
+	renderedBlocks(t, src)
+}
+
+func TestCodeBodiesStayUntouchedInTheFile(t *testing.T) {
+	body := "\nstd::vector<int> v;\n<td data-kapi-id=\"cellcell\">x</td> <kapi-callout>no</kapi-callout>\n"
+	home, path := newPage(t, `<kapi-code lang="cpp">`+body+`</kapi-code>`+"\n")
+	open(t, home, path)
+	got := onDisk(t, path)
+	if !strings.Contains(got, ">"+body+"</kapi-code>") || strings.Count(got, "data-kapi-id") != 2 {
+		t.Errorf("file after open:\n%s", got)
+	}
+	if _, err := Outer([]byte(got), "cellcell"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an id inside a code body is addressable")
+	}
+}
+
+func TestOpsChangeOnlyTheValueTheyTouch(t *testing.T) {
+	src := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=done>x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "archive", ID: "aaaaaaaa"})
+	want := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=\"archived\">x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
+	if got := onDisk(t, path); got != want {
+		t.Errorf("after archive:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestOpenLabelsBlocksTheParserInvents(t *testing.T) {
+	raw := `<p data-kapi-id="aaaaaaaa">a<div data-kapi-id="bbbbbbbb">b</div></p>` + "\n"
+	home, path := newPage(t, raw)
+	s := open(t, home, path)
+	src, _ := s.Source()
+	if ids := renderedBlocks(t, src); len(ids) != 3 {
+		t.Errorf("blocks = %v:\n%s", ids, src)
+	}
+	if !strings.Contains(s.Conversion(), "raw input saved to") {
+		t.Errorf("conversion = %q", s.Conversion())
+	}
+}
+
+func TestAnAgentWritingInALoopAlwaysWins(t *testing.T) {
+	for trial := 0; trial < 30; trial++ {
+		home, path := newPage(t, "<p data-kapi-id='q0000001'>start</p>\n")
+		s := open(t, home, path)
+		version := func(i int) string {
+			return fmt.Sprintf("<p data-kapi-id='q0000001'>v%d</p>\n<p>needs an id %d</p>\n", i, i)
+		}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for i := 0; i < 40; i++ {
+				if err := os.WriteFile(path, []byte(version(i)), 0o600); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+	poll:
+		for {
+			select {
+			case <-done:
+				break poll
+			default:
+				if _, _, err := s.Refresh(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		for i := 0; i < 10; i++ {
+			if _, changed, err := s.Refresh(); err != nil || !changed {
+				break
+			}
+		}
+		got := onDisk(t, path)
+		if stripped := regexp.MustCompile(` data-kapi-id="[a-z2-7]{8}"`).ReplaceAllString(got, ""); stripped != version(39) {
+			t.Fatalf("trial %d: the agent's last write was lost:\n%s", trial, got)
+		}
+	}
+}
+
+func TestEditRefusesAResultThatLosesItsID(t *testing.T) {
+	src := `<p data-kapi-id="aaaaaaaa">a</p>` + "\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	for _, h := range []string{
+		`<td data-kapi-id="aaaaaaaa">cell</td>`,
+		`<tr data-kapi-id="aaaaaaaa"><td>x</td></tr>`,
+		`<script data-kapi-id="aaaaaaaa">x()</script>`,
+	} {
+		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrEditLostID) {
+			t.Errorf("edit %q: err = %v, want ErrEditLostID", h, err)
+		}
+	}
+	if got := onDisk(t, path); got != src {
+		t.Errorf("refused edit changed the file: %s", got)
+	}
+}
+
+func TestAPastedDuplicateKeepsTheIDOnTheOriginal(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"xxxxxxxx\">original</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n")
+	s := open(t, home, path)
+	externalWrite(t, path, "<p data-kapi-id=\"xxxxxxxx\">pasted copy</p>\n<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"xxxxxxxx\">original</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n")
+	if _, _, err := s.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	src, _ := s.Source()
+	if b, err := Outer(src, "xxxxxxxx"); err != nil || string(b) != `<p data-kapi-id="xxxxxxxx">original</p>` {
+		t.Errorf("#xxxxxxxx is now %q, %v; want the original block\n%s", b, err, src)
+	}
+	renderedBlocks(t, src)
+}
+
+func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
+	lost := 0
+	for trial := 0; trial < 400; trial++ {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		final := fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">agent %d</p>\n", trial)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for i := 0; i < 30; i++ {
+				body := fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">draft %d</p>\n", i)
+				if i == 29 {
+					body = final
+				}
+				tmp := path + ".agent"
+				if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+					t.Error(err)
+					return
+				}
+				if err := os.Rename(tmp, path); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+		kinds := []string{"done", "archive"}
+	ops:
+		for k := 0; ; k++ {
+			select {
+			case <-done:
+				break ops
+			default:
+			}
+			_, rev := s.Source()
+			if _, _, err := s.Apply(rev, Op{Kind: kinds[k%2], ID: "aaaaaaaa"}); errors.Is(err, ErrStale) {
+				if _, _, err := s.Refresh(); err != nil {
+					t.Fatal(err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !strings.Contains(onDisk(t, path), fmt.Sprintf(">agent %d<", trial)) {
+			lost++
+		}
+	}
+	if lost > 0 {
+		t.Errorf("ops overwrote the agent's final write in %d of 400 trials", lost)
+	}
+}
+
+func agentRename(t *testing.T, path, body string) {
+	t.Helper()
+	tmp := path + ".agent"
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnAgentRenameInsideTheWriteWindowWins(t *testing.T) {
+	for _, stages := range [][]string{{"swap"}, {"swap", "restore"}, {"swap", "restore", "restore"}} {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		var last string
+		n := 0
+		replaceHook = func(stage string) {
+			if n < len(stages) && stage == stages[n] {
+				last = fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">agent %d</p>\n", n)
+				agentRename(t, path, last)
+				n++
+			}
+		}
+		_, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"})
+		replaceHook = nil
+		if !errors.Is(err, ErrStale) {
+			t.Errorf("%v: Apply err = %v, want ErrStale", stages, err)
+		}
+		if got := onDisk(t, path); got != last {
+			t.Errorf("%v: file = %q, want the agent's last write %q", stages, got, last)
+		}
+	}
+}
+
+func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
+	body := "a\r\nb\x00c"
+	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")
+	open(t, home, path)
+	if got := onDisk(t, path); !strings.Contains(got, ">"+body+"</kapi-code>") {
+		t.Errorf("split changed the code body:\n%q", got)
+	}
+}
+
+func TestDuplicateIDsFollowThePreviousRevision(t *testing.T) {
+	cases := []struct {
+		name, before, after string
+		want                map[string]string
+	}{
+		{
+			"nested copy in a blockquote",
+			`<p data-kapi-id="xxxxxxxx">text</p>` + "\n",
+			`<blockquote><p data-kapi-id="xxxxxxxx">quoted copy</p></blockquote>` + "\n" + `<p data-kapi-id="xxxxxxxx">text</p>` + "\n",
+			map[string]string{"xxxxxxxx": `<p data-kapi-id="xxxxxxxx">text</p>`},
+		},
+		{
+			"pasted run after the originals",
+			"<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n<p data-kapi-id=\"cccccccc\">C</p>\n<p data-kapi-id=\"dddddddd\">D</p>\n",
+			"<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n<p data-kapi-id=\"aaaaaaaa\">A copy</p>\n<p data-kapi-id=\"bbbbbbbb\">B copy</p>\n<p data-kapi-id=\"cccccccc\">C</p>\n<p data-kapi-id=\"dddddddd\">D</p>\n",
+			map[string]string{"aaaaaaaa": `<p data-kapi-id="aaaaaaaa">A</p>`, "bbbbbbbb": `<p data-kapi-id="bbbbbbbb">B</p>`},
+		},
+	}
+	for _, tc := range cases {
+		home, path := newPage(t, tc.before)
+		s := open(t, home, path)
+		externalWrite(t, path, tc.after)
+		if _, _, err := s.Refresh(); err != nil {
+			t.Fatal(err)
+		}
+		src, _ := s.Source()
+		for id, want := range tc.want {
+			if got, err := Outer(src, id); err != nil || string(got) != want {
+				t.Errorf("%s: #%s = %q, %v; want %q\n%s", tc.name, id, got, err, want, src)
+			}
+			out, _ := render.Render(src)
+			if n := strings.Count(string(out), `data-kapi-id="`+id+`"`); n != 1 {
+				t.Errorf("%s: rendered page has #%s %d times", tc.name, id, n)
+			}
+		}
+		renderedBlocks(t, src)
+	}
+}
+
+func TestAnEditThatSplitsSavesItsInput(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n")
+	s := open(t, home, path)
+	sum := mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`})
+	_, rev := s.Source()
+	saved := filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
+	if !strings.Contains(sum.Text, "raw input saved to "+saved) {
+		t.Errorf("summary = %q, want it to name %s", sum.Text, saved)
+	}
+	if b, err := os.ReadFile(saved); err != nil || !strings.Contains(string(b), `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`) {
+		t.Errorf("saved input = %q, %v", b, err)
+	}
+}
+
+func TestAValuelessIDGetsAWellFormedValue(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id class=\"x\">hi</p>\n")
+	open(t, home, path)
+	if got := onDisk(t, path); !regexp.MustCompile(`^<p data-kapi-id="[a-z2-7]{8}" class="x">hi</p>\n$`).MatchString(got) {
+		t.Errorf("file = %q", got)
 	}
 }

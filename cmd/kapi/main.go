@@ -66,6 +66,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			pendingCmd(c, out),
 			statusCmd(c, out),
 			daemonCmd(),
+			newPresetCmd(out),
 			newPublishCmd(out),
 			newOpenCmd(c, out),
 		},
@@ -278,6 +279,11 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 			}
 			if _, err := fmt.Fprintln(out, resp.URL); err != nil {
 				return err
+			}
+			if resp.Notice != "" {
+				if _, err := fmt.Fprintln(out, resp.Notice); err != nil {
+					return err
+				}
 			}
 			if *printOnly {
 				return nil
