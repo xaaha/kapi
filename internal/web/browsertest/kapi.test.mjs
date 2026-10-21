@@ -300,3 +300,9 @@ test("Escape cancels a source edit and shows the block again", async () => {
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').checkVisibility()`), true);
   assert.equal(requests("POST", "/ops").length, 0);
 });
+
+test("the toolbar does not show the raw block id", async () => {
+  await select("cccccccc");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.doesNotMatch(await page.eval(`document.querySelector(".kapi-bar").textContent`), /#/);
+});

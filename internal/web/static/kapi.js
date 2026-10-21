@@ -104,8 +104,7 @@
       const list = peers(selected);
       const i = list.indexOf(selected);
       const state = selected.getAttribute("data-kapi-state");
-      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: `#${idOf(selected)}` }),
-        button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
+      bar.replaceChildren(button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"), button("Ask", "ask", "Ask the agent about this block"));
       bar.querySelector('[data-action="done"]').disabled = state === "done";
