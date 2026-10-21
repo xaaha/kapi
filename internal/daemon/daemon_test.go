@@ -61,3 +61,37 @@ func TestOnlyOneDaemonServesAHome(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestDaemonStartsOverAStaleSocket(t *testing.T) {
+	home, err := os.MkdirTemp("", "kd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	stale, err := net.Listen("unix", SocketPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.(*net.UnixListener).SetUnlinkOnClose(false)
+	stale.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- New(home).Serve(ctx) }()
+	reach := time.Now().Add(2 * time.Second)
+	for {
+		conn, err := net.Dial("unix", SocketPath(home))
+		if err == nil {
+			conn.Close()
+			break
+		}
+		if time.Now().After(reach) {
+			t.Fatalf("daemon did not take over the stale socket: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
