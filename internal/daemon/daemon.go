@@ -149,50 +149,50 @@ func (s *Server) handle(conn net.Conn) {
 	var req Request
 	if err := dec.Decode(&req); err != nil {
 		if !errors.Is(err, io.EOF) {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 		}
 		return
 	}
 	if req.Op == "pages" {
 		pages, err := s.listPages()
 		if err != nil {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, Response{Pages: pages})
+		reply(enc, &Response{Pages: pages})
 		return
 	}
 	l, err := s.page(req.Page)
 	if err != nil {
-		reply(enc, Response{Error: err.Error()})
+		reply(enc, &Response{Error: err.Error()})
 		return
 	}
 	switch req.Op {
 	case "append":
 		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
 		if err != nil {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, Response{Event: &e})
+		reply(enc, &Response{Event: &e})
 	case "pending":
-		reply(enc, Response{Events: l.Pending(req.Reader)})
+		reply(enc, &Response{Events: l.Pending(req.Reader)})
 	case "ack":
 		if err := l.Ack(req.Reader, req.Seq); err != nil {
-			reply(enc, Response{Error: err.Error()})
+			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, Response{})
+		reply(enc, &Response{})
 	case "status":
-		reply(enc, Response{Readers: s.status(req.Page, l)})
+		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
 		s.watch(dec, enc, &req, l)
 	default:
-		reply(enc, Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
+		reply(enc, &Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
 	}
 }
 
-func reply(enc *json.Encoder, resp Response) {
+func reply(enc *json.Encoder, resp *Response) {
 	if err := enc.Encode(resp); err != nil {
 		log.Printf("reply: %v", err)
 	}
@@ -200,7 +200,7 @@ func reply(enc *json.Encoder, resp Response) {
 
 func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *eventlog.Log) {
 	if req.Reader == "" {
-		reply(enc, Response{Error: "watch needs a reader"})
+		reply(enc, &Response{Error: "watch needs a reader"})
 		return
 	}
 	s.setAttached(req.Page, req.Reader, true)
