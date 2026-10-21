@@ -299,7 +299,7 @@
   function scheduleFlush() {
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => {
-      if (!pending || (editing && pending === "page")) return;
+      if (!pending) return;
       if (pending === "page") {
         pending = null;
         return refresh(null);
