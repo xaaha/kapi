@@ -52,6 +52,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Long:   "kapi: shared HTML pages for you and your agent.",
 		Flags:  flag.NewFlagSet("kapi", flag.ContinueOnError),
 		Config: &cli.Config{Out: out},
+		Run:    func([]string) error { return homeView(c, out) },
 		SubCommands: []*cli.Command{
 			watchCmd(c, out, sleep),
 			messageCmd(c, out, "say", "agent", "Reply on a page as the agent"),
@@ -212,6 +213,39 @@ func completionCmd(root *cli.Command, out io.Writer) *cli.Command {
 			{Name: "bash", Short: "Print the bash completion script", Run: func([]string) error { return cli.WriteBashCompletion(out, root) }},
 		},
 	}
+}
+
+func homeView(c api, out io.Writer) error {
+	resp, err := c.Do(&daemon.Request{Op: "pages"})
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	b.WriteString("kapi: shared HTML pages for you and your agent\n")
+	if len(resp.Pages) == 0 {
+		b.WriteString("pages: none yet\n")
+	} else {
+		fmt.Fprintf(&b, "pages[%d]:\n", len(resp.Pages))
+		for _, p := range resp.Pages {
+			readers := make([]string, 0, len(p.Readers))
+			for _, r := range p.Readers {
+				s := fmt.Sprintf("%s %d unread", r.Reader, r.Pending)
+				if r.Attached {
+					s += " (watching)"
+				}
+				readers = append(readers, s)
+			}
+			fmt.Fprintf(&b, "  %s: %s\n", p.Path, strings.Join(readers, ", "))
+		}
+	}
+	b.WriteString(`next:
+  kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
+  kapi say <page> <text>  reply on a page
+  kapi pending <page>     list unread events without consuming them
+  kapi --help             every command
+`)
+	_, err = io.WriteString(out, b.String())
+	return err
 }
 
 func pagePath(args []string, want int, command string) (string, error) {

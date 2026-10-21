@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/xaaha/kapi/internal/eventlog"
 )
 
 func TestOnlyOneDaemonServesAHome(t *testing.T) {
@@ -93,5 +95,33 @@ func TestDaemonStartsOverAStaleSocket(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPagesListsEveryKnownPage(t *testing.T) {
+	home, err := os.MkdirTemp("", "kd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	s := New(home)
+	for _, page := range []string{"/tmp/a.html", "/tmp/a.html", "/tmp/b.html"} {
+		l, err := s.page(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := l.Append(&eventlog.Event{Author: "human", Kind: "message", Text: "hi"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := New(home).listPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Path != "/tmp/a.html" || got[1].Path != "/tmp/b.html" {
+		t.Fatalf("pages = %+v", got)
+	}
+	if got[0].Readers[0].Reader != "agent" || got[0].Readers[0].Pending != 2 || got[1].Readers[0].Pending != 1 {
+		t.Errorf("readers = %+v / %+v", got[0].Readers, got[1].Readers)
 	}
 }

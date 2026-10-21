@@ -14,6 +14,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -39,6 +41,12 @@ type Response struct {
 	Event   *eventlog.Event  `json:"event,omitempty"`
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Readers []ReaderStatus   `json:"readers,omitempty"`
+	Pages   []PageStatus     `json:"pages,omitempty"`
+}
+
+type PageStatus struct {
+	Path    string         `json:"path"`
+	Readers []ReaderStatus `json:"readers"`
 }
 
 type ReaderStatus struct {
@@ -145,6 +153,15 @@ func (s *Server) handle(conn net.Conn) {
 		}
 		return
 	}
+	if req.Op == "pages" {
+		pages, err := s.listPages()
+		if err != nil {
+			reply(enc, Response{Error: err.Error()})
+			return
+		}
+		reply(enc, Response{Pages: pages})
+		return
+	}
 	l, err := s.page(req.Page)
 	if err != nil {
 		reply(enc, Response{Error: err.Error()})
@@ -247,4 +264,28 @@ func (s *Server) status(page string, l *eventlog.Log) []ReaderStatus {
 		out = append(out, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: l.Cursor(r), Pending: len(l.Pending(r))})
 	}
 	return out
+}
+
+func (s *Server) listPages() ([]PageStatus, error) {
+	files, err := filepath.Glob(filepath.Join(s.home, "pages", "*", "page.txt"))
+	if err != nil {
+		return nil, err
+	}
+	var out []PageStatus
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		path := strings.TrimSpace(string(b))
+		l, err := s.page(path)
+		if err != nil {
+			return nil, err
+		}
+		readers := s.status(path, l)
+		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
+		out = append(out, PageStatus{Path: path, Readers: readers})
+	}
+	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
+	return out, nil
 }
