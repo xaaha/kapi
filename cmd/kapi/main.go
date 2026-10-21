@@ -280,6 +280,15 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 			if _, err := fmt.Fprintln(out, resp.URL); err != nil {
 				return err
 			}
+			if resp.Notice != "" {
+				where := " (" + resp.Original + ")"
+				if strings.HasSuffix(resp.Notice, "original saved") {
+					where = " to " + resp.Original
+				}
+				if _, err := fmt.Fprintln(out, resp.Notice+where); err != nil {
+					return err
+				}
+			}
 			if *printOnly {
 				return nil
 			}

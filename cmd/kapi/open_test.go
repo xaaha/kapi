@@ -57,3 +57,16 @@ func TestOpenReportsABrowserFailure(t *testing.T) {
 		t.Errorf("err = %v, want the browser error", err)
 	}
 }
+
+func TestOpenPrintsAConversionNotice(t *testing.T) {
+	stubBrowser(t, nil)
+	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/tok/p/x/", Notice: "converted to kapi format: removed 1 script; original saved", Original: "/home/.kapi/pages/x/original.html"}}
+	out, err := run(t, f, "open", "plan.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "http://127.0.0.1:5000/tok/p/x/\nconverted to kapi format: removed 1 script; original saved to /home/.kapi/pages/x/original.html\n"
+	if out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}

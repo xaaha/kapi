@@ -314,3 +314,34 @@ func TestARestartedDaemonClearsPresenceLeftBehind(t *testing.T) {
 		t.Errorf("presence after restart = %s", got)
 	}
 }
+
+func TestOpenReportsALossyConversion(t *testing.T) {
+	home, _, stop := serving(t)
+	defer stop()
+	raw := "<style>p{}</style><p onclick=\"x()\">hi</p><script>x()</script>\n"
+	path := writePage(t, raw)
+	resp := call(t, home, &Request{Op: "open", Page: path})
+	want := "converted to kapi format: removed 1 script, 1 style, 1 attribute; original saved"
+	if resp.Error != "" || resp.Notice != want {
+		t.Fatalf("open = %+v, want notice %q", resp, want)
+	}
+	if orig, err := os.ReadFile(resp.Original); err != nil || string(orig) != raw {
+		t.Errorf("original %q = %q, %v", resp.Original, orig, err)
+	}
+	pending := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"})
+	found := false
+	for _, e := range pending.Events {
+		found = found || (e.Kind == "revision" && e.Text == want)
+	}
+	if !found {
+		t.Errorf("no revision event with the notice in %+v", pending.Events)
+	}
+	if again := call(t, home, &Request{Op: "open", Page: path}); again.Notice != "" || again.Original != "" {
+		t.Errorf("second open repeats the notice: %+v", again)
+	}
+
+	clean := writePage(t, "<p>clean</p>\n")
+	if resp := call(t, home, &Request{Op: "open", Page: clean}); resp.Notice != "" || resp.Original != "" {
+		t.Errorf("clean page open = %+v", resp)
+	}
+}

@@ -40,12 +40,14 @@ type Request struct {
 }
 
 type Response struct {
-	Error   string           `json:"error,omitempty"`
-	Event   *eventlog.Event  `json:"event,omitempty"`
-	Events  []eventlog.Event `json:"events,omitempty"`
-	Readers []ReaderStatus   `json:"readers,omitempty"`
-	Pages   []PageStatus     `json:"pages,omitempty"`
-	URL     string           `json:"url,omitempty"`
+	Error    string           `json:"error,omitempty"`
+	Event    *eventlog.Event  `json:"event,omitempty"`
+	Events   []eventlog.Event `json:"events,omitempty"`
+	Readers  []ReaderStatus   `json:"readers,omitempty"`
+	Pages    []PageStatus     `json:"pages,omitempty"`
+	URL      string           `json:"url,omitempty"`
+	Notice   string           `json:"notice,omitempty"`
+	Original string           `json:"original,omitempty"`
 }
 
 type PageStatus struct {
@@ -239,21 +241,31 @@ func clearPresence(l *eventlog.Log) error {
 }
 
 func (s *Server) store(path string) (*page.Store, *eventlog.Log, error) {
+	st, l, _, err := s.openStore(path)
+	return st, l, err
+}
+
+func (s *Server) openStore(path string) (*page.Store, *eventlog.Log, bool, error) {
 	l, err := s.page(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if st, ok := s.stores[path]; ok {
-		return st, l, nil
+		return st, l, false, nil
 	}
 	st, err := page.Open(s.home, path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
+	}
+	if text := st.Conversion(); text != "" {
+		if _, err := l.Append(&eventlog.Event{Author: "kapi", Kind: "revision", Text: text}); err != nil {
+			return nil, nil, false, err
+		}
 	}
 	s.stores[path] = st
-	return st, l, nil
+	return st, l, true, nil
 }
 
 // Page finds a page kapi has seen by its 16-hex id, for the browser.
@@ -367,14 +379,18 @@ func (s *Server) handle(conn net.Conn) {
 }
 
 func (s *Server) open(enc *json.Encoder, path string) {
-	if _, _, err := s.store(path); err != nil {
+	st, _, opened, err := s.openStore(path)
+	if err != nil {
 		reply(enc, &Response{Error: err.Error()})
 		return
 	}
 	s.mu.Lock()
-	url := s.baseURL + "p/" + page.ID(path) + "/"
+	resp := &Response{URL: s.baseURL + "p/" + page.ID(path) + "/"}
 	s.mu.Unlock()
-	reply(enc, &Response{URL: url})
+	if opened && st.Conversion() != "" {
+		resp.Notice, resp.Original = st.Conversion(), st.OriginalPath()
+	}
+	reply(enc, resp)
 }
 
 func (s *Server) presenceOf(path, reader string) string {
