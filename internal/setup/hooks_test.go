@@ -370,7 +370,7 @@ func TestReviewH8CopilotRemovalMatchesEveryCommandKey(t *testing.T) {
 
 func TestReviewH8CodexConfigKeepsCRLF(t *testing.T) {
 	for in, want := range map[string]string{
-		"model = 1\r\n":                     "model = 1\r\n\r\n[features]\r\nhooks = true\r\n",
+		"model = 1\r\n":                      "model = 1\r\n\r\n[features]\r\nhooks = true\r\n",
 		"[features]\r\nother = 1\r\n[x]\r\n": "[features]\r\nother = 1\r\nhooks = true\r\n[x]\r\n",
 	} {
 		got, _, err := codexConfigUpdate(in)
