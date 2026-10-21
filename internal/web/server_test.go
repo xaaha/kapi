@@ -439,6 +439,17 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 	}
 }
 
+func TestAnOpWithoutAnIDIs422(t *testing.T) {
+	s := newSite(t, `<h1 data-kapi-id="hhhhhhhh">Plan <b>bold</b></h1>`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"","html":"<b>x</b>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "id") {
+		t.Errorf("edit with no id: %d %v, want 422", code, out)
+	}
+	if b, _ := os.ReadFile(s.path); strings.Contains(string(b), `data-kapi-id=""`) {
+		t.Errorf("file = %s", b)
+	}
+}
+
 func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
 	editFile(t, s.path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")

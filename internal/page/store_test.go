@@ -207,6 +207,38 @@ func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
 	}
 }
 
+func TestUndoAtAnOldRevDoesNotUndoAnotherTabsOp(t *testing.T) {
+	home, path := newPage(t, "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	if _, _, err := s.Apply(1, Op{Kind: "delete", ID: "bbbbbbbb"}); err != nil {
+		t.Fatalf("tab 2 deletes b at rev 1: %v", err)
+	}
+	for _, id := range []string{"", "hhhhhhhh"} {
+		if _, _, err := s.Apply(2, Op{Kind: "undo", ID: id}); !errors.Is(err, ErrStale) {
+			t.Fatalf("tab 1 undoes at rev 2 with id %q: err = %v, want ErrStale", id, err)
+		}
+	}
+	if got := onDisk(t, path); strings.Contains(got, "bbbbbbbb") {
+		t.Errorf("a stale undo brought b back:\n%s", got)
+	}
+}
+
+func TestOpsWithoutAnIDAreRefused(t *testing.T) {
+	const orig = "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n"
+	for _, kind := range []string{"edit", "done", "archive", "delete", "move"} {
+		home, path := newPage(t, orig)
+		s := open(t, home, path)
+		_, _, err := s.Apply(1, Op{Kind: kind, HTML: "<b>x</b>"})
+		if err == nil || errors.Is(err, ErrStale) {
+			t.Errorf("%s with no id: err = %v, want a refusal", kind, err)
+		}
+		if got := onDisk(t, path); got != orig {
+			t.Errorf("%s with no id changed the file:\n%s", kind, got)
+		}
+	}
+}
+
 func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
 	for _, op := range []Op{
 		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},

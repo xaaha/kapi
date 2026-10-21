@@ -115,6 +115,9 @@ func parse(src []byte) []element {
 }
 
 func find(els []element, id string) (*element, error) {
+	if id == "" {
+		return nil, errors.New("the op needs an element id")
+	}
 	for i := range els {
 		if els[i].id == id {
 			return &els[i], nil
