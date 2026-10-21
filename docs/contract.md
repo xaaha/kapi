@@ -50,7 +50,7 @@ Unknown `kapi-*` elements render as a visible error box, never silently.
 ```go
 // package render
 func Render(src []byte) ([]byte, error)          // page source to body HTML; keeps data-kapi-id on each outer element
-func RenderBlock(src []byte, id string) ([]byte, error) // one element by id, same output as inside Render
+func Block(src []byte, id string) ([]byte, error) // one element by id, same output as inside Render
 func CSS() []byte                                 // the design system, light theme
 func Presets() []Preset                           // name, one-line summary, example source
 type Preset struct{ Name, Summary, Example string }
@@ -90,7 +90,7 @@ an `HttpOnly`, `SameSite=Strict` cookie. Requests whose `Host` is not
 | Method and path | Body | Response |
 |---|---|---|
 | `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
-| `GET /p/{id}/blocks/{block}` | | `RenderBlock` output, header `Kapi-Rev` |
+| `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |
