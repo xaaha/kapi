@@ -21,6 +21,7 @@ import (
 	"github.com/xaaha/kapi/internal/client"
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
 )
 
@@ -65,6 +66,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			statusCmd(c, out),
 			daemonCmd(),
 			newPresetCmd(out),
+			newPublishCmd(out),
 		},
 	}
 	root.SubCommands = append(root.SubCommands, completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
@@ -201,6 +203,44 @@ func daemonCmd() *cli.Command {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return daemon.New(home()).Serve(ctx)
+		},
+	}
+}
+
+func newPublishCmd(out io.Writer) *cli.Command {
+	return &cli.Command{
+		Name:  "publish",
+		Short: "Publish a read-only snapshot of a page to your hub and print its URL",
+		Long: "Render the page's current source into one self-contained HTML document, upload it to your hub\n" +
+			"as a new revision, and print the page's hub URL. The hub comes from $KAPI_HOME/hub.json\n" +
+			`({"url":"https://...","token_file":"hub-token"}) or KAPI_HUB_URL and KAPI_HUB_TOKEN.` + "\n" +
+			"See hub/README.md to deploy a hub.",
+		Flags: flag.NewFlagSet("publish", flag.ContinueOnError),
+		Args:  []cli.ArgDef{pageArg},
+		Examples: []cli.Example{
+			{Command: "kapi publish plan.html", Description: "Publish plan.html and print its URL"},
+		},
+		Run: func(args []string) error {
+			page, err := pagePath(args, 1, "publish")
+			if err != nil {
+				return err
+			}
+			src, err := os.ReadFile(page)
+			if err != nil {
+				return err
+			}
+			c, err := publish.FromHome(home(), os.Getenv)
+			if err != nil {
+				return err
+			}
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			url, err := c.Publish(ctx, publish.PageID(page), uint64(time.Now().UnixMilli()), filepath.Base(page), src)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(out, url)
+			return err
 		},
 	}
 }

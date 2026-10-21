@@ -85,18 +85,31 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 
+`undo` reverts only the browser's own ops. When the file changed outside the
+browser after the op being undone, `undo` fails with 422 instead of discarding
+that change. Before writing, `Apply` compares the file's bytes (not only its
+mtime and size) with the source it read; a mismatch is treated as an
+external edit first.
+
 The agent edits the file directly too. The store notices a changed mtime,
 assigns missing ids, and bumps the revision as if an `edit` happened.
 
 ## HTTP
 
 The daemon also listens on `127.0.0.1` on a random port and writes
-`http://127.0.0.1:<port>/?t=<token>` to `$KAPI_HOME/http.url`. `kapi open
-<page>` starts the daemon if needed and opens `<url>/p/<pageid>/`.
+`http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
+`kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
 
-Every request needs the token: the `t` query parameter on the first load sets
-an `HttpOnly`, `SameSite=Strict` cookie. Requests whose `Host` is not
-`127.0.0.1:<port>` get 403 (DNS rebinding).
+The token is the first path segment of every URL, including static files. No
+cookies: browsers send cookies to every port on `127.0.0.1`, so a cookie would
+leak to any other local server. Every path in the table below is relative to
+`/<token>/`; `kapi.js` derives that base from `location.pathname` and never
+hard-codes it. Every response sets `Referrer-Policy: no-referrer`.
+
+Requests are refused with 403 when the token is wrong, when `Host` is not
+`127.0.0.1:<port>` (DNS rebinding), or, for any POST, when `Origin` is not
+exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
+(cross-site requests from other local pages).
 
 | Method and path | Body | Response |
 |---|---|---|
