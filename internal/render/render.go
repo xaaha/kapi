@@ -14,23 +14,21 @@ type Preset struct{ Name, Summary, Example string }
 var ErrNotFound = errors.New("render: no element with that data-kapi-id")
 
 func Render(src []byte) ([]byte, error) {
-	nodes, err := parse(src)
+	root, err := parse(src)
 	if err != nil {
 		return nil, err
 	}
 	var b bytes.Buffer
-	for _, n := range nodes {
-		renderNode(&b, n)
-	}
+	renderChildren(&b, root)
 	return b.Bytes(), nil
 }
 
 func Block(src []byte, id string) ([]byte, error) {
-	nodes, err := parse(src)
+	root, err := parse(src)
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range nodes {
+	for n := root.FirstChild; n != nil; n = n.NextSibling {
 		if found := findBlock(n, id); found != nil {
 			var b bytes.Buffer
 			renderNode(&b, found)
@@ -40,9 +38,68 @@ func Block(src []byte, id string) ([]byte, error) {
 	return nil, ErrNotFound
 }
 
-func parse(src []byte) ([]*html.Node, error) {
+func parse(src []byte) (*html.Node, error) {
 	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	return html.ParseFragment(bytes.NewReader(src), body)
+	nodes, err := html.ParseFragment(bytes.NewReader(src), body)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range nodes {
+		body.AppendChild(n)
+	}
+	var blocks []*html.Node
+	collectBlocks(body, &blocks)
+	for _, n := range blocks {
+		hoist(n)
+	}
+	return body, nil
+}
+
+var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form")
+
+var flowContainers = set("body", "div", "li", "td", "th", "blockquote", "section", "article", "aside", "header", "footer", "details", "dd", "figure", "ul", "ol")
+
+func collectBlocks(n *html.Node, out *[]*html.Node) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode || c.Namespace != "" || dropped[c.Data] {
+			continue
+		}
+		if blockPresets[c.Data] {
+			*out = append(*out, c)
+		}
+		if !rawPresets[c.Data] {
+			collectBlocks(c, out)
+		}
+	}
+}
+
+func hoist(n *html.Node) {
+	for parent := n.Parent; !flowContainers[parent.Data] && !strings.HasPrefix(parent.Data, "kapi-"); parent = n.Parent {
+		rest := &html.Node{Type: parent.Type, Data: parent.Data, DataAtom: parent.DataAtom}
+		for _, a := range parent.Attr {
+			if a.Key != "id" && a.Key != "data-kapi-id" {
+				rest.Attr = append(rest.Attr, a)
+			}
+		}
+		for c := n.NextSibling; c != nil; {
+			next := c.NextSibling
+			parent.RemoveChild(c)
+			rest.AppendChild(c)
+			c = next
+		}
+		parent.RemoveChild(n)
+		grand := parent.Parent
+		grand.InsertBefore(n, parent.NextSibling)
+		if hasContent(rest) {
+			grand.InsertBefore(rest, n.NextSibling)
+			if !hasContent(parent) {
+				rest.Attr = parent.Attr
+			}
+		}
+		if !hasContent(parent) {
+			grand.RemoveChild(parent)
+		}
+	}
 }
 
 func findBlock(n *html.Node, id string) *html.Node {

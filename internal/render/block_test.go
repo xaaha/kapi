@@ -34,7 +34,7 @@ func sources(t *testing.T) map[string][]byte {
 
 func kapiIDs(t *testing.T, src []byte) []string {
 	t.Helper()
-	nodes, err := parse(src)
+	root, err := parse(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func kapiIDs(t *testing.T, src []byte) []string {
 			walk(c)
 		}
 	}
-	for _, n := range nodes {
+	for n := root.FirstChild; n != nil; n = n.NextSibling {
 		walk(n)
 	}
 	return ids
@@ -159,7 +159,7 @@ func TestPresetsCarryTheirName(t *testing.T) {
 				walkSrc(c)
 			}
 		}
-		for _, n := range in {
+		for n := in.FirstChild; n != nil; n = n.NextSibling {
 			walkSrc(n)
 		}
 		got := map[string]string{}

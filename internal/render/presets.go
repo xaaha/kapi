@@ -167,6 +167,11 @@ func planItem(class, label string) presetFunc {
 }
 
 func renderForm(b *bytes.Buffer, n *html.Node) error {
+	for a := n.Parent; a != nil; a = a.Parent {
+		if a.Data == "kapi-form" {
+			return fmt.Errorf("cannot be inside another <kapi-form>")
+		}
+	}
 	name, err := requireAttr(n, "name")
 	if err != nil {
 		return err
