@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const staticDir = fileURLToPath(new URL("../static/", import.meta.url));
 
 export const PAGE_ID = "0123456789abcdef";
+export const TOKEN = "f00dfacecafebeef";
 
 const PAGE_CSS = `
 body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #fff; }
@@ -62,9 +63,9 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
 
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><title>Fake kapi</title>` +
-    `<style>${PAGE_CSS}</style><link rel="stylesheet" href="/static/chrome.css"></head><body>` +
+    `<style>${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}">${state.blocks.map((b) => b.html).join("\n")}</main>` +
-    `<script src="/static/kapi.js"></script></body></html>`;
+    `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
     const full = { seq: state.events.length + 1, time: new Date().toISOString(), author: "agent", text: "", ...ev };
@@ -118,13 +119,19 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     const parsed = body ? JSON.parse(body) : null;
     state.requests.push({ method: req.method, path: url.pathname, headers: req.headers, body: parsed });
 
-    if (url.pathname.startsWith("/static/")) {
-      const name = url.pathname.slice(8);
+    const prefix = `/${TOKEN}/`;
+    if (!url.pathname.startsWith(prefix)) return json(res, 403, { error: "bad token" });
+    const path = url.pathname.slice(prefix.length - 1);
+    if (req.method === "POST" && (req.headers["content-type"] !== "application/json" || req.headers.origin !== `http://${req.headers.host}`)) {
+      return json(res, 403, { error: "cross-site request" });
+    }
+    if (path.startsWith("/static/")) {
+      const name = path.slice(8);
       const type = name.endsWith(".js") ? "text/javascript" : "text/css";
       res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
       return res.end(await readFile(staticDir + name));
     }
-    const m = url.pathname.match(/^\/p\/([^/]+)\/(.*)$/);
+    const m = path.match(/^\/p\/([^/]+)\/(.*)$/);
     if (!m || m[1] !== PAGE_ID) return json(res, 404, { error: "not found" });
     const rest = m[2];
 
@@ -179,7 +186,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   return {
     state,
     push,
-    url: `http://127.0.0.1:${port}/p/${PAGE_ID}/`,
+    url: `http://127.0.0.1:${port}/${TOKEN}/p/${PAGE_ID}/`,
     dropStreams() {
       for (const res of state.streams) res.destroy();
       state.streams.clear();

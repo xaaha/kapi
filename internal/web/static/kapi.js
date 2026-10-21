@@ -2,7 +2,7 @@
   "use strict";
 
   const main = document.getElementById("kapi-page");
-  const base = location.pathname.match(/^\/p\/[^/]+/)?.[0];
+  const base = location.pathname.match(/^(?:.*?\/)?p\/[^/]+(?=\/)/)?.[0];
   if (!main || !base) return;
 
   const STATUS = {

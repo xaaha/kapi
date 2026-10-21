@@ -29,7 +29,7 @@ afterEach(async () => {
 
 const requests = (method, suffix) =>
   server.state.requests.filter((r) => r.method === method && r.path.endsWith(suffix));
-const pageLoads = () => requests("GET", `/p/${server.url.split("/")[4]}/`).length;
+const pageLoads = () => requests("GET", new URL(server.url).pathname).length;
 const click = (selector) => page.eval(`document.querySelector(${JSON.stringify(selector)}).click()`);
 const select = (id) => click(`[data-kapi-id="${id}"]`);
 const notice = () => page.eval(`(n => n.hidden ? "" : n.textContent)(document.querySelector(".kapi-notice"))`);
@@ -344,4 +344,16 @@ test("Undo and Hide render as quiet bordered buttons", async () => {
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
   assert.deepEqual(styles, [["Undo", "1px", "solid"], ["Hide", "1px", "solid"]]);
+});
+
+test("every request carries the token prefix and every POST is JSON", async () => {
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
+  await click(".kapi-composer .kapi-primary");
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="done"]');
+  await click('kapi-form button[type="submit"]');
+  await until(() => requests("POST", "").length === 3);
+  const prefix = new URL(server.url).pathname.split("/p/")[0] + "/";
+  assert.deepEqual(server.state.requests.filter((r) => !r.path.startsWith(prefix) && r.path !== "/favicon.ico"), []);
+  for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
 });
