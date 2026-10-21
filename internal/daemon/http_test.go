@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -194,6 +195,40 @@ func TestWatchingReportsPresenceAndNeverDeliversIt(t *testing.T) {
 	waitPresence(t, l, "agent watching", "agent busy", "agent watching", "agent none")
 	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "done" {
 		t.Errorf("pending = %+v, want only the agent's own reply", p.Events)
+	}
+}
+
+func TestConcurrentPresenceLandsInTheLogInOrder(t *testing.T) {
+	home, err := os.MkdirTemp("", "kd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	s := New(home)
+	path := writePage(t, "<p>x</p>")
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range 20 {
+				s.setPresence(path, "agent", []string{"watching", "busy"}[(i+j)%2], l)
+			}
+		}()
+	}
+	wg.Wait()
+	got := presence(l)
+	for i := 1; i < len(got); i++ {
+		if got[i] == got[i-1] {
+			t.Fatalf("presence %d and %d are both %q: updates landed out of order", i-1, i, got[i])
+		}
+	}
+	if want := "agent " + s.presenceOf(path, "agent"); got[len(got)-1] != want {
+		t.Errorf("last presence in the log = %q, daemon thinks %q", got[len(got)-1], want)
 	}
 }
 

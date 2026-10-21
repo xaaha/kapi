@@ -69,8 +69,10 @@ type Server struct {
 	pages    map[string]*eventlog.Log
 	stores   map[string]*page.Store
 	attached map[string]map[string]time.Time
-	presence map[string]map[string]string
 	baseURL  string
+
+	presenceMu sync.Mutex
+	presence   map[string]map[string]string
 }
 
 func New(home string) *Server {
@@ -262,17 +264,16 @@ func (s *Server) Page(id string) (*page.Store, *eventlog.Log, error) {
 }
 
 func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {
-	s.mu.Lock()
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
 	if s.presence[path] == nil {
 		s.presence[path] = map[string]string{}
 	}
 	prev := s.presence[path][reader]
 	if prev == state || (prev == "" && state == "none") {
-		s.mu.Unlock()
 		return
 	}
 	s.presence[path][reader] = state
-	s.mu.Unlock()
 	if _, err := l.Append(&eventlog.Event{Author: reader, Kind: eventlog.KindPresence, Text: state}); err != nil {
 		log.Printf("presence %s %s: %v", reader, state, err)
 	}
@@ -347,8 +348,8 @@ func (s *Server) open(enc *json.Encoder, path string) {
 }
 
 func (s *Server) presenceOf(path, reader string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
 	return s.presence[path][reader]
 }
 
