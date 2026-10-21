@@ -1,0 +1,423 @@
+(() => {
+  "use strict";
+
+  const main = document.getElementById("kapi-page");
+  const base = location.pathname.match(/^\/p\/[^/]+/)?.[0];
+  if (!main || !base) return;
+
+  const STATUS = {
+    connecting: "Connecting to kapi\u2026",
+    watching: "Agent is watching",
+    busy: "Agent is working",
+    none: "No agent connected",
+    disconnected: "Disconnected. Reconnecting\u2026",
+  };
+
+  let selected = null;
+  let editing = null;
+  let presence = "none";
+  let lastSeq = 0;
+  let opened = false;
+  let busy = false;
+  let pending = null;
+  let flushTimer = 0;
+  let queue = Promise.resolve();
+  let noticeTimer = 0;
+  let retryDelay = 1000;
+
+  function h(tag, props = {}, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else if (k === "class") el.className = v;
+      else if (k === "text") el.textContent = v;
+      else el.setAttribute(k, v);
+    }
+    el.append(...kids);
+    return el;
+  }
+
+  const button = (label, action, title = label) =>
+    h("button", { type: "button", "data-action": action, title, text: label });
+
+  const dot = h("span", { class: "kapi-dot", "data-state": "connecting" });
+  const statusText = h("span", { class: "kapi-status", text: STATUS.connecting });
+  const notice = h("div", { class: "kapi-notice", role: "status", hidden: "" });
+  const log = h("ol", { class: "kapi-log", "aria-live": "polite" });
+  const empty = h("p", { class: "kapi-empty", text: "Messages with the agent show up here." });
+  const targetChip = h("button", { type: "button", class: "kapi-target", hidden: "", title: "Stop targeting this block" });
+  const input = h("textarea", { rows: "3", placeholder: "Message the agent", "aria-label": "Message" });
+  const sendButton = h("button", { type: "submit", class: "kapi-primary", text: "Send" });
+  const composer = h("form", { class: "kapi-composer" },
+    targetChip, input,
+    h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
+  const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
+    h("header", { class: "kapi-panel-head" }, dot, statusText,
+      button("Undo", "undo", "Undo the last change"), button("Hide", "collapse", "Hide chat")),
+    notice, h("div", { class: "kapi-scroll" }, empty, log), composer);
+  const opener = h("button", { type: "button", class: "kapi-opener", "data-action": "expand", title: "Show chat" },
+    h("span", { class: "kapi-dot", "data-state": "connecting" }), "Chat");
+  const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
+  const root = h("div", { id: "kapi-chrome" }, bar, panel, opener);
+  document.body.append(root);
+  document.documentElement.classList.add("kapi-panel-open");
+
+  if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
+
+  const idOf = (el) => el.getAttribute("data-kapi-id");
+  const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
+  const peers = (el) => [...el.parentElement.children].filter((c) => c.hasAttribute("data-kapi-id"));
+
+  function setStatus(state) {
+    for (const d of root.querySelectorAll(".kapi-dot")) d.dataset.state = state;
+    statusText.textContent = STATUS[state] || STATUS.none;
+    dot.title = statusText.textContent;
+  }
+
+  function say(text, kind = "info") {
+    clearTimeout(noticeTimer);
+    notice.textContent = text;
+    notice.dataset.kind = kind;
+    notice.hidden = false;
+    if (kind === "info") noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
+  }
+
+  function select(el) {
+    if (editing) return;
+    selected?.removeAttribute("data-kapi-selected");
+    selected = el;
+    el?.setAttribute("data-kapi-selected", "");
+    targetChip.hidden = !el;
+    targetChip.textContent = el ? `About #${idOf(el)}  ×` : "";
+    renderBar();
+  }
+
+  function renderBar() {
+    if (!selected || !selected.isConnected) {
+      bar.hidden = true;
+      return;
+    }
+    if (editing) {
+      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }),
+        button("Save", "save", "Save (Ctrl+Enter)"), button("Cancel", "cancel", "Cancel (Escape)"));
+    } else {
+      const list = peers(selected);
+      const i = list.indexOf(selected);
+      const state = selected.getAttribute("data-kapi-state");
+      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: `#${idOf(selected)}` }),
+        button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
+        button("↑", "up", "Move up"), button("↓", "down", "Move down"),
+        button("Delete", "delete"), button("Ask", "ask", "Ask the agent about this block"));
+      bar.querySelector('[data-action="done"]').disabled = state === "done";
+      bar.querySelector('[data-action="archive"]').disabled = state === "archived";
+      bar.querySelector('[data-action="up"]').disabled = i <= 0;
+      bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
+    }
+    for (const b of bar.querySelectorAll("button")) b.disabled ||= busy;
+    bar.hidden = false;
+    placeBar();
+  }
+
+  function placeBar() {
+    if (bar.hidden || !selected) return;
+    const r = selected.getBoundingClientRect();
+    const top = r.top - bar.offsetHeight - 8;
+    bar.style.top = `${Math.max(8, top < 8 ? r.bottom + 8 : top)}px`;
+    const right = document.documentElement.clientWidth - 8;
+    bar.style.left = `${Math.max(8, Math.min(r.right - bar.offsetWidth, right - bar.offsetWidth))}px`;
+  }
+
+  async function request(path, body) {
+    let res;
+    try {
+      res = await fetch(base + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      say("Could not reach kapi. Check that the daemon is running.", "error");
+      return null;
+    }
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, ok: res.ok, data };
+  }
+
+  async function op(kind, fields = {}) {
+    notice.hidden = true;
+    busy = true;
+    renderBar();
+    try {
+      const res = await request("/ops", { rev: Number(main.dataset.rev), op: { kind, ...fields } });
+      if (!res || res.ok) {
+        if (res) main.dataset.rev = res.data.rev;
+        return res;
+      }
+      if (res.status === 409) {
+        await refresh(null);
+        say("The page changed before your change landed. This is the latest version, so try again.", "error");
+      } else if (res.status === 422) {
+        say(res.data.error || "kapi refused that change.", "error");
+      } else {
+        say(`kapi refused that change (HTTP ${res.status}).`, "error");
+      }
+      return res;
+    } finally {
+      busy = false;
+      renderBar();
+    }
+  }
+
+  function startEdit() {
+    if (!selected || editing) return;
+    editing = { el: selected, original: selected.innerHTML };
+    selected.contentEditable = "true";
+    selected.focus();
+    getSelection().selectAllChildren(selected);
+    getSelection().collapseToEnd();
+    renderBar();
+  }
+
+  function endEdit(restore) {
+    const { el, original } = editing;
+    if (restore) el.innerHTML = original;
+    el.removeAttribute("contenteditable");
+    editing = null;
+    renderBar();
+    if (pending) scheduleFlush();
+  }
+
+  function outerHTMLOf(el) {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("contenteditable");
+    copy.removeAttribute("data-kapi-selected");
+    return copy.outerHTML;
+  }
+
+  async function saveEdit() {
+    const { el, original } = editing;
+    if (el.innerHTML === original) return endEdit(false);
+    const id = idOf(el);
+    const res = await op("edit", { id, html: outerHTMLOf(el) });
+    if (res?.ok) {
+      endEdit(false);
+      await refresh([id]);
+    } else if (res?.status === 409) {
+      endEdit(true);
+    }
+  }
+
+  async function action(name) {
+    if (name === "collapse" || name === "expand") {
+      document.documentElement.classList.toggle("kapi-panel-open", name === "expand");
+      if (name === "expand") input.focus();
+      return placeBar();
+    }
+    if (name === "undo") return (await op("undo", { id: "" }))?.ok && refresh(null);
+    if (name === "save") return saveEdit();
+    if (name === "cancel") return endEdit(true);
+    if (!selected) return;
+    const id = idOf(selected);
+    if (name === "edit") return startEdit();
+    if (name === "ask") return action("expand");
+    if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
+    const list = peers(selected);
+    const i = list.indexOf(selected);
+    const before = name === "up" ? list[i - 1] : list[i + 2];
+    if (name === "up" && !before) return;
+    if (name === "down" && i >= list.length - 1) return;
+    if ((await op("move", { id, before: before ? idOf(before) : "" }))?.ok) await refresh(null);
+  }
+
+  function refresh(ids) {
+    queue = queue.then(() => (ids ? loadBlocks(ids) : loadPage())).catch(() =>
+      say("Could not load the latest page from kapi.", "error"));
+    return queue;
+  }
+
+  function schedule(ids) {
+    pending = pending === "page" || !ids ? "page" : new Set([...(pending || []), ...ids]);
+    scheduleFlush();
+  }
+
+  function scheduleFlush() {
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => {
+      if (editing || !pending) return;
+      const job = pending;
+      pending = null;
+      refresh(job === "page" ? null : [...job]);
+    }, 30);
+  }
+
+  async function loadPage() {
+    if (editing) return void (pending = "page");
+    const res = await fetch(base + "/", { headers: { Accept: "text/html" } });
+    if (!res.ok) throw new Error(res.status);
+    const fresh = new DOMParser().parseFromString(await res.text(), "text/html").getElementById("kapi-page");
+    if (!fresh) throw new Error("no page");
+    const keep = selected && idOf(selected);
+    selected = null;
+    main.replaceChildren(...fresh.childNodes);
+    main.dataset.rev = fresh.dataset.rev;
+    select(keep ? find(keep) : null);
+  }
+
+  async function loadBlocks(ids) {
+    for (const id of ids) {
+      const el = find(id);
+      if (!el) return loadPage();
+      const res = await fetch(`${base}/blocks/${encodeURIComponent(id)}`);
+      if (!res.ok) return loadPage();
+      const tpl = document.createElement("template");
+      tpl.innerHTML = (await res.text()).trim();
+      const next = tpl.content.firstElementChild;
+      if (!next) return loadPage();
+      if (editing?.el === el) return void schedule([id]);
+      el.replaceWith(next);
+      const rev = res.headers.get("Kapi-Rev");
+      if (rev) main.dataset.rev = rev;
+      if (selected === el) {
+        selected = null;
+        select(next);
+      }
+    }
+  }
+
+  function addEntry(ev, body) {
+    const near = log.parentElement.scrollHeight - log.parentElement.scrollTop - log.parentElement.clientHeight < 40;
+    const human = ev.author === "human";
+    const meta = h("div", { class: "kapi-msg-meta" }, h("span", { class: "kapi-author", text: human ? "You" : ev.author || "agent" }));
+    if (ev.time) {
+      const t = new Date(ev.time);
+      if (!isNaN(t)) meta.append(h("time", { datetime: ev.time, text: t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }));
+    }
+    if (ev.target) meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": ev.target, text: `#${ev.target}` }));
+    log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
+    empty.hidden = true;
+    if (near) log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  }
+
+  function onEvent(ev) {
+    if (typeof ev.seq === "number") {
+      if (ev.seq <= lastSeq) return;
+      lastSeq = ev.seq;
+    }
+    if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
+    else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
+    else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
+    else if (ev.kind === "presence") {
+      presence = STATUS[ev.text] ? ev.text : "none";
+      setStatus(presence);
+    }
+  }
+
+  function connect() {
+    const es = new EventSource(base + "/events");
+    es.onopen = () => {
+      retryDelay = 1000;
+      setStatus(presence);
+      if (opened) refresh(null);
+      opened = true;
+    };
+    es.onerror = () => {
+      setStatus("disconnected");
+      if (es.readyState === EventSource.CLOSED) {
+        setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 10000);
+      }
+    };
+    es.onmessage = (e) => {
+      let ev;
+      try {
+        ev = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      onEvent(ev);
+    };
+  }
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    sendButton.disabled = true;
+    const res = await request("/messages", { kind: "message", target: selected ? idOf(selected) : "", text });
+    sendButton.disabled = false;
+    if (!res) return;
+    if (!res.ok) return say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
+    input.value = "";
+  }
+
+  async function answer(form) {
+    const values = {};
+    for (const [k, v] of new FormData(form)) {
+      if (typeof v === "string") (values[k] ||= []).push(v);
+    }
+    const name = form.getAttribute("name") || form.closest("kapi-form,[data-kapi-form]")?.getAttribute("name") || "";
+    const res = await request("/answers", { form: name, values });
+    if (!res) return;
+    if (res.ok) say("Answer sent to the agent.");
+    else say(res.data.error || `Answer not sent (HTTP ${res.status}).`, "error");
+  }
+
+  root.addEventListener("click", (e) => {
+    const ref = e.target.closest("[data-ref]");
+    if (ref) {
+      const el = find(ref.dataset.ref);
+      if (el) {
+        select(el);
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+      } else say(`Block #${ref.dataset.ref} is no longer on the page.`);
+      return;
+    }
+    if (e.target === targetChip) return select(null);
+    const b = e.target.closest("[data-action]");
+    if (b && !b.disabled) action(b.dataset.action);
+  });
+
+  main.addEventListener("click", (e) => {
+    if (editing) return;
+    const el = e.target.closest("[data-kapi-id]");
+    if (el && main.contains(el)) select(el);
+  });
+
+  main.addEventListener("dblclick", (e) => {
+    if (!editing && e.target.closest("[data-kapi-id]") === selected) startEdit();
+  });
+
+  main.addEventListener("submit", (e) => {
+    e.preventDefault();
+    answer(e.target);
+  });
+
+  composer.addEventListener("submit", (e) => {
+    e.preventDefault();
+    send();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (editing) endEdit(true);
+      else if (!notice.hidden) notice.hidden = true;
+      else select(null);
+      return;
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (editing) {
+        e.preventDefault();
+        saveEdit();
+      } else if (document.activeElement === input) {
+        e.preventDefault();
+        send();
+      }
+    }
+  });
+
+  addEventListener("scroll", placeBar, { passive: true });
+  addEventListener("resize", placeBar);
+  notice.addEventListener("click", () => (notice.hidden = true));
+
+  connect();
+})();
