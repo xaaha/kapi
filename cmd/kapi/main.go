@@ -64,6 +64,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			pendingCmd(c, out),
 			statusCmd(c, out),
 			daemonCmd(),
+			newPresetCmd(out),
 		},
 	}
 	root.SubCommands = append(root.SubCommands, completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
