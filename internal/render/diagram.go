@@ -182,7 +182,7 @@ func (s *svgWriter) finish(b *bytes.Buffer, title string) {
 	x, y := s.minX-margin, s.minY-margin
 	w, h := s.maxX-s.minX+2*margin, s.maxY-s.minY+2*margin
 	fmt.Fprintf(b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="%s %s %s %s" width="%s" height="%s" role="img" aria-label="`, f(x), f(y), f(w), f(h), f(w), f(h))
-	writeText(b, title)
+	b.WriteString(attrEscaper.Replace(title))
 	b.WriteString(`"><title>`)
 	writeText(b, title)
 	fmt.Fprintf(b, `</title><defs><marker id="%s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="kd-arrow" d="M0,0 L10,5 L0,10 z"></path></marker></defs>`, s.marker)

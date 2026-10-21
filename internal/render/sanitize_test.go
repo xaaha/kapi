@@ -43,6 +43,8 @@ var payloads = []string{
 	`</kapi-code><script>alert(1)</script>`,
 	`"><script>alert(1)</script>`,
 	`' onmouseover='alert(1)`,
+	`a" onload="alert(1)`,
+	`a" onmouseover="alert(1)" x="`,
 }
 
 var attrPayloads = []string{
@@ -64,6 +66,11 @@ var containers = []string{
 	`<kapi-diff>@@ -1 +1 @@` + "\n" + `-%s` + "\n" + `+%s</kapi-diff>`,
 	`<kapi-diagram>a -> b: %s</kapi-diagram>`,
 	`<kapi-diagram type="sequence">a -> b: %s</kapi-diagram>`,
+	`<kapi-diagram>%s -> b: x</kapi-diagram>`,
+	`<kapi-diagram>a -> %s</kapi-diagram>`,
+	`<kapi-diagram>%s</kapi-diagram>`,
+	`<kapi-diagram type="sequence">%s -> b: x</kapi-diagram>`,
+	`<kapi-diagram type="sequence">%s</kapi-diagram>`,
 	`<kapi-nosuch>%s</kapi-nosuch>`,
 }
 
