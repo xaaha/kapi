@@ -256,6 +256,7 @@
 }
 
 #kapi-chrome .kapi-msg {
+  min-width: 0;
   max-width: 92%;
   padding: 8px 11px;
   border-radius: 10px;
@@ -274,6 +275,7 @@
 
 #kapi-chrome .kapi-msg-meta {
   display: flex;
+  min-width: 0;
   align-items: baseline;
   gap: 6px;
   margin-bottom: 2px;
@@ -286,9 +288,19 @@
   color: var(--kapi-text);
 }
 
+#kapi-chrome .kapi-msg-meta time,
+#kapi-chrome .kapi-author {
+  flex: none;
+  white-space: nowrap;
+}
+
 #kapi-chrome .kapi-ref {
+  display: block;
+  min-width: 0;
   padding: 0 4px;
-  font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 11.5px/1.4 var(--kapi-font);
   color: var(--kapi-accent);
 }
 

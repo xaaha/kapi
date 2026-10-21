@@ -502,3 +502,15 @@ test("the source editor is labelled and takes the block's place", async () => {
   assert.ok(Math.abs(top - before) <= 1, `editor at ${top}, block was at ${before}`);
 });
 
+test("block tags stay inside their message bubble and the panel", async () => {
+  server.push({ author: "human", kind: "message", target: "bbbbbbbb", text: "Why?" });
+  await page.waitFor(`!!document.querySelector(".kapi-ref")`);
+  const fit = await page.eval(`(() => {
+    const ref = document.querySelector(".kapi-ref").getBoundingClientRect();
+    const msg = document.querySelector(".kapi-msg").getBoundingClientRect();
+    const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
+    return { inBubble: ref.right <= msg.right, bubbleInPanel: msg.right <= panel.right, mono: getComputedStyle(document.querySelector(".kapi-ref")).fontFamily.includes("mono") };
+  })()`);
+  assert.deepEqual(fit, { inBubble: true, bubbleInPanel: true, mono: false });
+});
+
