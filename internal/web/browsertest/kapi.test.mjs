@@ -334,3 +334,11 @@ test("on narrow screens chat starts as a bar and opens to at most 40% of the hei
     await narrow.close();
   }
 });
+
+test("Undo and Hide render as quiet bordered buttons", async () => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head button")].map((b) => {
+    const s = getComputedStyle(b);
+    return [b.textContent, s.borderTopWidth, s.borderTopStyle];
+  })`);
+  assert.deepEqual(styles, [["Undo", "1px", "solid"], ["Hide", "1px", "solid"]]);
+});

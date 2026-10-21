@@ -146,6 +146,17 @@ html.kapi-panel-open #kapi-chrome .kapi-opener {
   border-bottom: 1px solid var(--kapi-border);
 }
 
+#kapi-chrome .kapi-panel-head button {
+  padding: 3px 10px;
+  border: 1px solid var(--kapi-border);
+  font-size: 12.5px;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-panel-head button:hover:not(:disabled) {
+  color: var(--kapi-text);
+}
+
 #kapi-chrome .kapi-status {
   flex: 1;
   color: var(--kapi-muted);
