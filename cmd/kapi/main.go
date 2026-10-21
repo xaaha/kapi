@@ -260,7 +260,7 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 	return &cli.Command{
 		Name:  "open",
 		Short: "Open a page in the browser",
-		Long:  "Print the page's local URL and open it in the default browser. The URL carries a token, so treat it like a password.",
+		Long:  "Print the page's local URL and open it in the default browser. The URL holds a token, so treat it like a password.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{

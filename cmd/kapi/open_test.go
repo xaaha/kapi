@@ -21,7 +21,7 @@ func stubBrowser(t *testing.T, err error) *[]string {
 
 func TestOpenPrintsTheURLAndOpensIt(t *testing.T) {
 	opened := stubBrowser(t, nil)
-	const url = "http://127.0.0.1:5000/p/0123456789abcdef/?t=tok"
+	const url = "http://127.0.0.1:5000/tok/p/0123456789abcdef/"
 	f := &fakeAPI{resp: daemon.Response{URL: url}}
 	out, err := run(t, f, "open", "plan.html")
 	if err != nil {
@@ -40,7 +40,7 @@ func TestOpenPrintsTheURLAndOpensIt(t *testing.T) {
 
 func TestOpenWithPrintOnlyPrints(t *testing.T) {
 	opened := stubBrowser(t, nil)
-	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/p/x/?t=tok"}}
+	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/tok/p/x/"}}
 	if _, err := run(t, f, "open", "--print", "plan.html"); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestOpenWithPrintOnlyPrints(t *testing.T) {
 func TestOpenReportsABrowserFailure(t *testing.T) {
 	failed := errors.New("no browser")
 	stubBrowser(t, failed)
-	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/p/x/?t=tok"}}
+	f := &fakeAPI{resp: daemon.Response{URL: "http://127.0.0.1:5000/tok/p/x/"}}
 	if _, err := run(t, f, "open", "plan.html"); !errors.Is(err, failed) {
 		t.Errorf("err = %v, want the browser error", err)
 	}

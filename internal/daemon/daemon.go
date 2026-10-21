@@ -71,7 +71,6 @@ type Server struct {
 	attached map[string]map[string]time.Time
 	presence map[string]map[string]string
 	baseURL  string
-	token    string
 }
 
 func New(home string) *Server {
@@ -154,10 +153,11 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 		return nil, err
 	}
 	host := ln.Addr().String()
+	token := hex.EncodeToString(b)
 	s.mu.Lock()
-	s.baseURL, s.token = "http://"+host, hex.EncodeToString(b)
+	s.baseURL = "http://" + host + "/" + token + "/"
 	s.mu.Unlock()
-	h := web.New(s, s.token, host)
+	h := web.New(s, token, host)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() {
 		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
@@ -167,7 +167,7 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 	pollCtx, stopPoll := context.WithCancel(ctx)
 	go h.Poll(pollCtx, 300*time.Millisecond)
 	urlFile := HTTPURLPath(s.home)
-	if err := writeFile(urlFile, s.baseURL+"/?t="+s.token+"\n"); err != nil {
+	if err := writeFile(urlFile, s.baseURL+"\n"); err != nil {
 		stopPoll()
 		srv.Close()
 		return nil, err
@@ -341,7 +341,7 @@ func (s *Server) open(enc *json.Encoder, path string) {
 		return
 	}
 	s.mu.Lock()
-	url := s.baseURL + "/p/" + page.ID(path) + "/?t=" + s.token
+	url := s.baseURL + "p/" + page.ID(path) + "/"
 	s.mu.Unlock()
 	reply(enc, &Response{URL: url})
 }

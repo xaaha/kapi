@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -78,13 +77,9 @@ func newSite(t *testing.T, src string) *site {
 	srv.Config.Handler = web
 	srv.Start()
 	t.Cleanup(srv.Close)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &site{t: t, srv: srv, web: web, pages: pages, path: path, id: id, client: &http.Client{Jar: jar}}
-	if resp := s.get("/p/" + id + "/?t=" + token); resp.code != http.StatusOK {
-		t.Fatalf("first load with the token: %d", resp.code)
+	s := &site{t: t, srv: srv, web: web, pages: pages, path: path, id: id, client: &http.Client{}}
+	if resp := s.get("/p/" + id + "/"); resp.code != http.StatusOK {
+		t.Fatalf("first load: %d", resp.code)
 	}
 	return s
 }
@@ -97,7 +92,19 @@ type got struct {
 
 func (s *site) get(path string) got {
 	s.t.Helper()
-	resp, err := s.client.Get(s.srv.URL + path)
+	return s.raw("GET", "/"+token+path, nil)
+}
+
+func (s *site) raw(method, path string, header http.Header) got {
+	s.t.Helper()
+	r, err := http.NewRequest(method, s.srv.URL+path, strings.NewReader("{}"))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	for k, v := range header {
+		r.Header[k] = v
+	}
+	resp, err := s.client.Do(r)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -111,7 +118,7 @@ func (s *site) get(path string) got {
 
 func (s *site) post(path, body string) (int, map[string]any) {
 	s.t.Helper()
-	resp, err := s.client.Post(s.srv.URL+"/p/"+s.id+path, "application/json", strings.NewReader(body))
+	resp, err := s.client.Post(s.srv.URL+"/"+token+"/p/"+s.id+path, "application/json", strings.NewReader(body))
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -133,68 +140,46 @@ func (s *site) events() []eventlog.Event {
 	return events
 }
 
-func TestTokenSetsAStrictHttpOnlyCookieAndLeavesTheURL(t *testing.T) {
+func TestEveryPathNeedsTheTokenAsItsFirstSegment(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := noRedirect.Get(s.srv.URL + "/p/" + s.id + "/?t=" + token)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/p/"+s.id+"/" {
-		t.Fatalf("token load = %s to %q, want a 303 to the bare page URL", resp.Status, resp.Header.Get("Location"))
-	}
-	c := resp.Cookies()
-	if len(c) != 1 || c[0].Value != token || !c[0].HttpOnly || c[0].SameSite != http.SameSiteStrictMode {
-		t.Fatalf("cookies = %+v", c)
-	}
-
-	resp, err = noRedirect.Get(s.srv.URL + "//evil.example/?t=" + token)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if loc := resp.Header.Get("Location"); loc != "/evil.example/" {
-		t.Errorf("redirect for //evil.example/ goes to %q, want a path on this server", loc)
-	}
-}
-
-func TestRequestsWithoutTheTokenAreRefused(t *testing.T) {
-	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	for _, tc := range []struct {
-		name string
-		req  func() *http.Request
-		want int
-	}{
-		{"no token", func() *http.Request { return httptest.NewRequest("GET", s.srv.URL+"/p/"+s.id+"/", nil) }, http.StatusUnauthorized},
-		{"wrong query token", func() *http.Request { return httptest.NewRequest("GET", s.srv.URL+"/p/"+s.id+"/?t=nope", nil) }, http.StatusForbidden},
-		{"wrong cookie", func() *http.Request {
-			r := httptest.NewRequest("POST", s.srv.URL+"/p/"+s.id+"/messages", strings.NewReader(`{"kind":"message","text":"x"}`))
-			r.AddCookie(&http.Cookie{Name: cookieName, Value: "nope"}) //nolint:gosec // a forged cookie
-			return r
-		}, http.StatusUnauthorized},
-		{"static without token", func() *http.Request { return httptest.NewRequest("GET", s.srv.URL+"/static/kapi.js", nil) }, http.StatusUnauthorized},
+	for _, path := range []string{
+		"/p/" + s.id + "/",
+		"/static/kapi.js",
+		"/nope/p/" + s.id + "/",
+		"/" + token + "x/p/" + s.id + "/",
+		"/p/" + s.id + "/?t=" + token,
+		"/x/" + token + "/p/" + s.id + "/",
 	} {
-		r := tc.req()
-		r.RequestURI = ""
-		resp, err := http.DefaultClient.Do(r)
-		if err != nil {
-			t.Fatal(err)
+		resp := s.raw("GET", path, nil)
+		if resp.code != http.StatusForbidden {
+			t.Errorf("GET %s: %d, want 403", path, resp.code)
 		}
-		resp.Body.Close()
-		if resp.StatusCode != tc.want {
-			t.Errorf("%s: %s, want %d", tc.name, resp.Status, tc.want)
-		}
+	}
+	resp := s.raw("POST", "/nope/p/"+s.id+"/messages", nil)
+	if resp.code != http.StatusForbidden {
+		t.Errorf("POST with a wrong token: %d, want 403", resp.code)
 	}
 	if n := len(s.events()); n != 0 {
 		t.Errorf("%d events appended by refused requests", n)
 	}
 }
 
+func TestResponsesSetNoCookieAndNoReferrer(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	for _, resp := range []got{s.get("/p/" + s.id + "/"), s.get("/static/kapi.js"), s.raw("GET", "/nope/", nil)} {
+		if c := resp.header.Values("Set-Cookie"); len(c) != 0 {
+			t.Errorf("%d response sets cookies %v", resp.code, c)
+		}
+		if rp := resp.header.Get("Referrer-Policy"); rp != "no-referrer" {
+			t.Errorf("%d response has Referrer-Policy %q", resp.code, rp)
+		}
+	}
+}
+
 func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	for _, host := range []string{"evil.example:80", "localhost:" + strconv.Itoa(s.srv.Listener.Addr().(*net.TCPAddr).Port)} {
-		r, err := http.NewRequest("GET", s.srv.URL+"/p/"+s.id+"/?t="+token, nil)
+		r, err := http.NewRequest("GET", s.srv.URL+"/"+token+"/p/"+s.id+"/", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -204,8 +189,8 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusForbidden || len(resp.Cookies()) != 0 {
-			t.Errorf("Host %s: %s with cookies %v, want 403 and no cookie", host, resp.Status, resp.Cookies())
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("Host %s: %s, want 403", host, resp.Status)
 		}
 	}
 }
@@ -213,7 +198,7 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1">`, `hello &amp; welcome`, `<link rel="stylesheet" href="/static/chrome.css">`, `<script src="/static/kapi.js" defer></script>`, `<title>plan.html</title>`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -354,7 +339,7 @@ type sse struct {
 
 func (s *site) stream(ctx context.Context, lastID string) *sse {
 	s.t.Helper()
-	r, err := http.NewRequestWithContext(ctx, "GET", s.srv.URL+"/p/"+s.id+"/events", nil)
+	r, err := http.NewRequestWithContext(ctx, "GET", s.srv.URL+"/"+token+"/p/"+s.id+"/events", nil)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -430,7 +415,7 @@ func TestEventsResumeAfterLastEventID(t *testing.T) {
 		t.Errorf("live event = %s %+v", id, ev)
 	}
 
-	r, err := http.NewRequest("GET", s.srv.URL+"/p/"+s.id+"/events", nil)
+	r, err := http.NewRequest("GET", s.srv.URL+"/"+token+"/p/"+s.id+"/events", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

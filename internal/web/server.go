@@ -26,8 +26,6 @@ import (
 //go:embed static
 var static embed.FS
 
-const cookieName = "kapi"
-
 // Pages finds a page's store and event log by its 16-hex id; a page kapi has never seen is fs.ErrNotExist.
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
@@ -43,7 +41,7 @@ type Server struct {
 	seen map[string]bool
 }
 
-// New serves pages to requests addressed to host (127.0.0.1:<port>) that carry token.
+// New serves pages to requests addressed to host (127.0.0.1:<port>) whose path starts with /<token>/.
 func New(pages Pages, token, host string) *Server {
 	s := &Server{pages: pages, token: token, host: host, mux: http.NewServeMux(), seen: map[string]bool{}}
 	s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
@@ -74,27 +72,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "wrong host", http.StatusForbidden)
 		return
 	}
-	q := r.URL.Query()
-	if t := q.Get("t"); t != "" {
-		if !s.validToken(t) {
-			http.Error(w, "wrong token", http.StatusForbidden)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: t, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode}) //nolint:gosec // plain http on 127.0.0.1, so no Secure
-		if r.Method == http.MethodGet {
-			q.Del("t")
-			to := "/" + strings.TrimLeft(r.URL.EscapedPath(), "/")
-			if len(q) > 0 {
-				to += "?" + q.Encode()
-			}
-			http.Redirect(w, r, to, http.StatusSeeOther) //nolint:gosec // always a path on this server
-			return
-		}
-	} else if c, err := r.Cookie(cookieName); err != nil || !s.validToken(c.Value) {
-		http.Error(w, "missing token; open the page with kapi open", http.StatusUnauthorized)
+	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	if !s.validToken(seg) {
+		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
 		return
 	}
-	s.mux.ServeHTTP(w, r)
+	r2 := r.Clone(r.Context())
+	r2.URL.Path, r2.URL.RawPath = "/"+rest, ""
+	s.mux.ServeHTTP(w, r2)
 }
 
 func (s *Server) validToken(t string) bool {
@@ -185,9 +170,9 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
 	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(filepath.Base(st.Path())))
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
-	b.WriteString("<link rel=\"stylesheet\" href=\"/static/chrome.css\">\n</head>\n<body>\n")
+	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
 	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\">\n%s\n</main>\n", rev, body)
-	b.WriteString("<script src=\"/static/kapi.js\" defer></script>\n</body>\n</html>\n")
+	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	fmt.Fprint(w, b.String())

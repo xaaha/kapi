@@ -7,14 +7,15 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/page"
 )
 
 func serving(t *testing.T) (home string, s *Server, stop func()) {
@@ -87,24 +88,23 @@ func TestDaemonServesPagesOverHTTPAndWritesTheURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, _, ok := strings.Cut(strings.TrimSpace(string(b)), "/?t=")
-	if !ok || !strings.HasPrefix(base, "http://127.0.0.1:") {
-		t.Fatalf("http.url = %q", b)
+	base := strings.TrimSuffix(string(b), "\n")
+	if !regexp.MustCompile(`^http://127\.0\.0\.1:\d+/[0-9a-f]{32}/$`).MatchString(base) {
+		t.Fatalf("http.url = %q, want http://127.0.0.1:<port>/<token>/", b)
+	}
+	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("http.url mode = %v, %v; want 0600", fi.Mode().Perm(), err)
 	}
 
 	path := writePage(t, "<p>hello</p>\n")
 	resp := call(t, home, &Request{Op: "open", Page: path})
-	if resp.Error != "" || !strings.HasPrefix(resp.URL, base+"/p/") {
+	if resp.Error != "" || resp.URL != base+"p/"+page.ID(path)+"/" {
 		t.Fatalf("open = %+v", resp)
 	}
 	if src, _ := os.ReadFile(path); !strings.Contains(string(src), "data-kapi-id=") {
 		t.Errorf("open did not give the page ids: %s", src)
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := (&http.Client{Jar: jar}).Get(resp.URL)
+	got, err := http.Get(resp.URL)
 	if err != nil {
 		t.Fatal(err)
 	}

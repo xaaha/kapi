@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,14 +148,10 @@ func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
-	if !strings.HasPrefix(url, "http://127.0.0.1:") || !strings.Contains(url, "/p/") || !strings.Contains(url, "?t=") {
+	if !strings.HasPrefix(url, "http://127.0.0.1:") || !strings.Contains(url, "/p/") || strings.Contains(url, "?") {
 		t.Fatalf("open printed %q", url)
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	browser := &http.Client{Jar: jar}
+	browser := &http.Client{}
 	resp, err := browser.Get(url)
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +162,7 @@ func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
 		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
 	}
 
-	base, _, _ := strings.Cut(url, "?")
-	resp, err = browser.Post(base+"messages", "application/json", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
+	resp, err = browser.Post(url+"messages", "application/json", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
