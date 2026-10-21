@@ -15,10 +15,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
 )
+
+var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Request struct {
 	Op     string `json:"op"`
@@ -77,9 +80,16 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 	sock := SocketPath(s.home)
-	if conn, err := net.Dial("unix", sock); err == nil {
-		conn.Close()
-		return fmt.Errorf("daemon already running on %s", sock)
+	lock, err := os.OpenFile(filepath.Join(s.home, "kapi.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return fmt.Errorf("%w on %s", ErrAlreadyRunning, sock)
+		}
+		return err
 	}
 	os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
