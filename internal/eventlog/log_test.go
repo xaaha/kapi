@@ -1,6 +1,8 @@
 package eventlog
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -12,7 +14,7 @@ func TestAppendSurvivesReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{"one", "two", "three"} {
-		if _, err := l.Append(Event{Author: "human", Kind: "message", Text: text}); err != nil {
+		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: text}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,11 +42,18 @@ func TestAfterWakesOnAppend(t *testing.T) {
 	if len(events) != 0 {
 		t.Fatalf("expected empty log, got %d", len(events))
 	}
-	go l.Append(Event{Author: "human", Kind: "message", Text: "hi"})
+	errs := make(chan error, 1)
+	go func() {
+		_, err := l.Append(&Event{Author: "human", Kind: "message", Text: "hi"})
+		errs <- err
+	}()
 	select {
 	case <-changed:
 	case <-time.After(time.Second):
 		t.Fatal("append did not wake waiter")
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
 	}
 	if events, _ := l.After(0); len(events) != 1 {
 		t.Fatalf("got %d events", len(events))
@@ -56,14 +65,30 @@ func TestAckIsMonotonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Append(Event{Text: "a"})
-	l.Append(Event{Text: "b"})
-	l.Ack("r", 2)
-	l.Ack("r", 1)
+	for _, text := range []string{"a", "b"} {
+		if _, err := l.Append(&Event{Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, seq := range []uint64{2, 1} {
+		if err := l.Ack("r", seq); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if got := l.Cursor("r"); got != 2 {
 		t.Fatalf("cursor = %d", got)
 	}
 	if err := l.Ack("r", 9); err == nil {
 		t.Fatal("ack past end should fail")
+	}
+}
+
+func TestCorruptCursorsFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err == nil {
+		t.Error("Open accepted a corrupt cursors file, which would replay every event")
 	}
 }

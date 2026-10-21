@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 )
@@ -59,9 +60,10 @@ func (l *Log) Close() error {
 	return l.file.Close()
 }
 
-func (l *Log) Append(e Event) (Event, error) {
+func (l *Log) Append(in *Event) (Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	e := *in
 	e.Seq = uint64(len(l.events)) + 1
 	if e.Time.IsZero() {
 		e.Time = time.Now().UTC()
@@ -89,9 +91,7 @@ func (l *Log) After(cursor uint64) ([]Event, <-chan struct{}) {
 	if cursor >= uint64(len(l.events)) {
 		return nil, l.changed
 	}
-	out := make([]Event, len(l.events)-int(cursor))
-	copy(out, l.events[cursor:])
-	return out, l.changed
+	return slices.Clone(l.events[cursor:]), l.changed
 }
 
 func (l *Log) Cursor(reader string) uint64 {
@@ -149,7 +149,10 @@ func readCursors(path string) (map[string]uint64, error) {
 		return nil, err
 	}
 	cursors := map[string]uint64{}
-	return cursors, json.Unmarshal(b, &cursors)
+	if err := json.Unmarshal(b, &cursors); err != nil {
+		return nil, err
+	}
+	return cursors, nil
 }
 
 func writeCursors(path string, cursors map[string]uint64) error {
