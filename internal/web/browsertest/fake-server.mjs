@@ -201,6 +201,11 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     if (req.method === "POST" && rest === "ops") {
       if (state.opDelay) await new Promise((r) => setTimeout(r, state.opDelay));
+      if (state.nextOpError) {
+        const error = state.nextOpError;
+        state.nextOpError = null;
+        return json(res, 422, { error });
+      }
       if (parsed.rev !== state.rev) return json(res, 409, { rev: state.rev });
       const { status, body: out } = apply(parsed.op);
       return json(res, status, out);

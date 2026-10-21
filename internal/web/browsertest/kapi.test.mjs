@@ -294,6 +294,16 @@ test("a whole-page refresh waits until the edit ends", async () => {
   await until(() => pageLoads() === loads + 1);
 });
 
+test("server error text renders as text in the notice", async () => {
+  const evil = `<img src=x onerror="window.pwned=1">`;
+  server.state.nextOpError = evil;
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="done"]');
+  await until(async () => (await notice()) === evil);
+  assert.equal(await page.eval(`document.querySelectorAll("#kapi-chrome img").length`), 0);
+  assert.equal(await page.eval(`window.pwned`), undefined);
+});
+
 test("edits a preset block as source in a textarea", async () => {
   await select("ffffffff");
   await click('.kapi-bar [data-action="edit"]');
