@@ -3,7 +3,9 @@ package setup
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 )
 
 type object struct {
@@ -40,6 +42,9 @@ func parseObject(b []byte) (*object, error) {
 	}
 	if _, err := dec.Token(); err != nil {
 		return nil, err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("unexpected content after the JSON object")
 	}
 	return o, nil
 }

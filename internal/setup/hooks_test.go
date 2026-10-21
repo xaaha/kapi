@@ -224,3 +224,20 @@ func TestInstallKeepsAnExistingFileMode(t *testing.T) {
 		t.Errorf("mode = %v", info.Mode().Perm())
 	}
 }
+
+func TestReviewH1TrailingContentIsAnErrorAndLeavesTheFile(t *testing.T) {
+	for _, content := range []string{`{"a":1} junk`, `{"a":1}{"b":2}`} {
+		o := opts(t)
+		claude, _, _, _, _ := o.paths()
+		write(t, claude, content)
+		if s := statuses(Install(o))["Claude Code"]; !strings.HasPrefix(s, "error:") {
+			t.Errorf("install %q: %s", content, s)
+		}
+		if s := statuses(Remove(o))["Claude Code"]; !strings.HasPrefix(s, "error:") {
+			t.Errorf("remove %q: %s", content, s)
+		}
+		if read(t, claude) != content {
+			t.Errorf("%q rewritten to %q", content, read(t, claude))
+		}
+	}
+}
