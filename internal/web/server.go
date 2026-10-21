@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
@@ -28,24 +29,27 @@ import (
 //go:embed static
 var static embed.FS
 
-// Pages finds a page's store and event log by its 16-hex id; a page kapi has never seen is fs.ErrNotExist.
+// Pages finds a page by its 16-hex id; a page kapi has never seen is fs.ErrNotExist.
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
+	PagePath(id string) (string, error)
 }
 
 type Server struct {
-	pages Pages
-	token string
-	host  string
-	mux   *http.ServeMux
+	pages    Pages
+	token    string
+	host     string
+	previous [][32]byte
+	mux      *http.ServeMux
 
 	mu   sync.Mutex
 	seen map[string]bool
 }
 
 // New serves pages to requests addressed to host (127.0.0.1:<port>) whose path starts with /<token>/.
-func New(pages Pages, token, host string) *Server {
-	s := &Server{pages: pages, token: token, host: host, mux: http.NewServeMux(), seen: map[string]bool{}}
+// previous holds the SHA-256 of tokens earlier runs issued; only those learn a page's path.
+func New(pages Pages, token, host string, previous [][32]byte) *Server {
+	s := &Server{pages: pages, token: token, host: host, previous: previous, mux: http.NewServeMux(), seen: map[string]bool{}}
 	s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "kapi is running. Open a page with: kapi open <page>")
 	})
@@ -84,12 +88,36 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !s.validToken(seg) {
-		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
+		s.refuseToken(w, seg, rest)
 		return
 	}
 	r2 := r.Clone(r.Context())
 	r2.URL.Path, r2.URL.RawPath = "/"+rest, ""
 	s.mux.ServeHTTP(w, r2)
+}
+
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events)?$`)
+
+func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
+	m := reopenable.FindStringSubmatch(rest)
+	if m == nil {
+		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
+		return
+	}
+	reopen := "kapi open <page>"
+	if path, err := s.pages.PagePath(m[1]); err == nil && s.issuedBefore(seg) {
+		reopen = "kapi open " + path
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "kapi restarted", "reopen": reopen})
+}
+
+func (s *Server) issuedBefore(seg string) bool {
+	h := sha256.Sum256([]byte(seg))
+	known := false
+	for _, p := range s.previous {
+		known = subtle.ConstantTimeCompare(h[:], p[:]) == 1 || known
+	}
+	return known
 }
 
 func tidy(p string) bool {

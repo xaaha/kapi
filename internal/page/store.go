@@ -23,6 +23,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
 )
@@ -236,7 +237,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if rev != s.rev {
+	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
 		return s.rev, Summary{}, ErrStale
 	}
 	raw, err := os.ReadFile(s.path)
@@ -291,6 +292,24 @@ func stale(err error) error {
 		return ErrStale
 	}
 	return err
+}
+
+func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
+	switch op.Kind {
+	case "edit", "done", "archive", "delete":
+	default:
+		return false
+	}
+	then, err := os.ReadFile(s.revPath(rev))
+	if err != nil {
+		return false
+	}
+	was, err := Outer(then, op.ID)
+	if err != nil {
+		return false
+	}
+	is, err := Outer(s.src, op.ID)
+	return err == nil && bytes.Equal(was, is)
 }
 
 func (s *Store) revPath(rev uint64) string {
@@ -427,7 +446,34 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	if root.id == "" {
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
-	return splice(src, e.start, e.end, string(frag)), nil
+	out := splice(src, e.start, e.end, string(frag))
+	before := dangling(src)
+	var added []string
+	for id := range dangling(out) {
+		if !before[id] {
+			added = append(added, "#"+id)
+		}
+	}
+	if len(added) > 0 {
+		slices.Sort(added)
+		return nil, fmt.Errorf("%w: %s", ErrDanglingLinks, strings.Join(added, ", "))
+	}
+	return out, nil
+}
+
+func dangling(src []byte) map[string]bool {
+	els := parse(src)
+	ids := map[string]bool{}
+	for _, e := range els {
+		ids[e.id] = true
+	}
+	out := map[string]bool{}
+	for i := range els {
+		if href, _ := els[i].attr("href"); len(href) > 1 && href[0] == '#' && !ids[href[1:]] {
+			out[href[1:]] = true
+		}
+	}
+	return out
 }
 
 func move(src []byte, els []element, e *element, before string) ([]byte, error) {

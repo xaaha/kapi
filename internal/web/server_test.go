@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,7 +24,10 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 )
 
-const token = "s3cret"
+const (
+	token    = "s3cret"
+	oldToken = "0123456789abcdef0123456789abcdef"
+)
 
 type fakePages struct {
 	mu    sync.Mutex
@@ -31,6 +35,16 @@ type fakePages struct {
 	paths map[string]string
 	logs  map[string]*eventlog.Log
 	pages map[string]*page.Store
+}
+
+func (f *fakePages) PagePath(id string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	path, ok := f.paths[id]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+	return path, nil
 }
 
 func (f *fakePages) Page(id string) (*page.Store, *eventlog.Log, error) {
@@ -75,7 +89,7 @@ func newSite(t *testing.T, src string) *site {
 	id := page.ID(path)
 	pages := &fakePages{home: filepath.Join(dir, "home"), paths: map[string]string{id: path}, logs: map[string]*eventlog.Log{}, pages: map[string]*page.Store{}}
 	srv := httptest.NewUnstartedServer(nil)
-	web := New(pages, token, srv.Listener.Addr().String())
+	web := New(pages, token, srv.Listener.Addr().String(), [][32]byte{sha256.Sum256([]byte(oldToken))})
 	srv.Config.Handler = web
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -146,6 +160,37 @@ func (s *site) events() []eventlog.Event {
 	}
 	events, _ := l.After(0)
 	return events
+}
+
+func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	const old = oldToken
+	const never = "fedcba9876543210fedcba9876543210"
+	for _, tc := range []struct{ path, reopen string }{
+		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
+		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
+		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
+		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
+		{"/x/p/" + s.id + "/", "kapi open <page>"},
+	} {
+		resp := s.raw("GET", tc.path, nil)
+		var body map[string]string
+		if err := json.Unmarshal([]byte(resp.body), &body); err != nil {
+			t.Fatalf("GET %s: %d %q is not JSON", tc.path, resp.code, resp.body)
+		}
+		if resp.code != http.StatusForbidden || body["error"] != "kapi restarted" || body["reopen"] != tc.reopen || len(body) != 2 {
+			t.Errorf("GET %s: %d %v, want 403 with reopen %q", tc.path, resp.code, body, tc.reopen)
+		}
+		if strings.Contains(resp.body, token) || strings.Contains(resp.body, old) || strings.Contains(resp.body, never) {
+			t.Errorf("GET %s: body %q carries a token", tc.path, resp.body)
+		}
+	}
+	for _, p := range []string{"/" + old + "/static/kapi.js", "/" + old + "/p/" + s.id + "/blocks/aaaaaaaa"} {
+		if resp := s.raw("GET", p, nil); resp.code != http.StatusForbidden || strings.Contains(resp.body, "restarted") {
+			t.Errorf("GET %s: %d %q, want a plain 403", p, resp.code, resp.body)
+		}
+	}
 }
 
 func TestEveryPathNeedsTheTokenAsItsFirstSegment(t *testing.T) {
@@ -401,6 +446,36 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 				t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
 			}
 		})
+	}
+}
+
+func TestAnEditThatLeavesADanglingLinkIs422(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p><a href=\"#zzzzzzzz\">z</a></p>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "#zzzzzzzz") {
+		t.Errorf("edit adding a dangling link: %d %v, want 422 naming #zzzzzzzz", code, out)
+	}
+}
+
+func TestAnOpWithoutAnIDIs422(t *testing.T) {
+	s := newSite(t, `<h1 data-kapi-id="hhhhhhhh">Plan <b>bold</b></h1>`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"","html":"<b>x</b>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "id") {
+		t.Errorf("edit with no id: %d %v, want 422", code, out)
+	}
+	if b, _ := os.ReadFile(s.path); strings.Contains(string(b), `data-kapi-id=""`) {
+		t.Errorf("file = %s", b)
+	}
+}
+
+func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
+	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	editFile(t, s.path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p>a, by the human</p>"}}`); code != http.StatusOK || out["rev"] != 3.0 {
+		t.Errorf("save on an untouched block: %d %v, want 200 rev 3", code, out)
+	}
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
+		t.Errorf("op on the block the agent changed: %d %v, want 409 rev 3", code, out)
 	}
 }
 
