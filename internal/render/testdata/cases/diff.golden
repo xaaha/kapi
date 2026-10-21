@@ -1,0 +1,31 @@
+<figure class="kapi-diff" data-kapi-preset="diff" data-kapi-id="d0000001"><figcaption class="kapi-code-head"><span class="kapi-code-file">store.go</span><span class="kapi-diff-stat"><span class="kapi-diff-added">+2</span> <span class="kapi-diff-removed">&minus;1</span></span></figcaption><pre class="kapi-hl" data-gutter="2"><code><span class="kapi-line kapi-diff-hunk">@@ -12,5 +12,6 @@ type Store struct {</span>
+<span class="kapi-line kapi-diff-ctx"><span class="kapi-ln" data-n="12"></span><span class="kapi-ln" data-n="12"></span><span class="kapi-diff-sign"> </span><span class="kapi-src">	<span class="t-nx">mu</span>   <span class="t-nx">sync</span><span class="t-p">.</span><span class="t-nx">Mutex</span></span></span>
+<span class="kapi-line kapi-diff-del"><span class="kapi-ln" data-n="13"></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">-</span><span class="kapi-src">	<span class="t-nx">rev</span>  <span class="t-kt">int</span></span></span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n="13"></span><span class="kapi-diff-sign">+</span><span class="kapi-src">	<span class="t-nx">rev</span>  <span class="t-kt">uint64</span></span></span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n="14"></span><span class="kapi-diff-sign">+</span><span class="kapi-src">	<span class="t-nx">mod</span>  <span class="t-nx">time</span><span class="t-p">.</span><span class="t-nx">Time</span></span></span>
+<span class="kapi-line kapi-diff-ctx"><span class="kapi-ln" data-n="14"></span><span class="kapi-ln" data-n="15"></span><span class="kapi-diff-sign"> </span><span class="kapi-src">	<span class="t-nx">src</span>  <span class="t-p">[]</span><span class="t-kt">byte</span></span></span>
+<span class="kapi-line kapi-diff-ctx"><span class="kapi-ln" data-n="15"></span><span class="kapi-ln" data-n="16"></span><span class="kapi-diff-sign"> </span><span class="kapi-src"><span class="t-p">}</span></span></span>
+<span class="kapi-line kapi-diff-meta">\ No newline at end of file</span>
+</code></pre></figure>
+<figure class="kapi-diff" data-kapi-preset="diff" data-kapi-id="d0000002"><figcaption class="kapi-code-head"><span class="kapi-code-file">notes.txt</span><span class="kapi-diff-stat"><span class="kapi-diff-added">+1</span> <span class="kapi-diff-removed">&minus;1</span></span><span class="kapi-code-lang">text</span></figcaption><pre class="kapi-hl" data-gutter="1"><code><span class="kapi-line kapi-diff-hunk">@@ -1,2 +1,2 @@</span>
+<span class="kapi-line kapi-diff-del"><span class="kapi-ln" data-n="1"></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">-</span><span class="kapi-src">old line</span></span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n="1"></span><span class="kapi-diff-sign">+</span><span class="kapi-src">new line</span></span>
+<span class="kapi-line kapi-diff-ctx"><span class="kapi-ln" data-n="2"></span><span class="kapi-ln" data-n="2"></span><span class="kapi-diff-sign"> </span><span class="kapi-src">same</span></span>
+</code></pre></figure>
+<figure class="kapi-diff" data-kapi-preset="diff" data-kapi-id="d0000003"><figcaption class="kapi-code-head"><span class="kapi-diff-stat"><span class="kapi-diff-added">+2</span> <span class="kapi-diff-removed">&minus;2</span></span></figcaption><pre class="kapi-hl" data-gutter="1"><code><span class="kapi-line kapi-diff-file">a.py</span>
+<span class="kapi-line kapi-diff-hunk">@@ -1 +1 @@</span>
+<span class="kapi-line kapi-diff-del"><span class="kapi-ln" data-n="1"></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">-</span><span class="kapi-src">x = 1</span></span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n="1"></span><span class="kapi-diff-sign">+</span><span class="kapi-src">x = 2</span></span>
+<span class="kapi-line kapi-diff-meta">new file mode 100644</span>
+<span class="kapi-line kapi-diff-file">b.go</span>
+<span class="kapi-line kapi-diff-hunk">@@ -0,0 +1,1 @@</span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n="1"></span><span class="kapi-diff-sign">+</span><span class="kapi-src">package b</span></span>
+<span class="kapi-line kapi-diff-meta">deleted file mode 100644</span>
+<span class="kapi-line kapi-diff-file">gone.txt</span>
+<span class="kapi-line kapi-diff-hunk">@@ -1 +0,0 @@</span>
+<span class="kapi-line kapi-diff-del"><span class="kapi-ln" data-n="1"></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">-</span><span class="kapi-src">bye</span></span>
+</code></pre></figure>
+<figure class="kapi-diff" data-kapi-preset="diff" data-kapi-id="d0000004"><figcaption class="kapi-code-head"><span class="kapi-diff-stat"><span class="kapi-diff-added">+1</span> <span class="kapi-diff-removed">&minus;1</span></span></figcaption><pre class="kapi-hl" data-gutter="1"><code><span class="kapi-line kapi-diff-del"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">-</span><span class="kapi-src">removed without a hunk</span></span>
+<span class="kapi-line kapi-diff-add"><span class="kapi-ln" data-n=""></span><span class="kapi-ln" data-n=""></span><span class="kapi-diff-sign">+</span><span class="kapi-src">added without a hunk</span></span>
+</code></pre></figure>
+<div class="kapi-error" data-kapi-preset="diff" role="alert" data-kapi-id="d0000005"><span class="kapi-error-tag">&lt;kapi-diff&gt;</span> has no diff</div>

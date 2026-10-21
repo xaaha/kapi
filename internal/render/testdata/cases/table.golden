@@ -1,0 +1,8 @@
+<div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000001"><table>
+    <thead><tr><th>Name</th><th scope="col">Count</th></tr></thead>
+    <tbody><tr><td>a</td><td>1</td></tr><tr><td colspan="2">wide</td></tr></tbody>
+  </table></div>
+<div class="kapi-table" data-kapi-preset="table" data-kapi-sort="on" data-kapi-id="t0000002"><table><tbody><tr><th>x</th></tr><tr><td>1</td></tr></tbody></table></div>
+<div class="kapi-error" data-kapi-preset="table" role="alert" data-kapi-id="t0000003"><span class="kapi-error-tag">&lt;kapi-table&gt;</span> sort must be on or left out, not "yes"</div>
+<div class="kapi-error" data-kapi-preset="table" role="alert" data-kapi-id="t0000004"><span class="kapi-error-tag">&lt;kapi-table&gt;</span> body must be exactly one &lt;table&gt;</div>
+<table data-kapi-id="t0000005"><caption>Plain prose table</caption><tbody><tr><th>a</th></tr><tr><td>b</td></tr></tbody></table>

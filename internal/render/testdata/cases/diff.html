@@ -1,0 +1,45 @@
+<kapi-diff data-kapi-id="d0000001">
+diff --git a/store.go b/store.go
+index 1111111..2222222 100644
+--- a/store.go
++++ b/store.go
+@@ -12,5 +12,6 @@ type Store struct {
+ 	mu   sync.Mutex
+-	rev  int
++	rev  uint64
++	mod  time.Time
+ 	src  []byte
+ }
+\ No newline at end of file
+</kapi-diff>
+<kapi-diff file="notes.txt" lang="text" data-kapi-id="d0000002">
+    @@ -1,2 +1,2 @@
+    -old line
+    +new line
+     same
+</kapi-diff>
+<kapi-diff data-kapi-id="d0000003">
+diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -1 +1 @@
+-x = 1
++x = 2
+diff --git a/b.go b/b.go
+new file mode 100644
+--- /dev/null
++++ b/b.go
+@@ -0,0 +1,1 @@
++package b
+diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+--- a/gone.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-bye
+</kapi-diff>
+<kapi-diff data-kapi-id="d0000004">
+-removed without a hunk
++added without a hunk
+</kapi-diff>
+<kapi-diff data-kapi-id="d0000005"></kapi-diff>
