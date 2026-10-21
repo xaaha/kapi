@@ -280,7 +280,7 @@ test("edits a preset block as source in a textarea", async () => {
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.equal(requests("GET", "/source/ffffffff").length, 1);
-  assert.equal(await page.eval(`document.activeElement.value`), server.state.blocks[5].source);
+  assert.equal(await page.eval(`document.activeElement.value`), server.state.blocks.find((b) => b.id === "ffffffff").source);
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
   assert.equal(await page.eval(`getComputedStyle(document.activeElement).fontFamily.includes("mono")`), true);
 
@@ -356,4 +356,21 @@ test("every request carries the token prefix and every POST is JSON", async () =
   const prefix = new URL(server.url).pathname.split("/p/")[0] + "/";
   assert.deepEqual(server.state.requests.filter((r) => !r.path.startsWith(prefix) && r.path !== "/favicon.ico"), []);
   for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
+});
+
+test("sortable tables sort by a header click, numeric or by locale, without an op", async () => {
+  const column = (i) => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[${i}].textContent)`);
+  const sortState = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] th')].map((th) => th.getAttribute("aria-sort"))`);
+  const header = (i) => click(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
+
+  await header(1);
+  assert.deepEqual(await column(1), ["9", "10", "1,200"]);
+  assert.deepEqual(await sortState(), [null, "ascending"]);
+  await header(1);
+  assert.deepEqual(await column(1), ["1,200", "10", "9"]);
+  assert.deepEqual(await sortState(), [null, "descending"]);
+  await header(0);
+  assert.deepEqual(await column(0), ["Alpha", "beta", "gamma"]);
+  assert.deepEqual(await sortState(), ["ascending", null]);
+  assert.equal(requests("POST", "").length, 0);
 });

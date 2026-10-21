@@ -430,8 +430,27 @@
     if (b && !b.disabled) action(b.dataset.action);
   });
 
+  function sortTable(th) {
+    const table = th.closest("table");
+    const body = table.tBodies[0];
+    if (!body) return;
+    const col = th.cellIndex;
+    const dir = th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
+    for (const other of th.parentElement.cells) other.removeAttribute("aria-sort");
+    th.setAttribute("aria-sort", dir);
+    const rows = [...body.rows].filter((r) => r !== th.parentElement);
+    const text = (r) => (r.cells[col]?.textContent || "").trim();
+    const num = (v) => Number(v.replace(/,/g, ""));
+    const numeric = rows.every((r) => text(r) !== "" && Number.isFinite(num(text(r))));
+    const cmp = numeric ? (a, b) => num(text(a)) - num(text(b)) : (a, b) => text(a).localeCompare(text(b));
+    rows.sort((a, b) => (dir === "ascending" ? cmp(a, b) : cmp(b, a)));
+    body.append(...rows);
+  }
+
   main.addEventListener("click", (e) => {
     if (editing) return;
+    const th = e.target.closest('[data-kapi-sort="on"] th');
+    if (th && main.contains(th)) sortTable(th);
     const el = e.target.closest("[data-kapi-id]");
     if (el && main.contains(el)) select(el);
   });
