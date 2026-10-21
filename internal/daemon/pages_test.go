@@ -2,8 +2,8 @@ package daemon
 
 import (
 	"os"
-	"slices"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/xaaha/kapi/internal/eventlog"
