@@ -288,8 +288,10 @@ func setupCmd(out io.Writer) *cli.Command {
 					}
 					results = setup.Install(o)
 				}
+				failed := 0
 				for _, r := range results {
 					if r.Err != nil {
+						failed++
 						fmt.Fprintf(out, "  %-15s error: %v\n", r.Harness, r.Err)
 						continue
 					}
@@ -297,6 +299,9 @@ func setupCmd(out io.Writer) *cli.Command {
 				}
 				if !*remove {
 					fmt.Fprintln(out, "Restart your agent sessions so the hook takes effect.")
+				}
+				if failed > 0 {
+					return fmt.Errorf("%d harness(es) failed; see the errors above", failed)
 				}
 				return nil
 			},

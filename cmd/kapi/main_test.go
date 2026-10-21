@@ -293,3 +293,23 @@ func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewH5SetupHooksFailsWhenAHarnessFails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("COPILOT_HOME", "")
+	settings := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, &fakeAPI{}, "setup", "hooks", "--remove")
+	if err == nil || !strings.Contains(err.Error(), "1 harness") {
+		t.Errorf("error = %v", err)
+	}
+	if !strings.Contains(out, "Claude Code") || !strings.Contains(out, "Copilot CLI") {
+		t.Errorf("every harness should still be reported:\n%s", out)
+	}
+}
