@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -221,10 +223,6 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		summary := "edited in the file"
-		if text != "" {
-			summary += "; " + text
-		}
 		err = s.commit(src, raw, s.rev+1, s.undo)
 		if errors.Is(err, errFileChanged) {
 			continue
@@ -232,7 +230,15 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
+		ids := changedBlocks(old, s.src)
+		summary := "edited in the file"
+		if len(ids) > 0 {
+			summary += ": " + describeIDs(s.src, ids)
+		}
+		if text != "" {
+			summary += "; " + text
+		}
+		return Summary{Text: summary, IDs: ids}, true, nil
 	}
 	return Summary{}, false, nil
 }
@@ -449,6 +455,7 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 		return nil, Summary{}, err
 	}
 	one := []string{op.ID}
+	about := func(verb string) string { return verb + " " + describe(src, e) }
 	switch op.Kind {
 	case "edit":
 		with := op.HTML
@@ -459,7 +466,10 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 			with = string(src[e.start:e.tagEnd]) + *op.Inner + string(src[e.closeStart:e.end])
 		}
 		out, err := edit(src, els, e, with, op.Inner != nil)
-		return out, Summary{Text: "edited", IDs: one}, err
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
 	case "delete":
 		for i := range els {
 			l := &els[i]
@@ -471,16 +481,16 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 				return nil, Summary{}, fmt.Errorf("%w: a link to #%s", ErrInboundLinks, t.id)
 			}
 		}
-		return cut(src, e), Summary{Text: "deleted", IDs: one}, nil
+		return cut(src, e), Summary{Text: about("deleted"), IDs: one}, nil
 	case "done":
-		return setAttr(src, e, "data-kapi-state", "done"), Summary{Text: "marked done", IDs: one}, nil
+		return setAttr(src, e, "data-kapi-state", "done"), Summary{Text: about("marked done"), IDs: one}, nil
 	case "archive":
-		return setAttr(src, e, "data-kapi-state", "archived"), Summary{Text: "archived", IDs: one}, nil
+		return setAttr(src, e, "data-kapi-state", "archived"), Summary{Text: about("archived"), IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
-		text := "moved #" + op.ID + " to the end"
+		text := about("moved #"+op.ID) + " to the end"
 		if op.Before != "" {
-			text = "moved #" + op.ID + " before #" + op.Before
+			text = about("moved #"+op.ID) + " before #" + op.Before
 		}
 		return out, Summary{Text: text}, err
 	}
@@ -622,4 +632,78 @@ func changedBlocks(old, cur []byte) []string {
 		}
 	}
 	return changed
+}
+
+const (
+	excerptLen   = 60
+	listedIDs    = 3
+	presetPrefix = "kapi-"
+)
+
+var inline = map[string]bool{
+	"a": true, "abbr": true, "b": true, "cite": true, "code": true, "em": true, "i": true, "kbd": true,
+	"mark": true, "q": true, "s": true, "small": true, "span": true, "strong": true, "sub": true, "sup": true, "u": true,
+}
+
+func describeIDs(src []byte, ids []string) string {
+	parts := make([]string, 0, listedIDs+1)
+	for _, id := range ids[:min(len(ids), listedIDs)] {
+		parts = append(parts, describeID(src, id))
+	}
+	if extra := len(ids) - listedIDs; extra > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", extra))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func describeID(src []byte, id string) string {
+	e, err := find(parse(src), id)
+	if err != nil {
+		return "#" + id
+	}
+	return describe(src, e)
+}
+
+func describe(src []byte, e *element) string {
+	var parts []string
+	if name, ok := strings.CutPrefix(e.name, presetPrefix); ok {
+		parts = append(parts, name)
+	}
+	if text := excerpt(src[e.start:e.end]); text != "" || len(parts) == 0 {
+		parts = append(parts, `"`+text+`"`)
+	}
+	return strings.Join(parts, " ")
+}
+
+func excerpt(outer []byte) string {
+	var b strings.Builder
+	z := html.NewTokenizer(bytes.NewReader(render.MaskRawBodies(outer)))
+	off := 0
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		start := off
+		off += len(z.Raw())
+		switch tt {
+		case html.TextToken:
+			b.WriteString(html.UnescapeString(string(outer[start:off])))
+		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
+			if name, _ := z.TagName(); !inline[string(name)] {
+				b.WriteByte(' ')
+			}
+		}
+	}
+	text := []rune(strings.Join(strings.Fields(b.String()), " "))
+	if len(text) <= excerptLen {
+		return string(text)
+	}
+	cut := string(text[:excerptLen])
+	if text[excerptLen] != ' ' {
+		if i := strings.LastIndexByte(cut, ' '); i > 0 {
+			cut = cut[:i]
+		}
+	}
+	return strings.TrimRight(cut, " ") + "\u2026"
 }

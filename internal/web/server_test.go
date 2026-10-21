@@ -426,7 +426,7 @@ func TestOpsApplyAndLogARevision(t *testing.T) {
 		t.Fatalf("done: %d %v", code, out)
 	}
 	ev := s.events()
-	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != "marked done" {
+	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != `marked done "see a"` {
 		t.Errorf("events = %+v", ev)
 	}
 

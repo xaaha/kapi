@@ -80,7 +80,7 @@ type Op struct {
     Inner *string // edit, instead of HTML: new source between the element's start and end tags
     Before string // move: id to insert before, "" means end
 }
-type Summary struct{ Text string; IDs []string } // "edited #k3f9a2bq" etc., goes into the event log
+type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
 var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
@@ -174,7 +174,13 @@ The browser keeps nothing: after any reconnect it refetches the page.
 ## Agent side
 
 Ops reach the agent through the existing event log, so `kapi watch` shows
-`#12 human revision on #k3f9a2bq: deleted` with no new command. Agent-side
+`#12 human revision on #k3f9a2bq: deleted "Move the session store to the new…"`
+with no new command. A revision's `text` quotes the block: its text with
+whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
+the preset name without `kapi-` for a preset (`archived callout "Freeze
+writes."`). An edit quotes the new text. A file edit that changed several
+blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",
+"b", callout "c", and 1 more`). `target` still lists the ids. Agent-side
 `kapi op` and `kapi get` are phase 3.
 
 A reader never gets its own events back: `kapi watch` skips events whose

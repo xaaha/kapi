@@ -304,7 +304,7 @@ func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	if !strings.HasPrefix(got, `<kapi-callout data-kapi-id="aaaaaaaa" kind="note">new <kapi-code data-kapi-id="`) || !strings.HasSuffix(got, "</kapi-callout>\n<p data-kapi-id=\"bbbbbbbb\">keep</p>\n") {
 		t.Fatalf("file after edit:\n%s", got)
 	}
-	if sum.Text != "edited" || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
+	if sum.Text != `edited callout "new x"` || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
 		t.Errorf("summary = %+v", sum)
 	}
 	snap, err := os.ReadFile(filepath.Join(s.dir, "revs", "1.html"))
@@ -1030,7 +1030,7 @@ func TestAnInnerEditKeepsTheTagsAndReplacesOnlyTheBody(t *testing.T) {
 	if got := onDisk(t, path); got != want {
 		t.Errorf("file after inner edits:\n%s\nwant:\n%s", got, want)
 	}
-	if sum.Text != "edited" || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
+	if sum.Text != `edited callout "new text"` || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
 		t.Errorf("summary = %+v", sum)
 	}
 }
@@ -1081,5 +1081,57 @@ func TestAnInnerEditThatNeedsASplitSavesTheRawInput(t *testing.T) {
 	sum := mustApply(t, s, Op{Kind: "edit", ID: "eeeeeeee", Inner: ptr("<p>stray</p>")})
 	if !strings.Contains(sum.Text, "raw input saved to") || len(rawSaves(t, s)) != 1 {
 		t.Errorf("summary %q, raw saves %v", sum.Text, rawSaves(t, s))
+	}
+}
+
+func TestRevisionSummariesQuoteTheBlock(t *testing.T) {
+	src := "<p data-kapi-id=\"aaaaaaaa\">This page is served by Kapi itself, so every   edit you make\n  lands in the file on disk.</p>\n" +
+		"<ul data-kapi-id=\"bbbbbbbb\"><li>Copy data</li><li>Flip <em>reads</em> &amp; writes</li></ul>\n" +
+		"<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">Freeze writes.</kapi-callout>\n" +
+		"<kapi-code data-kapi-id=\"dddddddd\" lang=\"go\">if a<b &amp;&amp; c {\n}</kapi-code>\n" +
+		"<hr data-kapi-id=\"eeeeeeee\">\n" +
+		"<p data-kapi-id=\"ffffffff\">last</p>\n" +
+		"<p data-kapi-id=\"gggggggg\">" + strings.Repeat("x", 70) + "</p>\n"
+	for _, tc := range []struct {
+		op   Op
+		want string
+	}{
+		{Op{Kind: "delete", ID: "aaaaaaaa"}, `deleted "This page is served by Kapi itself, so every edit you make…"`},
+		{Op{Kind: "delete", ID: "gggggggg"}, `deleted "` + strings.Repeat("x", 60) + "…\""},
+		{Op{Kind: "done", ID: "bbbbbbbb"}, `marked done "Copy data Flip reads & writes"`},
+		{Op{Kind: "archive", ID: "cccccccc"}, `archived callout "Freeze writes."`},
+		{Op{Kind: "delete", ID: "dddddddd"}, `deleted code "if a<b && c { }"`},
+		{Op{Kind: "delete", ID: "eeeeeeee"}, `deleted ""`},
+		{Op{Kind: "move", ID: "ffffffff", Before: "aaaaaaaa"}, `moved #ffffffff "last" before #aaaaaaaa`},
+		{Op{Kind: "move", ID: "aaaaaaaa"}, `moved #aaaaaaaa "This page is served by Kapi itself, so every edit you make…" to the end`},
+		{Op{Kind: "edit", ID: "cccccccc", Inner: ptr("Thaw   them\n after.")}, `edited callout "Thaw them after."`},
+		{Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<h2>New title</h2>"}, `edited "New title"`},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if sum := mustApply(t, s, tc.op); sum.Text != tc.want || strings.Join(sum.IDs, ",") != map[bool]string{true: "", false: tc.op.ID}[tc.op.Kind == "move"] {
+			t.Errorf("%s #%s: summary %+v, want text %q", tc.op.Kind, tc.op.ID, sum, tc.want)
+		}
+	}
+}
+
+func TestAFileEditSummaryQuotesUpToThreeChangedBlocks(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">c</kapi-callout>\n" +
+		"<p data-kapi-id=\"dddddddd\">d</p>\n<p data-kapi-id=\"eeeeeeee\">e</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	externalWrite(t, path, strings.Replace(src, ">b<", ">b2<", 1))
+	sum, _, err := s.Refresh()
+	if err != nil || sum.Text != `edited in the file: "b2"` || strings.Join(sum.IDs, ",") != "bbbbbbbb" {
+		t.Errorf("one block: %+v, %v", sum, err)
+	}
+	next := src
+	for _, r := range []string{">a<", ">b<", ">c<", ">e<"} {
+		next = strings.Replace(next, r, r[:2]+"x<", 1)
+	}
+	externalWrite(t, path, next)
+	sum, _, err = s.Refresh()
+	if err != nil || sum.Text != `edited in the file: "ax", "bx", callout "cx", and 1 more` || strings.Join(sum.IDs, ",") != "aaaaaaaa,bbbbbbbb,cccccccc,eeeeeeee" {
+		t.Errorf("four blocks: %+v, %v", sum, err)
 	}
 }
