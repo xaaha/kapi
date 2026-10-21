@@ -33,6 +33,7 @@ func init() {
 		"kapi-step":     planItem("kapi-step", ""),
 		"kapi-risk":     planItem("kapi-risk", "Risk"),
 		"kapi-question": planItem("kapi-question", "Question"),
+		"kapi-diagram":  renderDiagram,
 		"kapi-form":     renderForm,
 		"kapi-choice":   renderChoice,
 		"kapi-opt":      renderOpt,
