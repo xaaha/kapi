@@ -61,7 +61,6 @@ func ID(path string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-
 func Open(home, path string) (*Store, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("page path must be absolute: %q", path)
