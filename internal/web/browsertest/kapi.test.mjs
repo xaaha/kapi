@@ -465,6 +465,12 @@ test("block tags name presets and jump to and flash the block", async () => {
   await page.waitFor(`(r => r.top >= 0 && r.bottom <= innerHeight)(document.querySelector('[data-kapi-id="ffffffff"]').getBoundingClientRect())`);
 });
 
+test("block excerpts keep words from separate list items apart", async () => {
+  server.push({ kind: "message", target: "cccccccc", text: "Order?" });
+  await page.waitFor(`!!document.querySelector(".kapi-ref")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-ref").textContent`), "Copy data Flip reads");
+});
+
 test("on phones Send sits to the right of the composer on the same row", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   const row = `(() => {

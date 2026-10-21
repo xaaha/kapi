@@ -71,7 +71,7 @@
   function describe(id) {
     const el = find(id);
     if (!el) return "a block no longer on the page";
-    const text = el.textContent.replace(/\s+/g, " ").trim();
+    const text = (el.innerText || el.textContent).replace(/\s+/g, " ").trim();
     const short = text.length > 40 ? `${text.slice(0, 39).trimEnd()}\u2026` : text;
     const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
     if (!preset) return short || "an empty block";
