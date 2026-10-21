@@ -42,21 +42,28 @@ func init() {
 }
 
 func renderPreset(b *bytes.Buffer, n *html.Node) {
-	fn, ok := presets[n.Data]
-	if !ok {
-		errorBox(b, n, "unknown preset element; run `kapi preset` to list the ones that exist")
-		return
-	}
-	if want := parents[n.Data]; want != "" && (n.Parent == nil || n.Parent.Data != want) {
-		errorBox(b, n, fmt.Sprintf("must be a direct child of <%s>", want))
-		return
-	}
 	var out bytes.Buffer
-	if err := fn(&out, n); err != nil {
+	if err := tryPreset(&out, n); err != nil {
 		errorBox(b, n, err.Error())
 		return
 	}
 	b.Write(out.Bytes())
+}
+
+func tryPreset(b *bytes.Buffer, n *html.Node) error {
+	fn, ok := presets[n.Data]
+	if !ok {
+		return fmt.Errorf("unknown preset element; run `kapi preset` to list the ones that exist")
+	}
+	if want := parents[n.Data]; want != "" && (n.Parent == nil || n.Parent.Data != want) {
+		return fmt.Errorf("must be a direct child of <%s>", want)
+	}
+	return fn(b, n)
+}
+
+func presetRenders(n *html.Node) bool {
+	var discard bytes.Buffer
+	return tryPreset(&discard, n) == nil
 }
 
 var phrasing = set("p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "a", "em", "strong", "b", "i", "u", "s",

@@ -52,7 +52,7 @@ func findBlock(n *html.Node, id string) *html.Node {
 	if v, ok := attr(n, "data-kapi-id"); ok && v == id {
 		return n
 	}
-	if rawPresets[n.Data] {
+	if rawPresets[n.Data] || (strings.HasPrefix(n.Data, "kapi-") && !presetRenders(n)) {
 		return nil
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

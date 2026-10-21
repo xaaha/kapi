@@ -92,6 +92,25 @@ func TestBlockUnknownID(t *testing.T) {
 	}
 }
 
+func TestBlockHidesWhatRenderHides(t *testing.T) {
+	cases := map[string]string{
+		"inside an unknown preset":   `<kapi-chart><p data-kapi-id="aaaaaaaa">x</p></kapi-chart>`,
+		"inside an errored callout":  `<kapi-callout kind="bad"><p data-kapi-id="aaaaaaaa">x</p></kapi-callout>`,
+		"inside a misplaced step":    `<kapi-step><p data-kapi-id="aaaaaaaa">x</p></kapi-step>`,
+		"inside a form with no name": `<kapi-form><kapi-text name="t" data-kapi-id="aaaaaaaa">x</kapi-text></kapi-form>`,
+		"inside a table with prose":  `<kapi-table><p data-kapi-id="aaaaaaaa">x</p></kapi-table>`,
+		"inside a dropped element":   `<template><p data-kapi-id="aaaaaaaa">x</p></template>`,
+	}
+	for name, src := range cases {
+		if strings.Contains(render(t, src), "aaaaaaaa") {
+			t.Fatalf("%s: Render shows the element, the case is wrong", name)
+		}
+		if got, err := Block([]byte(src), "aaaaaaaa"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: Block = %q, %v; want ErrNotFound because Render does not show it", name, got, err)
+		}
+	}
+}
+
 func TestBlockNestedPresetKeepsContext(t *testing.T) {
 	src := []byte(`<kapi-form name="f"><kapi-choice name="pick" multiple><kapi-opt value="a" data-kapi-id="optaaaaa">A</kapi-opt></kapi-choice></kapi-form>`)
 	got, err := Block(src, "optaaaaa")
