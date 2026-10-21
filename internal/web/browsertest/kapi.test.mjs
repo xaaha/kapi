@@ -482,3 +482,17 @@ test("on phones Send sits to the right of the composer on the same row", async (
   }
 });
 
+test("the source editor is labelled and takes the block's place", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').style.margin = "20px 0"`);
+  const before = await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').getBoundingClientRect().top + scrollY`);
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  const [label, top] = await page.eval(`(() => {
+    const box = document.querySelector(".kapi-source").closest(".kapi-source-box");
+    return [box.querySelector(".kapi-source-label").textContent, box.getBoundingClientRect().top + scrollY];
+  })()`);
+  assert.equal(label, "Editing source of: callout");
+  assert.ok(Math.abs(top - before) <= 1, `editor at ${top}, block was at ${before}`);
+});
+

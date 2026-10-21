@@ -32,6 +32,16 @@
   display: none !important;
 }
 
+#kapi-page .kapi-source-box {
+  display: block;
+}
+
+#kapi-page .kapi-source-label {
+  margin: 0 0 6px;
+  font: 600 12px/1.4 var(--kapi-font);
+  color: var(--kapi-accent);
+}
+
 #kapi-page textarea.kapi-source {
   display: block;
   box-sizing: border-box;

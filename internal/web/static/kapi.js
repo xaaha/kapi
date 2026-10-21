@@ -212,20 +212,25 @@
     busy = false;
     if (src === null) say("Could not load the source of this block.", "error");
     if (src === null || selected !== el || editing) return renderBar();
-    const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of #${idOf(el)}` });
+    const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "") || "this section";
+    const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of ${describe(idOf(el))}` });
     area.value = src;
     area.rows = Math.min(24, src.split("\n").length + 2);
-    el.before(area);
+    const box = h("div", { class: "kapi-source-box" }, h("div", { class: "kapi-source-label", text: `Editing source of: ${preset}` }), area);
+    const style = getComputedStyle(el);
+    box.style.marginTop = style.marginTop;
+    box.style.marginBottom = style.marginBottom;
+    el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
-    editing = { el, area, initial: src, read: () => area.value };
+    editing = { el, area, box, initial: src, read: () => area.value };
     area.focus();
     renderBar();
   }
 
   function endEdit(restore) {
-    const { el, area, original } = editing;
+    const { el, area, box, original } = editing;
     if (area) {
-      area.remove();
+      box.remove();
       el.removeAttribute("data-kapi-editing-source");
     } else {
       if (restore) el.innerHTML = original;
