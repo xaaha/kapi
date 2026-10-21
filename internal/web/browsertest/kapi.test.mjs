@@ -465,3 +465,20 @@ test("block tags name presets and jump to and flash the block", async () => {
   await page.waitFor(`(r => r.top >= 0 && r.bottom <= innerHeight)(document.querySelector('[data-kapi-id="ffffffff"]').getBoundingClientRect())`);
 });
 
+test("on phones Send sits to the right of the composer on the same row", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  const row = `(() => {
+    const t = document.querySelector(".kapi-composer textarea").getBoundingClientRect();
+    const s = document.querySelector(".kapi-composer .kapi-primary").getBoundingClientRect();
+    return { right: s.left >= t.right, sameRow: s.top < t.bottom && t.top < s.bottom, edge: innerWidth - s.right };
+  })()`;
+  try {
+    assert.deepEqual(await phone.eval(row), { right: true, sameRow: true, edge: 12 });
+    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    await phone.waitFor(`document.querySelector(".kapi-scroll").checkVisibility()`);
+    assert.deepEqual(await phone.eval(row), { right: true, sameRow: true, edge: 12 });
+  } finally {
+    await phone.close();
+  }
+});
+

@@ -378,6 +378,36 @@
     display: none;
   }
 
+  #kapi-chrome .kapi-composer {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #kapi-chrome .kapi-composer-row {
+    display: contents;
+  }
+
+  #kapi-chrome .kapi-target {
+    grid-column: 1 / -1;
+  }
+
+  #kapi-chrome .kapi-composer textarea {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  #kapi-chrome .kapi-composer-dot {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #kapi-chrome .kapi-composer .kapi-primary {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-composer textarea {
     min-height: 0;
     height: 40px;
