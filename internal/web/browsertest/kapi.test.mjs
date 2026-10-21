@@ -128,7 +128,7 @@ test("sends a chat message with Ctrl+Enter, targeted at the selected block", asy
   await page.key("Enter", { ctrl: true });
   await page.waitFor(`document.querySelector(".kapi-msg .kapi-msg-text")?.textContent === "Looks good"`);
   assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", target: "", text: "Looks good" });
-  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "");
+  await page.waitFor(`document.querySelector(".kapi-composer textarea").value === ""`);
 
   await select("bbbbbbbb");
   assert.match(await page.eval(`document.querySelector(".kapi-target").textContent`), /#bbbbbbbb/);
