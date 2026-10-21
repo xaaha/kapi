@@ -320,3 +320,17 @@ test("the selection ring sits on the content box", async () => {
   assert.ok(Math.abs(ring[0] - content[0]) <= 1, `ring left ${ring[0]} vs content ${content[0]}`);
   assert.ok(Math.abs(ring[1] - content[1]) <= 1, `ring right ${ring[1]} vs content ${content[1]}`);
 });
+
+test("on narrow screens chat starts as a bar and opens to at most 40% of the height", async () => {
+  const narrow = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await narrow.waitFor(`!document.documentElement.classList.contains("kapi-panel-open")`);
+    assert.equal(await narrow.eval(`document.querySelector(".kapi-opener").getBoundingClientRect().width`), 390);
+    await narrow.eval(`document.querySelector(".kapi-opener").click()`);
+    await narrow.waitFor(`document.documentElement.classList.contains("kapi-panel-open")`);
+    assert.ok((await narrow.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`)) <= 320);
+    assert.deepEqual(narrow.errors, []);
+  } finally {
+    await narrow.close();
+  }
+});

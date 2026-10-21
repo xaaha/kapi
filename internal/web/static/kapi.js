@@ -56,12 +56,13 @@
       button("Undo", "undo", "Undo the last change"), button("Hide", "collapse", "Hide chat")),
     notice, h("div", { class: "kapi-scroll" }, empty, log), composer);
   const opener = h("button", { type: "button", class: "kapi-opener", "data-action": "expand", title: "Show chat" },
-    h("span", { class: "kapi-dot", "data-state": "connecting" }), "Chat");
+    h("span", { class: "kapi-dot", "data-state": "connecting" }), h("span", { text: "Chat" }),
+    h("span", { class: "kapi-opener-status", text: STATUS.connecting }));
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const root = h("div", { id: "kapi-chrome" }, ring, bar, panel, opener);
   document.body.append(root);
-  document.documentElement.classList.add("kapi-panel-open");
+  if (!matchMedia("(max-width: 760px)").matches) document.documentElement.classList.add("kapi-panel-open");
 
   if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
 
@@ -72,6 +73,7 @@
   function setStatus(state) {
     for (const d of root.querySelectorAll(".kapi-dot")) d.dataset.state = state;
     statusText.textContent = STATUS[state] || STATUS.none;
+    opener.querySelector(".kapi-opener-status").textContent = statusText.textContent;
     dot.title = statusText.textContent;
   }
 

@@ -346,19 +346,46 @@ html.kapi-panel-open #kapi-chrome .kapi-opener {
   box-shadow: var(--kapi-shadow);
 }
 
+#kapi-chrome .kapi-opener-status {
+  display: none;
+}
+
 @media (max-width: 760px) {
   html.kapi-panel-open {
     padding-right: 0;
-    padding-bottom: 55vh;
+    padding-bottom: 40vh;
+  }
+
+  html:not(.kapi-panel-open) {
+    padding-bottom: 48px;
   }
 
   #kapi-chrome .kapi-panel {
     top: auto;
     left: 0;
     width: auto;
-    height: 55vh;
+    height: 40vh;
     border-left: 0;
     border-top: 1px solid var(--kapi-border);
     box-shadow: var(--kapi-shadow);
+  }
+
+  #kapi-chrome .kapi-opener {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 48px;
+    padding: 0 16px;
+    gap: 8px;
+    border: 0;
+    border-top: 1px solid var(--kapi-border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  #kapi-chrome .kapi-opener-status {
+    display: inline;
+    margin-left: auto;
+    color: var(--kapi-muted);
   }
 }
