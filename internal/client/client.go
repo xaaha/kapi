@@ -66,7 +66,7 @@ func (c Client) startDaemon() error {
 	return cmd.Process.Release()
 }
 
-func (c Client) Do(req daemon.Request) (daemon.Response, error) {
+func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 	conn, err := c.dial()
 	if err != nil {
 		return daemon.Response{}, err

@@ -72,7 +72,7 @@ func run(args []string) error {
 		}
 		for {
 			err := c.Watch(page, *reader, func(r daemon.Response) error {
-				_, err := fmt.Println(format(*r.Event))
+				_, err := fmt.Println(format(r.Event))
 				return err
 			})
 			if !errors.Is(err, client.ErrConnectionLost) {
@@ -90,7 +90,7 @@ func run(args []string) error {
 		if cmd == "send" {
 			author = "human"
 		}
-		resp, err := c.Do(daemon.Request{Op: "append", Page: page, Author: author, Kind: "message", Target: *on, Text: strings.Join(rest[1:], " ")})
+		resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: author, Kind: "message", Target: *on, Text: strings.Join(rest[1:], " ")})
 		if err != nil {
 			return err
 		}
@@ -101,12 +101,12 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		resp, err := c.Do(daemon.Request{Op: "pending", Page: page, Reader: *reader})
+		resp, err := c.Do(&daemon.Request{Op: "pending", Page: page, Reader: *reader})
 		if err != nil {
 			return err
 		}
 		for _, e := range resp.Events {
-			fmt.Println(format(e))
+			fmt.Println(format(&e))
 		}
 		return nil
 	case "status":
@@ -114,7 +114,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		resp, err := c.Do(daemon.Request{Op: "status", Page: page})
+		resp, err := c.Do(&daemon.Request{Op: "status", Page: page})
 		if err != nil {
 			return err
 		}
@@ -132,14 +132,14 @@ func run(args []string) error {
 	}
 }
 
-func pageArg(rest []string, min int) (string, error) {
-	if len(rest) < min {
-		return "", fmt.Errorf("expected %d argument(s), got %d\n\n%s", min, len(rest), usage)
+func pageArg(rest []string, minArgs int) (string, error) {
+	if len(rest) < minArgs {
+		return "", fmt.Errorf("expected %d argument(s), got %d\n\n%s", minArgs, len(rest), usage)
 	}
 	return filepath.Abs(rest[0])
 }
 
-func format(e eventlog.Event) string {
+func format(e *eventlog.Event) string {
 	target := ""
 	if e.Target != "" {
 		target = " on #" + e.Target
