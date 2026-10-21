@@ -15,6 +15,7 @@ func literalTree(t *testing.T, out string) string {
 	root := &html.Node{Type: html.ElementNode, Data: "body"}
 	stack := []*html.Node{root}
 	z := html.NewTokenizer(strings.NewReader(out))
+	afterPre := false
 	for {
 		tt := z.Next()
 		if tt == html.ErrorToken {
@@ -25,6 +26,10 @@ func literalTree(t *testing.T, out string) string {
 		}
 		tok := z.Token()
 		top := stack[len(stack)-1]
+		if afterPre && tt == html.TextToken {
+			tok.Data = strings.TrimPrefix(tok.Data, "\n")
+		}
+		afterPre = tt == html.StartTagToken && tok.Data == "pre"
 		switch tt {
 		case html.TextToken:
 			top.AppendChild(&html.Node{Type: html.TextNode, Data: tok.Data})
