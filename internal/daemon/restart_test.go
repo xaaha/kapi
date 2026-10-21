@@ -56,11 +56,14 @@ func firstEventID(t *testing.T, pageURL, lastID string) string {
 	return ""
 }
 
-func TestARestartedDaemonServesTheSameURLAndTheStreamResumes(t *testing.T) {
+func TestARestartedDaemonKeepsThePortWithANewTokenAndTheStreamResumes(t *testing.T) {
 	home := shortHome(t)
 	path := writePage(t, "<p>x</p>\n")
 	_, stop := servingAt(t, home)
-	base := httpURL(t, home)
+	before, err := url.Parse(httpURL(t, home))
+	if err != nil {
+		t.Fatal(err)
+	}
 	pageURL := call(t, home, &Request{Op: "open", Page: path}).URL
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "before"})
 	if id := firstEventID(t, pageURL, ""); id != "1" {
@@ -70,27 +73,24 @@ func TestARestartedDaemonServesTheSameURLAndTheStreamResumes(t *testing.T) {
 
 	_, stop = servingAt(t, home)
 	defer stop()
-	if got := httpURL(t, home); got != base {
-		t.Fatalf("http.url after restart = %s, want %s", got, base)
+	after, err := url.Parse(httpURL(t, home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Host != before.Host || after.Path == before.Path {
+		t.Fatalf("http.url after restart = %s, was %s; want the same port and a new token", after, before)
 	}
 	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("http.url mode = %v, %v; want 0600", fi.Mode().Perm(), err)
 	}
-	resp, err := http.Get(pageURL) //nolint:gosec // the daemon under test gave this URL
-	if err != nil {
-		t.Fatalf("the old page URL after restart: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("the old page URL after restart: %s", resp.Status)
-	}
+	reopened := call(t, home, &Request{Op: "open", Page: path}).URL
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "after"})
-	if id := firstEventID(t, pageURL, "1"); id != "2" {
+	if id := firstEventID(t, reopened, "1"); id != "2" {
 		t.Errorf("resumed stream starts at %s, want 2", id)
 	}
 }
 
-func TestATakenPortGetsANewPortWithTheSameToken(t *testing.T) {
+func TestATakenPortGetsANewPortAndANewToken(t *testing.T) {
 	home := shortHome(t)
 	_, stop := servingAt(t, home)
 	before, err := url.Parse(httpURL(t, home))
@@ -110,8 +110,8 @@ func TestATakenPortGetsANewPortWithTheSameToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Host == before.Host || after.Path != before.Path {
-		t.Fatalf("http.url = %s after %s was taken, want a new port and the same token", after, before)
+	if after.Host == before.Host || after.Path == before.Path {
+		t.Fatalf("http.url = %s after %s was taken, want a new port and a new token", after, before)
 	}
 	resp, err := http.Get(after.String())
 	if err != nil {

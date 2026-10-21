@@ -146,32 +146,29 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
-var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/([0-9a-f]{32})/\n$`)
+var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/[0-9a-f]{32}/\n$`)
 
 func (s *Server) listenHTTP() (net.Listener, string, error) {
-	addr, token := "127.0.0.1:0", ""
+	addr := "127.0.0.1:0"
 	if b, err := os.ReadFile(HTTPURLPath(s.home)); err == nil {
 		if m := savedURL.FindSubmatch(b); m != nil {
-			addr, token = string(m[1]), string(m[2])
+			addr = string(m[1])
 		}
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil && addr != "127.0.0.1:0" {
-		log.Printf("http: %s is taken (%v); moving to a new port, so open tabs need kapi open again", addr, err)
+		log.Printf("http: %s is taken (%v); moving to a new port", addr, err)
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 	if err != nil {
 		return nil, "", err
 	}
-	if token == "" {
-		b := make([]byte, 16)
-		if _, err := rand.Read(b); err != nil {
-			ln.Close()
-			return nil, "", err
-		}
-		token = hex.EncodeToString(b)
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		ln.Close()
+		return nil, "", err
 	}
-	return ln, token, nil
+	return ln, hex.EncodeToString(b), nil
 }
 
 func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
