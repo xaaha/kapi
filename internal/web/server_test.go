@@ -2,6 +2,7 @@ package web
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -118,7 +119,13 @@ func (s *site) raw(method, path string, header http.Header) got {
 
 func (s *site) post(path, body string) (int, map[string]any) {
 	s.t.Helper()
-	resp, err := s.client.Post(s.srv.URL+"/"+token+"/p/"+s.id+path, "application/json", strings.NewReader(body))
+	r, err := http.NewRequest("POST", s.srv.URL+"/"+token+"/p/"+s.id+path, strings.NewReader(body))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	r.Header.Set("Origin", s.srv.URL)
+	r.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(r)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -161,6 +168,57 @@ func TestEveryPathNeedsTheTokenAsItsFirstSegment(t *testing.T) {
 	}
 	if n := len(s.events()); n != 0 {
 		t.Errorf("%d events appended by refused requests", n)
+	}
+}
+
+func TestPostsFromAnotherOriginOrNotJSONAreRefused(t *testing.T) {
+	src := `<p data-kapi-id="aaaaaaaa">a</p><kapi-form data-kapi-id="ffffffff" name="env"></kapi-form>`
+	s := newSite(t, src)
+	before, err := os.ReadFile(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(s.srv.Listener.Addr().(*net.TCPAddr).Port)
+	bodies := map[string]string{
+		"ops":      `{"rev":1,"op":{"kind":"delete","id":"aaaaaaaa"}}`,
+		"messages": `{"kind":"message","text":"x"}`,
+		"answers":  `{"form":"env","values":{}}`,
+	}
+	for _, h := range []map[string]string{
+		{"Content-Type": "application/json"},
+		{"Origin": "http://127.0.0.1:1", "Content-Type": "application/json"},
+		{"Origin": "http://localhost:" + port, "Content-Type": "application/json"},
+		{"Origin": "null", "Content-Type": "application/json"},
+		{"Origin": s.srv.URL, "Content-Type": "text/plain"},
+		{"Origin": s.srv.URL},
+		{"Origin": s.srv.URL + "/", "Content-Type": "application/json"},
+	} {
+		for path, body := range bodies {
+			r, err := http.NewRequest("POST", s.srv.URL+"/"+token+"/p/"+s.id+"/"+path, strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for k, v := range h {
+				r.Header.Set(k, v)
+			}
+			resp, err := s.client.Do(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Errorf("POST %s with %v: %s, want 403", path, h, resp.Status)
+			}
+		}
+	}
+	if after, _ := os.ReadFile(s.path); !bytes.Equal(after, before) {
+		t.Errorf("a refused op changed the file:\n%s", after)
+	}
+	if n := len(s.events()); n != 0 {
+		t.Errorf("%d events appended by refused posts", n)
+	}
+	if code, _ := s.post("/messages", `{"kind":"message","text":"same origin"}`); code != http.StatusOK {
+		t.Errorf("same-origin JSON post: %d", code)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"html"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -72,6 +73,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "wrong host", http.StatusForbidden)
 		return
 	}
+	if r.Method == http.MethodPost && !s.sameOriginJSON(r) {
+		http.Error(w, "posts must come from this page as application/json", http.StatusForbidden)
+		return
+	}
 	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !s.validToken(seg) {
 		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
@@ -80,6 +85,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path, r2.URL.RawPath = "/"+rest, ""
 	s.mux.ServeHTTP(w, r2)
+}
+
+func (s *Server) sameOriginJSON(r *http.Request) bool {
+	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mt == "application/json" && r.Header.Get("Origin") == "http://"+s.host
 }
 
 func (s *Server) validToken(t string) bool {

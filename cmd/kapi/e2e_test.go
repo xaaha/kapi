@@ -162,7 +162,13 @@ func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
 		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
 	}
 
-	resp, err = browser.Post(url+"messages", "application/json", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
+	post, err := http.NewRequest("POST", url+"messages", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	post.Header.Set("Content-Type", "application/json")
+	post.Header.Set("Origin", "http://"+post.URL.Host)
+	resp, err = browser.Do(post)
 	if err != nil {
 		t.Fatal(err)
 	}
