@@ -67,3 +67,29 @@ func TestGoldenCases(t *testing.T) {
 		})
 	}
 }
+
+func samplePage(t *testing.T) []byte {
+	t.Helper()
+	src, err := os.ReadFile("testdata/all-presets.src.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := render(t, string(src))
+	var b bytes.Buffer
+	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>kapi presets</title>\n<style>\n")
+	b.Write(CSS())
+	b.WriteString("</style>\n</head>\n<body>\n<main id=\"kapi-page\">\n")
+	b.WriteString(body)
+	b.WriteString("\n</main>\n</body>\n</html>\n")
+	return b.Bytes()
+}
+
+func TestAllPresetsSample(t *testing.T) {
+	page := samplePage(t)
+	golden(t, "testdata/all-presets.html", page)
+	for _, p := range Presets() {
+		if !bytes.Contains(page, []byte(`class="`+p.Name)) {
+			t.Errorf("sample page has no rendered %s", p.Name)
+		}
+	}
+}
