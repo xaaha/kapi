@@ -14,7 +14,7 @@ type Preset struct{ Name, Summary, Example string }
 var ErrNotFound = errors.New("render: no element with that data-kapi-id")
 
 func Render(src []byte) ([]byte, error) {
-	root, err := parse(src)
+	root, err := load(src)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +24,7 @@ func Render(src []byte) ([]byte, error) {
 }
 
 func Block(src []byte, id string) ([]byte, error) {
-	root, err := parse(src)
+	root, err := load(src)
 	if err != nil {
 		return nil, err
 	}
@@ -36,6 +36,14 @@ func Block(src []byte, id string) ([]byte, error) {
 		}
 	}
 	return nil, ErrNotFound
+}
+
+func load(src []byte) (*html.Node, error) {
+	canonical, err := Canonical(src)
+	if err != nil {
+		return nil, err
+	}
+	return parse(canonical)
 }
 
 func parse(src []byte) (*html.Node, error) {
@@ -121,14 +129,11 @@ func findBlock(n *html.Node, id string) *html.Node {
 }
 
 func renderNode(b *bytes.Buffer, n *html.Node) {
-	switch n.Type {
-	case html.TextNode:
-		writeText(b, n.Data)
-	case html.ElementNode:
-		renderElement(b, n)
-	case html.CommentNode:
-		b.WriteString("<!--" + n.Data + "-->")
+	if isPreset(n) {
+		renderPreset(b, n)
+		return
 	}
+	writeProse(b, n, renderNode)
 }
 
 func renderChildren(b *bytes.Buffer, n *html.Node) {
@@ -137,28 +142,41 @@ func renderChildren(b *bytes.Buffer, n *html.Node) {
 	}
 }
 
-func renderElement(b *bytes.Buffer, n *html.Node) {
+func isPreset(n *html.Node) bool {
+	return n.Type == html.ElementNode && n.Namespace == "" && strings.HasPrefix(n.Data, "kapi-")
+}
+
+func writeProse(b *bytes.Buffer, n *html.Node, child func(*bytes.Buffer, *html.Node)) {
+	switch n.Type {
+	case html.TextNode:
+		writeText(b, n.Data)
+		return
+	case html.CommentNode:
+		b.WriteString("<!--" + n.Data + "-->")
+		return
+	case html.ElementNode:
+	default:
+		return
+	}
 	if n.Namespace != "" || dropped[n.Data] {
 		return
 	}
-	if strings.HasPrefix(n.Data, "kapi-") {
-		renderPreset(b, n)
-		return
-	}
 	allowed, ok := allowedTags[n.Data]
-	if !ok {
-		renderChildren(b, n)
-		return
+	if ok {
+		writeStart(b, n.Data, proseAttrs(n, allowed))
+		if voidTags[n.Data] {
+			return
+		}
+		if n.Data == "pre" && n.FirstChild != nil && n.FirstChild.Type == html.TextNode && strings.HasPrefix(n.FirstChild.Data, "\n") {
+			b.WriteByte('\n')
+		}
 	}
-	writeStart(b, n.Data, proseAttrs(n, allowed))
-	if voidTags[n.Data] {
-		return
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		child(b, c)
 	}
-	if n.Data == "pre" && n.FirstChild != nil && n.FirstChild.Type == html.TextNode && strings.HasPrefix(n.FirstChild.Data, "\n") {
-		b.WriteByte('\n')
+	if ok {
+		writeEnd(b, n.Data)
 	}
-	renderChildren(b, n)
-	writeEnd(b, n.Data)
 }
 
 func attr(n *html.Node, key string) (string, bool) {

@@ -70,9 +70,22 @@ var phrasing = set("p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "a", "em", "
 	"small", "code", "mark", "sub", "sup", "q", "cite", "abbr", "kbd", "samp", "var", "del", "ins", "time",
 	"dfn", "summary", "caption", "kapi-opt", "kapi-text", "kapi-choice")
 
+func renderedParent(n *html.Node) *html.Node {
+	p := n.Parent
+	for p != nil && p.Type == html.ElementNode && !isPreset(p) && !hasAllowedTag(p.Data) {
+		p = p.Parent
+	}
+	return p
+}
+
+func hasAllowedTag(tag string) bool {
+	_, ok := allowedTags[tag]
+	return ok
+}
+
 func errorBox(b *bytes.Buffer, n *html.Node, msg string) {
 	tag := "div"
-	if n.Parent != nil && phrasing[n.Parent.Data] {
+	if p := renderedParent(n); p != nil && phrasing[p.Data] {
 		tag = "span"
 	}
 	writeStart(b, tag, outerAttrs(n, "kapi-error", "role", "alert"))
