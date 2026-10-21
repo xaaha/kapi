@@ -18,3 +18,18 @@ kapi --help
 
 In Claude Code, run `kapi watch <page>` under the Monitor tool so each event
 arrives as a notification while the agent keeps working.
+
+## Agent harnesses
+
+Run `kapi` with no arguments to see every page and what is waiting on it.
+To show that to every new agent session automatically:
+
+```sh
+kapi setup hooks          # Claude Code, Codex, OpenCode and GitHub Copilot CLI
+kapi setup hooks --remove # take it out again
+```
+
+This adds a SessionStart hook that runs `kapi` (Copilot CLI uses
+`kapi hook-context`, which prints the same view as JSON). Re-running repairs it.
+Restart your agent sessions afterwards.
+

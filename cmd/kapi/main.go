@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -19,6 +21,7 @@ import (
 	"github.com/xaaha/kapi/internal/client"
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/setup"
 )
 
 type api interface {
@@ -63,7 +66,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			daemonCmd(),
 		},
 	}
-	root.SubCommands = append(root.SubCommands, completionCmd(root, out))
+	root.SubCommands = append(root.SubCommands, completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
 	return root
 }
 
@@ -255,6 +258,90 @@ func homeView(c api, out io.Writer) error {
 `)
 	_, err = io.WriteString(out, b.String())
 	return err
+}
+
+func setupCmd(out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("hooks", flag.ContinueOnError)
+	remove := fs.Bool("remove", false, "Remove kapi's hooks instead of installing them")
+	return &cli.Command{
+		Name:  "setup",
+		Short: "Connect kapi to your agent harnesses",
+		SubCommands: []*cli.Command{{
+			Name:  "hooks",
+			Short: "Install or repair the SessionStart hook in Claude Code, Codex, OpenCode and Copilot CLI",
+			Long: "Install or repair a SessionStart hook that runs `kapi` so every new agent session sees your pages\n" +
+				"and their unread messages. Covers Claude Code, Codex, OpenCode and GitHub Copilot CLI. Re-running\n" +
+				"repairs the hook; --remove takes it out again. Restart your agent sessions afterwards.",
+			Flags: fs,
+			Run: func([]string) error {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				o := setup.Options{Home: home, CopilotHome: os.Getenv("COPILOT_HOME")}
+				var results []setup.Result
+				if *remove {
+					results = setup.Remove(o)
+				} else {
+					if o.Command, err = hookCommand(); err != nil {
+						return err
+					}
+					results = setup.Install(o)
+				}
+				for _, r := range results {
+					if r.Err != nil {
+						fmt.Fprintf(out, "  %-15s error: %v\n", r.Harness, r.Err)
+						continue
+					}
+					fmt.Fprintf(out, "  %-15s %-9s %s\n", r.Harness, r.Status, r.Path)
+				}
+				if !*remove {
+					fmt.Fprintln(out, "Restart your agent sessions so the hook takes effect.")
+				}
+				return nil
+			},
+		}},
+	}
+}
+
+func hookContextCmd(c api, out io.Writer) *cli.Command {
+	return &cli.Command{
+		Name:   "hook-context",
+		Short:  "Print the home view as JSON for hooks that need additionalContext",
+		Hidden: true,
+		Run: func([]string) error {
+			var view strings.Builder
+			text := "## kapi ambient context\n"
+			if err := homeView(c, &view); err != nil {
+				text += "error: kapi ambient context failed: " + err.Error()
+			} else {
+				text += strings.TrimSpace(view.String())
+			}
+			enc := json.NewEncoder(out)
+			enc.SetEscapeHTML(false)
+			return enc.Encode(map[string]string{"additionalContext": text})
+		},
+	}
+}
+
+func hookCommand() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	resolvedExe, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(resolvedExe, filepath.Clean(os.TempDir())) || strings.Contains(resolvedExe, string(filepath.Separator)+"go-build") {
+		return "", fmt.Errorf("kapi is running from a temporary build (%s); install it first with `go install github.com/xaaha/kapi/cmd/kapi@latest`", resolvedExe)
+	}
+	if onPath, err := exec.LookPath("kapi"); err == nil {
+		if resolved, err := filepath.EvalSymlinks(onPath); err == nil && resolved == resolvedExe {
+			return "kapi", nil
+		}
+	}
+	return resolvedExe, nil
 }
 
 func pagePath(args []string, want int, command string) (string, error) {
