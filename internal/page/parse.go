@@ -187,56 +187,82 @@ func assignIDs(src []byte, els []element, need map[int]bool, prev []byte) []byte
 			keep[e.id] = i
 		}
 	}
-	for id, i := range keepByPosition(els, prev) {
+	for id, i := range alignIDs(els, prev) {
 		keep[id] = i
 	}
 	for i := len(els) - 1; i >= 0; i-- {
 		e := &els[i]
-		if (need[i] || strings.HasPrefix(e.name, "kapi-")) && (e.id == "" || keep[e.id] != i) {
+		if (e.id != "" && keep[e.id] != i) || (e.id == "" && (need[i] || strings.HasPrefix(e.name, "kapi-"))) {
 			src = setAttr(src, e, idAttr, newID(taken))
 		}
 	}
 	return src
 }
 
-func keepByPosition(els []element, prev []byte) map[string]int {
+type idToken struct {
+	id, name string
+	top      bool
+}
+
+func idTokens(els []element, top map[int]bool) ([]idToken, []int) {
+	var toks []idToken
+	var at []int
+	for i, e := range els {
+		if e.id != "" {
+			toks = append(toks, idToken{e.id, e.name, top[i]})
+			at = append(at, i)
+		}
+	}
+	return toks, at
+}
+
+func topSet(els []element) map[int]bool {
+	top := map[int]bool{}
+	for _, i := range units(els) {
+		top[i] = true
+	}
+	return top
+}
+
+func alignIDs(els []element, prev []byte) map[string]int {
 	if prev == nil {
 		return nil
 	}
-	before, after := map[string]string{}, map[string]string{}
+	count := map[string]int{}
+	for _, e := range els {
+		count[e.id]++
+	}
 	prevEls := parse(prev)
-	prevUnits := units(prevEls)
-	for k, i := range prevUnits {
-		if k > 0 {
-			before[prevEls[i].id] = prevEls[prevUnits[k-1]].id
-		}
-		if k+1 < len(prevUnits) {
-			after[prevEls[i].id] = prevEls[prevUnits[k+1]].id
+	a, _ := idTokens(prevEls, topSet(prevEls))
+	b, at := idTokens(els, topSet(els))
+	if len(a)*len(b) > 1<<22 {
+		return nil
+	}
+	lcs := make([][]int32, len(a)+1)
+	for i := range lcs {
+		lcs[i] = make([]int32, len(b)+1)
+	}
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := len(b) - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
 		}
 	}
-	cur := units(els)
-	copies := map[string]int{}
-	for _, i := range cur {
-		copies[els[i].id]++
-	}
-	score := func(k int) int {
-		id, n := els[cur[k]].id, 0
-		if k > 0 && before[id] != "" && els[cur[k-1]].id == before[id] {
-			n++
-		}
-		if k+1 < len(cur) && after[id] != "" && els[cur[k+1]].id == after[id] {
-			n++
-		}
-		return n
-	}
-	out, best := map[string]int{}, map[string]int{}
-	for k, i := range cur {
-		id := els[i].id
-		if id == "" || copies[id] < 2 {
-			continue
-		}
-		if n := score(k); n > best[id] {
-			best[id], out[id] = n, i
+	out := map[string]int{}
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		switch {
+		case a[i] == b[j] && lcs[i][j] == lcs[i+1][j+1]+1:
+			if count[b[j].id] > 1 {
+				out[b[j].id] = at[j]
+			}
+			i, j = i+1, j+1
+		case lcs[i+1][j] >= lcs[i][j+1]:
+			i++
+		default:
+			j++
 		}
 	}
 	return out

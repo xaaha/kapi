@@ -933,3 +933,42 @@ func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
 		t.Errorf("split changed the code body:\n%q", got)
 	}
 }
+
+func TestDuplicateIDsFollowThePreviousRevision(t *testing.T) {
+	cases := []struct {
+		name, before, after string
+		want                map[string]string
+	}{
+		{
+			"nested copy in a blockquote",
+			`<p data-kapi-id="xxxxxxxx">text</p>` + "\n",
+			`<blockquote><p data-kapi-id="xxxxxxxx">quoted copy</p></blockquote>` + "\n" + `<p data-kapi-id="xxxxxxxx">text</p>` + "\n",
+			map[string]string{"xxxxxxxx": `<p data-kapi-id="xxxxxxxx">text</p>`},
+		},
+		{
+			"pasted run after the originals",
+			"<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n<p data-kapi-id=\"cccccccc\">C</p>\n<p data-kapi-id=\"dddddddd\">D</p>\n",
+			"<p data-kapi-id=\"aaaaaaaa\">A</p>\n<p data-kapi-id=\"bbbbbbbb\">B</p>\n<p data-kapi-id=\"aaaaaaaa\">A copy</p>\n<p data-kapi-id=\"bbbbbbbb\">B copy</p>\n<p data-kapi-id=\"cccccccc\">C</p>\n<p data-kapi-id=\"dddddddd\">D</p>\n",
+			map[string]string{"aaaaaaaa": `<p data-kapi-id="aaaaaaaa">A</p>`, "bbbbbbbb": `<p data-kapi-id="bbbbbbbb">B</p>`},
+		},
+	}
+	for _, tc := range cases {
+		home, path := newPage(t, tc.before)
+		s := open(t, home, path)
+		externalWrite(t, path, tc.after)
+		if _, _, err := s.Refresh(); err != nil {
+			t.Fatal(err)
+		}
+		src, _ := s.Source()
+		for id, want := range tc.want {
+			if got, err := Outer(src, id); err != nil || string(got) != want {
+				t.Errorf("%s: #%s = %q, %v; want %q\n%s", tc.name, id, got, err, want, src)
+			}
+			out, _ := render.Render(src)
+			if n := strings.Count(string(out), `data-kapi-id="`+id+`"`); n != 1 {
+				t.Errorf("%s: rendered page has #%s %d times", tc.name, id, n)
+			}
+		}
+		renderedBlocks(t, src)
+	}
+}
