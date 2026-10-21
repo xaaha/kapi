@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -60,6 +63,7 @@ func (e *e2e) killDaemon() {
 type watcher struct {
 	cmd   *exec.Cmd
 	lines chan string
+	seq   uint64
 }
 
 func (e *e2e) watch() *watcher {
@@ -103,6 +107,22 @@ func (w *watcher) next(t *testing.T) string {
 	return ""
 }
 
+// event returns the next line without its event number, which must be higher than the last one.
+func (w *watcher) event(t *testing.T) string {
+	t.Helper()
+	line := w.next(t)
+	num, rest, ok := strings.Cut(line, " ")
+	seq, err := strconv.ParseUint(strings.TrimPrefix(num, "#"), 10, 64)
+	if !ok || err != nil || !strings.HasPrefix(num, "#") {
+		t.Fatalf("line %q does not start with #<seq>", line)
+	}
+	if seq <= w.seq {
+		t.Fatalf("event #%d after #%d: replayed or out of order", seq, w.seq)
+	}
+	w.seq = seq
+	return rest
+}
+
 func (w *watcher) kill9(t *testing.T) {
 	t.Helper()
 	if err := w.cmd.Process.Signal(syscall.SIGKILL); err != nil {
@@ -122,6 +142,45 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	if !strings.HasPrefix(url, "http://127.0.0.1:") || !strings.Contains(url, "/p/") || strings.Contains(url, "?") {
+		t.Fatalf("open printed %q", url)
+	}
+	browser := &http.Client{}
+	resp, err := browser.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1">`) {
+		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
+	}
+
+	post, err := http.NewRequest("POST", url+"messages", strings.NewReader(`{"kind":"message","text":"from the browser"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	post.Header.Set("Content-Type", "application/json")
+	post.Header.Set("Origin", "http://"+post.URL.Host)
+	resp, err = browser.Do(post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST messages: %s", resp.Status)
+	}
+	if got := e.kapi("pending", e.page); !strings.HasSuffix(got, " human message: from the browser\n") {
+		t.Errorf("pending = %q", got)
+	}
+}
+
 func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	e := newE2E(t)
 
@@ -129,10 +188,10 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	e.kapi("send", "--on", "cutover", e.page, "second note")
 
 	w := e.watch()
-	if got := w.next(t); got != "#1 human message: queued before anyone listens" {
+	if got := w.event(t); got != "human message: queued before anyone listens" {
 		t.Fatalf("first event = %q", got)
 	}
-	if got := w.next(t); got != "#2 human message on #cutover: second note" {
+	if got := w.event(t); got != "human message on #cutover: second note" {
 		t.Fatalf("second event = %q", got)
 	}
 	waitFor(t, "acks for #1 and #2", func() bool { return e.kapi("pending", e.page) == "" })
@@ -144,20 +203,20 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	})
 
 	w2 := e.watch()
-	if got := w2.next(t); got != "#3 human message: sent while the watcher is dead" {
-		t.Fatalf("after restart, first event = %q, want only #3", got)
+	if got := w2.event(t); got != "human message: sent while the watcher is dead" {
+		t.Fatalf("after restart, first event = %q, want only the message sent while it was dead", got)
 	}
 
 	e.killDaemon()
 	e.kapi("send", e.page, "after the daemon restarted")
-	if got := w2.next(t); got != "#4 human message: after the daemon restarted" {
+	if got := w2.event(t); got != "human message: after the daemon restarted" {
 		t.Fatalf("after daemon restart, event = %q", got)
 	}
 
 	e.kapi("send", e.page, "fifth")
 	e.kapi("send", e.page, "sixth")
-	for _, want := range []string{"#5 human message: fifth", "#6 human message: sixth"} {
-		if got := w2.next(t); got != want {
+	for _, want := range []string{"human message: fifth", "human message: sixth"} {
+		if got := w2.event(t); got != want {
 			t.Fatalf("live event = %q, want %q (each event exactly once)", got, want)
 		}
 	}
