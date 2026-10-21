@@ -73,6 +73,7 @@ type Server struct {
 
 	presenceMu sync.Mutex
 	presence   map[string]map[string]string
+	watchers   map[string]map[string]int
 }
 
 func New(home string) *Server {
@@ -82,6 +83,7 @@ func New(home string) *Server {
 		stores:   map[string]*page.Store{},
 		attached: map[string]map[string]time.Time{},
 		presence: map[string]map[string]string{},
+		watchers: map[string]map[string]int{},
 	}
 }
 
@@ -266,6 +268,34 @@ func (s *Server) Page(id string) (*page.Store, *eventlog.Log, error) {
 func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {
 	s.presenceMu.Lock()
 	defer s.presenceMu.Unlock()
+	s.setPresenceLocked(path, reader, state, l)
+}
+
+func (s *Server) attach(path, reader string, l *eventlog.Log) {
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	if s.watchers[path] == nil {
+		s.watchers[path] = map[string]int{}
+	}
+	s.watchers[path][reader]++
+	if s.watchers[path][reader] == 1 {
+		s.setAttached(path, reader, true)
+		s.setPresenceLocked(path, reader, "watching", l)
+	}
+}
+
+func (s *Server) detach(path, reader string, l *eventlog.Log) {
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	s.watchers[path][reader]--
+	if s.watchers[path][reader] == 0 {
+		delete(s.watchers[path], reader)
+		s.setAttached(path, reader, false)
+		s.setPresenceLocked(path, reader, "none", l)
+	}
+}
+
+func (s *Server) setPresenceLocked(path, reader, state string, l *eventlog.Log) {
 	if s.presence[path] == nil {
 		s.presence[path] = map[string]string{}
 	}
@@ -364,10 +394,8 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 		reply(enc, &Response{Error: "watch needs a reader"})
 		return
 	}
-	s.setAttached(req.Page, req.Reader, true)
-	defer s.setAttached(req.Page, req.Reader, false)
-	s.setPresence(req.Page, req.Reader, "watching", l)
-	defer s.setPresence(req.Page, req.Reader, "none", l)
+	s.attach(req.Page, req.Reader, l)
+	defer s.detach(req.Page, req.Reader, l)
 
 	gone := make(chan struct{})
 	go func() {

@@ -198,6 +198,61 @@ func TestWatchingReportsPresenceAndNeverDeliversIt(t *testing.T) {
 	}
 }
 
+func attachWatcher(t *testing.T, home, path string) net.Conn {
+	t.Helper()
+	conn, err := net.Dial("unix", SocketPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := json.NewEncoder(conn).Encode(Request{Op: "watch", Page: path, Reader: "agent"}); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
+func TestTwoWatchersOfOneReaderStayPresentUntilTheLastLeaves(t *testing.T) {
+	home, s, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := attachWatcher(t, home, path)
+	waitPresence(t, l, "agent watching")
+	second := attachWatcher(t, home, path)
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	attached := func() int {
+		s.presenceMu.Lock()
+		defer s.presenceMu.Unlock()
+		return s.watchers[path]["agent"]
+	}
+	waitFor("two watchers", func() bool { return attached() == 2 })
+
+	first.Close()
+	waitFor("one watcher", func() bool { return attached() == 1 })
+	time.Sleep(50 * time.Millisecond)
+	if got := presence(l); len(got) != 1 {
+		t.Fatalf("presence after the first watcher left = %v, want still watching", got)
+	}
+	st := call(t, home, &Request{Op: "status", Page: path})
+	if len(st.Readers) != 1 || !st.Readers[0].Attached {
+		t.Errorf("status = %+v, want agent attached", st.Readers)
+	}
+
+	second.Close()
+	waitPresence(t, l, "agent watching", "agent none")
+}
+
 func TestConcurrentPresenceLandsInTheLogInOrder(t *testing.T) {
 	home, err := os.MkdirTemp("", "kd")
 	if err != nil {
