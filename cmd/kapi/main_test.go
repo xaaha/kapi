@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,5 +177,27 @@ func TestReviewF2F3UnknownFlagsAreErrors(t *testing.T) {
 		if len(f.requests) != 0 {
 			t.Errorf("%v: sent %d requests", args, len(f.requests))
 		}
+	}
+}
+
+func TestReviewF2DaemonRejectsUnknownFlags(t *testing.T) {
+	home, err := os.MkdirTemp("", "kapi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	t.Setenv("KAPI_HOME", home)
+	done := make(chan error, 1)
+	go func() {
+		_, err := run(t, &fakeAPI{}, "daemon", "--bogus")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
+			t.Errorf("error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("kapi daemon --bogus started the daemon instead of failing")
 	}
 }
