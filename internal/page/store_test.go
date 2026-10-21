@@ -508,3 +508,45 @@ func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
 		t.Errorf("refused edit changed the file: %s", got)
 	}
 }
+
+const lavishPage = "<!doctype html>\n<html><head><style>body{color:red}</style></head><body>\n" +
+	"<h1>Report</h1>\n<p onclick=\"go()\">Hello</p>\n<script>go()</script>\n</body></html>\n"
+
+func TestOpenKeepsTheOriginalWhenConversionDrops(t *testing.T) {
+	home, path := newPage(t, lavishPage)
+	s := open(t, home, path)
+	orig, err := os.ReadFile(s.OriginalPath())
+	if err != nil || string(orig) != lavishPage {
+		t.Fatalf("original copy = %q, %v; want the untouched file", orig, err)
+	}
+	want := "converted to kapi format: removed 1 body, 1 doctype, 1 head, 1 html, 1 script, 1 style, 1 attribute; original saved"
+	if got := s.Conversion(); got != want {
+		t.Errorf("Conversion() = %q, want %q", got, want)
+	}
+	if got := onDisk(t, path); strings.Contains(got, "<script") || !strings.Contains(got, "Hello") {
+		t.Errorf("page file after conversion:\n%s", got)
+	}
+
+	externalWrite(t, path, onDisk(t, path)+"<script>again()</script>\n")
+	sum, ok, err := s.Refresh()
+	if err != nil || !ok || !strings.Contains(sum.Text, "converted to kapi format: removed 1 script") {
+		t.Fatalf("Refresh = %+v, %v, %v", sum, ok, err)
+	}
+	if orig, _ := os.ReadFile(s.OriginalPath()); string(orig) != lavishPage {
+		t.Errorf("a later conversion overwrote the original copy:\n%s", orig)
+	}
+	if again := open(t, home, path); again.Conversion() != "" {
+		t.Errorf("reopening a converted page reports %q", again.Conversion())
+	}
+}
+
+func TestOpenOfAKapiPageKeepsNoOriginal(t *testing.T) {
+	home, path := newPage(t, "<h1>Plan</h1>\n"+hoistRepro+"\n<kapi-plan><kapi-step>one</kapi-step></kapi-plan>\n")
+	s := open(t, home, path)
+	if _, err := os.Stat(s.OriginalPath()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("ids and splits alone made an original copy: %v", err)
+	}
+	if s.Conversion() != "" {
+		t.Errorf("Conversion() = %q, want empty", s.Conversion())
+	}
+}

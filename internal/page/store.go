@@ -45,6 +45,8 @@ type Store struct {
 	src  []byte
 	rev  uint64
 	undo []uint64
+
+	conversion string
 }
 
 type state struct {
@@ -86,6 +88,11 @@ func Open(home, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !bytes.Equal(raw, src) {
+		if s.conversion, err = s.keepOriginal(raw); err != nil {
+			return nil, err
+		}
+	}
 	if s.rev == 0 {
 		err = s.commit(src, !bytes.Equal(raw, src), 1, nil)
 	} else if s.src, err = os.ReadFile(s.revPath(s.rev)); err == nil {
@@ -101,6 +108,25 @@ func Open(home, path string) (*Store, error) {
 }
 
 func (s *Store) Path() string { return s.path }
+
+func (s *Store) OriginalPath() string { return filepath.Join(s.dir, "original.html") }
+
+func (s *Store) Conversion() string { return s.conversion }
+
+func (s *Store) keepOriginal(raw []byte) (string, error) {
+	dropped, err := render.Dropped(raw)
+	if err != nil || dropped.Empty() {
+		return "", err
+	}
+	text := "converted to kapi format: removed " + dropped.String()
+	if _, err := os.Stat(s.OriginalPath()); err == nil {
+		return text + "; the original from the first conversion is kept", nil
+	}
+	if err := writeAtomic(s.OriginalPath(), raw); err != nil {
+		return "", err
+	}
+	return text + "; original saved", nil
+}
 
 func (s *Store) Source() ([]byte, uint64) {
 	s.mu.Lock()
@@ -121,10 +147,20 @@ func (s *Store) Refresh() (Summary, bool, error) {
 	if err != nil {
 		return Summary{}, false, err
 	}
+	text := "edited in the file"
+	if !bytes.Equal(raw, src) {
+		conversion, err := s.keepOriginal(raw)
+		if err != nil {
+			return Summary{}, false, err
+		}
+		if conversion != "" {
+			text += "; " + conversion
+		}
+	}
 	if err := s.commit(src, !bytes.Equal(raw, src), s.rev+1, s.undo); err != nil {
 		return Summary{}, false, err
 	}
-	return Summary{Text: "edited in the file", IDs: changedBlocks(old, s.src)}, true, nil
+	return Summary{Text: text, IDs: changedBlocks(old, s.src)}, true, nil
 }
 
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
