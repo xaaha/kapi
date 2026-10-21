@@ -110,7 +110,7 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg, {Name: "text", Required: true, Desc: "Message text; several words are joined"}},
 		Examples: []cli.Example{
-			{Command: "kapi " + name + " plan.html --on cutover is this still true?", Description: "Message about one element"},
+			{Command: "kapi " + name + ` plan.html --on cutover "is this still true?"`, Description: "Message about one element"},
 		},
 		Run: func(args []string) error {
 			page, err := pagePath(args, 2, name)
