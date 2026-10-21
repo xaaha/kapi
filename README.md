@@ -33,3 +33,14 @@ This adds a SessionStart hook that runs `kapi` (Copilot CLI uses
 `kapi hook-context`, which prints the same view as JSON). Re-running repairs it.
 Restart your agent sessions afterwards.
 
+## Skill
+
+Install the kapi skill in the [Agent Skills](https://agentskills.io) format:
+
+```sh
+npx skills add xaaha/kapi --skill kapi
+```
+
+It is a short stub that sends the agent to `kapi` and `kapi --help`, so an
+installed copy cannot go stale against a newer CLI.
+
