@@ -221,6 +221,34 @@
   }
 }
 
+#kapi-chrome .kapi-restart {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--kapi-error) 35%, transparent);
+  border-radius: 6px;
+  background: var(--kapi-error-soft);
+  color: var(--kapi-text);
+}
+
+#kapi-chrome .kapi-restart p {
+  flex: 1;
+  margin: 0;
+}
+
+#kapi-chrome .kapi-restart code {
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+#kapi-chrome .kapi-copy {
+  flex: none;
+  border: 1px solid var(--kapi-border);
+  background: var(--kapi-bg);
+}
+
 #kapi-chrome .kapi-notice {
   margin: 10px 12px 0;
   padding: 8px 10px;

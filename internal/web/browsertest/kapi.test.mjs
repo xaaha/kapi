@@ -582,3 +582,47 @@ test("block tags stay inside their message bubble and the panel", async () => {
   assert.deepEqual(fit, { inBubble: true, bubbleInPanel: true, mono: false });
 });
 
+const restartText = () => page.eval(`(b => b && !b.hidden ? b.textContent : "")(document.querySelector(".kapi-restart"))`);
+
+test("after a daemon restart the stream stops and the reopen command is shown, keeping unsaved text", async () => {
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  server.state.restarted = "kapi open plan.html";
+  server.dropStreams();
+  await until(async () => (await restartText()).startsWith("Kapi restarted."));
+  assert.equal(await page.eval(`document.querySelector(".kapi-restart code").textContent`), "kapi open plan.html");
+  assert.match(await restartText(), /^Kapi restarted\. Run kapi open plan\.html to continue/);
+  const streams = requests("GET", "/events").length;
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(requests("GET", "/events").length, streams);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 1);
+
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 1);
+
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await click(".kapi-restart button");
+  assert.deepEqual(await page.eval(`window.copied`), ["kapi open plan.html"]);
+  await page.key("Escape");
+  await page.key("Escape");
+  assert.notEqual(await restartText(), "");
+});
+
+test("a POST refused after a restart shows the reopen command as text", async () => {
+  const evil = `<img src=x onerror="window.pwned=1">`;
+  server.state.restarted = evil;
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
+  await click(".kapi-composer .kapi-primary");
+  await until(async () => (await restartText()).startsWith("Kapi restarted."));
+  assert.equal(await page.eval(`document.querySelector(".kapi-restart code").textContent`), evil);
+  assert.equal(await page.eval(`document.querySelectorAll("#kapi-chrome img").length`), 0);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "hi");
+  assert.equal(await notice(), "");
+});
+

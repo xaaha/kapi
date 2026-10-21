@@ -44,6 +44,7 @@
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
   const statusText = h("span", { class: "kapi-status", text: STATUS.connecting });
   const notice = h("div", { class: "kapi-notice", role: "status", hidden: "" });
+  const restartBox = h("div", { class: "kapi-restart", role: "alert", hidden: "" });
   const log = h("ol", { class: "kapi-log", "aria-live": "polite" });
   const empty = h("p", { class: "kapi-empty", text: "Messages with the agent show up here." });
   const targetChip = h("button", { type: "button", class: "kapi-target", hidden: "", title: "Stop targeting this block" });
@@ -56,7 +57,7 @@
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, dot, statusText,
       button("Undo", "undo", "Undo the last change")),
-    notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
+    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const root = h("div", { id: "kapi-chrome" }, ring, panel);
   document.body.append(root);
@@ -152,6 +153,29 @@
     }
   }
 
+  let stream = null;
+  let restarted = false;
+
+  function showRestart(reopen) {
+    restarted = true;
+    stream?.close();
+    setStatus("disconnected");
+    statusText.textContent = "Kapi restarted";
+    const copy = h("button", { type: "button", class: "kapi-copy", text: "Copy" });
+    copy.addEventListener("click", () =>
+      navigator.clipboard.writeText(reopen).then(() => (copy.textContent = "Copied"), () => (copy.textContent = "Copy failed")));
+    restartBox.replaceChildren(h("p", {}, "Kapi restarted. Run ", h("code", { text: reopen }), " to continue."), copy);
+    restartBox.hidden = false;
+  }
+
+  async function restartedReply(res) {
+    if (res.status !== 403) return false;
+    const data = await res.clone().json().catch(() => ({}));
+    if (typeof data.reopen !== "string") return false;
+    showRestart(data.reopen);
+    return true;
+  }
+
   async function request(path, body) {
     let res;
     try {
@@ -164,6 +188,7 @@
       say("Could not reach kapi. Check that the daemon is running.", "error");
       return null;
     }
+    if (await restartedReply(res)) return null;
     const data = await res.json().catch(() => ({}));
     return { status: res.status, ok: res.ok, data };
   }
@@ -386,8 +411,19 @@
     }
   }
 
+  async function reconnect() {
+    const probe = new AbortController();
+    const res = await fetch(base + "/events", { signal: probe.signal }).catch(() => null);
+    if (res && (await restartedReply(res))) return;
+    probe.abort();
+    setTimeout(connect, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 10000);
+  }
+
   function connect() {
+    if (restarted) return;
     const es = new EventSource(base + "/events");
+    stream = es;
     es.onopen = () => {
       retryDelay = 1000;
       setStatus(presence);
@@ -395,11 +431,9 @@
       opened = true;
     };
     es.onerror = () => {
+      if (restarted) return;
       setStatus("disconnected");
-      if (es.readyState === EventSource.CLOSED) {
-        setTimeout(connect, retryDelay);
-        retryDelay = Math.min(retryDelay * 2, 10000);
-      }
+      if (es.readyState === EventSource.CLOSED) reconnect();
     };
     es.onmessage = (e) => {
       let ev;
