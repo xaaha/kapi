@@ -430,6 +430,10 @@
     grid-row: 2;
   }
 
+  #kapi-chrome .kapi-panel.kapi-expanded .kapi-composer textarea {
+    grid-column: 1 / 3;
+  }
+
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-composer textarea {
     min-height: 0;
     height: 40px;
