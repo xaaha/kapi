@@ -2,13 +2,17 @@ package daemon
 
 import (
 	"bufio"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xaaha/kapi/internal/page"
 )
 
 func shortHome(t *testing.T) string {
@@ -155,6 +159,63 @@ func TestOnlyAWellFormedHTTPURLHasItsPortReused(t *testing.T) {
 				t.Errorf("from %q: http.url = %s, port reused = %v, want %v", tc.saved(port), got, reused, tc.reuse)
 			}
 		})
+	}
+}
+
+func reopenFor(t *testing.T, pageURL string) string {
+	t.Helper()
+	resp, err := http.Get(pageURL) //nolint:gosec // built from the daemon under test
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("GET %s: %s %v", pageURL, resp.Status, err)
+	}
+	return body["reopen"]
+}
+
+func TestOnlyTheLastThreeIssuedTokensGetThePagePath(t *testing.T) {
+	home := shortHome(t)
+	path := writePage(t, "<p>x</p>\n")
+	var urls []string
+	for range 5 {
+		_, stop := servingAt(t, home)
+		urls = append(urls, call(t, home, &Request{Op: "open", Page: path}).URL)
+		stop()
+	}
+	_, stop := servingAt(t, home)
+	defer stop()
+	if fi, err := os.Stat(filepath.Join(home, "previous-tokens")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("previous-tokens: %v, %v; want mode 0600", fi, err)
+	}
+	for i, u := range urls {
+		want := "kapi open <page>"
+		if i >= len(urls)-3 {
+			want = "kapi open " + path
+		}
+		if got := reopenFor(t, u); got != want {
+			t.Errorf("token from start %d: reopen %q, want %q", i+1, got, want)
+		}
+	}
+	cur, err := url.Parse(httpURL(t, home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged := "http://" + cur.Host + "/" + strings.Repeat("ab", 16) + "/p/" + page.ID(path) + "/"
+	if got := reopenFor(t, forged); got != "kapi open <page>" {
+		t.Errorf("a token never issued gets reopen %q", got)
+	}
+	b, err := os.ReadFile(filepath.Join(home, "previous-tokens"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range append(urls, cur.String()) {
+		tok := strings.Split(u, "/")[3]
+		if strings.Contains(string(b), tok) {
+			t.Errorf("previous-tokens holds a raw token")
+		}
 	}
 }
 

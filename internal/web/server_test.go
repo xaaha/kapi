@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,7 +24,10 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 )
 
-const token = "s3cret"
+const (
+	token    = "s3cret"
+	oldToken = "0123456789abcdef0123456789abcdef"
+)
 
 type fakePages struct {
 	mu    sync.Mutex
@@ -85,7 +89,7 @@ func newSite(t *testing.T, src string) *site {
 	id := page.ID(path)
 	pages := &fakePages{home: filepath.Join(dir, "home"), paths: map[string]string{id: path}, logs: map[string]*eventlog.Log{}, pages: map[string]*page.Store{}}
 	srv := httptest.NewUnstartedServer(nil)
-	web := New(pages, token, srv.Listener.Addr().String())
+	web := New(pages, token, srv.Listener.Addr().String(), [][32]byte{sha256.Sum256([]byte(oldToken))})
 	srv.Config.Handler = web
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -160,11 +164,15 @@ func (s *site) events() []eventlog.Event {
 
 func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	const old = "0123456789abcdef0123456789abcdef"
+	const old = oldToken
+	const never = "fedcba9876543210fedcba9876543210"
 	for _, tc := range []struct{ path, reopen string }{
 		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
+		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
+		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
+		{"/x/p/" + s.id + "/", "kapi open <page>"},
 	} {
 		resp := s.raw("GET", tc.path, nil)
 		var body map[string]string
@@ -174,7 +182,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		if resp.code != http.StatusForbidden || body["error"] != "kapi restarted" || body["reopen"] != tc.reopen || len(body) != 2 {
 			t.Errorf("GET %s: %d %v, want 403 with reopen %q", tc.path, resp.code, body, tc.reopen)
 		}
-		if strings.Contains(resp.body, token) || strings.Contains(resp.body, old) {
+		if strings.Contains(resp.body, token) || strings.Contains(resp.body, old) || strings.Contains(resp.body, never) {
 			t.Errorf("GET %s: body %q carries a token", tc.path, resp.body)
 		}
 	}

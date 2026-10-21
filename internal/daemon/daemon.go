@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -177,10 +178,15 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 		return nil, err
 	}
 	host := ln.Addr().String()
+	previous, err := rememberToken(s.home, token)
+	if err != nil {
+		ln.Close()
+		return nil, err
+	}
 	s.mu.Lock()
 	s.baseURL = "http://" + host + "/" + token + "/"
 	s.mu.Unlock()
-	h := web.New(s, token, host)
+	h := web.New(s, token, host, previous)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() {
 		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
@@ -199,6 +205,31 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 		stopPoll()
 		srv.Close()
 	}, nil
+}
+
+const keptTokens = 3
+
+// rememberToken returns the hashes of the tokens earlier runs issued and adds this run's.
+func rememberToken(home, token string) ([][32]byte, error) {
+	path := filepath.Join(home, "previous-tokens")
+	b, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	var previous [][32]byte
+	for line := range strings.Lines(string(b)) {
+		h, err := hex.DecodeString(strings.TrimSpace(line))
+		if err == nil && len(h) == 32 {
+			previous = append(previous, [32]byte(h))
+		}
+	}
+	kept := slices.Concat(previous, [][32]byte{sha256.Sum256([]byte(token))})
+	kept = kept[max(0, len(kept)-keptTokens):]
+	var out strings.Builder
+	for _, h := range kept {
+		out.WriteString(hex.EncodeToString(h[:]) + "\n")
+	}
+	return previous, writeFile(path, out.String())
 }
 
 func writeFile(path, text string) error {
