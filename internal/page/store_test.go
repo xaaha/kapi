@@ -838,3 +838,89 @@ func TestAPastedDuplicateKeepsTheIDOnTheOriginal(t *testing.T) {
 	}
 	renderedBlocks(t, src)
 }
+
+func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
+	lost := 0
+	for trial := 0; trial < 400; trial++ {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		final := fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">agent %d</p>\n", trial)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for i := 0; i < 30; i++ {
+				body := fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">draft %d</p>\n", i)
+				if i == 29 {
+					body = final
+				}
+				tmp := path + ".agent"
+				if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+					t.Error(err)
+					return
+				}
+				if err := os.Rename(tmp, path); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+		kinds := []string{"done", "archive"}
+	ops:
+		for k := 0; ; k++ {
+			select {
+			case <-done:
+				break ops
+			default:
+			}
+			_, rev := s.Source()
+			if _, _, err := s.Apply(rev, Op{Kind: kinds[k%2], ID: "aaaaaaaa"}); errors.Is(err, ErrStale) {
+				if _, _, err := s.Refresh(); err != nil {
+					t.Fatal(err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !strings.Contains(onDisk(t, path), fmt.Sprintf(">agent %d<", trial)) {
+			lost++
+		}
+	}
+	if lost > 0 {
+		t.Errorf("ops overwrote the agent's final write in %d of 400 trials", lost)
+	}
+}
+
+func agentRename(t *testing.T, path, body string) {
+	t.Helper()
+	tmp := path + ".agent"
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnAgentRenameInsideTheWriteWindowWins(t *testing.T) {
+	for _, stages := range [][]string{{"swap"}, {"swap", "restore"}, {"swap", "restore", "restore"}} {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		var last string
+		n := 0
+		replaceHook = func(stage string) {
+			if n < len(stages) && stage == stages[n] {
+				last = fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">agent %d</p>\n", n)
+				agentRename(t, path, last)
+				n++
+			}
+		}
+		_, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"})
+		replaceHook = nil
+		if !errors.Is(err, ErrStale) {
+			t.Errorf("%v: Apply err = %v, want ErrStale", stages, err)
+		}
+		if got := onDisk(t, path); got != last {
+			t.Errorf("%v: file = %q, want the agent's last write %q", stages, got, last)
+		}
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/xaaha/kapi/internal/render"
 )
@@ -316,7 +317,11 @@ func (s *Store) revPath(rev uint64) string {
 	return filepath.Join(s.dir, "revs", strconv.FormatUint(rev, 10)+".html")
 }
 
-var errFileChanged = errors.New("the file changed while kapi was writing it")
+var (
+	errFileChanged = errors.New("the file changed while kapi was writing it")
+	errNoSwap      = errors.New("this file system cannot swap files atomically")
+	replaceHook    func(stage string)
+)
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	if !bytes.Equal(src, base) {
@@ -367,7 +372,22 @@ func replaceFile(path string, b, expect []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if expect != nil {
+	if expect == nil {
+		return os.Rename(f.Name(), path)
+	}
+	return swapIn(f.Name(), path, b, expect)
+}
+
+func swapIn(tmp, path string, ours, expect []byte) error {
+	mine, err := os.Stat(tmp)
+	if err != nil {
+		return err
+	}
+	if replaceHook != nil {
+		replaceHook("swap")
+	}
+	err = swapFiles(tmp, path)
+	if errors.Is(err, errNoSwap) {
 		cur, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -375,8 +395,46 @@ func replaceFile(path string, b, expect []byte) error {
 		if !bytes.Equal(cur, expect) {
 			return errFileChanged
 		}
+		return os.Rename(tmp, path)
 	}
-	return os.Rename(f.Name(), path)
+	if err != nil {
+		return err
+	}
+	if displaced, err := os.ReadFile(tmp); err != nil || bytes.Equal(displaced, expect) {
+		return err
+	}
+	for range 1 << 16 {
+		atPath, err := stamp(path, mine, ours)
+		if err != nil {
+			return err
+		}
+		atTmp, err := stamp(tmp, mine, ours)
+		if err != nil {
+			return err
+		}
+		if !atTmp.After(atPath) {
+			return errFileChanged
+		}
+		if replaceHook != nil {
+			replaceHook("restore")
+		}
+		if err := swapFiles(tmp, path); err != nil {
+			return err
+		}
+	}
+	return errFileChanged
+}
+
+func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
+	fi, err := os.Stat(name)
+	if err != nil || !os.SameFile(fi, mine) {
+		return fi.ModTime(), err
+	}
+	b, err := os.ReadFile(name)
+	if err != nil || bytes.Equal(b, ours) {
+		return time.Time{}, err
+	}
+	return fi.ModTime(), nil
 }
 
 func apply(src []byte, op Op) ([]byte, Summary, error) {
