@@ -194,11 +194,18 @@
     return copy.outerHTML;
   }
 
+  function cancelEdit() {
+    if (editing && !busy) endEdit(true);
+  }
+
   async function saveEdit() {
-    const { el, original } = editing;
+    if (!editing || busy) return;
+    const session = editing;
+    const { el, original } = session;
     if (el.innerHTML === original) return endEdit(false);
     const id = idOf(el);
     const res = await op("edit", { id, html: outerHTMLOf(el) });
+    if (editing !== session) return;
     if (res?.ok) {
       endEdit(false);
       await refresh([id]);
@@ -215,7 +222,7 @@
     }
     if (name === "undo") return (await op("undo", { id: "" }))?.ok && refresh(null);
     if (name === "save") return saveEdit();
-    if (name === "cancel") return endEdit(true);
+    if (name === "cancel") return cancelEdit();
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
@@ -399,7 +406,7 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (editing) endEdit(true);
+      if (editing) cancelEdit();
       else if (!notice.hidden) notice.hidden = true;
       else select(null);
       return;

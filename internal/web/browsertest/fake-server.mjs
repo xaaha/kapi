@@ -37,6 +37,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const state = {
     rev: 1,
     blocks: blocks.map((b) => ({ ...b })),
+    opDelay: 0,
     history: [],
     events: [],
     streams: new Set(),
@@ -142,6 +143,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return json(res, 200, { seq: ev.seq });
     }
     if (req.method === "POST" && rest === "ops") {
+      if (state.opDelay) await new Promise((r) => setTimeout(r, state.opDelay));
       if (parsed.rev !== state.rev) return json(res, 409, { rev: state.rev });
       const { status, body: out } = apply(parsed.op);
       return json(res, status, out);

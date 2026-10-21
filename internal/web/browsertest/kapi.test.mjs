@@ -207,3 +207,21 @@ test("submits kapi-form answers", async () => {
   await page.waitFor(`!!document.querySelector(".kapi-msg.kapi-answer")`);
   assert.equal(pageLoads(), 1);
 });
+
+test("ignores Escape and a second save while a save is in flight", async () => {
+  server.state.opDelay = 300;
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Then verify.");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.key("Escape");
+  await page.key("Enter", { ctrl: true });
+  await click('.kapi-bar [data-action="cancel"]');
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(async () => /Then verify\.$/.test(await text("bbbbbbbb")));
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(requests("POST", "/ops").length, 1);
+  assert.equal(await notice(), "");
+});
