@@ -293,6 +293,9 @@ func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
+	if bytes.Equal(src, s.src) {
+		return s.rev, Summary{}, nil
+	}
 	if err := s.commit(src, raw, s.rev+1, append(s.undo, s.rev)); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}

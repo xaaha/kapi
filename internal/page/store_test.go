@@ -1135,3 +1135,34 @@ func TestAFileEditSummaryQuotesUpToThreeChangedBlocks(t *testing.T) {
 		t.Errorf("four blocks: %+v, %v", sum, err)
 	}
 }
+
+func TestAnOpThatChangesNothingMakesNoRevision(t *testing.T) {
+	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a</td></tr></table></kapi-table>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	inner, err := Inner([]byte(src), "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := Outer([]byte(src), "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(string(inner))},
+		{Kind: "edit", ID: "aaaaaaaa", HTML: string(outer)},
+		{Kind: "move", ID: "bbbbbbbb"},
+	} {
+		rev, sum, err := s.Apply(1, op)
+		if err != nil || rev != 1 || sum.Text != "" || sum.IDs != nil {
+			t.Errorf("%+v: rev %d, summary %+v, err %v; want rev 1 and an empty summary", op, rev, sum, err)
+		}
+	}
+	revs, _ := filepath.Glob(filepath.Join(s.dir, "revs", "*.html"))
+	if len(revs) != 1 || onDisk(t, path) != src {
+		t.Errorf("revs %v, file:\n%s", revs, onDisk(t, path))
+	}
+	if _, _, err := s.Apply(1, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+		t.Errorf("undo after no-op edits: err = %v, want ErrNothingToUndo", err)
+	}
+}

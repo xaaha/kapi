@@ -419,6 +419,17 @@ func TestAnInnerEditKeepsTheElementsTags(t *testing.T) {
 	}
 }
 
+func TestAnUnchangedEditLogsNothing(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">same</kapi-callout>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"same"}}`)
+	if code != http.StatusOK || out["rev"] != 1.0 {
+		t.Fatalf("unchanged edit: %d %v, want 200 with rev 1", code, out)
+	}
+	if ev := s.events(); len(ev) != 0 {
+		t.Errorf("events = %+v, want none", ev)
+	}
+}
+
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`)

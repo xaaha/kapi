@@ -350,6 +350,10 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	if sum.Text == "" {
+		writeJSON(w, http.StatusOK, map[string]uint64{"rev": rev})
+		return
+	}
 	if err := appendRevision(l, "human", sum); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

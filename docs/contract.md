@@ -93,6 +93,9 @@ and replaces only the source between them. It follows every rule an `edit`
 with `html` does, and it fails with `ErrInnerEscapes` (422) when the new body
 would close the element or leave it unclosed. An op with both `html` and
 `inner` is 422.
+An op whose result is byte for byte the current source changes nothing: it
+returns 200 with the current `rev`, writes no `revs/` file, adds no undo step
+and logs no event (`Apply` returns an empty `Summary`).
 `done` and `archive` set `data-kapi-state` on the element. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 

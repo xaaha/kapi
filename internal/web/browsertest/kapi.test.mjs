@@ -422,6 +422,15 @@ test("edits a preset block as source in a textarea", async () => {
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
 });
 
+test("saving a source edit with no change just closes the editor", async () => {
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  await page.key("Enter", { ctrl: true });
+  await page.waitFor(`!document.querySelector(".kapi-source")`);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
 test("Escape cancels a source edit and shows the block again", async () => {
   await select("ffffffff");
   await click('.kapi-bar [data-action="edit"]');
