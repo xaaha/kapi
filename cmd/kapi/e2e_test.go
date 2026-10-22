@@ -489,6 +489,17 @@ func TestWaitExitsWithTheMessageWithinSecondsAndTheReplyMarksItSeen(t *testing.T
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
 
+func TestAHookDoesNotStartTheDaemon(t *testing.T) {
+	e := newE2E(t)
+	cmd, out := e.start(`{"hook_event_name":"Stop","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+	if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() || out.Len() != 0 {
+		t.Fatalf("hook with no daemon: %v, output %q; want a quiet zero exit", cmd.ProcessState, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(e.home, "kapi.sock")); !os.IsNotExist(err) {
+		t.Errorf("socket after the hook: %v; a hook in any session must not start the daemon and reopen tabs", err)
+	}
+}
+
 func TestTheStopHookHoldsTheAgentUntilItHasSeenTheMessage(t *testing.T) {
 	e := newE2E(t)
 	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {

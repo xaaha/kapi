@@ -14,10 +14,14 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 )
 
-var ErrConnectionLost = errors.New("daemon connection lost")
+var (
+	ErrConnectionLost = errors.New("daemon connection lost")
+	ErrNotRunning     = errors.New("daemon not running")
+)
 
 type Client struct {
-	Home string
+	Home    string
+	NoStart bool
 }
 
 func (c Client) dial(openPage string) (net.Conn, error) {
@@ -27,6 +31,9 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 	sock := daemon.SocketPath(c.Home)
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
+	}
+	if c.NoStart {
+		return nil, ErrNotRunning
 	}
 	if err := c.startDaemon(openPage); err != nil {
 		return nil, err

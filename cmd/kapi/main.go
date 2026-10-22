@@ -566,7 +566,11 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 		Short:  "Hand a Claude Code hook the unseen events on pages under its directory",
 		Hidden: true,
 		Run: func([]string) error {
-			if err := hookMessages(c, in, out); err != nil {
+			if cc, ok := c.(client.Client); ok {
+				cc.NoStart = true
+				c = cc
+			}
+			if err := hookMessages(c, in, out); err != nil && !errors.Is(err, client.ErrNotRunning) {
 				fmt.Fprintln(os.Stderr, "kapi hook-messages:", err)
 			}
 			return nil
