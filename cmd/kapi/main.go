@@ -196,17 +196,33 @@ func statusCmd(c api, out io.Writer) *cli.Command {
 }
 
 func daemonCmd() *cli.Command {
+	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
+	reopen := fs.Bool("reopen", false, "Reopen pages viewed in the last 3 hours in the browser; kapi sets this when it starts the daemon on demand")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
-		Flags: flag.NewFlagSet("daemon", flag.ContinueOnError),
-		Long:  "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.",
+		Flags: fs,
+		Long: "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.\n" +
+			"With --reopen, up to 5 pages that had a browser tab open in the last 3 hours open again in the browser,\n" +
+			"unless KAPI_NO_BROWSER is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
 		Run: func([]string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return daemon.New(home()).Serve(ctx)
+			s := daemon.New(home())
+			s.Browser = daemonBrowser(*reopen, os.Getenv, runtime.GOOS)
+			return s.Serve(ctx)
 		},
 	}
+}
+
+func daemonBrowser(reopen bool, getenv func(string) string, goos string) func(url string) error {
+	if !reopen || getenv("KAPI_NO_BROWSER") != "" {
+		return nil
+	}
+	if goos == "linux" && getenv("DISPLAY") == "" && getenv("WAYLAND_DISPLAY") == "" {
+		return nil
+	}
+	return func(url string) error { return openBrowser(url) }
 }
 
 func newPublishCmd(out io.Writer) *cli.Command {

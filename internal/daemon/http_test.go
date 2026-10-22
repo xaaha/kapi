@@ -32,7 +32,13 @@ func serving(t *testing.T) (home string, s *Server, stop func()) {
 
 func servingAt(t *testing.T, home string) (s *Server, stop func()) {
 	t.Helper()
+	return servingWith(t, home, nil)
+}
+
+func servingWith(t *testing.T, home string, open func(url string) error) (s *Server, stop func()) {
+	t.Helper()
 	s = New(home)
+	s.Browser = open
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(ctx) }()

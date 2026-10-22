@@ -116,12 +116,37 @@ On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
-`p/{id}/` or `p/{id}/events` gets 403 with
+`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/ops` or
+`p/{id}/answers` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
 the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
 `$KAPI_HOME/previous-tokens`, mode 0600); otherwise `reopen` is
-`kapi open <page>`. The body never holds a token.
+`kapi open <page>`. For such a token, the body also has `"reopened":true`
+when this start of the daemon reopened that page in the browser (see below).
+The body never holds a token.
+
+### Reopening tabs after a restart
+
+While a browser is connected to `p/{id}/events`, the daemon writes the
+current time (RFC 3339) to `$KAPI_HOME/pages/<id>/viewed` (mode 0600) when
+the stream opens, every minute while it stays open, and when it closes. The
+file holds no token.
+
+When a kapi command starts the daemon on demand it runs `kapi daemon
+--reopen`. Once HTTP is serving, that daemon opens the new URL of every page
+whose file still exists and whose `viewed` time is within the last 3 hours,
+newest first, at most 5, with the same opener as `kapi open`. It logs each
+reopen to `$KAPI_HOME/daemon.log` by page path. It reopens nothing when
+`KAPI_NO_BROWSER` is set, on Linux when neither `DISPLAY` nor
+`WAYLAND_DISPLAY` is set, or when run as plain `kapi daemon` in the
+foreground. A page whose opener fails is not reported as `reopened`.
+
+The old tab shows "Kapi restarted and reopened this page in a new tab. You
+can close this one." when the 403 says `reopened`, and "Kapi restarted. Run
+`<reopen>` to continue." with a Copy button otherwise. Either way it stops
+reconnecting and keeps any unsent message and any open edit in place, so the
+text can still be copied.
 
 The token is the first path segment of every URL, including static files. No
 cookies: browsers send cookies to every port on `127.0.0.1`, so a cookie would

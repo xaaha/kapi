@@ -56,7 +56,7 @@ func (c Client) startDaemon() error {
 		return err
 	}
 	defer logf.Close()
-	cmd := exec.Command(exe, "daemon")
+	cmd := exec.Command(exe, "daemon", "--reopen")
 	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

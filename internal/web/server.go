@@ -33,7 +33,11 @@ var static embed.FS
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
 	PagePath(id string) (string, error)
+	Viewed(id string)
+	Reopened(id string) bool
 }
+
+const viewedEvery = time.Minute
 
 type Server struct {
 	pages    Pages
@@ -96,7 +100,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|ops|answers)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -104,11 +108,16 @@ func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
 		return
 	}
-	reopen := "kapi open <page>"
-	if path, err := s.pages.PagePath(m[1]); err == nil && s.issuedBefore(seg) {
-		reopen = "kapi open " + path
+	body := map[string]any{"error": "kapi restarted", "reopen": "kapi open <page>"}
+	if s.issuedBefore(seg) {
+		if path, err := s.pages.PagePath(m[1]); err == nil {
+			body["reopen"] = "kapi open " + path
+		}
+		if s.pages.Reopened(m[1]) {
+			body["reopened"] = true
+		}
 	}
-	writeJSON(w, http.StatusForbidden, map[string]string{"error": "kapi restarted", "reopen": reopen})
+	writeJSON(w, http.StatusForbidden, body)
 }
 
 func (s *Server) issuedBefore(seg string) bool {
@@ -280,6 +289,11 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
+	id := r.PathValue("id")
+	s.pages.Viewed(id)
+	defer s.pages.Viewed(id)
+	viewing := time.NewTicker(viewedEvery)
+	defer viewing.Stop()
 	for {
 		events, changed := l.After(after)
 		for _, e := range events {
@@ -297,6 +311,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		}
 		select {
 		case <-changed:
+		case <-viewing.C:
+			s.pages.Viewed(id)
 		case <-r.Context().Done():
 			return
 		}
