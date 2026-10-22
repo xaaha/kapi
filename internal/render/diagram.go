@@ -21,6 +21,7 @@ const (
 	nodeGap     = 60.0
 	nodeGapLR   = 36.0
 	labelWrapAt = 22
+	wideAt      = 720.0
 	layerGap    = 52.0
 	labelGap    = 84.0
 	margin      = 12.0
@@ -144,7 +145,11 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	if dir != "" {
 		extra = []string{"data-kapi-dir", dir}
 	}
-	writeStart(b, "figure", outerAttrs(n, "kapi-diagram kapi-diagram-"+kind, extra...))
+	class := "kapi-diagram kapi-diagram-" + kind
+	if svg.maxX-svg.minX+2*margin > wideAt {
+		class += " kapi-diagram-wide"
+	}
+	writeStart(b, "figure", outerAttrs(n, class, extra...))
 	svg.finish(b, kind+" diagram: "+strings.Join(names, ", "))
 	writeLegend(b, legend)
 	writeEnd(b, "figure")

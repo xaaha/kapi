@@ -1,4 +1,5 @@
 body {
+  container-type: inline-size;
   margin: 0;
   background: var(--kapi-bg);
   color: var(--kapi-fg);
@@ -441,6 +442,12 @@ pre.kapi-hl {
   border-radius: var(--kapi-radius);
   background: var(--kapi-surface);
   text-align: center;
+}
+.kapi-diagram-wide {
+  --kapi-wide: max(100%, min(72rem, 100cqw - 2.5rem));
+  box-sizing: border-box;
+  width: var(--kapi-wide);
+  margin-left: calc(50% - var(--kapi-wide) / 2);
 }
 .kapi-diagram svg {
   display: inline-block;

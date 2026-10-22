@@ -139,3 +139,17 @@ func TestArchitectureRefusesBadSource(t *testing.T) {
 		}
 	}
 }
+
+func TestWideDiagramsAskForMoreRoom(t *testing.T) {
+	long := " | a subtitle long enough to make the node wide"
+	wide := render(t, diagram("architecture", "a: A"+long+"\nb: B"+long+"\nc: C"+long+"\na -> b: first\nb -> c: second"))
+	if !strings.Contains(wide, `class="kapi-diagram kapi-diagram-architecture kapi-diagram-wide"`) {
+		t.Errorf("a diagram wider than the text column should be marked wide: %.200s", wide)
+	}
+	if narrow := render(t, diagram("flow", "a -> b")); strings.Contains(narrow, "kapi-diagram-wide") {
+		t.Errorf("a small diagram is not wide: %s", narrow)
+	}
+	if css := string(CSS()); !strings.Contains(css, ".kapi-diagram-wide {") || !strings.Contains(css, "container-type: inline-size") {
+		t.Error("CSS does not let wide diagrams grow past the text column")
+	}
+}
