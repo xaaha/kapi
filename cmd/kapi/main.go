@@ -100,7 +100,7 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 func watch(c api, page, reader string, out io.Writer, sleep func(time.Duration)) error {
 	for {
 		err := c.Watch(page, reader, func(r daemon.Response) error {
-			_, err := fmt.Fprintln(out, format(r.Event))
+			_, err := fmt.Fprintln(out, eventLine(r.Event))
 			return err
 		})
 		if !errors.Is(err, client.ErrConnectionLost) {
@@ -157,7 +157,7 @@ func pendingCmd(c api, out io.Writer) *cli.Command {
 				return err
 			}
 			for i := range resp.Events {
-				if _, err := fmt.Fprintln(out, format(&resp.Events[i])); err != nil {
+				if _, err := fmt.Fprintln(out, eventLine(&resp.Events[i])); err != nil {
 					return err
 				}
 			}
@@ -445,10 +445,10 @@ func pagePath(args []string, want int, command string) (string, error) {
 	return filepath.Abs(args[0])
 }
 
-func format(e *eventlog.Event) string {
+func eventLine(e *eventlog.Event) string {
 	target := ""
 	if e.Target != "" {
 		target = " on #" + e.Target
 	}
-	return fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, e.Kind, target, strings.ReplaceAll(e.Text, "\n", `\n`))
+	return eventlog.Printable(fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, e.Kind, target, e.Text))
 }

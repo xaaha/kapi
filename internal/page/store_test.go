@@ -1318,3 +1318,12 @@ func TestOverlappingCellRangesAreRefused(t *testing.T) {
 		t.Errorf("got %q, %v", got, err)
 	}
 }
+
+func TestRevisionExcerptsCarryNoTerminalControls(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n")
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<p>x&#27;]0;owned&#7;&#27;[2J&#x202e;y</p>"})
+	if sum.Text != `edited "x]0;owned[2Jy"` {
+		t.Errorf("summary = %q", sum.Text)
+	}
+}

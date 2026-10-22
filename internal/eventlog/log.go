@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -203,4 +204,17 @@ func writeCursors(path string, cursors map[string]uint64) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// Printable drops control and bidi characters a terminal would act on, turning newlines and tabs into spaces.
+func Printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return ' '
+		case r < 0x20, r >= 0x7f && r <= 0x9f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+			return -1
+		}
+		return r
+	}, s)
 }

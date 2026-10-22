@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -726,7 +727,7 @@ func excerpt(outer []byte) string {
 			}
 		}
 	}
-	text := []rune(strings.Join(strings.Fields(b.String()), " "))
+	text := []rune(strings.Join(strings.Fields(eventlog.Printable(b.String())), " "))
 	if len(text) <= excerptLen {
 		return string(text)
 	}
