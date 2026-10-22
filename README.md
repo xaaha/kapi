@@ -52,7 +52,7 @@ streams it to the agent and survives restarts without losing or replaying
 events. The browser editor comes next.
 
 ```sh
-kapi send plan.html --on cutover "is this still true?"   # as the human
+kapi send --on cutover plan.html "is this still true?"   # as the human
 kapi wait plan.html                                        # as the agent: print what is unseen and exit
 kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
 kapi seen plan.html 4                                      # or say you read #4 without replying

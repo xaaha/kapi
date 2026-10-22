@@ -171,6 +171,27 @@ func TestReviewF1MessageWordsStartingWithADashAreText(t *testing.T) {
 	}
 }
 
+func TestAFlagRightAfterThePageIsRefusedInsteadOfSentAsText(t *testing.T) {
+	for _, args := range [][]string{
+		{"say", "plan.html", "--seen", "3", "x"},
+		{"say", "plan.html", "-on=cutover", "x"},
+		{"send", "plan.html", "--on", "cutover", "is this true?"},
+	} {
+		f := &fakeAPI{}
+		_, err := run(t, f, args...)
+		if err == nil || !strings.Contains(err.Error(), "put flags before the page") {
+			t.Errorf("%v: error = %v", args, err)
+		}
+		if len(f.requests) != 0 {
+			t.Errorf("%v: sent %+v", args, f.requests)
+		}
+	}
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 1}}}
+	if _, err := run(t, f, "send", "plan.html", "--verbose", "is", "text"); err != nil || f.requests[0].Text != "--verbose is text" {
+		t.Errorf("a word that is not a flag of send = %+v, %v; want it sent as text", f.requests, err)
+	}
+}
+
 func TestReviewF2F3UnknownFlagsAreErrors(t *testing.T) {
 	for _, args := range [][]string{{"status", "--reader", "agent", "plan.html"}, {"--bogus"}} {
 		f := &fakeAPI{}

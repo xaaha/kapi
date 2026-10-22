@@ -232,6 +232,9 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 			if err != nil {
 				return err
 			}
+			if flagName, _, _ := strings.Cut(strings.TrimLeft(args[1], "-"), "="); strings.HasPrefix(args[1], "-") && fs.Lookup(flagName) != nil {
+				return fmt.Errorf("%s after the page would be sent as message text; put flags before the page: kapi %s %s ... %s <text>", args[1], name, args[1], args[0])
+			}
 			if author == "" {
 				if err := eventlog.CheckReader(*reader); err != nil {
 					return err
