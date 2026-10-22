@@ -175,7 +175,9 @@ func (s *Store) restoreDisplaced(st *state) error {
 			known = append(known, b)
 		}
 	}
-	isKnown := func(b []byte) bool { return slices.ContainsFunc(known, func(k []byte) bool { return bytes.Equal(k, b) }) }
+	isKnown := func(b []byte) bool {
+		return slices.ContainsFunc(known, func(k []byte) bool { return bytes.Equal(k, b) })
+	}
 	for _, tmp := range temps {
 		theirs, err := os.ReadFile(tmp)
 		if err != nil {
