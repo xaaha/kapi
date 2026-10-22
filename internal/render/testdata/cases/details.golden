@@ -1,0 +1,4 @@
+<details class="kapi-details" data-kapi-preset="details" data-kapi-id="d0000001"><summary>Why two steps?</summary><div class="kapi-details-body"><p>Copying first lets us check row counts before any reads move.</p></div></details>
+<details class="kapi-details" data-kapi-preset="details" open="" data-kapi-id="d0000002"><summary>Open by default &amp; escaped &lt;b&gt;</summary><div class="kapi-details-body">Plain text body with <code>code</code>.<figure class="kapi-code" data-kapi-preset="code"><figcaption class="kapi-code-head"><span class="kapi-code-lang">sh</span></figcaption><pre class="kapi-hl" data-gutter="1"><code><span class="kapi-line"><span class="kapi-ln" data-n="1"></span><span class="kapi-src">kapi open plan.html</span></span>
+</code></pre></figure></div></details>
+<div class="kapi-error" data-kapi-preset="details" role="alert" data-kapi-id="d0000003"><span class="kapi-error-tag">&lt;kapi-details&gt;</span> needs a summary attribute</div>

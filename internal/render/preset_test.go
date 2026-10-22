@@ -67,3 +67,20 @@ func TestKVRendersADefinitionList(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailsIsClosedUnlessOpen(t *testing.T) {
+	out := render(t, `<kapi-details summary="Why &lt;two&gt; steps?"><p>Because.</p></kapi-details>`)
+	want := `<details class="kapi-details" data-kapi-preset="details"><summary>Why &lt;two&gt; steps?</summary><div class="kapi-details-body"><p>Because.</p></div></details>`
+	if out != want {
+		t.Errorf("got  %s\nwant %s", out, want)
+	}
+	if out := render(t, `<kapi-details summary="s" open>x</kapi-details>`); !strings.HasPrefix(out, `<details class="kapi-details" data-kapi-preset="details" open="">`) {
+		t.Errorf("open should carry over: %s", out)
+	}
+	if out := render(t, `<kapi-details>x</kapi-details>`); !strings.Contains(out, "needs a summary attribute") {
+		t.Errorf("a missing summary should be an error box: %s", out)
+	}
+	if got := canonical(t, `<kapi-details summary="s" open onclick="x()">x</kapi-details>`); got != `<kapi-details summary="s" open="">x</kapi-details>` {
+		t.Errorf("Canonical = %s", got)
+	}
+}

@@ -78,6 +78,7 @@ var containers = []string{
 	`<kapi-badge tone="%s">x</kapi-badge>`,
 	`<kapi-kv><kapi-item key="k">%s</kapi-item></kapi-kv>`,
 	`<kapi-kv><kapi-item key="%s">v</kapi-item>%s</kapi-kv>`,
+	`<kapi-details summary="s">%s</kapi-details>`,
 }
 
 var presetAttrs = map[string][]string{
@@ -88,6 +89,7 @@ var presetAttrs = map[string][]string{
 	"kapi-diagram": {"type"},
 	"kapi-form":    {"name"},
 	"kapi-badge":   {"tone"},
+	"kapi-details": {"summary", "open"},
 }
 
 func TestSanitizerPayloadsInEveryContainer(t *testing.T) {

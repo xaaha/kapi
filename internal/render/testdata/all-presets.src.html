@@ -82,6 +82,10 @@ diff --git a/internal/page/store.go b/internal/page/store.go
   </table>
 </kapi-table>
 
+<kapi-details summary="Why the p99 for ops is high" data-kapi-id="detailsa">
+  <p>Every op writes the page file and a revision copy, and both are synced to disk before the reply.</p>
+</kapi-details>
+
 <h2 data-kapi-id="h2dddddd">Transport options</h2>
 <kapi-compare data-kapi-id="compaaaa">
   <kapi-option title="Server-sent events" data-kapi-id="optaaaaa">

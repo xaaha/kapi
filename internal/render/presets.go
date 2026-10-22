@@ -43,6 +43,7 @@ func init() {
 		"kapi-badge":    renderBadge,
 		"kapi-kv":       renderKV,
 		"kapi-item":     renderKVItem,
+		"kapi-details":  renderDetails,
 	}
 }
 
@@ -353,5 +354,23 @@ func renderKVItem(b *bytes.Buffer, n *html.Node) error {
 	b.WriteString("</dt><dd>")
 	renderChildren(b, n)
 	b.WriteString("</dd></div>")
+	return nil
+}
+
+func renderDetails(b *bytes.Buffer, n *html.Node) error {
+	summary, err := requireAttr(n, "summary")
+	if err != nil {
+		return err
+	}
+	var open []string
+	if _, ok := attr(n, "open"); ok {
+		open = []string{"open", ""}
+	}
+	writeStart(b, "details", outerAttrs(n, "kapi-details", open...))
+	b.WriteString("<summary>")
+	writeText(b, summary)
+	b.WriteString(`</summary><div class="kapi-details-body">`)
+	renderChildren(b, n)
+	b.WriteString("</div></details>")
 	return nil
 }

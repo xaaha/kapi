@@ -88,7 +88,7 @@ func dropDuplicateIDs(n *html.Node, seen map[string]bool) {
 	}
 }
 
-var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form", "kapi-kv")
+var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form", "kapi-kv", "kapi-details")
 
 var inlinePresets = set("kapi-badge")
 

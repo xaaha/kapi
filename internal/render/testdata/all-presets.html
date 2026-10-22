@@ -266,6 +266,44 @@ body {
 .kapi-kv dd > :first-child { margin-top: 0; }
 .kapi-kv dd > :last-child { margin-bottom: 0; }
 
+.kapi-details {
+  margin: 1.25rem 0;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+#kapi-page .kapi-details,
+.kapi-details { padding: 0; }
+.kapi-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-radius: var(--kapi-radius);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.kapi-details > summary::-webkit-details-marker { display: none; }
+.kapi-details > summary::before {
+  content: "";
+  flex: none;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.1rem;
+  border-right: 2px solid var(--kapi-faint);
+  border-bottom: 2px solid var(--kapi-faint);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.kapi-details[open] > summary::before { transform: rotate(45deg); }
+.kapi-details > summary:hover { background: var(--kapi-subtle); }
+.kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
+.kapi-details[open] > summary { border-bottom: 1px solid var(--kapi-border); border-radius: var(--kapi-radius) var(--kapi-radius) 0 0; }
+.kapi-details-body { padding: 0.75rem 1rem 0.9rem; }
+.kapi-details-body > :first-child { margin-top: 0; }
+.kapi-details-body > :last-child { margin-bottom: 0; }
+
 .kapi-code,
 .kapi-diff {
   margin: 1.25rem 0;
@@ -663,6 +701,10 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
       <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision <span class="kapi-badge kapi-tone-warning" data-kapi-preset="badge" data-kapi-id="badgeaaa">slowest</span></td></tr>
     </tbody>
   </table></div>
+
+<details class="kapi-details" data-kapi-preset="details" data-kapi-id="detailsa"><summary>Why the p99 for ops is high</summary><div class="kapi-details-body">
+  <p>Every op writes the page file and a revision copy, and both are synced to disk before the reply.</p>
+</div></details>
 
 <h2 data-kapi-id="h2dddddd">Transport options</h2>
 <div class="kapi-compare" data-kapi-preset="compare" data-kapi-id="compaaaa">

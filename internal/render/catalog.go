@@ -141,4 +141,12 @@ func (s *Store) Source() ([]byte, uint64) {
   <kapi-item key="Rollback">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
 </kapi-kv>`,
 	},
+	{
+		Name:    "kapi-details",
+		Summary: "A collapsed section the reader opens, for detail most readers can skip",
+		Example: `<!-- summary: the line shown while closed. open: add it to start open. Body: prose. -->
+<kapi-details summary="Why copy before flipping reads?">
+  <p>Copying first lets us compare row counts before any reads move, so a bad copy never serves traffic.</p>
+</kapi-details>`,
+	},
 }
