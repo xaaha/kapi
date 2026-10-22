@@ -75,7 +75,7 @@ func TestAnEditWithTheSameSizeAndMtimeIsNotOverwritten(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s := open(t, home, path)
 	externalWriteKeepingStamp(t, path, `<p data-kapi-id="aaaaaaaa">b</p>`)
-	if _, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
 		t.Fatalf("Apply over a same-stamp edit: err = %v, want ErrStale", err)
 	}
 	if got := onDisk(t, path); got != `<p data-kapi-id="aaaaaaaa">b</p>` {
@@ -100,7 +100,7 @@ func TestApplyReplacesTheFileInsteadOfWritingIntoIt(t *testing.T) {
 	if err := os.Link(path, reader); err != nil {
 		t.Fatal(err)
 	}
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
 	if got := onDisk(t, reader); got != orig {
 		t.Errorf("a reader holding the old file saw %q; the write went into the file in place", got)
 	}
@@ -117,7 +117,7 @@ func TestApplyReplacesTheFileInsteadOfWritingIntoIt(t *testing.T) {
 	}
 }
 
-func mustApply(t *testing.T, s *Store, op Op) Summary {
+func mustApply(t *testing.T, s *Store, op *Op) Summary {
 	t.Helper()
 	_, rev := s.Source()
 	got, sum, err := s.Apply(rev, op)
@@ -169,9 +169,9 @@ func TestOpenGivesADuplicatedIDAFreshOne(t *testing.T) {
 func TestApplyRefusesAStaleRevision(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">one</p>`)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
 	before := onDisk(t, path)
-	rev, _, err := s.Apply(1, Op{Kind: "delete", ID: "aaaaaaaa"})
+	rev, _, err := s.Apply(1, &Op{Kind: "delete", ID: "aaaaaaaa"})
 	if !errors.Is(err, ErrStale) {
 		t.Fatalf("err = %v, want ErrStale", err)
 	}
@@ -188,7 +188,6 @@ func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
 	const agents = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c, by the agent</p>\n"
 	for _, op := range []Op{
 		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
-		{Kind: "done", ID: "aaaaaaaa"},
 		{Kind: "archive", ID: "aaaaaaaa"},
 		{Kind: "delete", ID: "aaaaaaaa"},
 	} {
@@ -199,7 +198,7 @@ func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
 			if _, _, err := s.Refresh(); err != nil {
 				t.Fatal(err)
 			}
-			rev, _, err := s.Apply(1, op)
+			rev, _, err := s.Apply(1, &op)
 			if err != nil {
 				t.Fatalf("%s at rev 1 after the agent changed another block: %v", op.Kind, err)
 			}
@@ -216,12 +215,12 @@ func TestAnOpOnAnUntouchedBlockSucceedsAtAnOlderRevision(t *testing.T) {
 func TestUndoAtAnOldRevDoesNotUndoAnotherTabsOp(t *testing.T) {
 	home, path := newPage(t, "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
-	if _, _, err := s.Apply(1, Op{Kind: "delete", ID: "bbbbbbbb"}); err != nil {
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	if _, _, err := s.Apply(1, &Op{Kind: "delete", ID: "bbbbbbbb"}); err != nil {
 		t.Fatalf("tab 2 deletes b at rev 1: %v", err)
 	}
 	for _, id := range []string{"", "hhhhhhhh"} {
-		if _, _, err := s.Apply(2, Op{Kind: "undo", ID: id}); !errors.Is(err, ErrStale) {
+		if _, _, err := s.Apply(2, &Op{Kind: "undo", ID: id}); !errors.Is(err, ErrStale) {
 			t.Fatalf("tab 1 undoes at rev 2 with id %q: err = %v, want ErrStale", id, err)
 		}
 	}
@@ -234,9 +233,9 @@ func TestAMoveAtAnOldRevIsStaleEvenWhenTheBlockIsUnchanged(t *testing.T) {
 	const orig = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<p data-kapi-id=\"cccccccc\">c</p>\n"
 	home, path := newPage(t, orig)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "move", ID: "cccccccc", Before: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "move", ID: "cccccccc", Before: "aaaaaaaa"})
 	moved := onDisk(t, path)
-	if _, _, err := s.Apply(1, Op{Kind: "move", ID: "aaaaaaaa", Before: "cccccccc"}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(1, &Op{Kind: "move", ID: "aaaaaaaa", Before: "cccccccc"}); !errors.Is(err, ErrStale) {
 		t.Fatalf("move at rev 1 after another tab's move: err = %v, want ErrStale", err)
 	}
 	if got := onDisk(t, path); got != moved {
@@ -246,10 +245,10 @@ func TestAMoveAtAnOldRevIsStaleEvenWhenTheBlockIsUnchanged(t *testing.T) {
 
 func TestOpsWithoutAnIDAreRefused(t *testing.T) {
 	const orig = "<h1 data-kapi-id=\"hhhhhhhh\">Plan <b>bold</b></h1>\n"
-	for _, kind := range []string{"edit", "done", "archive", "delete", "move"} {
+	for _, kind := range []string{"edit", "archive", "unarchive", "delete", "move"} {
 		home, path := newPage(t, orig)
 		s := open(t, home, path)
-		_, _, err := s.Apply(1, Op{Kind: kind, HTML: "<b>x</b>"})
+		_, _, err := s.Apply(1, &Op{Kind: kind, HTML: "<b>x</b>"})
 		if err == nil || errors.Is(err, ErrStale) {
 			t.Errorf("%s with no id: err = %v, want a refusal", kind, err)
 		}
@@ -262,8 +261,8 @@ func TestOpsWithoutAnIDAreRefused(t *testing.T) {
 func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
 	for _, op := range []Op{
 		{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a, by the human</p>`},
-		{Kind: "done", ID: "aaaaaaaa"},
 		{Kind: "archive", ID: "aaaaaaaa"},
+		{Kind: "unarchive", ID: "aaaaaaaa"},
 		{Kind: "delete", ID: "aaaaaaaa"},
 		{Kind: "move", ID: "aaaaaaaa"},
 	} {
@@ -275,7 +274,7 @@ func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
 			if _, _, err := s.Refresh(); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := s.Apply(1, op); !errors.Is(err, ErrStale) {
+			if _, _, err := s.Apply(1, &op); !errors.Is(err, ErrStale) {
 				t.Fatalf("%s on a block the agent changed: err = %v, want ErrStale", op.Kind, err)
 			}
 			if got := onDisk(t, path); got != agents {
@@ -285,13 +284,13 @@ func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
 	}
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
 	for _, rev := range []uint64{0, 3} {
-		if _, _, err := s.Apply(rev, Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+		if _, _, err := s.Apply(rev, &Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
 			t.Errorf("rev %d: err = %v, want ErrStale", rev, err)
 		}
 	}
-	if _, _, err := s.Apply(1, Op{Kind: "undo"}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(1, &Op{Kind: "undo"}); !errors.Is(err, ErrStale) {
 		t.Errorf("undo at an old rev: err = %v, want ErrStale", err)
 	}
 }
@@ -299,12 +298,12 @@ func TestAnOpOnABlockThatChangedSinceItsRevisionIsStale(t *testing.T) {
 func TestEditReplacesTheElementAndKeepsItsID(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">old</p>\n<p data-kapi-id=\"bbbbbbbb\">keep</p>\n")
 	s := open(t, home, path)
-	sum := mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<kapi-callout kind=\"note\">new <kapi-code lang=\"go\">x</kapi-code></kapi-callout>"})
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<kapi-callout kind=\"note\">new <kapi-code lang=\"go\">x</kapi-code></kapi-callout>"})
 	got := onDisk(t, path)
 	if !strings.HasPrefix(got, `<kapi-callout data-kapi-id="aaaaaaaa" kind="note">new <kapi-code data-kapi-id="`) || !strings.HasSuffix(got, "</kapi-callout>\n<p data-kapi-id=\"bbbbbbbb\">keep</p>\n") {
 		t.Fatalf("file after edit:\n%s", got)
 	}
-	if sum.Text != "edited" || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
+	if sum.Text != `edited callout "new x"` || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
 		t.Errorf("summary = %+v", sum)
 	}
 	snap, err := os.ReadFile(filepath.Join(s.dir, "revs", "1.html"))
@@ -324,7 +323,7 @@ func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			home, path := newPage(t, orig)
 			s := open(t, home, path)
-			_, _, err := s.Apply(1, Op{Kind: "edit", ID: tc.id, HTML: tc.html})
+			_, _, err := s.Apply(1, &Op{Kind: "edit", ID: tc.id, HTML: tc.html})
 			if !errors.Is(err, ErrDanglingLinks) || !strings.HasSuffix(err.Error(), ": "+tc.dangling) {
 				t.Fatalf("err = %v, want ErrDanglingLinks naming %s", err, tc.dangling)
 			}
@@ -335,8 +334,8 @@ func TestEditRefusesToLeaveDanglingLinks(t *testing.T) {
 	}
 	home, path := newPage(t, orig)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "edit", ID: "bbbbbbbb", HTML: `<p>see <a href="#cccccccc">the code</a> and <a href="#gone0000">old</a></p>`})
-	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <span data-kapi-id="cccccccc">y</span> <a href="#bbbbbbbb">b</a></p>`})
+	mustApply(t, s, &Op{Kind: "edit", ID: "bbbbbbbb", HTML: `<p>see <a href="#cccccccc">the code</a> and <a href="#gone0000">old</a></p>`})
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>a <span data-kapi-id="cccccccc">y</span> <a href="#bbbbbbbb">b</a></p>`})
 }
 
 func TestEditRejectsBadHTML(t *testing.T) {
@@ -348,7 +347,7 @@ func TestEditRejectsBadHTML(t *testing.T) {
 		`<p data-kapi-id="cccccccc">other id</p>`,
 		`<div><kapi-code data-kapi-id="bbbbbbbb">x</kapi-code></div>`,
 	} {
-		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: html}); err == nil {
+		if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: html}); err == nil {
 			t.Errorf("edit with %q succeeded, want an error", html)
 		}
 	}
@@ -361,39 +360,64 @@ func TestDeleteRefusesWhileAnotherElementLinksToIt(t *testing.T) {
 	home, path := newPage(t, "<ul data-kapi-id=\"aaaaaaaa\"><li><kapi-callout data-kapi-id=\"bbbbbbbb\">x <a href=\"#bbbbbbbb\">self</a></kapi-callout></li></ul>\n<p data-kapi-id=\"cccccccc\">see <a href=\"#bbbbbbbb\">it</a></p>\n")
 	s := open(t, home, path)
 	for _, id := range []string{"aaaaaaaa", "bbbbbbbb"} {
-		if _, _, err := s.Apply(1, Op{Kind: "delete", ID: id}); !errors.Is(err, ErrInboundLinks) {
+		if _, _, err := s.Apply(1, &Op{Kind: "delete", ID: id}); !errors.Is(err, ErrInboundLinks) {
 			t.Fatalf("delete #%s: err = %v, want ErrInboundLinks", id, err)
 		}
 	}
-	mustApply(t, s, Op{Kind: "delete", ID: "cccccccc"})
-	mustApply(t, s, Op{Kind: "delete", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "delete", ID: "cccccccc"})
+	mustApply(t, s, &Op{Kind: "delete", ID: "aaaaaaaa"})
 	if got := onDisk(t, path); got != "" {
 		t.Errorf("file after deletes = %q, want empty", got)
 	}
 }
 
-func TestDoneAndArchiveSetState(t *testing.T) {
-	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa" class="x">a</p><kapi-step data-kapi-id="bbbbbbbb" data-kapi-state="done">b</kapi-step>`)
+func TestArchiveSetsAndUnarchiveClearsTheState(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa" class="x">a</p><kapi-step data-kapi-id="bbbbbbbb" data-kapi-state="archived" class=y>b</kapi-step><p data-kapi-id="cccccccc" data-kapi-state>c</p>`)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
-	mustApply(t, s, Op{Kind: "archive", ID: "bbbbbbbb"})
-	want := `<p data-kapi-state="done" data-kapi-id="aaaaaaaa" class="x">a</p><kapi-step data-kapi-id="bbbbbbbb" data-kapi-state="archived">b</kapi-step>`
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "unarchive", ID: "bbbbbbbb"})
+	sum := mustApply(t, s, &Op{Kind: "unarchive", ID: "cccccccc"})
+	want := `<p data-kapi-state="archived" data-kapi-id="aaaaaaaa" class="x">a</p><kapi-step data-kapi-id="bbbbbbbb" class=y>b</kapi-step><p data-kapi-id="cccccccc">c</p>`
 	if got := onDisk(t, path); got != want {
 		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	if sum.Text != `unarchived "c"` || strings.Join(sum.IDs, ",") != "cccccccc" {
+		t.Errorf("summary = %+v", sum)
+	}
+	if rev, sum, err := s.Apply(4, &Op{Kind: "unarchive", ID: "bbbbbbbb"}); err != nil || rev != 4 || sum.Text != "" {
+		t.Errorf("unarchive of a block that is not archived: rev %d, %+v, %v; want no change", rev, sum, err)
+	}
+	if _, _, err := s.Apply(4, &Op{Kind: "done", ID: "aaaaaaaa"}); err == nil || !strings.Contains(err.Error(), `unknown op kind "done"`) {
+		t.Errorf("done: err = %v, want an unknown op kind", err)
+	}
+}
+
+func TestUnarchiveAtAnOldRevChecksOnlyItsBlock(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\" data-kapi-state=\"archived\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	if _, _, err := s.Apply(1, &Op{Kind: "unarchive", ID: "aaaaaaaa"}); err != nil {
+		t.Fatalf("unarchive of an unchanged block at an old rev: %v", err)
+	}
+	if _, _, err := s.Apply(1, &Op{Kind: "unarchive", ID: "bbbbbbbb"}); !errors.Is(err, ErrStale) {
+		t.Errorf("unarchive of a block that changed since that rev: err = %v, want ErrStale", err)
+	}
+	if _, _, err := s.Apply(2, &Op{Kind: "unarchive", ID: "bbbbbbbb"}); err != nil {
+		t.Fatalf("unarchive at an old rev of a block unchanged since: %v", err)
 	}
 }
 
 func TestMoveBeforeAndToTheEnd(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<kapi-plan data-kapi-id=\"cccccccc\">\n  <kapi-step data-kapi-id=\"dddddddd\">d</kapi-step>\n  <kapi-step data-kapi-id=\"eeeeeeee\">e</kapi-step>\n</kapi-plan>\n")
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "move", ID: "bbbbbbbb", Before: "aaaaaaaa"})
-	mustApply(t, s, Op{Kind: "move", ID: "bbbbbbbb"})
-	mustApply(t, s, Op{Kind: "move", ID: "dddddddd"})
+	mustApply(t, s, &Op{Kind: "move", ID: "bbbbbbbb", Before: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "move", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "move", ID: "dddddddd"})
 	want := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-plan data-kapi-id=\"cccccccc\">\n  <kapi-step data-kapi-id=\"eeeeeeee\">e</kapi-step>\n  <kapi-step data-kapi-id=\"dddddddd\">d</kapi-step>\n</kapi-plan>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
 	if got := onDisk(t, path); got != want {
 		t.Errorf("file =\n%s\nwant\n%s", got, want)
 	}
-	if _, _, err := s.Apply(4, Op{Kind: "move", ID: "cccccccc", Before: "eeeeeeee"}); err == nil {
+	if _, _, err := s.Apply(4, &Op{Kind: "move", ID: "cccccccc", Before: "eeeeeeee"}); err == nil {
 		t.Error("moving an element before its own child succeeded")
 	}
 }
@@ -402,18 +426,18 @@ func TestUndoWalksBackThroughRevisions(t *testing.T) {
 	orig := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
 	home, path := newPage(t, orig)
 	s := open(t, home, path)
-	if _, _, err := s.Apply(1, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+	if _, _, err := s.Apply(1, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
 		t.Fatalf("undo on a fresh page: err = %v", err)
 	}
-	mustApply(t, s, Op{Kind: "delete", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "delete", ID: "aaaaaaaa"})
 	afterDelete := onDisk(t, path)
-	mustApply(t, s, Op{Kind: "done", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
 
-	mustApply(t, s, Op{Kind: "undo"})
+	mustApply(t, s, &Op{Kind: "undo"})
 	if got := onDisk(t, path); got != afterDelete {
 		t.Fatalf("first undo =\n%s\nwant\n%s", got, afterDelete)
 	}
-	mustApply(t, s, Op{Kind: "undo"})
+	mustApply(t, s, &Op{Kind: "undo"})
 	if got := onDisk(t, path); got != orig {
 		t.Fatalf("second undo =\n%s\nwant\n%s", got, orig)
 	}
@@ -431,7 +455,7 @@ func TestRefreshPicksUpAnExternalEdit(t *testing.T) {
 	}
 
 	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, edited</p>\n")
-	if _, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
 		t.Fatalf("Apply over an unseen file edit: err = %v, want ErrStale", err)
 	}
 	sum, changed, err := s.Refresh()
@@ -455,7 +479,7 @@ func TestRefreshPicksUpAnExternalEdit(t *testing.T) {
 	}
 
 	before := onDisk(t, path)
-	if _, _, err := s.Apply(3, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+	if _, _, err := s.Apply(3, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
 		t.Errorf("undo with only file edits: err = %v, want ErrNothingToUndo", err)
 	}
 	if onDisk(t, path) != before {
@@ -471,7 +495,7 @@ func TestOpenNoticesAnEditMadeWhileClosed(t *testing.T) {
 	if _, rev := s.Source(); rev != 2 {
 		t.Fatalf("rev = %d, want 2", rev)
 	}
-	if _, _, err := s.Apply(2, Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+	if _, _, err := s.Apply(2, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
 		t.Errorf("undo of an edit made while closed: err = %v, want ErrNothingToUndo", err)
 	}
 }
@@ -479,20 +503,20 @@ func TestOpenNoticesAnEditMadeWhileClosed(t *testing.T) {
 func TestUndoRefusesToDiscardAFileEditMadeAfterTheOp(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "done", ID: "aaaaaaaa"})
-	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\" data-kapi-state=\"done\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\" data-kapi-state=\"archived\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b, by the agent</p>\n")
 	if _, changed, err := s.Refresh(); err != nil || !changed {
 		t.Fatalf("Refresh: changed=%v err=%v", changed, err)
 	}
-	mustApply(t, s, Op{Kind: "archive", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
 
-	mustApply(t, s, Op{Kind: "undo"})
+	mustApply(t, s, &Op{Kind: "undo"})
 	agents := onDisk(t, path)
-	if !strings.Contains(agents, "b, by the agent") || strings.Contains(agents, "archived") {
+	if !strings.Contains(agents, "b, by the agent") || strings.Count(agents, "archived") != 1 {
 		t.Fatalf("undo of the op after the file edit =\n%s", agents)
 	}
 	_, rev := s.Source()
-	if _, _, err := s.Apply(rev, Op{Kind: "undo"}); !errors.Is(err, ErrUndoConflict) {
+	if _, _, err := s.Apply(rev, &Op{Kind: "undo"}); !errors.Is(err, ErrUndoConflict) {
 		t.Fatalf("undo across a file edit: err = %v, want ErrUndoConflict", err)
 	}
 	if onDisk(t, path) != agents {
@@ -503,10 +527,10 @@ func TestUndoRefusesToDiscardAFileEditMadeAfterTheOp(t *testing.T) {
 func TestApplyUnknownIDOrKind(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s := open(t, home, path)
-	if _, _, err := s.Apply(1, Op{Kind: "delete", ID: "zzzzzzzz"}); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.Apply(1, &Op{Kind: "delete", ID: "zzzzzzzz"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
 	}
-	if _, _, err := s.Apply(1, Op{Kind: "explode", ID: "aaaaaaaa"}); err == nil {
+	if _, _, err := s.Apply(1, &Op{Kind: "explode", ID: "aaaaaaaa"}); err == nil {
 		t.Error("unknown kind succeeded")
 	}
 }
@@ -593,7 +617,7 @@ func TestEditAfterASplitKeepsEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	edited := strings.Replace(string(block), "before", "before, edited", 1)
-	mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: edited})
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: edited})
 	got, _ := s.Source()
 	for _, want := range []string{"before, edited", `data-kapi-id="bbbbbbbb"`, "keep me", "after"} {
 		if !strings.Contains(string(got), want) {
@@ -620,7 +644,7 @@ func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
 		`<div data-kapi-id="aaaaaaaa"><aside class="kapi-callout" data-kapi-preset="callout">rendered</aside></div>`,
 		`<p data-kapi-id="aaaaaaaa" data-kapi-preset="code">x</p>`,
 	} {
-		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrPresetInProse) {
+		if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrPresetInProse) {
 			t.Errorf("edit %q: err = %v, want ErrPresetInProse", h, err)
 		}
 	}
@@ -747,7 +771,7 @@ func TestOpsChangeOnlyTheValueTheyTouch(t *testing.T) {
 	src := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=done>x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
 	home, path := newPage(t, src)
 	s := open(t, home, path)
-	mustApply(t, s, Op{Kind: "archive", ID: "aaaaaaaa"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
 	want := "<p data-kapi-id='aaaaaaaa' class=lead data-kapi-state=\"archived\">x</p>\n<p data-kapi-id=\"bbbbbbbb\" hidden>y</p>\n"
 	if got := onDisk(t, path); got != want {
 		t.Errorf("after archive:\n%s\nwant:\n%s", got, want)
@@ -816,7 +840,7 @@ func TestEditRefusesAResultThatLosesItsID(t *testing.T) {
 		`<tr data-kapi-id="aaaaaaaa"><td>x</td></tr>`,
 		`<script data-kapi-id="aaaaaaaa">x()</script>`,
 	} {
-		if _, _, err := s.Apply(1, Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrEditLostID) {
+		if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: h}); !errors.Is(err, ErrEditLostID) {
 			t.Errorf("edit %q: err = %v, want ErrEditLostID", h, err)
 		}
 	}
@@ -864,7 +888,7 @@ func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
 				}
 			}
 		}()
-		kinds := []string{"done", "archive"}
+		kinds := []string{"archive", "unarchive"}
 	ops:
 		for k := 0; ; k++ {
 			select {
@@ -873,7 +897,7 @@ func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
 			default:
 			}
 			_, rev := s.Source()
-			if _, _, err := s.Apply(rev, Op{Kind: kinds[k%2], ID: "aaaaaaaa"}); errors.Is(err, ErrStale) {
+			if _, _, err := s.Apply(rev, &Op{Kind: kinds[k%2], ID: "aaaaaaaa"}); errors.Is(err, ErrStale) {
 				if _, _, err := s.Refresh(); err != nil {
 					t.Fatal(err)
 				}
@@ -914,7 +938,7 @@ func TestAnAgentRenameInsideTheWriteWindowWins(t *testing.T) {
 				n++
 			}
 		}
-		_, _, err := s.Apply(1, Op{Kind: "done", ID: "aaaaaaaa"})
+		_, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"})
 		replaceHook = nil
 		if !errors.Is(err, ErrStale) {
 			t.Errorf("%v: Apply err = %v, want ErrStale", stages, err)
@@ -976,7 +1000,7 @@ func TestDuplicateIDsFollowThePreviousRevision(t *testing.T) {
 func TestAnEditThatSplitsSavesItsInput(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`+"\n")
 	s := open(t, home, path)
-	sum := mustApply(t, s, Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`})
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<table data-kapi-id="aaaaaaaa"><p>stray</p></table>`})
 	_, rev := s.Source()
 	saved := filepath.Join(s.dir, "raw", strconv.FormatUint(rev, 10)+".html")
 	if !strings.Contains(sum.Text, "raw input saved to "+saved) {
@@ -992,5 +1016,367 @@ func TestAValuelessIDGetsAWellFormedValue(t *testing.T) {
 	open(t, home, path)
 	if got := onDisk(t, path); !regexp.MustCompile(`^<p data-kapi-id="[a-z2-7]{8}" class="x">hi</p>\n$`).MatchString(got) {
 		t.Errorf("file = %q", got)
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+const innerPage = "<kapi-callout data-kapi-id=\"aaaaaaaa\"  kind='warning'>old <em>body</em></kapi-callout>\n" +
+	"<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n</kapi-code>\n" +
+	"<kapi-diff data-kapi-id=\"cccccccc\">-<p>\n+</kapi-callout>\n</kapi-diff>\n" +
+	"<div data-kapi-id=\"dddddddd\"><p>see <a href=\"#aaaaaaaa\">it</a></p></div>\n" +
+	"<table data-kapi-id=\"eeeeeeee\"><tr><td>x</td></tr></table>\n"
+
+func TestInnerIsTheBodyByteForByte(t *testing.T) {
+	for id, want := range map[string]string{
+		"aaaaaaaa": "old <em>body</em>",
+		"bbbbbbbb": "if a < b && c {\n",
+		"cccccccc": "-<p>\n+</kapi-callout>\n",
+		"dddddddd": `<p>see <a href="#aaaaaaaa">it</a></p>`,
+	} {
+		got, err := Inner([]byte(innerPage), id)
+		if err != nil || string(got) != want {
+			t.Errorf("Inner(#%s) = %q, %v; want %q", id, got, err, want)
+		}
+	}
+	if _, err := Inner([]byte(innerPage), "zzzzzzzz"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAnInnerEditKeepsTheTagsAndReplacesOnlyTheBody(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("new <strong>text</strong>")})
+	mustApply(t, s, &Op{Kind: "edit", ID: "bbbbbbbb", Inner: ptr("if x < y {\n\treturn\n}\n")})
+	want := strings.Replace(innerPage, "old <em>body</em>", "new <strong>text</strong>", 1)
+	want = strings.Replace(want, "if a < b && c {\n", "if x < y {\n\treturn\n}\n", 1)
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file after inner edits:\n%s\nwant:\n%s", got, want)
+	}
+	if sum.Text != `edited callout "new text"` || len(sum.IDs) != 1 || sum.IDs[0] != "aaaaaaaa" {
+		t.Errorf("summary = %+v", sum)
+	}
+}
+
+func TestAnInnerEditFollowsTheEditRules(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		op    Op
+		check func(error) bool
+	}{
+		{"closes the element early", Op{ID: "aaaaaaaa", Inner: ptr(`x</kapi-callout><kapi-callout kind="note">y`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"adds a stray end tag", Op{ID: "aaaaaaaa", Inner: ptr(`x</kapi-callout>`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"leaves a same-named element open", Op{ID: "aaaaaaaa", Inner: ptr(`<kapi-callout kind="note">y`)}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"closes a raw body early", Op{ID: "bbbbbbbb", Inner: ptr("x</kapi-code><p>y</p><kapi-code>")}, func(err error) bool { return errors.Is(err, ErrInnerEscapes) }},
+		{"links to a missing id", Op{ID: "aaaaaaaa", Inner: ptr(`<a href="#zzzzzzzz">z</a>`)}, func(err error) bool { return errors.Is(err, ErrDanglingLinks) }},
+		{"puts a preset in prose", Op{ID: "dddddddd", Inner: ptr(`<kapi-callout kind="note">y</kapi-callout>`)}, func(err error) bool { return errors.Is(err, ErrPresetInProse) }},
+		{"carries html too", Op{ID: "aaaaaaaa", HTML: "<p>x</p>", Inner: ptr("y")}, func(err error) bool { return err != nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, path := newPage(t, innerPage)
+			s := open(t, home, path)
+			tc.op.Kind = "edit"
+			if _, _, err := s.Apply(1, &tc.op); !tc.check(err) {
+				t.Fatalf("err = %v", err)
+			}
+			if got := onDisk(t, path); got != innerPage {
+				t.Errorf("refused edit changed the file:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestAnInnerEditAtAnOldRevChecksOnlyItsBlock(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "dddddddd"})
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("fresh")}); err != nil {
+		t.Fatalf("inner edit of an unchanged block at an old rev: %v", err)
+	}
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr("again")}); !errors.Is(err, ErrStale) {
+		t.Errorf("inner edit of a changed block at an old rev: err = %v, want ErrStale", err)
+	}
+}
+
+func TestAnInnerEditThatNeedsASplitSavesTheRawInput(t *testing.T) {
+	home, path := newPage(t, innerPage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "eeeeeeee", Inner: ptr("<p>stray</p>")})
+	if !strings.Contains(sum.Text, "raw input saved to") || len(rawSaves(t, s)) != 1 {
+		t.Errorf("summary %q, raw saves %v", sum.Text, rawSaves(t, s))
+	}
+}
+
+func TestRevisionSummariesQuoteTheBlock(t *testing.T) {
+	src := "<p data-kapi-id=\"aaaaaaaa\">This page is served by Kapi itself, so every   edit you make\n  lands in the file on disk.</p>\n" +
+		"<ul data-kapi-id=\"bbbbbbbb\"><li>Copy data</li><li>Flip <em>reads</em> &amp; writes</li></ul>\n" +
+		"<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">Freeze writes.</kapi-callout>\n" +
+		"<kapi-code data-kapi-id=\"dddddddd\" lang=\"go\">if a<b &amp;&amp; c {\n}</kapi-code>\n" +
+		"<hr data-kapi-id=\"eeeeeeee\">\n" +
+		"<p data-kapi-id=\"ffffffff\">last</p>\n" +
+		"<p data-kapi-id=\"gggggggg\">" + strings.Repeat("x", 70) + "</p>\n"
+	for _, tc := range []struct {
+		op   Op
+		want string
+	}{
+		{Op{Kind: "delete", ID: "aaaaaaaa"}, `deleted "This page is served by Kapi itself, so every edit you make…"`},
+		{Op{Kind: "delete", ID: "gggggggg"}, `deleted "` + strings.Repeat("x", 60) + "…\""},
+		{Op{Kind: "archive", ID: "bbbbbbbb"}, `archived "Copy data Flip reads & writes"`},
+		{Op{Kind: "archive", ID: "cccccccc"}, `archived callout "Freeze writes."`},
+		{Op{Kind: "delete", ID: "dddddddd"}, `deleted code "if a<b && c { }"`},
+		{Op{Kind: "delete", ID: "eeeeeeee"}, `deleted ""`},
+		{Op{Kind: "move", ID: "ffffffff", Before: "aaaaaaaa"}, `moved #ffffffff "last" before #aaaaaaaa`},
+		{Op{Kind: "move", ID: "aaaaaaaa"}, `moved #aaaaaaaa "This page is served by Kapi itself, so every edit you make…" to the end`},
+		{Op{Kind: "edit", ID: "cccccccc", Inner: ptr("Thaw   them\n after.")}, `edited callout "Thaw them after."`},
+		{Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<h2>New title</h2>"}, `edited "New title"`},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if sum := mustApply(t, s, &tc.op); sum.Text != tc.want || strings.Join(sum.IDs, ",") != map[bool]string{true: "", false: tc.op.ID}[tc.op.Kind == "move"] {
+			t.Errorf("%s #%s: summary %+v, want text %q", tc.op.Kind, tc.op.ID, sum, tc.want)
+		}
+	}
+}
+
+func TestAFileEditSummaryQuotesUpToThreeChangedBlocks(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">c</kapi-callout>\n" +
+		"<p data-kapi-id=\"dddddddd\">d</p>\n<p data-kapi-id=\"eeeeeeee\">e</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	externalWrite(t, path, strings.Replace(src, ">b<", ">b2<", 1))
+	sum, _, err := s.Refresh()
+	if err != nil || sum.Text != `edited in the file: "b2"` || strings.Join(sum.IDs, ",") != "bbbbbbbb" {
+		t.Errorf("one block: %+v, %v", sum, err)
+	}
+	next := src
+	for _, r := range []string{">a<", ">b<", ">c<", ">e<"} {
+		next = strings.Replace(next, r, r[:2]+"x<", 1)
+	}
+	externalWrite(t, path, next)
+	sum, _, err = s.Refresh()
+	if err != nil || sum.Text != `edited in the file: "ax", "bx", callout "cx", and 1 more` || strings.Join(sum.IDs, ",") != "aaaaaaaa,bbbbbbbb,cccccccc,eeeeeeee" {
+		t.Errorf("four blocks: %+v, %v", sum, err)
+	}
+}
+
+func TestAnOpThatChangesNothingMakesNoRevision(t *testing.T) {
+	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a</td></tr></table></kapi-table>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	inner, err := Inner([]byte(src), "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := Outer([]byte(src), "aaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(string(inner))},
+		{Kind: "edit", ID: "aaaaaaaa", HTML: string(outer)},
+		{Kind: "move", ID: "bbbbbbbb"},
+	} {
+		rev, sum, err := s.Apply(1, &op)
+		if err != nil || rev != 1 || sum.Text != "" || sum.IDs != nil {
+			t.Errorf("%+v: rev %d, summary %+v, err %v; want rev 1 and an empty summary", op, rev, sum, err)
+		}
+	}
+	revs, _ := filepath.Glob(filepath.Join(s.dir, "revs", "*.html"))
+	if len(revs) != 1 || onDisk(t, path) != src {
+		t.Errorf("revs %v, file:\n%s", revs, onDisk(t, path))
+	}
+	if _, _, err := s.Apply(1, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
+		t.Errorf("undo after no-op edits: err = %v, want ErrNothingToUndo", err)
+	}
+}
+
+const tablePage = "<kapi-table data-kapi-id=\"aaaaaaaa\" sort=\"on\">\n  <table class=t>\n    <thead><tr><th scope=\"col\">Shard</th><th>Rows</th></tr></thead>\n" +
+	"    <tbody><tr><td class=\"name\">beta</td><td>10</td></tr><tr><td>alpha<td>9</tr></tbody>\n  </table>\n</kapi-table>\n" +
+	"<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+
+func TestACellsOpSetsCellTextAndKeepsTheMarkup(t *testing.T) {
+	home, path := newPage(t, tablePage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{
+		{Row: 0, Col: 1, Text: "Row count"},
+		{Row: 1, Col: 0, Text: `b<eta> & "co"`},
+		{Row: 2, Col: 1, Text: "nine"},
+	}})
+	want := strings.NewReplacer(
+		"<th>Rows</th>", "<th>Row count</th>",
+		`<td class="name">beta</td>`, `<td class="name">b&lt;eta&gt; &amp; &#34;co&#34;</td>`,
+		"<td>9</tr>", "<td>nine</tr>",
+	).Replace(tablePage)
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file after cells op:\n%s\nwant:\n%s", got, want)
+	}
+	if !strings.HasPrefix(sum.Text, `edited cells of table "Shard Row count`) || strings.Join(sum.IDs, ",") != "aaaaaaaa" {
+		t.Errorf("summary = %+v", sum)
+	}
+}
+
+func TestACellsOpRefusesBadCellsAndOtherElements(t *testing.T) {
+	for _, op := range []Op{
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 3, Col: 0, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 2, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: -1, Col: 0, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}, {Row: 0, Col: 0, Text: "y"}}},
+		{Kind: "cells", ID: "aaaaaaaa"},
+		{Kind: "cells", ID: "bbbbbbbb", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}}},
+	} {
+		home, path := newPage(t, tablePage)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &op); err == nil {
+			t.Errorf("%+v succeeded, want an error", op)
+		}
+		if got := onDisk(t, path); got != tablePage {
+			t.Errorf("refused op changed the file:\n%s", got)
+		}
+	}
+}
+
+func TestACellsOpOnATableThatChangedIsStale(t *testing.T) {
+	home, path := newPage(t, tablePage)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	if _, _, err := s.Apply(1, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "11"}}}); err != nil {
+		t.Fatalf("cells op at an old rev with the table unchanged: %v", err)
+	}
+	if _, _, err := s.Apply(2, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "12"}}}); !errors.Is(err, ErrStale) {
+		t.Errorf("cells op at a rev before the table changed: err = %v, want ErrStale", err)
+	}
+}
+
+func TestAnInnerEditCannotLeaveAChildOpen(t *testing.T) {
+	const src = "<kapi-plan data-kapi-id=\"aaaaaaaa\"><kapi-step data-kapi-id=\"bbbbbbbb\">one</kapi-step></kapi-plan>\n" +
+		"<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\"><p>x</p></kapi-callout>\n<p data-kapi-id=\"dddddddd\">next</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<kapi-step data-kapi-id="bbbbbbbb">one</kapi-step><div>`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<div><p>x`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x`)},
+		{Kind: "edit", ID: "cccccccc", HTML: `<kapi-callout kind="note"><div>x</kapi-callout>`},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &op); !errors.Is(err, ErrInnerEscapes) {
+			t.Errorf("%+v: err = %v, want ErrInnerEscapes", op, err)
+		}
+		if got := onDisk(t, path); got != src {
+			t.Errorf("refused edit changed the file:\n%s", got)
+		}
+	}
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x<br></p><ul><li>a</li></ul>`)})
+}
+
+func TestAnInnerEditOfTheLastBlockCannotLeaveAChildOpen(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<div>x`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes", err)
+	}
+}
+
+func TestAnEditThatPullsInTheNextBlockIsRefused(t *testing.T) {
+	const src = "<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n<p data-kapi-id=\"dddddddd\">next</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<span><div>x</span>`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes", err)
+	}
+	if got := onDisk(t, path); got != src {
+		t.Errorf("refused edit changed the file:\n%s", got)
+	}
+}
+
+func TestACellsOpFollowsImpliedEndTags(t *testing.T) {
+	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>b<tr><td>c<td>d</table></kapi-table>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "B"}}})
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 0, Text: "C"}, {Row: 1, Col: 1, Text: "D"}}})
+	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>B<tr><td>C<td>D</table></kapi-table>\n"; got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	const sections = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>i<tbody><tr><td>a<td>b</table></kapi-table>\n"
+	home, path = newPage(t, sections)
+	s = open(t, home, path)
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "I"}, {Row: 1, Col: 0, Text: "A"}}})
+	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>I<tbody><tr><td>A<td>b</table></kapi-table>\n"; got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestOverlappingCellRangesAreRefused(t *testing.T) {
+	if _, err := spliceCells([]byte("0123456789"), 0, []cellChange{{2, 6, "x"}, {4, 8, "y"}}); err == nil {
+		t.Error("overlapping ranges were spliced")
+	}
+	if got, err := spliceCells([]byte("0123456789"), 0, []cellChange{{6, 8, "y"}, {2, 4, "x"}}); err != nil || string(got) != "01x45y89" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+func TestRevisionExcerptsCarryNoTerminalControls(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n")
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: "<p>x&#27;]0;owned&#7;&#27;[2J&#x202e;y</p>"})
+	if sum.Text != `edited "x]0;owned[2Jy"` {
+		t.Errorf("summary = %q", sum.Text)
+	}
+}
+
+func TestAnEditMayOmitOptionalEndTags(t *testing.T) {
+	const src = "<ul data-kapi-id=\"aaaaaaaa\"><li>x</li></ul>\n<dl data-kapi-id=\"bbbbbbbb\"><dt>t</dt></dl>\n" +
+		"<table data-kapi-id=\"cccccccc\"><tr><td>1</td></tr></table>\n<div data-kapi-id=\"dddddddd\"><p>p</p></div>\n<p data-kapi-id=\"eeeeeeee\">next</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<li>a<li>b`)},
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<ul><li>a<li>b</ul>`},
+		{Kind: "edit", ID: "bbbbbbbb", Inner: ptr(`<dt>t<dd>d<dt>u<dd>e`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<thead><tr><th>h<th>i<tbody><tr><td>1<td>2<tr><td>3<td>4<tfoot><tr><td>f`)},
+		{Kind: "edit", ID: "dddddddd", Inner: ptr(`<p>one<p>two`)},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &op); err != nil {
+			t.Errorf("%+v: %v", op, err)
+		}
+	}
+}
+
+func TestAPresetEndTagDoesNotCloseAnOptionalEnd(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes, since HTML ignores a custom element's end tag while a p is open", err)
+	}
+}
+
+func TestAnInnerEditCannotLeaveAnElementOpenInsideAClosedChild(t *testing.T) {
+	for _, src := range []string{
+		"<div data-kapi-id=\"aaaaaaaa\">a</div>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n",
+		"<p data-kapi-id=\"bbbbbbbb\">b</p>\n<div data-kapi-id=\"aaaaaaaa\">a</div>\n",
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<span><b>x</span>`)}); !errors.Is(err, ErrInnerEscapes) {
+			t.Errorf("err = %v, want ErrInnerEscapes", err)
+		}
+		if got := onDisk(t, path); got != src {
+			t.Errorf("refused edit changed the file:\n%s", got)
+		}
+	}
+}
+
+func TestTheTopLevelCheckCountsBlocksWithoutIDs(t *testing.T) {
+	before := []byte(`<div data-kapi-id="aaaaaaaa">a</div><hr>`)
+	if !sameTopLevel(before, before, "aaaaaaaa") {
+		t.Error("an unchanged page differs from itself")
+	}
+	if sameTopLevel(before, []byte(`<div data-kapi-id="aaaaaaaa">a<hr></div>`), "aaaaaaaa") {
+		t.Error("a page that lost a top-level block without an id passed")
 	}
 }

@@ -118,3 +118,16 @@ func TestPresenceIsNeverPending(t *testing.T) {
 		t.Errorf("After(0) has %d events, want all 3", len(events))
 	}
 }
+
+func TestPrintableStripsTerminalControls(t *testing.T) {
+	in := "a\x1b]0;owned\x07\x1b[2J\x00b\nc\td\re\x7f\u0085\u009bf\u202eg\u2066h\u2069i é"
+	if got, want := Printable(in), "a]0;owned[2Jb c defghi é"; got != want {
+		t.Errorf("Printable = %q, want %q", got, want)
+	}
+}
+
+func TestPrintableStripsMarksAndSeparators(t *testing.T) {
+	if got := Printable("a\u200eb\u200fc\u061cd\u2028e\u2029f"); got != "abcdef" {
+		t.Errorf("Printable = %q", got)
+	}
+}

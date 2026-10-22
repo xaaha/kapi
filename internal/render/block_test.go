@@ -129,7 +129,7 @@ func TestProseRendersAsItsSource(t *testing.T) {
 <ul data-kapi-id="cccccccc"><li>one</li><li>two<ol start="3"><li>three</li></ol></li></ul>
 <table data-kapi-id="dddddddd"><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table>
 <details open="" data-kapi-id="eeeeeeee"><summary>More</summary><p>Hidden <br> text <img src="a.png" alt="x"></p></details>
-<blockquote data-kapi-id="ffffffff" data-kapi-state="done"><p>"Quoted" it's</p></blockquote>
+<blockquote data-kapi-id="ffffffff" data-kapi-state="archived"><p>"Quoted" it's</p></blockquote>
 <!-- a comment -->
 <pre data-kapi-id="gggggggg">  indented
     code</pre>`

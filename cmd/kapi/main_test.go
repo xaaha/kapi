@@ -109,7 +109,7 @@ func TestD10WatchReconnectsAfterLostConnection(t *testing.T) {
 	if !errors.Is(err, stop) {
 		t.Fatalf("error = %v, want the second watch's error", err)
 	}
-	if out != "#3 human message on #x: a\\nb\n" {
+	if out != "#3 human message on #x: a b\n" {
 		t.Errorf("output = %q", out)
 	}
 	want := abs(t, "plan.html") + "|codex"
@@ -311,5 +311,12 @@ func TestReviewH5SetupHooksFailsWhenAHarnessFails(t *testing.T) {
 	}
 	if !strings.Contains(out, "Claude Code") || !strings.Contains(out, "Copilot CLI") {
 		t.Errorf("every harness should still be reported:\n%s", out)
+	}
+}
+
+func TestEventLinesCarryNoTerminalControls(t *testing.T) {
+	e := &eventlog.Event{Seq: 4, Author: "human\x1b[31m", Kind: "revision", Target: "a\x1b[2J", Text: "edited \"\x1b]0;owned\x07\x1b[2J\u202ex\""}
+	if got, want := eventLine(e), `#4 human[31m revision on #a[2J: edited "]0;owned[2Jx"`; got != want {
+		t.Errorf("eventLine = %q, want %q", got, want)
 	}
 }

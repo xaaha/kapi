@@ -12,13 +12,12 @@ const PAGE_CSS = `
 body { margin: 0; font: 16px/1.6 Georgia, serif; color: var(--kapi-fg); background: var(--kapi-bg); }
 #kapi-page { max-width: 720px; margin: 0 auto; padding: 48px 32px; }
 h1 { font-size: 30px; line-height: 1.2; }
-[data-kapi-state="done"] { opacity: .55; }
-[data-kapi-state="archived"] { display: none; }
 [data-kapi-sort="on"] th { cursor: pointer; text-align: left; }
 [data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: " \\2191"; }
 [data-kapi-sort="on"] th[aria-sort="descending"]::after { content: " \\2193"; }
-.callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
-.callout p { margin: 0; }
+.kapi-callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
+.kapi-callout-label { font: 600 12px sans-serif; text-transform: uppercase; }
+.kapi-code pre { margin: 0; padding: 12px; background: #f6f6f4; font: 13px monospace; }
 form { display: grid; gap: 10px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
 `;
 
@@ -51,7 +50,7 @@ export const SAMPLE = [
     source: '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p><kapi-callout kind="note">Freeze writes.</kapi-callout></div>',
     html:
       '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p>' +
-      '<aside data-kapi-preset="callout" class="callout"><p>Freeze writes.</p></aside></div>',
+      '<aside data-kapi-preset="callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">Freeze writes.</div></aside></div>',
   },
   {
     id: "iiiiiiii",
@@ -66,15 +65,41 @@ export const SAMPLE = [
     id: "ffffffff",
     source: '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window.</kapi-callout>',
   },
+  {
+    id: "jjjjjjjj",
+    source: '<kapi-code data-kapi-id="jjjjjjjj" lang="go">if a &lt; b {\n\tswap()\n}</kapi-code>',
+  },
 ];
 
-const renderCallout = (src) =>
-  src.replace(
-    /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
-    '<aside$1 data-kapi-preset="kapi-callout" class="callout"><p>$2</p></aside>',
-  );
+const renderSource = (src) =>
+  src
+    .replace(
+      /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
+      '<aside$1 data-kapi-preset="kapi-callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">$2</div></aside>',
+    )
+    .replace(
+      /^<kapi-code([^>]*)>([\s\S]*)<\/kapi-code>$/,
+      '<figure$1 data-kapi-preset="code" class="kapi-code"><pre><code>$2</code></pre></figure>',
+    );
 
-const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderCallout(b.source) } : { ...b });
+const escapeText = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function setCells(html, cells) {
+  let row = -1;
+  return html.replace(/<tr>([\s\S]*?)<\/tr>/g, (tr, body) => {
+    row++;
+    let col = -1;
+    return tr.replace(/<(t[hd])([^>]*)>([\s\S]*?)<\/\1>/g, (cell, tag, attrs, text) => {
+      col++;
+      const c = cells.find((x) => x.row === row && x.col === col);
+      return c ? `<${tag}${attrs}>${escapeText(c.text)}</${tag}>` : cell;
+    });
+  });
+}
+
+const tags = (src) => src.match(/^(<[^>]*>)([\s\S]*)(<\/[\w-]+>)$/);
+
+const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderSource(b.source) } : { ...b });
 
 export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const state = {
@@ -89,6 +114,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     restarted: "",
     reopened: false,
     refused: 0,
+    read: {},
   };
 
   const pageHTML = () =>
@@ -112,16 +138,22 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (linked) return { status: 422, body: { error: `#${op.id} is linked from #${linked.id}` } };
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
-    if (op.kind === "edit" && state.blocks[i].source) {
+    if (op.kind === "edit" && "inner" in op) {
+      const b = state.blocks[i];
+      const [, open, , close] = tags(b.source ?? b.html);
+      if (b.source) {
+        b.source = open + op.inner + close;
+        b.html = renderSource(b.source);
+      } else b.html = open + op.inner + close;
+    } else if (op.kind === "edit" && state.blocks[i].source) {
       state.blocks[i].source = op.html;
-      state.blocks[i].html = renderCallout(op.html);
+      state.blocks[i].html = renderSource(op.html);
     } else if (op.kind === "edit") state.blocks[i].html = op.html;
+    else if (op.kind === "cells") state.blocks[i].html = setCells(state.blocks[i].html, op.cells);
     else if (op.kind === "delete") state.blocks.splice(i, 1);
-    else if (op.kind === "done" || op.kind === "archive") {
-      const value = op.kind === "done" ? "done" : "archived";
-      state.blocks[i].html = state.blocks[i].html
-        .replace(/ data-kapi-state="[^"]*"/, "")
-        .replace(/^<([\w-]+)/, `<$1 data-kapi-state="${value}"`);
+    else if (op.kind === "archive" || op.kind === "unarchive") {
+      const html = state.blocks[i].html.replace(/ data-kapi-state="[^"]*"/, "");
+      state.blocks[i].html = op.kind === "archive" ? html.replace(/^<([\w-]+)/, '<$1 data-kapi-state="archived"') : html;
     } else if (op.kind === "move") {
       const [b] = state.blocks.splice(i, 1);
       const j = op.before ? state.blocks.findIndex((x) => x.id === op.before) : state.blocks.length;
@@ -133,7 +165,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks = prev;
     }
     state.rev++;
-    push({ author: "human", kind: "revision", target: op.kind === "edit" ? op.id : "", text: `${op.kind} #${op.id}` });
+    const target = ["edit", "cells", "archive", "unarchive"].includes(op.kind) ? op.id : "";
+    push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev } };
   }
 
@@ -147,7 +180,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     let body = "";
     for await (const chunk of req) body += chunk;
     const parsed = body ? JSON.parse(body) : null;
-    state.requests.push({ method: req.method, path: url.pathname, headers: req.headers, body: parsed });
+    state.requests.push({ method: req.method, path: url.pathname, search: url.search, headers: req.headers, body: parsed });
 
     const prefix = `/${TOKEN}/`;
     if (!url.pathname.startsWith(prefix)) return json(res, 403, { error: "bad token" });
@@ -182,7 +215,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));
       if (!b) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Kapi-Rev": String(state.rev) });
-      return res.end(b.source ?? b.html);
+      const src = b.source ?? b.html;
+      return res.end(url.searchParams.get("part") === "inner" ? tags(src)[2] : src);
     }
     if (req.method === "GET" && rest === "events") {
       if (state.refuseEvents) {
@@ -193,6 +227,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       res.write("retry: 100\n\n");
       const after = Number(req.headers["last-event-id"] || 0);
       for (const ev of state.events.filter((e) => e.seq > after)) res.write(`id: ${ev.seq}\ndata: ${JSON.stringify(ev)}\n\n`);
+      for (const [reader, seq] of Object.entries(state.read)) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
       state.streams.add(res);
       req.on("close", () => state.streams.delete(res));
       return;
@@ -225,6 +260,10 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     state,
     push,
     url: `http://127.0.0.1:${port}/${TOKEN}/p/${PAGE_ID}/`,
+    ack(reader, seq) {
+      state.read[reader] = seq;
+      for (const res of state.streams) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
+    },
     dropStreams() {
       for (const res of state.streams) res.destroy();
       state.streams.clear();

@@ -442,14 +442,70 @@ func TestSourceIsTheElementsOuterHTMLAsText(t *testing.T) {
 	}
 }
 
+func TestInnerSourceIsTheBodyByteForByte(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">a <em>b</em></kapi-callout>\n<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n}</kapi-code>\n")
+	for id, want := range map[string]string{"aaaaaaaa": "a <em>b</em>", "bbbbbbbb": "if a < b && c {\n}"} {
+		resp := s.get("/p/" + s.id + "/source/" + id + "?part=inner")
+		if resp.code != http.StatusOK || resp.header.Get("Kapi-Rev") != "1" || !strings.HasPrefix(resp.header.Get("Content-Type"), "text/plain") {
+			t.Fatalf("inner source: %d, Kapi-Rev %q, Content-Type %q", resp.code, resp.header.Get("Kapi-Rev"), resp.header.Get("Content-Type"))
+		}
+		if resp.body != want {
+			t.Errorf("inner source of #%s = %q, want %q", id, resp.body, want)
+		}
+	}
+	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa?part=outer"); resp.code != http.StatusBadRequest {
+		t.Errorf("unknown part: %d", resp.code)
+	}
+}
+
+func TestAnInnerEditKeepsTheElementsTags(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">old</kapi-callout>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"new <strong>text</strong>"}}`)
+	if code != http.StatusOK || out["rev"] != 2.0 {
+		t.Fatalf("inner edit: %d %v", code, out)
+	}
+	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa"); resp.body != `<kapi-callout data-kapi-id="aaaaaaaa" kind="note">new <strong>text</strong></kapi-callout>` {
+		t.Errorf("source after inner edit = %q", resp.body)
+	}
+	code, out = s.post("/ops", `{"rev":2,"op":{"kind":"edit","id":"aaaaaaaa","inner":"x</kapi-callout><p>y</p><kapi-callout>"}}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "closes the element early") {
+		t.Errorf("escaping inner edit: %d %v", code, out)
+	}
+}
+
+func TestAnUnchangedEditLogsNothing(t *testing.T) {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">same</kapi-callout>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"same"}}`)
+	if code != http.StatusOK || out["rev"] != 1.0 {
+		t.Fatalf("unchanged edit: %d %v, want 200 with rev 1", code, out)
+	}
+	if ev := s.events(); len(ev) != 0 {
+		t.Errorf("events = %+v, want none", ev)
+	}
+}
+
+func TestACellsOpSetsCellText(t *testing.T) {
+	s := newSite(t, "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><th>a</th></tr><tr><td class=\"x\">b</td></tr></table></kapi-table>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"cells","id":"aaaaaaaa","cells":[{"row":1,"col":0,"text":"<c>"}]}}`)
+	if code != http.StatusOK || out["rev"] != 2.0 {
+		t.Fatalf("cells: %d %v", code, out)
+	}
+	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa"); resp.body != `<kapi-table data-kapi-id="aaaaaaaa"><table><tr><th>a</th></tr><tr><td class="x">&lt;c&gt;</td></tr></table></kapi-table>` {
+		t.Errorf("source after cells op = %q", resp.body)
+	}
+	if ev := s.events(); len(ev) != 1 || ev[0].Target != "aaaaaaaa" {
+		t.Errorf("events = %+v", ev)
+	}
+}
+
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
-	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`)
 	if code != http.StatusOK || out["rev"] != 2.0 {
-		t.Fatalf("done: %d %v", code, out)
+		t.Fatalf("archive: %d %v", code, out)
 	}
 	ev := s.events()
-	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != "marked done" {
+	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != `archived "see a"` {
 		t.Errorf("events = %+v", ev)
 	}
 
@@ -488,7 +544,7 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 			edit(t, s.path, `<p data-kapi-id="aaaaaaaa">b</p>`)
-			code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`)
+			code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`)
 			if code != http.StatusConflict || out["rev"] != 2.0 {
 				t.Fatalf("op over a file edit: %d %v, want 409 rev 2", code, out)
 			}
@@ -496,8 +552,8 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 				t.Errorf("file = %s, want the agent's edit kept", b)
 			}
 			ev := s.events()
-			if len(ev) != 1 || ev[0].Author != "agent" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
-				t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
+			if len(ev) != 1 || ev[0].Author != "file" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
+				t.Errorf("events = %+v, want one file revision on #aaaaaaaa", ev)
 			}
 		})
 	}
@@ -528,17 +584,17 @@ func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
 	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p>a, by the human</p>"}}`); code != http.StatusOK || out["rev"] != 3.0 {
 		t.Errorf("save on an untouched block: %d %v, want 200 rev 3", code, out)
 	}
-	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
 		t.Errorf("op on the block the agent changed: %d %v, want 409 rev 3", code, out)
 	}
 }
 
 func TestUndoAcrossAFileEditIs422(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`); code != http.StatusOK {
-		t.Fatalf("done: %d", code)
+	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`); code != http.StatusOK {
+		t.Fatalf("archive: %d", code)
 	}
-	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa" data-kapi-state="done">a, by the agent</p>`)
+	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa" data-kapi-state="archived">a, by the agent</p>`)
 	code, out := s.post("/ops", `{"rev":3,"op":{"kind":"undo"}}`)
 	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "changed outside the browser") {
 		t.Errorf("undo across a file edit: %d %v, want 422", code, out)
@@ -636,6 +692,9 @@ func (s *site) stream(ctx context.Context, lastID string) *sse {
 			if v, ok := strings.CutPrefix(line, "id: "); ok {
 				id = v
 			}
+			if line == "" {
+				id = ""
+			}
 			if v, ok := strings.CutPrefix(line, "data: "); ok {
 				out.msgs <- [2]string{id, v}
 			}
@@ -643,6 +702,78 @@ func (s *site) stream(ctx context.Context, lastID string) *sse {
 		close(out.msgs)
 	}()
 	return out
+}
+
+func (e *sse) raw() (id, data string) {
+	e.t.Helper()
+	select {
+	case m, ok := <-e.msgs:
+		if !ok {
+			e.t.Fatal("stream closed")
+		}
+		return m[0], m[1]
+	case <-time.After(5 * time.Second):
+		e.t.Fatal("no message within 5s")
+	}
+	return "", ""
+}
+
+func TestTheStreamSendsReadPositionsWithoutAnID(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"one"}`)
+	s.post("/messages", `{"kind":"message","text":"two"}`)
+	_, l, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	live := s.stream(ctx, "")
+	for _, want := range []string{"1", "2"} {
+		if id, _ := live.raw(); id != want {
+			t.Fatalf("event id %q, want %s", id, want)
+		}
+	}
+	if err := l.Ack("agent", 1); err != nil {
+		t.Fatal(err)
+	}
+	if id, data := live.raw(); id != "" || data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Fatalf("after an ack: id %q data %s, want a read message with no id", id, data)
+	}
+	s.post("/messages", `{"kind":"message","text":"three"}`)
+	if id, _ := live.raw(); id != "3" {
+		t.Fatalf("event after the read message has id %q, want 3", id)
+	}
+
+	again := s.stream(ctx, "3")
+	if id, data := again.raw(); id != "" || data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Fatalf("a reconnect starts with id %q data %s, want the current read position", id, data)
+	}
+}
+
+func TestReservedReadersSendNoReadPosition(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"one"}`)
+	_, l, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []string{"human", "kapi", "agent"} {
+		if err := l.Ack(r, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st := s.stream(ctx, "1")
+	if _, data := st.raw(); data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Errorf("first read message = %s, want only the agent's", data)
+	}
+	s.post("/messages", `{"kind":"message","text":"two"}`)
+	if id, _ := st.raw(); id != "2" {
+		t.Errorf("next message has id %q, want the event 2 and no read position for human or kapi", id)
+	}
 }
 
 func (e *sse) next() (string, eventlog.Event) {
@@ -709,8 +840,8 @@ func TestPollStreamsAFileEditAsARevision(t *testing.T) {
 
 	editFile(t, s.path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p>new</p>\n")
 	_, ev := events.next()
-	if ev.Kind != "revision" || ev.Author != "agent" || ev.Target != "" || ev.Text != "edited in the file" {
-		t.Errorf("event = %+v, want an agent revision with no target", ev)
+	if ev.Kind != "revision" || ev.Author != "file" || ev.Target != "" || ev.Text != "edited in the file" {
+		t.Errorf("event = %+v, want a file revision with no target", ev)
 	}
 	if page := s.get("/p/" + s.id + "/").body; !strings.Contains(page, `data-rev="2"`) {
 		t.Errorf("page after the edit:\n%s", page)

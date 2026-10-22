@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -28,6 +30,7 @@ type Log struct {
 	events  []Event
 	cursors map[string]uint64
 	changed chan struct{}
+	acked   chan struct{}
 }
 
 const (
@@ -51,7 +54,7 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -69,7 +72,7 @@ func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
 		if c >= uint64(len(events)) {
 			return 0
 		}
-		return len(unread(events[c:]))
+		return len(unread(events[c:], reader))
 	}
 	return cursors, pending, nil
 }
@@ -130,19 +133,28 @@ func (l *Log) Ack(reader string, seq uint64) error {
 		return nil
 	}
 	l.cursors[reader] = seq
+	close(l.acked)
+	l.acked = make(chan struct{})
 	return writeCursors(filepath.Join(l.dir, cursorsFile), l.cursors)
 }
 
-// Pending returns the events a reader has not acknowledged, leaving out presence events.
+// Cursors returns every reader's cursor and a channel closed when the next one advances.
+func (l *Log) Cursors() (map[string]uint64, <-chan struct{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return maps.Clone(l.cursors), l.acked
+}
+
+// Pending returns the events a reader has not acknowledged, leaving out presence events and the reader's own.
 func (l *Log) Pending(reader string) []Event {
 	events, _ := l.After(l.Cursor(reader))
-	return unread(events)
+	return unread(events, reader)
 }
 
 const KindPresence = "presence"
 
-func unread(events []Event) []Event {
-	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence })
+func unread(events []Event, reader string) []Event {
+	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
 }
 
 func readEvents(path string) ([]Event, error) {
@@ -192,4 +204,26 @@ func writeCursors(path string, cursors map[string]uint64) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// Printable drops control and bidi characters a terminal would act on, turning newlines and tabs into spaces.
+func Printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return ' '
+		case r < 0x20, r >= 0x7f && r <= 0x9f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069,
+			r == 0x200e, r == 0x200f, r == 0x061c, r == 0x2028, r == 0x2029:
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// CheckReader refuses the author names the browser, file edits and kapi itself write events as.
+func CheckReader(name string) error {
+	if name == "human" || name == "kapi" || name == "file" {
+		return fmt.Errorf("reader %q is reserved; pick another name, such as agent or codex", name)
+	}
+	return nil
 }

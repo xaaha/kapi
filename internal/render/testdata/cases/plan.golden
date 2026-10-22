@@ -1,6 +1,6 @@
 <div class="kapi-plan" data-kapi-preset="plan" data-kapi-id="p0000001">
   <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="p0000002"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">First step.</div></div>
-  <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="p0000003" data-kapi-state="done"><span class="kapi-plan-mark"></span><div class="kapi-plan-body"><p>Second step, done.</p></div></div>
+  <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="p0000003" data-kapi-state="archived"><span class="kapi-plan-mark"></span><div class="kapi-plan-body"><p>Second step, archived.</p></div></div>
   <div class="kapi-plan-item kapi-risk" data-kapi-preset="risk" data-kapi-id="p0000004"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body">Something can break.</div></div>
   <div class="kapi-plan-item kapi-question" data-kapi-preset="question" data-kapi-id="p0000005"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Open question?</div></div>
 </div>
