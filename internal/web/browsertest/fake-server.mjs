@@ -104,7 +104,20 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     return full;
   }
 
+  const taskPattern = (id) => new RegExp(`<li[^>]*data-kapi-id="${id}"[^>]*>[\\s\\S]*?</li>`);
+  const findTask = (id) => state.blocks.find((b) => taskPattern(id).test(b.html));
+
   function apply(op) {
+    if (op.kind === "check") {
+      const b = findTask(op.id);
+      if (!b) return { status: 422, body: { error: `#${op.id} is not a kapi-task` } };
+      state.history.push(state.blocks.map((x) => ({ ...x })));
+      b.html = b.html.replace(taskPattern(op.id), (li) =>
+        li.replace(/<input type="checkbox"[^>]*>/, `<input type="checkbox"${op.done ? ' checked=""' : ""}>`));
+      state.rev++;
+      push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
+      return { status: 200, body: { rev: state.rev } };
+    }
     const i = state.blocks.findIndex((b) => b.id === op.id);
     if (op.kind !== "undo" && i < 0) return { status: 422, body: { error: `no block #${op.id}` } };
     if (op.kind === "delete") {
@@ -173,10 +186,12 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return res.end(pageHTML());
     }
     if (req.method === "GET" && rest.startsWith("blocks/")) {
-      const b = state.blocks.find((x) => x.id === rest.slice(7));
-      if (!b) return json(res, 404, { error: "no block" });
+      const id = rest.slice(7);
+      const b = state.blocks.find((x) => x.id === id);
+      const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];
+      if (!b && !inner) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev) });
-      return res.end(b.html);
+      return res.end(b ? b.html : inner);
     }
     if (req.method === "GET" && rest.startsWith("source/")) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));

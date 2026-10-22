@@ -542,6 +542,17 @@
     if (!editing && closest(e.target, "[data-kapi-id]") === selected) startEdit();
   });
 
+  main.addEventListener("change", async (e) => {
+    const box = closest(e.target, '.kapi-task > label > input[type="checkbox"]');
+    if (!box || !main.contains(box)) return;
+    const id = idOf(closest(box, ".kapi-task"));
+    box.disabled = true;
+    const res = await op("check", { id, done: box.checked });
+    box.disabled = false;
+    if (res?.ok) return refresh([id]);
+    if (res?.status !== 409) box.checked = !box.checked;
+  });
+
   main.addEventListener("submit", (e) => {
     e.preventDefault();
     answer(e.target);

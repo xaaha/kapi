@@ -747,3 +747,50 @@ test("a message refused after a restart without a reopen shows the command, neve
   assert.equal(await copyable(".kapi-composer textarea"), true);
 });
 
+
+const task = (id, done, label) =>
+  `<li class="kapi-task" data-kapi-preset="task" data-kapi-id="${id}"><label><input type="checkbox"${done ? ' checked=""' : ""}>` +
+  `<span class="kapi-task-body">${label}</span></label></li>`;
+
+async function reopenWith(blocks) {
+  await page.close();
+  await server.close();
+  server = await startFakeServer({ blocks });
+  page = await browser.open(server.url);
+  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+}
+
+const CHECKLIST = [
+  {
+    id: "llllllll",
+    html: `<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="llllllll">${task("tttttttt", false, "Copy")}${task("uuuuuuuu", true, "Flip")}</ul>`,
+  },
+];
+const checked = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"] input').checked`);
+
+test("ticking a task sends a check op and refetches only that task", async () => {
+  await reopenWith(CHECKLIST);
+  const loads = pageLoads();
+  await click('[data-kapi-id="tttttttt"] input');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "check", id: "tttttttt", done: true } });
+  await until(() => requests("GET", "/blocks/tttttttt").length === 1);
+  assert.equal(await checked("tttttttt"), true);
+  await page.waitFor(`!document.querySelector('[data-kapi-id="tttttttt"] input').disabled`);
+
+  await click('[data-kapi-id="uuuuuuuu"] input');
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.deepEqual(requests("POST", "/ops")[1].body, { rev: 2, op: { kind: "check", id: "uuuuuuuu", done: false } });
+  await until(() => requests("GET", "/blocks/uuuuuuuu").length === 1);
+  assert.equal(await checked("uuuuuuuu"), false);
+  assert.equal(pageLoads(), loads);
+});
+
+test("a refused check puts the box back and says why", async () => {
+  await reopenWith(CHECKLIST);
+  server.state.nextOpError = "check needs a kapi-task";
+  await click('[data-kapi-id="tttttttt"] input');
+  await until(async () => (await notice()) === "check needs a kapi-task");
+  assert.equal(await checked("tttttttt"), false);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="tttttttt"] input').disabled`), false);
+});
