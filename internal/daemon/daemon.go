@@ -39,6 +39,7 @@ type Request struct {
 	Target string `json:"target,omitempty"`
 	Text   string `json:"text,omitempty"`
 	Seq    uint64 `json:"seq,omitempty"`
+	Fresh  bool   `json:"fresh,omitempty"`
 }
 
 type Response struct {
@@ -52,9 +53,10 @@ type Response struct {
 }
 
 type PageStatus struct {
-	Path    string         `json:"path"`
-	Readers []ReaderStatus `json:"readers,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	Path    string           `json:"path"`
+	Readers []ReaderStatus   `json:"readers,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Events  []eventlog.Event `json:"events,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -406,6 +408,23 @@ func (s *Server) handle(conn net.Conn) {
 		s.open(enc, req.Page)
 		return
 	}
+	if req.Op == "inbox" {
+		if !filepath.IsAbs(req.Page) {
+			reply(enc, &Response{Error: fmt.Sprintf("inbox directory must be absolute: %q", req.Page)})
+			return
+		}
+		if err := eventlog.CheckReader(req.Reader); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		pages, err := s.inbox(req.Page, req.Reader, req.Fresh)
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Pages: pages})
+		return
+	}
 	if req.Op == "pages" {
 		pages, err := s.listPages()
 		if err != nil {
@@ -596,6 +615,40 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 			return
 		}
 	}
+}
+
+func (s *Server) inbox(dir, reader string, fresh bool) ([]PageStatus, error) {
+	pages, err := s.listPages()
+	if err != nil {
+		return nil, err
+	}
+	var out []PageStatus
+	for _, p := range pages {
+		if p.Error != "" || !within(dir, p.Path) {
+			continue
+		}
+		l, err := s.page(p.Path)
+		if err != nil {
+			return nil, err
+		}
+		events, _, queued := l.Unseen(reader)
+		if fresh {
+			events = slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Seq <= queued })
+		}
+		if len(events) == 0 {
+			continue
+		}
+		if err := l.Queue(reader, events[len(events)-1].Seq); err != nil {
+			return nil, err
+		}
+		out = append(out, PageStatus{Path: p.Path, Events: events})
+	}
+	return out, nil
+}
+
+func within(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {

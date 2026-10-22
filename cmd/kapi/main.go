@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,7 +33,7 @@ type api interface {
 }
 
 func main() {
-	root := newRoot(client.Client{Home: home()}, os.Stdout, time.Sleep)
+	root := newRoot(client.Client{Home: home()}, os.Stdin, os.Stdout, time.Sleep)
 	if err := root.Execute(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "kapi:", err)
 		os.Exit(1)
@@ -52,7 +53,7 @@ func home() string {
 
 var pageArg = cli.ArgDef{Name: "page", Required: true, Desc: "HTML page the events belong to", Kind: cli.KindFile}
 
-func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
+func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli.Command {
 	root := &cli.Command{
 		Name:   "kapi",
 		Long:   "kapi: shared HTML pages for you and your agent.",
@@ -73,7 +74,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			newOpenCmd(c, out),
 		},
 	}
-	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(out), hookContextCmd(c, out))
+	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(out), hookContextCmd(c, out), hookMessagesCmd(c, in, out))
 	return root
 }
 
@@ -473,10 +474,12 @@ func setupCmd(out io.Writer) *cli.Command {
 		Short: "Connect kapi to your agent harnesses",
 		SubCommands: []*cli.Command{{
 			Name:  "hooks",
-			Short: "Install or repair the SessionStart hook in Claude Code, Codex, OpenCode and Copilot CLI",
+			Short: "Install or repair kapi's hooks in Claude Code, Codex, OpenCode and Copilot CLI",
 			Long: "Install or repair a SessionStart hook that runs `kapi` so every new agent session sees your pages\n" +
-				"and their unread messages. Covers Claude Code, Codex, OpenCode and GitHub Copilot CLI. Re-running\n" +
-				"repairs the hook; --remove takes it out again. Restart your agent sessions afterwards.",
+				"and their unread messages. Covers Claude Code, Codex, OpenCode and GitHub Copilot CLI. In Claude Code\n" +
+				"it also adds UserPromptSubmit, PostToolUse and Stop hooks that hand the agent unseen messages on pages\n" +
+				"under its directory and keep it from stopping with any. Re-running repairs the hooks; --remove takes\n" +
+				"them out again. Restart your agent sessions afterwards.",
 			Flags: fs,
 			Run: func([]string) error {
 				home, err := os.UserHomeDir()
@@ -530,6 +533,48 @@ func hookContextCmd(c api, out io.Writer) *cli.Command {
 			enc := json.NewEncoder(out)
 			enc.SetEscapeHTML(false)
 			return enc.Encode(map[string]string{"additionalContext": text})
+		},
+	}
+}
+
+func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
+	return &cli.Command{
+		Name:   "hook-messages",
+		Short:  "Hand a Claude Code hook the unseen events on pages under its directory",
+		Hidden: true,
+		Run: func([]string) error {
+			var hook struct {
+				Event      string `json:"hook_event_name"`
+				Cwd        string `json:"cwd"`
+				StopActive bool   `json:"stop_hook_active"`
+			}
+			if err := json.NewDecoder(in).Decode(&hook); err != nil {
+				return fmt.Errorf("hook input: %w", err)
+			}
+			if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) {
+				return nil
+			}
+			fresh := hook.Event == "PostToolUse" || hook.StopActive
+			resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent", Fresh: fresh})
+			if err != nil || len(resp.Pages) == 0 {
+				return err
+			}
+			var b strings.Builder
+			b.WriteString("kapi: the human wrote on a shared page and does not know yet that you read it. Act on it, then reply with `kapi say <page> <text>` or run `kapi seen <page>`.\n")
+			for _, p := range resp.Pages {
+				fmt.Fprintf(&b, "%s:\n", p.Path)
+				for i := range p.Events {
+					fmt.Fprintf(&b, "  %s\n", eventLine(&p.Events[i]))
+				}
+			}
+			text := strings.TrimSuffix(b.String(), "\n")
+			var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
+			if hook.Event == "Stop" {
+				reply = map[string]string{"decision": "block", "reason": text}
+			}
+			enc := json.NewEncoder(out)
+			enc.SetEscapeHTML(false)
+			return enc.Encode(reply)
 		},
 	}
 }

@@ -3,6 +3,8 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -75,5 +77,37 @@ func TestAReplyMarksSeenOnlyWhatWasQueued(t *testing.T) {
 	}
 	if got := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(got.Events) != 0 {
 		t.Fatalf("pending again = %v, want nothing once pending showed it", texts(&got))
+	}
+}
+
+func TestInboxHandsOverUnseenEventsOfPagesUnderTheDirectory(t *testing.T) {
+	home, _, _ := serving(t)
+	dir := t.TempDir()
+	inside := filepath.Join(dir, "sub", "plan.html")
+	if err := os.MkdirAll(filepath.Dir(inside), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := writePage(t, "<p>x</p>")
+	for _, p := range []string{inside, outside} {
+		call(t, home, &Request{Op: "append", Page: p, Author: "human", Kind: "message", Text: "hello"})
+	}
+	got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"})
+	if len(got.Pages) != 1 || got.Pages[0].Path != inside || len(got.Pages[0].Events) != 1 || got.Pages[0].Events[0].Text != "hello" {
+		t.Fatalf("inbox = %+v, want only the page under the directory", got.Pages)
+	}
+	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent", Fresh: true}); len(got.Pages) != 0 {
+		t.Errorf("fresh inbox = %+v, want nothing once handed over", got.Pages)
+	}
+	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 1 {
+		t.Errorf("inbox = %+v, want the handed over but unseen message again", got.Pages)
+	}
+	call(t, home, &Request{Op: "seen", Page: inside, Reader: "agent"})
+	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 0 {
+		t.Errorf("inbox after seen = %+v", got.Pages)
+	}
+	for _, req := range []Request{{Op: "inbox", Page: "rel", Reader: "agent"}, {Op: "inbox", Page: dir, Reader: "human"}} {
+		if got := call(t, home, &req); got.Error == "" {
+			t.Errorf("%+v: no error", req)
+		}
 	}
 }

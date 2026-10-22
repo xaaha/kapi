@@ -488,3 +488,45 @@ func TestWaitExitsWithTheMessageWithinSecondsAndTheReplyMarksItSeen(t *testing.T
 	e.kapi("say", e.page, "yes")
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
+
+func TestTheStopHookHoldsTheAgentUntilItHasSeenTheMessage(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	hook := func(event string, active bool) string {
+		input, err := json.Marshal(map[string]any{"hook_event_name": event, "cwd": filepath.Dir(e.page), "stop_hook_active": active})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd, out := e.start(string(input), "hook-messages")
+		if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() {
+			t.Fatalf("%s hook failed: %v", event, cmd.ProcessState)
+		}
+		return out.String()
+	}
+	seq := e.post(url, "stop and look")
+	if got := hook("PostToolUse", false); !strings.Contains(got, `"additionalContext"`) || !strings.Contains(got, "human message: stop and look") {
+		t.Fatalf("PostToolUse hook = %q, want the new message as context", got)
+	}
+	if got := hook("PostToolUse", false); got != "" {
+		t.Errorf("second PostToolUse hook = %q, want nothing new", got)
+	}
+	if read, queued := receipts(t, url); queued < seq || read >= seq {
+		t.Errorf("read %d, queued %d; want #%d queued and not yet seen", read, queued, seq)
+	}
+	if got := hook("Stop", false); !strings.Contains(got, `"decision":"block"`) || !strings.Contains(got, "human message: stop and look") {
+		t.Fatalf("Stop hook = %q, want it to block on the unseen message", got)
+	}
+	if got := hook("Stop", true); got != "" {
+		t.Errorf("Stop hook while already continuing = %q, want it to let the agent stop", got)
+	}
+	e.kapi("say", e.page, "looked")
+	if got := hook("Stop", false); got != "" {
+		t.Errorf("Stop hook after the reply = %q, want nothing", got)
+	}
+	if read, _ := receipts(t, url); read < seq {
+		t.Errorf("read %d, want #%d seen after the reply", read, seq)
+	}
+}

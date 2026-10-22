@@ -21,6 +21,7 @@ type fakeAPI struct {
 	resp     daemon.Response
 	watches  []func(fn func(daemon.Response) error) error
 	watched  []string
+	stdin    string
 }
 
 func (f *fakeAPI) Do(req *daemon.Request) (daemon.Response, error) {
@@ -38,7 +39,7 @@ func (f *fakeAPI) Watch(page, reader string, fn func(daemon.Response) error) err
 func run(t *testing.T, f *fakeAPI, args ...string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
-	err := newRoot(f, &out, func(time.Duration) {}).Execute(args)
+	err := newRoot(f, strings.NewReader(f.stdin), &out, func(time.Duration) {}).Execute(args)
 	return out.String(), err
 }
 
@@ -343,5 +344,46 @@ func TestSeenReportsHowFarItMarked(t *testing.T) {
 	}
 	if f.requests[0].Op != "seen" || f.requests[0].Reader != "agent" {
 		t.Errorf("request = %+v", f.requests[0])
+	}
+}
+
+func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
+	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: "<ship it>"}}}}}
+	cases := []struct {
+		stdin     string
+		wantFresh bool
+		want      string
+	}{
+		{`{"hook_event_name":"Stop","cwd":"/w"}`, false, `{"decision":"block","reason":"kapi: `},
+		{`{"hook_event_name":"Stop","cwd":"/w","stop_hook_active":true}`, true, `{"decision":"block","reason":"kapi: `},
+		{`{"hook_event_name":"PostToolUse","cwd":"/w"}`, true, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`, false, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+	}
+	for _, tc := range cases {
+		f := &fakeAPI{resp: inbox, stdin: tc.stdin}
+		out, err := run(t, f, "hook-messages")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.stdin, err)
+		}
+		if !strings.HasPrefix(out, tc.want) || !strings.Contains(out, `/w/plan.html:\n  #4 human message: <ship it>`) || !strings.Contains(out, "kapi say <page> <text>") {
+			t.Errorf("%s: output = %s", tc.stdin, out)
+		}
+		want := daemon.Request{Op: "inbox", Page: "/w", Reader: "agent", Fresh: tc.wantFresh}
+		if len(f.requests) != 1 || f.requests[0] != want {
+			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
+		}
+	}
+	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":"/w"}`, `{"hook_event_name":"Stop","cwd":"rel"}`} {
+		f := &fakeAPI{resp: inbox, stdin: stdin}
+		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 0 {
+			t.Errorf("%s: %q, %v, %d requests; want nothing", stdin, out, err, len(f.requests))
+		}
+	}
+	f := &fakeAPI{stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+		t.Errorf("nothing unseen: %q, %v; want no output so the agent may stop", out, err)
+	}
+	if _, err := run(t, &fakeAPI{stdin: "not json"}, "hook-messages"); err == nil {
+		t.Error("bad hook input accepted")
 	}
 }
