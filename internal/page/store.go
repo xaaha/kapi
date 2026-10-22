@@ -349,6 +349,13 @@ var (
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	if !bytes.Equal(src, base) {
+		quiet, err := settled(s.path, placement{b: base})
+		if err != nil {
+			return err
+		}
+		if !quiet {
+			return errFileChanged
+		}
 		if err := replaceFile(s.path, src, base); err != nil {
 			return err
 		}
