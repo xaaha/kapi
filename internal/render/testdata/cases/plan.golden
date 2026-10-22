@@ -1,7 +1,7 @@
 <div class="kapi-plan" data-kapi-preset="plan" data-kapi-id="p0000001">
-  <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="p0000002"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">First step.</div></div>
-  <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="p0000003" data-kapi-state="archived"><span class="kapi-plan-mark"></span><div class="kapi-plan-body"><p>Second step, archived.</p></div></div>
-  <div class="kapi-plan-item kapi-risk kapi-tone-warning" data-kapi-preset="risk" data-kapi-id="p0000004"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body">Something can break.</div></div>
-  <div class="kapi-plan-item kapi-question kapi-tone-info" data-kapi-preset="question" data-kapi-id="p0000005"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Open question?</div></div>
+  <div class="kapi-plan-item kapi-step kapi-tone-purple" data-kapi-preset="step" data-kapi-id="p0000002"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">First step.</div></div>
+  <div class="kapi-plan-item kapi-step kapi-tone-purple" data-kapi-preset="step" data-kapi-id="p0000003" data-kapi-state="archived"><span class="kapi-plan-mark"></span><div class="kapi-plan-body"><p>Second step, archived.</p></div></div>
+  <div class="kapi-plan-item kapi-risk kapi-tone-yellow" data-kapi-preset="risk" data-kapi-id="p0000004"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body">Something can break.</div></div>
+  <div class="kapi-plan-item kapi-question kapi-tone-blue" data-kapi-preset="question" data-kapi-id="p0000005"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Open question?</div></div>
 </div>
 <div class="kapi-error" data-kapi-preset="step" role="alert" data-kapi-id="p0000006"><span class="kapi-error-tag">&lt;kapi-step&gt;</span> must be a direct child of &lt;kapi-plan&gt;</div>

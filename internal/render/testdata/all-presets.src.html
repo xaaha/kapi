@@ -3,7 +3,7 @@
 
 <kapi-kv data-kapi-id="kvaaaaaa">
   <kapi-item key="Owner" data-kapi-id="kvitemaa">Track A, the server</kapi-item>
-  <kapi-item key="Status" data-kapi-id="kvitembb"><kapi-badge tone="warning" data-kapi-id="badgebbb">in review</kapi-badge></kapi-item>
+  <kapi-item key="Status" data-kapi-id="kvitembb"><kapi-badge tone="yellow" data-kapi-id="badgebbb">in review</kapi-badge></kapi-item>
   <kapi-item key="Rollback" data-kapi-id="kvitemcc">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
 </kapi-kv>
 
@@ -77,7 +77,7 @@ diff --git a/internal/page/store.go b/internal/page/store.go
     <tbody>
       <tr><td><code>GET /p/{id}/</code></td><td>4</td><td>11</td><td>Full render with CSS</td></tr>
       <tr><td><code>GET /p/{id}/blocks/{block}</code></td><td>1</td><td>3</td><td>One element</td></tr>
-      <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision <kapi-badge tone="warning" data-kapi-id="badgeaaa">slowest</kapi-badge></td></tr>
+      <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision <kapi-badge tone="yellow" data-kapi-id="badgeaaa">slowest</kapi-badge></td></tr>
     </tbody>
   </table>
 </kapi-table>

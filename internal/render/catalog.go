@@ -8,7 +8,7 @@ var catalog = []Preset{
 	{
 		Name:    "kapi-callout",
 		Summary: "Boxed aside for a note, a warning, the key point, a danger or a success",
-		Example: `<!-- kind: note (default, info tone), warning, key (accent tone), danger or success. Body: prose. -->
+		Example: `<!-- kind: note (default, blue), warning (yellow), key (purple), danger (red) or success (green). Body: prose. -->
 <kapi-callout kind="warning">
   <p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p>
 </kapi-callout>`,
@@ -108,7 +108,7 @@ func (s *Store) Source() ([]byte, uint64) {
 
 <!-- type: architecture (left to right by default; dir="tb" stacks it top to bottom).
      Node lines: "id: Title | subtitle | subtitle | state". id is letters, digits, - _ or .
-     state is built, review, planned (dashed) or a tone: neutral, info, success, warning, danger, accent.
+     state is built, review, planned (dashed) or a colour: red, orange, yellow, green, blue, purple, grey.
      Edges: "a -> b: label", "a <-> b: label" (both ways, may share a column), "a --> b: label" (dashed).
      Every edge names declared ids. A legend for built, review and planned is added when they are used. -->
 <kapi-diagram type="architecture">
@@ -142,10 +142,10 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-badge",
-		Summary: "A small coloured pill for a status, inside prose or a table cell",
-		Example: `<!-- tone: neutral (default), info, success, warning, danger or accent. Body: a word or two.
+		Summary: "A small coloured label for a status, inside prose or a table cell",
+		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default). Body: a word or two.
      Use it inline: inside a <p>, an <li> or a table cell. -->
-<p>PR #19 is <kapi-badge tone="success">merged</kapi-badge>, #18 is <kapi-badge tone="warning">in review</kapi-badge>.</p>`,
+<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>`,
 	},
 	{
 		Name:    "kapi-kv",
@@ -153,7 +153,7 @@ func (s *Store) Source() ([]byte, uint64) {
 		Example: `<!-- Children: <kapi-item key="..."> each holding prose. Keep keys to a word or two. -->
 <kapi-kv>
   <kapi-item key="Owner">Pratik</kapi-item>
-  <kapi-item key="Status"><kapi-badge tone="warning">in review</kapi-badge></kapi-item>
+  <kapi-item key="Status"><kapi-badge tone="yellow">in review</kapi-badge></kapi-item>
   <kapi-item key="Rollback">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
 </kapi-kv>`,
 	},

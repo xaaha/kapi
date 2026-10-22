@@ -1,16 +1,16 @@
 <h1>Kapi component gallery</h1>
-<p>Every preset and every tone on one page. Status pills sit in prose: <kapi-badge tone="neutral">draft</kapi-badge> <kapi-badge tone="info">open</kapi-badge> <kapi-badge tone="success">merged</kapi-badge> <kapi-badge tone="warning">in review</kapi-badge> <kapi-badge tone="danger">failing</kapi-badge> <kapi-badge tone="accent">new</kapi-badge>.</p>
+<p>Every preset and every colour on one page. Badges sit in prose: <kapi-badge tone="red">failing</kapi-badge> <kapi-badge tone="orange">stale</kapi-badge> <kapi-badge tone="yellow">in review</kapi-badge> <kapi-badge tone="green">merged</kapi-badge> <kapi-badge tone="blue">open</kapi-badge> <kapi-badge tone="purple">new</kapi-badge> <kapi-badge tone="grey">draft</kapi-badge>.</p>
 
 <kapi-kv>
   <kapi-item key="Owner">Track C, presets</kapi-item>
-  <kapi-item key="Status"><kapi-badge tone="warning">in review</kapi-badge></kapi-item>
+  <kapi-item key="Status"><kapi-badge tone="yellow">in review</kapi-badge></kapi-item>
   <kapi-item key="Branch"><code>components</code></kapi-item>
   <kapi-item key="Rollback">Revert the merge and restart the daemon. Pages keep their source, so nothing on disk changes.</kapi-item>
 </kapi-kv>
 
 <h2>Callouts</h2>
-<kapi-callout kind="note"><p>A note uses the info tone.</p></kapi-callout>
-<kapi-callout kind="key"><p>The key point uses the accent tone.</p></kapi-callout>
+<kapi-callout kind="note"><p>A note is blue.</p></kapi-callout>
+<kapi-callout kind="key"><p>The key point is purple.</p></kapi-callout>
 <kapi-callout kind="success"><p>All 12 shards copied and row counts match.</p></kapi-callout>
 <kapi-callout kind="warning"><p>The cutover drops writes for about <strong>30 seconds</strong>.</p></kapi-callout>
 <kapi-callout kind="danger"><p>This deletes the old session table. There is no undo.</p></kapi-callout>
@@ -31,18 +31,20 @@
   daemon --> hub: publish
 </kapi-diagram>
 
-<p>The same kind of diagram flipped top to bottom, with nodes in each tone:</p>
+<p>The same kind of diagram flipped top to bottom, with nodes in each colour:</p>
 <kapi-diagram type="architecture" dir="tb">
-  cli: kapi CLI | neutral
-  sock: Unix socket | info
-  store: Page store | success
-  queue: Retry queue | warning
-  dead: Dead letters | danger
-  hub: Hub | accent
+  cli: kapi CLI | grey
+  sock: Unix socket | blue
+  store: Page store | green
+  queue: Retry queue | yellow
+  backoff: Backoff timer | orange
+  dead: Dead letters | red
+  hub: Hub | purple
   cli <-> sock: requests
   sock -> store: ops
   store -> queue: on failure
-  queue -> dead: after 5 tries
+  queue -> backoff: waits
+  backoff -> dead: after 5 tries
   store --> hub: publish
 </kapi-diagram>
 
@@ -98,10 +100,12 @@
   <table>
     <thead><tr><th>PR</th><th>Title</th><th>State</th></tr></thead>
     <tbody>
-      <tr><td>#18</td><td>Edit what you see</td><td><kapi-badge tone="warning">in review</kapi-badge></td></tr>
-      <tr><td>#19</td><td>Light and dark theme</td><td><kapi-badge tone="success">merged</kapi-badge></td></tr>
-      <tr><td>#20</td><td>Reopen after restart</td><td><kapi-badge tone="success">merged</kapi-badge></td></tr>
-      <tr><td>#21</td><td>Component system</td><td><kapi-badge tone="info">open</kapi-badge></td></tr>
+      <tr><td>#18</td><td>Edit what you see</td><td><kapi-badge tone="yellow">in review</kapi-badge></td></tr>
+      <tr><td>#19</td><td>Light and dark theme</td><td><kapi-badge tone="green">merged</kapi-badge></td></tr>
+      <tr><td>#20</td><td>Reopen after restart</td><td><kapi-badge tone="green">merged</kapi-badge></td></tr>
+      <tr><td>#21</td><td>Component system</td><td><kapi-badge tone="blue">open</kapi-badge></td></tr>
+      <tr><td>#14</td><td>Old session handler</td><td><kapi-badge tone="orange">stale</kapi-badge></td></tr>
+      <tr><td>#12</td><td>Drop the v1 socket</td><td><kapi-badge tone="red">failing</kapi-badge></td></tr>
     </tbody>
   </table>
 </kapi-table>

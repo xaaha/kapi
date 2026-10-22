@@ -1,8 +1,8 @@
 package render
 
-var tones = []string{"neutral", "info", "success", "warning", "danger", "accent"}
+var tones = []string{"red", "orange", "yellow", "green", "blue", "purple", "grey"}
 
-const toneList = "neutral, info, success, warning, danger or accent"
+const toneList = "red, orange, yellow, green, blue, purple or grey"
 
 func isTone(name string) bool {
 	for _, t := range tones {

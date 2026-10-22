@@ -36,7 +36,7 @@ type archGraph struct {
 	edges []edge
 }
 
-var archStates = map[string]string{"built": "accent", "review": "warning", "planned": "neutral"}
+var archStates = map[string]string{"built": "purple", "review": "yellow", "planned": "grey"}
 
 var legendStates = []struct{ state, label string }{{"built", "built"}, {"review", "in review"}, {"planned", "planned"}}
 
@@ -100,7 +100,7 @@ func parseArchitecture(src string) (*archGraph, error) {
 		if len(parts) == 0 {
 			return nil, fmt.Errorf("line %d: node %q needs a title after the colon", i+1, id)
 		}
-		node := archNode{title: wrapAtWidth(parts[0], archTitleWrap), tone: "neutral"}
+		node := archNode{title: wrapAtWidth(parts[0], archTitleWrap), tone: "grey"}
 		subs := parts[1:]
 		if last := len(subs) - 1; last >= 0 {
 			if tone, ok := archStates[subs[last]]; ok {

@@ -24,7 +24,7 @@ func archSources() map[string]string {
 		return int(seed>>16) % n
 	}
 	arrows := []string{"->", "<->", "-->"}
-	states := []string{"built", "review", "planned", "danger", "info", ""}
+	states := []string{"built", "review", "planned", "red", "blue", ""}
 	for g := 0; g < 16; g++ {
 		n := 4 + g%9
 		var lines []string
@@ -98,26 +98,26 @@ func TestArchitectureRunsLeftToRightByDefault(t *testing.T) {
 }
 
 func TestArchitectureNodesShowStateAndTone(t *testing.T) {
-	out := render(t, diagram("architecture", "a: Agent | one | two | built\nb: Daemon | review\nc: Hub | planned\nd: Disk | danger\ne: Plain\n"+
+	out := render(t, diagram("architecture", "a: Agent | one | two | built\nb: Daemon | review\nc: Hub | planned\nd: Disk | red\ne: Plain\n"+
 		"a <-> b: socket\nb --> c\nb -> d\nb -> e"))
 	for _, want := range []string{
-		`<g class="kd-node kd-arch kapi-tone-accent"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-warning"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-neutral kd-planned"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-danger"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-neutral"><rect`,
+		`<g class="kd-node kd-arch kapi-tone-purple"><rect`,
+		`<g class="kd-node kd-arch kapi-tone-yellow"><rect`,
+		`<g class="kd-node kd-arch kapi-tone-grey kd-planned"><rect`,
+		`<g class="kd-node kd-arch kapi-tone-red"><rect`,
+		`<g class="kd-node kd-arch kapi-tone-grey"><rect`,
 		`class="kd-title"`, `>Agent</text>`, `<text class="kd-title kd-centred"`, `class="kd-sub"`, `>one</text>`, `>two</text>`,
 		`marker-start="url(#`, `class="kd-edge kd-dashed"`,
-		`<figcaption class="kapi-diagram-legend"><span class="kapi-badge kapi-tone-accent">built</span> <span class="kapi-badge kapi-tone-warning">in review</span> <span class="kapi-badge kapi-tone-neutral kd-legend-planned">planned</span></figcaption>`,
+		`<figcaption class="kapi-diagram-legend"><span class="kapi-badge kapi-tone-purple">built</span> <span class="kapi-badge kapi-tone-yellow">in review</span> <span class="kapi-badge kapi-tone-grey kd-legend-planned">planned</span></figcaption>`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %s:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, ">built</text>") || strings.Contains(out, ">danger</text>") {
+	if strings.Contains(out, ">built</text>") || strings.Contains(out, ">red</text>") {
 		t.Errorf("a state was drawn as a subtitle:\n%s", out)
 	}
-	if plain := render(t, diagram("architecture", "a: A | danger\nb: B\na -> b")); strings.Contains(plain, "figcaption") {
+	if plain := render(t, diagram("architecture", "a: A | red\nb: B\na -> b")); strings.Contains(plain, "figcaption") {
 		t.Errorf("tones alone need no legend: %s", plain)
 	}
 }

@@ -33,9 +33,9 @@ func init() {
 		"kapi-compare":   renderCompare,
 		"kapi-option":    renderOption,
 		"kapi-plan":      renderPlan,
-		"kapi-step":      planItem("kapi-step", "", "accent"),
-		"kapi-risk":      planItem("kapi-risk", "Risk", "warning"),
-		"kapi-question":  planItem("kapi-question", "Question", "info"),
+		"kapi-step":      planItem("kapi-step", "", "purple"),
+		"kapi-risk":      planItem("kapi-risk", "Risk", "yellow"),
+		"kapi-question":  planItem("kapi-question", "Question", "blue"),
 		"kapi-diagram":   renderDiagram,
 		"kapi-form":      renderForm,
 		"kapi-choice":    renderChoice,
@@ -116,11 +116,11 @@ func requireAttr(n *html.Node, key string) (string, error) {
 type calloutKind struct{ label, tone string }
 
 var calloutKinds = map[string]calloutKind{
-	"note":    {"Note", "info"},
-	"warning": {"Warning", "warning"},
-	"key":     {"Key point", "accent"},
-	"danger":  {"Danger", "danger"},
-	"success": {"Success", "success"},
+	"note":    {"Note", "blue"},
+	"warning": {"Warning", "yellow"},
+	"key":     {"Key point", "purple"},
+	"danger":  {"Danger", "red"},
+	"success": {"Success", "green"},
 }
 
 func renderCallout(b *bytes.Buffer, n *html.Node) error {
@@ -299,7 +299,7 @@ func renderTextField(b *bytes.Buffer, n *html.Node) error {
 func toneAttr(n *html.Node) (string, error) {
 	tone := attrVal(n, "tone")
 	if tone == "" {
-		return "neutral", nil
+		return "grey", nil
 	}
 	if !isTone(tone) {
 		return "", fmt.Errorf("tone must be %s, not %q", toneList, tone)

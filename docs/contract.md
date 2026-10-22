@@ -34,18 +34,22 @@ load and writes the file back. Ids never change after that.
 
 | Element | Attributes | Body |
 |---|---|---|
-| `<kapi-callout>` | `kind` = `note`, `warning`, `key`, `danger`, `success` | prose |
+| `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` (red), `success` (green) | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built`, `review`, `planned` or a tone, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |
-| `<kapi-badge>` | optional `tone` = `neutral` (default), `info`, `success`, `warning`, `danger`, `accent` | short inline text; allowed inside prose and table cells |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built` (purple), `review` (yellow), `planned` (grey, dashed) or a colour, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |
+| `<kapi-badge>` | optional `tone` = `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default) | short inline text; allowed inside prose and table cells |
 | `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
 | `<kapi-checklist>` | none | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Ticking a box in the browser sends a `check` op |
 | `<kapi-form>` | `name` | `<kapi-choice name="..." multiple?>` with `<kapi-opt value="...">label</kapi-opt>`, and `<kapi-text name="...">label</kapi-text>` |
+
+The colours are the seven shared tones: `red`, `orange`, `yellow`, `green`,
+`blue`, `purple` and `grey`. Each is a `--kapi-<colour>-fill`, `-border`,
+`-text`, `-solid` and `-tint` token in `theme.css`, for light and dark.
 
 Unknown `kapi-*` elements render as a visible error box, never silently.
 

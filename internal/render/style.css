@@ -41,12 +41,12 @@ body {
 :where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
 :where(#kapi-page) li::marker { color: var(--kapi-faint); }
 :where(#kapi-page) a {
-  color: var(--kapi-accent-text);
+  color: var(--kapi-purple-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
-:where(#kapi-page) a:hover { color: var(--kapi-accent-text); text-decoration-thickness: 2px; }
+:where(#kapi-page) a:hover { color: var(--kapi-purple-text); text-decoration-thickness: 2px; }
 :where(#kapi-page) :where(strong, b) { font-weight: 650; }
 :where(#kapi-page) :where(code, kbd, samp) { font-family: var(--kapi-mono); font-size: 0.875em; }
 :where(#kapi-page) :not(pre) > code {
@@ -78,12 +78,12 @@ body {
 :where(#kapi-page) blockquote {
   margin: 1.25rem 0;
   padding: 0.1rem 0 0.1rem 1rem;
-  border-left: 3px solid var(--kapi-accent-border);
+  border-left: 3px solid var(--kapi-purple-border);
   color: var(--kapi-muted);
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
-:where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-warning-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
+:where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-yellow-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
 :where(#kapi-page) del { color: var(--kapi-muted); }
 :where(#kapi-page) details {
   margin: 1rem 0;
@@ -129,15 +129,16 @@ body {
 .kapi-table tbody tr:hover { background: var(--kapi-subtle); }
 .kapi-table[data-kapi-sort="on"] th { cursor: pointer; user-select: none; }
 .kapi-table[data-kapi-sort="on"] th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-accent-text); }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-accent-text); }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-purple-text); }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-purple-text); }
 
-.kapi-tone-neutral { --kapi-tone-fill: var(--kapi-neutral-fill); --kapi-tone-border: var(--kapi-neutral-border); --kapi-tone-text: var(--kapi-neutral-text); --kapi-tone-solid: var(--kapi-neutral-solid); }
-.kapi-tone-info { --kapi-tone-fill: var(--kapi-info-fill); --kapi-tone-border: var(--kapi-info-border); --kapi-tone-text: var(--kapi-info-text); --kapi-tone-solid: var(--kapi-info-solid); }
-.kapi-tone-success { --kapi-tone-fill: var(--kapi-success-fill); --kapi-tone-border: var(--kapi-success-border); --kapi-tone-text: var(--kapi-success-text); --kapi-tone-solid: var(--kapi-success-solid); }
-.kapi-tone-warning { --kapi-tone-fill: var(--kapi-warning-fill); --kapi-tone-border: var(--kapi-warning-border); --kapi-tone-text: var(--kapi-warning-text); --kapi-tone-solid: var(--kapi-warning-solid); }
-.kapi-tone-danger { --kapi-tone-fill: var(--kapi-danger-fill); --kapi-tone-border: var(--kapi-danger-border); --kapi-tone-text: var(--kapi-danger-text); --kapi-tone-solid: var(--kapi-danger-solid); }
-.kapi-tone-accent { --kapi-tone-fill: var(--kapi-accent-fill); --kapi-tone-border: var(--kapi-accent-border); --kapi-tone-text: var(--kapi-accent-text); --kapi-tone-solid: var(--kapi-accent-solid); }
+.kapi-tone-red { --kapi-tone-fill: var(--kapi-red-fill); --kapi-tone-border: var(--kapi-red-border); --kapi-tone-text: var(--kapi-red-text); --kapi-tone-solid: var(--kapi-red-solid); }
+.kapi-tone-orange { --kapi-tone-fill: var(--kapi-orange-fill); --kapi-tone-border: var(--kapi-orange-border); --kapi-tone-text: var(--kapi-orange-text); --kapi-tone-solid: var(--kapi-orange-solid); }
+.kapi-tone-yellow { --kapi-tone-fill: var(--kapi-yellow-fill); --kapi-tone-border: var(--kapi-yellow-border); --kapi-tone-text: var(--kapi-yellow-text); --kapi-tone-solid: var(--kapi-yellow-solid); }
+.kapi-tone-green { --kapi-tone-fill: var(--kapi-green-fill); --kapi-tone-border: var(--kapi-green-border); --kapi-tone-text: var(--kapi-green-text); --kapi-tone-solid: var(--kapi-green-solid); }
+.kapi-tone-blue { --kapi-tone-fill: var(--kapi-blue-fill); --kapi-tone-border: var(--kapi-blue-border); --kapi-tone-text: var(--kapi-blue-text); --kapi-tone-solid: var(--kapi-blue-solid); }
+.kapi-tone-purple { --kapi-tone-fill: var(--kapi-purple-fill); --kapi-tone-border: var(--kapi-purple-border); --kapi-tone-text: var(--kapi-purple-text); --kapi-tone-solid: var(--kapi-purple-solid); }
+.kapi-tone-grey { --kapi-tone-fill: var(--kapi-grey-fill); --kapi-tone-border: var(--kapi-grey-border); --kapi-tone-text: var(--kapi-grey-text); --kapi-tone-solid: var(--kapi-grey-solid); }
 
 .kapi-callout {
   margin: 1.25rem 0;
@@ -235,7 +236,7 @@ body {
 }
 .kapi-details[open] > summary::before { transform: translateY(-0.15rem) rotate(45deg); }
 .kapi-details > summary:hover { background: var(--kapi-subtle); }
-.kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
+.kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
 .kapi-details[open] > summary { border-bottom: 1px solid var(--kapi-border); border-radius: var(--kapi-radius) var(--kapi-radius) 0 0; }
 .kapi-details-body { padding: 0.75rem 1rem 0.9rem; }
 .kapi-details-body > :first-child { margin-top: 0; }
@@ -266,10 +267,10 @@ body {
   width: 1.05rem;
   height: 1.05rem;
   margin: 0.25rem 0 0;
-  accent-color: var(--kapi-accent-solid);
+  accent-color: var(--kapi-purple-solid);
   cursor: pointer;
 }
-.kapi-task input:focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
+.kapi-task input:focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
 .kapi-task-body { min-width: 0; }
 .kapi-task-body > :first-child { margin-top: 0; }
 .kapi-task-body > :last-child { margin-bottom: 0; }
@@ -304,17 +305,17 @@ body {
 .kapi-code-file { margin-right: auto; color: var(--kapi-fg); font-weight: 600; overflow-wrap: anywhere; }
 .kapi-code-lang {
   padding: 0 0.5rem;
-  border: 1px solid var(--kapi-accent-border);
+  border: 1px solid var(--kapi-purple-border);
   border-radius: 999px;
-  background: var(--kapi-accent-fill);
-  color: var(--kapi-accent-text);
+  background: var(--kapi-purple-fill);
+  color: var(--kapi-purple-text);
   font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: lowercase;
 }
 .kapi-diff-stat { white-space: nowrap; font-weight: 600; }
-.kapi-diff-added { color: var(--kapi-success-text); }
-.kapi-diff-removed { color: var(--kapi-danger-text); }
+.kapi-diff-added { color: var(--kapi-green-text); }
+.kapi-diff-removed { color: var(--kapi-red-text); }
 
 #kapi-page pre.kapi-hl,
 pre.kapi-hl {
@@ -357,16 +358,16 @@ pre.kapi-hl {
 .kapi-src { display: inline-block; }
 .kapi-diff .kapi-ln + .kapi-ln { padding-left: 0; }
 .kapi-diff-sign { display: inline-block; width: 1.5ch; color: var(--kapi-faint); user-select: none; }
-.kapi-diff-add { background: var(--kapi-success-fill); }
-.kapi-diff-add .kapi-ln { background: color-mix(in srgb, var(--kapi-success-text) 12%, var(--kapi-success-fill)); color: var(--kapi-success-text); }
-.kapi-diff-add .kapi-diff-sign { color: var(--kapi-success-text); }
-.kapi-diff-del { background: var(--kapi-danger-fill); }
-.kapi-diff-del .kapi-ln { background: color-mix(in srgb, var(--kapi-danger-text) 12%, var(--kapi-danger-fill)); color: var(--kapi-danger-text); }
-.kapi-diff-del .kapi-diff-sign { color: var(--kapi-danger-text); }
+.kapi-diff-add { background: var(--kapi-green-fill); }
+.kapi-diff-add .kapi-ln { background: color-mix(in srgb, var(--kapi-green-text) 12%, var(--kapi-green-fill)); color: var(--kapi-green-text); }
+.kapi-diff-add .kapi-diff-sign { color: var(--kapi-green-text); }
+.kapi-diff-del { background: var(--kapi-red-fill); }
+.kapi-diff-del .kapi-ln { background: color-mix(in srgb, var(--kapi-red-text) 12%, var(--kapi-red-fill)); color: var(--kapi-red-text); }
+.kapi-diff-del .kapi-diff-sign { color: var(--kapi-red-text); }
 .kapi-diff-hunk,
 .kapi-diff-file,
 .kapi-diff-meta { padding-left: 0.9rem; }
-.kapi-diff-hunk { margin: 0.2rem 0; background: var(--kapi-info-fill); color: var(--kapi-info-text); }
+.kapi-diff-hunk { margin: 0.2rem 0; background: var(--kapi-blue-fill); color: var(--kapi-blue-text); }
 .kapi-diff-hunk:first-child { margin-top: -0.55rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
 .kapi-diff-file { color: var(--kapi-muted); font-weight: 600; }
 .kapi-diff-meta { color: var(--kapi-faint); font-style: italic; }
@@ -383,7 +384,7 @@ pre.kapi-hl {
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius);
   background: var(--kapi-surface);
-  box-shadow: inset 0 3px 0 var(--kapi-accent-text);
+  box-shadow: inset 0 3px 0 var(--kapi-purple-text);
 }
 #kapi-page .kapi-option-title,
 .kapi-option-title {
@@ -463,9 +464,9 @@ pre.kapi-hl {
   vertical-align: top;
 }
 .kapi-diagram text { fill: var(--kapi-fg); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
-.kapi-diagram .kd-node rect { fill: var(--kapi-accent-fill); stroke: var(--kapi-accent-text); stroke-opacity: 0.55; stroke-width: 1.2; }
+.kapi-diagram .kd-node rect { fill: var(--kapi-purple-fill); stroke: var(--kapi-purple-text); stroke-opacity: 0.55; stroke-width: 1.2; }
 .kapi-diagram .kd-node text { font-weight: 600; }
-.kapi-diagram .kd-actor rect { fill: var(--kapi-warning-fill); stroke: var(--kapi-warning-text); }
+.kapi-diagram .kd-actor rect { fill: var(--kapi-yellow-fill); stroke: var(--kapi-yellow-text); }
 .kapi-diagram .kd-edge,
 .kapi-diagram .kd-msg { fill: none; stroke: var(--kapi-faint); stroke-width: 1.4; }
 .kapi-diagram .kd-dashed { stroke-dasharray: 5 4; }
@@ -513,8 +514,8 @@ pre.kapi-hl {
   cursor: pointer;
 }
 .kapi-opt:hover { border-color: var(--kapi-border-strong); }
-.kapi-opt:has(input:checked) { border-color: var(--kapi-accent-text); background: var(--kapi-accent-fill); }
-.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-accent-text); }
+.kapi-opt:has(input:checked) { border-color: var(--kapi-purple-text); background: var(--kapi-purple-fill); }
+.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-purple-text); }
 .kapi-text { display: flex; flex-direction: column; gap: 0.45rem; }
 .kapi-text-label { font-weight: 600; }
 .kapi-text textarea {
@@ -530,29 +531,29 @@ pre.kapi-hl {
   font-size: 0.95rem;
   resize: vertical;
 }
-.kapi-text textarea:focus { border-color: var(--kapi-accent-text); outline: 3px solid var(--kapi-accent-fill); outline-offset: 0; }
-.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
+.kapi-text textarea:focus { border-color: var(--kapi-purple-text); outline: 3px solid var(--kapi-purple-fill); outline-offset: 0; }
+.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
 .kapi-form-actions { display: flex; justify-content: flex-end; }
 .kapi-form-actions button {
   padding: 0.5rem 1.1rem;
   border: 0;
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-accent-solid);
+  background: var(--kapi-purple-solid);
   color: var(--kapi-on-solid);
   font: inherit;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
 }
-.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-accent-solid) 88%, var(--kapi-fg)); }
+.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-purple-solid) 88%, var(--kapi-fg)); }
 
 .kapi-error {
   margin: 1.25rem 0;
   padding: 0.65rem 0.9rem;
-  border: 1px solid var(--kapi-danger-border);
+  border: 1px solid var(--kapi-red-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-danger-fill);
-  color: var(--kapi-danger-text);
+  background: var(--kapi-red-fill);
+  color: var(--kapi-red-text);
   font-size: 0.92rem;
 }
 span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }

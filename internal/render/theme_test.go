@@ -69,7 +69,7 @@ func TestThemeDefinesExactlyTheSharedTones(t *testing.T) {
 	}
 	for name := range tokens {
 		if !want[name] {
-			t.Errorf("theme.css defines --kapi-%s, which is neither a surface role nor one of the six tones", name)
+			t.Errorf("theme.css defines --kapi-%s, which is neither a surface role nor one of the seven tones", name)
 		}
 	}
 	for name := range want {
@@ -77,8 +77,8 @@ func TestThemeDefinesExactlyTheSharedTones(t *testing.T) {
 			t.Errorf("theme.css lacks --kapi-%s", name)
 		}
 	}
-	if len(tones) != 6 {
-		t.Errorf("tones = %v, want the six shared tones", tones)
+	if len(tones) != 7 {
+		t.Errorf("tones = %v, want the seven shared tones", tones)
 	}
 }
 

@@ -76,7 +76,7 @@ var containers = []string{
 	`<kapi-diagram type="architecture">a: %s | %s | built` + "\n" + `b: B` + "\n" + `a <-> b: %s</kapi-diagram>`,
 	`<kapi-diagram type="architecture">%s</kapi-diagram>`,
 	`<kapi-nosuch>%s</kapi-nosuch>`,
-	`<p>a <kapi-badge tone="info">%s</kapi-badge></p>`,
+	`<p>a <kapi-badge tone="blue">%s</kapi-badge></p>`,
 	`<kapi-badge tone="%s">x</kapi-badge>`,
 	`<kapi-kv><kapi-item key="k">%s</kapi-item></kapi-kv>`,
 	`<kapi-kv><kapi-item key="%s">v</kapi-item>%s</kapi-kv>`,

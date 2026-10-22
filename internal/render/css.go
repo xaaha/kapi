@@ -46,18 +46,18 @@ func tokenCSS(b *bytes.Buffer) {
 }
 
 var syntaxColour = map[string]string{
-	"keyword":  "accent-text",
-	"type":     "info-text",
-	"function": "info-text",
-	"string":   "success-text",
-	"constant": "warning-text",
-	"tag":      "danger-text",
-	"variable": "danger-text",
+	"keyword":  "purple-text",
+	"type":     "blue-text",
+	"function": "blue-text",
+	"string":   "green-text",
+	"constant": "yellow-text",
+	"tag":      "red-text",
+	"variable": "red-text",
 	"comment":  "faint",
 	"operator": "muted",
-	"inserted": "success-text",
-	"deleted":  "danger-text",
-	"heading":  "accent-text",
+	"inserted": "green-text",
+	"deleted":  "red-text",
+	"heading":  "purple-text",
 	"output":   "muted",
 }
 
