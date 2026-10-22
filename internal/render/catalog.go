@@ -86,7 +86,7 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-diagram",
-		Summary: "A flow chart or sequence diagram drawn from one edge per line",
+		Summary: "A flow chart, sequence diagram or architecture diagram drawn from one line per node or edge",
 		Example: `<!-- type: flow (default) or sequence (lifelines, messages in order).
      dir: tb (top to bottom, the default for flow) or lr (left to right). Sequence diagrams ignore dir.
      Body: one edge per line, "a -> b: label". The label is optional. "a --> b" draws a dashed line.
@@ -104,6 +104,21 @@ func (s *Store) Source() ([]byte, uint64) {
   daemon -> store: Apply(rev, op)
   store --> daemon: new rev
   daemon --> browser: 200 {"rev":N}
+</kapi-diagram>
+
+<!-- type: architecture (left to right by default; dir="tb" stacks it top to bottom).
+     Node lines: "id: Title | subtitle | subtitle | state". id is letters, digits, - _ or .
+     state is built, review, planned (dashed) or a tone: neutral, info, success, warning, danger, accent.
+     Edges: "a -> b: label", "a <-> b: label" (both ways, may share a column), "a --> b: label" (dashed).
+     Every edge names declared ids. A legend for built, review and planned is added when they are used. -->
+<kapi-diagram type="architecture">
+  agent: Agent | kapi watch: one line per event | built
+  daemon: kapi daemon | event log, page store | review
+  disk: ~/.kapi | pages, cursors, revisions | built
+  hub: Private hub | R2 + Worker | planned
+  agent <-> daemon: socket
+  daemon -> disk: append
+  daemon --> hub: publish
 </kapi-diagram>`,
 	},
 	{

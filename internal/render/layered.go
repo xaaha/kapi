@@ -22,10 +22,12 @@ type chain struct {
 	edge     edge
 	verts    []int
 	reversed bool
+	sameRank bool
 }
 
 type layeredOpts struct {
 	nodeGap    float64
+	flatTwoWay bool
 	labelLines func(string) []string
 }
 
@@ -59,15 +61,25 @@ func layeredOnce(s *svgWriter, sizes [][2]float64, edges []edge, opts layeredOpt
 		case e.from == e.to:
 			selfLoops = append(selfLoops, e)
 		case reversed[i]:
-			dag = append(dag, chain{edge: e, verts: []int{e.to, e.from}, reversed: true})
+			dag = append(dag, chain{edge: e, verts: []int{e.to, e.from}, reversed: true, sameRank: opts.flatTwoWay && e.twoWay})
 		default:
-			dag = append(dag, chain{edge: e, verts: []int{e.from, e.to}})
+			dag = append(dag, chain{edge: e, verts: []int{e.from, e.to}, sameRank: opts.flatTwoWay && e.twoWay})
 		}
 	}
 	labelAbs := func(text string) (cross, along float64) {
 		return s.abstract(labelSize(opts.labelLines(text)))
 	}
 	layer := longestPath(n, dag)
+	var flat []chain
+	kept := dag[:0]
+	for _, c := range dag {
+		if layer[c.verts[0]] == layer[c.verts[1]] {
+			flat = append(flat, c)
+		} else {
+			kept = append(kept, c)
+		}
+	}
+	dag = kept
 	verts := make([]*vertex, n)
 	for i, sz := range sizes {
 		cross, along := s.abstract(sz[0], sz[1])
@@ -98,10 +110,23 @@ func layeredOnce(s *svgWriter, sizes [][2]float64, edges []edge, opts layeredOpt
 		}
 	}
 	layers := orderLayers(verts)
+	orderFlat(verts, layers, flat)
+	flatGap := map[[2]int]float64{}
+	for _, c := range flat {
+		need := 36.0
+		if c.edge.label != "" {
+			cross, _ := labelAbs(c.edge.label)
+			need = cross + 28
+		}
+		k := pairKey(c.verts[0], c.verts[1])
+		flatGap[k] = math.Max(flatGap[k], need)
+	}
 	sep := func(a, b *vertex) float64 {
 		gap := nodeGap
 		if a.real < 0 || b.real < 0 {
 			gap = nodeGap / 2
+		} else {
+			gap = math.Max(gap, flatGap[pairKey(a.real, b.real)])
 		}
 		return a.w/2 + a.extra + gap + b.w/2
 	}
@@ -115,6 +140,17 @@ func layeredOnce(s *svgWriter, sizes [][2]float64, edges []edge, opts layeredOpt
 			_, along := labelAbs(c.edge.label)
 			l := verts[c.verts[0]].layer
 			gaps[l] = math.Max(gaps[l], math.Max(labelGap, along+40)+40*widen)
+		}
+	}
+	for _, c := range flat {
+		if !adjacent(verts, c) {
+			need := flatBulge + 16
+			if c.edge.label != "" {
+				_, along := labelAbs(c.edge.label)
+				need = flatBulge + along + 24
+			}
+			l := verts[c.verts[0]].layer
+			gaps[l] = math.Max(gaps[l], need+40*widen)
 		}
 	}
 	layerY, layerH := positionY(verts, layers, gaps)
@@ -158,6 +194,38 @@ func layeredOnce(s *svgWriter, sizes [][2]float64, edges []edge, opts layeredOpt
 		}
 		labels = append(labels, r)
 	}
+	for _, c := range flat {
+		a, b := nodeRects[c.edge.from], nodeRects[c.edge.to]
+		var pts []point
+		var mid point
+		if adjacent(verts, c) {
+			cy := layerY[verts[c.edge.from].layer] + layerH[verts[c.edge.from].layer]/2
+			pa, pb := point{a.x + a.w, cy}, point{b.x, cy}
+			if a.x > b.x {
+				pa, pb = point{a.x, cy}, point{b.x + b.w, cy}
+			}
+			s.edgePath("kd-edge", "M"+s.at(pa)+" L"+s.at(pb), c.edge.dashed, c.edge.twoWay)
+			mid = point{(pa.x + pb.x) / 2, cy}
+		} else {
+			l := verts[c.edge.from].layer
+			out := layerY[l] + layerH[l] + flatBulge
+			ax, bx := a.x+a.w/2, b.x+b.w/2
+			pts = []point{{ax, a.y + a.h}, {ax, out}, {bx, out}, {bx, b.y + b.h}}
+			s.edgePath("kd-edge", s.cubic(pts), c.edge.dashed, c.edge.twoWay)
+			mid = point{(ax + bx) / 2, layerY[l] + layerH[l] + flatBulge*0.75}
+			if c.edge.label != "" {
+				_, along := labelAbs(c.edge.label)
+				mid.y += along / 2
+			}
+		}
+		if c.edge.label != "" {
+			r := s.labelLines(mid.x, mid.y, opts.labelLines(c.edge.label))
+			if hitsAny(r, labels, nodeRects) {
+				res.conflicts++
+			}
+			labels = append(labels, r)
+		}
+	}
 	for _, e := range selfLoops {
 		r := nodeRects[e.from]
 		x, cy := r.x+r.w, r.y+r.h/2
@@ -175,6 +243,55 @@ func layeredOnce(s *svgWriter, sizes [][2]float64, edges []edge, opts layeredOpt
 	}
 	copy(res.nodes, nodeRects)
 	return res
+}
+
+const flatBulge = 28.0
+
+func pairKey(a, b int) [2]int {
+	return [2]int{min(a, b), max(a, b)}
+}
+
+func adjacent(verts []*vertex, c chain) bool {
+	d := verts[c.verts[0]].order - verts[c.verts[1]].order
+	return d == 1 || d == -1
+}
+
+func orderFlat(verts []*vertex, layers [][]int, flat []chain) {
+	if len(flat) == 0 {
+		return
+	}
+	cost := func() int {
+		total := 4 * crossings(verts, layers)
+		for _, c := range flat {
+			d := verts[c.verts[0]].order - verts[c.verts[1]].order
+			total += 3 * (max(d, -d) - 1)
+		}
+		return total
+	}
+	best := cost()
+	for pass := 0; pass < 30; pass++ {
+		improved := false
+		for _, l := range layers {
+			for i := 0; i+1 < len(l); i++ {
+				l[i], l[i+1] = l[i+1], l[i]
+				verts[l[i]].order, verts[l[i+1]].order = i, i+1
+				if c := cost(); c < best {
+					best, improved = c, true
+					continue
+				}
+				l[i], l[i+1] = l[i+1], l[i]
+				verts[l[i]].order, verts[l[i+1]].order = i, i+1
+			}
+		}
+		if !improved {
+			return
+		}
+	}
+}
+
+func (s *svgWriter) at(p point) string {
+	r := s.realPt(p)
+	return f(r.x) + "," + f(r.y)
 }
 
 func (s *svgWriter) cubic(pts []point) string {
@@ -234,11 +351,18 @@ func backEdges(n int, edges []edge) map[int]bool {
 }
 
 func longestPath(n int, dag []chain) []int {
+	step := func(c chain) int {
+		if c.sameRank {
+			return 0
+		}
+		return 1
+	}
 	indeg := make([]int, n)
-	succ := make([][]int, n)
+	type next struct{ v, step int }
+	succ := make([][]next, n)
 	for _, c := range dag {
 		u, v := c.verts[0], c.verts[len(c.verts)-1]
-		succ[u] = append(succ[u], v)
+		succ[u] = append(succ[u], next{v, step(c)})
 		indeg[v]++
 	}
 	layer := make([]int, n)
@@ -251,10 +375,10 @@ func longestPath(n int, dag []chain) []int {
 	for len(queue) > 0 {
 		u := queue[0]
 		queue = queue[1:]
-		for _, v := range succ[u] {
-			layer[v] = max(layer[v], layer[u]+1)
-			if indeg[v]--; indeg[v] == 0 {
-				queue = append(queue, v)
+		for _, nx := range succ[u] {
+			layer[nx.v] = max(layer[nx.v], layer[u]+nx.step)
+			if indeg[nx.v]--; indeg[nx.v] == 0 {
+				queue = append(queue, nx.v)
 			}
 		}
 	}

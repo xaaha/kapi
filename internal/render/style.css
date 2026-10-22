@@ -458,6 +458,20 @@ pre.kapi-hl {
 .kapi-diagram .kd-dashed { stroke-dasharray: 5 4; }
 .kapi-diagram .kd-arrow { fill: var(--kapi-faint); }
 .kapi-diagram .kd-lifeline { fill: none; stroke: var(--kapi-border-strong); stroke-width: 1; stroke-dasharray: 3 4; }
+.kapi-diagram .kd-arch rect { fill: var(--kapi-tone-fill); stroke: var(--kapi-tone-text); stroke-opacity: 0.5; }
+.kapi-diagram .kd-arch text { text-anchor: start; }
+.kapi-diagram .kd-arch .kd-title { fill: var(--kapi-fg); font-size: 13px; font-weight: 600; }
+.kapi-diagram .kd-arch .kd-sub { fill: var(--kapi-muted); font-size: 11.5px; font-weight: 400; }
+.kapi-diagram .kd-planned rect { fill: var(--kapi-surface); stroke: var(--kapi-faint); stroke-opacity: 1; stroke-dasharray: 5 4; }
+.kapi-diagram-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  text-align: left;
+}
+.kapi-diagram-legend .kd-legend-planned { border-style: dashed; border-color: var(--kapi-faint); }
 .kapi-diagram .kd-label rect { fill: var(--kapi-surface); fill-opacity: 0.92; }
 .kapi-diagram .kd-label text { fill: var(--kapi-muted); font-size: 11.5px; }
 

@@ -95,7 +95,7 @@ func parseGraph(src string) (*graph, error) {
 	return g, nil
 }
 
-var defaultDir = map[string]string{"flow": "tb", "sequence": ""}
+var defaultDir = map[string]string{"flow": "tb", "sequence": "", "architecture": "lr"}
 
 func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	kind := attrVal(n, "type")
@@ -104,7 +104,7 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	}
 	dir, ok := defaultDir[kind]
 	if !ok {
-		return fmt.Errorf("type must be flow or sequence, not %q", kind)
+		return fmt.Errorf("type must be flow, sequence or architecture, not %q", kind)
 	}
 	if given := attrVal(n, "dir"); given != "" && dir != "" {
 		if given != "tb" && given != "lr" {
@@ -117,22 +117,36 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	h.Write([]byte(attrVal(n, "data-kapi-id") + "\x00" + kind + "\x00" + src))
 	svg := &svgWriter{marker: fmt.Sprintf("kapi-arrow-%08x", h.Sum32()), lr: dir == "lr"}
 	var names []string
-	g, err := parseGraph(src)
-	if err != nil {
-		return err
-	}
-	if kind == "flow" {
-		layoutFlow(g, svg)
+	var legend []string
+	if kind == "architecture" {
+		a, err := parseArchitecture(src)
+		if err != nil {
+			return err
+		}
+		layoutArchitecture(a, svg)
+		for _, node := range a.nodes {
+			names = append(names, strings.Join(node.title, " "))
+		}
+		legend = a.legend()
 	} else {
-		layoutSequence(g, svg)
+		g, err := parseGraph(src)
+		if err != nil {
+			return err
+		}
+		if kind == "flow" {
+			layoutFlow(g, svg)
+		} else {
+			layoutSequence(g, svg)
+		}
+		names = g.names
 	}
-	names = g.names
 	var extra []string
 	if dir != "" {
 		extra = []string{"data-kapi-dir", dir}
 	}
 	writeStart(b, "figure", outerAttrs(n, "kapi-diagram kapi-diagram-"+kind, extra...))
 	svg.finish(b, kind+" diagram: "+strings.Join(names, ", "))
+	writeLegend(b, legend)
 	writeEnd(b, "figure")
 	return nil
 }

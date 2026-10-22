@@ -40,7 +40,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow` or `sequence`; optional `dir` = `tb` (flow default) or `lr`, ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence) |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built`, `review`, `planned` or a tone, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |
 | `<kapi-badge>` | optional `tone` = `neutral` (default), `info`, `success`, `warning`, `danger`, `accent` | short inline text; allowed inside prose and table cells |
 | `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
