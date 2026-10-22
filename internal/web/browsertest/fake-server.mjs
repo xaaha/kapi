@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const staticDir = fileURLToPath(new URL("../static/", import.meta.url));
+const THEME_CSS = await readFile(fileURLToPath(new URL("../../render/theme.css", import.meta.url)), "utf8");
 
 export const PAGE_ID = "0123456789abcdef";
 export const TOKEN = "f00dfacecafebeef";
 
 const PAGE_CSS = `
-body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #fff; }
+body { margin: 0; font: 16px/1.6 Georgia, serif; color: var(--kapi-fg); background: var(--kapi-bg); }
 #kapi-page { max-width: 720px; margin: 0 auto; padding: 48px 32px; }
 h1 { font-size: 30px; line-height: 1.2; }
 [data-kapi-sort="on"] th { cursor: pointer; text-align: left; }
@@ -111,13 +112,14 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     requests: [],
     refuseEvents: false,
     restarted: "",
+    reopened: false,
     refused: 0,
     read: {},
   };
 
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><title>Fake kapi</title>` +
-    `<style>${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
+    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}">${state.blocks.map((b) => b.html).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
@@ -183,7 +185,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     const prefix = `/${TOKEN}/`;
     if (!url.pathname.startsWith(prefix)) return json(res, 403, { error: "bad token" });
     if (state.restarted && !url.pathname.startsWith(`${prefix}static/`)) {
-      return json(res, 403, { error: "kapi restarted", reopen: state.restarted });
+      return json(res, 403, { error: "kapi restarted", reopen: state.restarted, ...(state.reopened && { reopened: true }) });
     }
     const path = url.pathname.slice(prefix.length - 1);
     if (req.method === "POST" && (req.headers["content-type"] !== "application/json" || req.headers.origin !== `http://${req.headers.host}`)) {
@@ -191,7 +193,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     if (path.startsWith("/static/")) {
       const name = path.slice(8);
-      const type = name.endsWith(".js") ? "text/javascript" : "text/css";
+      const type = name.endsWith(".js") ? "text/javascript" : name.endsWith(".svg") ? "image/svg+xml" : "text/css";
       res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
       return res.end(await readFile(staticDir + name));
     }

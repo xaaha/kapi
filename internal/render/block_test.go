@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -227,6 +228,30 @@ func TestCSSCoversEveryPreset(t *testing.T) {
 	a[0] = 'x'
 	if CSS()[0] == 'x' {
 		t.Error("CSS returns a shared buffer")
+	}
+}
+
+func TestColoursComeFromTheTheme(t *testing.T) {
+	if hex := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`).FindAllString(string(baseCSS), -1); len(hex) > 0 {
+		t.Errorf("style.css hard-codes colours %v; add a token to theme.css", hex)
+	}
+	tokens := regexp.MustCompile(`(?m)^\s*(--kapi-[a-z0-9-]+):\s*(.+);$`).FindAllStringSubmatch(string(themeCSS), -1)
+	if len(tokens) < 20 {
+		t.Fatalf("theme.css defines only %d tokens", len(tokens))
+	}
+	for _, m := range tokens {
+		if strings.Contains(m[2], "#") && !strings.Contains(m[2], "light-dark(") && m[1] != "--kapi-on-accent" {
+			t.Errorf("%s is %s, with no dark value; wrap it in light-dark()", m[1], m[2])
+		}
+	}
+	css := string(CSS())
+	for _, want := range []string{`:root[data-theme="light"] { color-scheme: light; }`, `:root[data-theme="dark"] { color-scheme: dark; }`, "@media print {\n  :root:root { color-scheme: light; }"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("CSS lacks %q", want)
+		}
+	}
+	if strings.Contains(css, ".kapi-hl .t-") && regexp.MustCompile(`\.kapi-hl \.t-[a-z0-9]+\{color:#`).MatchString(css) {
+		t.Error("code token colours must come from --kapi-code-* tokens so they follow the theme")
 	}
 }
 

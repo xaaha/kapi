@@ -68,11 +68,19 @@ type ReaderStatus struct {
 type Server struct {
 	home string
 
+	Browser      func(url string) error
+	ReopenExcept string
+
 	mu       sync.Mutex
 	pages    map[string]*eventlog.Log
 	stores   map[string]*page.Store
 	attached map[string]map[string]time.Time
 	baseURL  string
+	reopened map[string]bool
+	stopping <-chan struct{}
+
+	viewingMu sync.Mutex
+	viewers   map[string]int
 
 	presenceMu sync.Mutex
 	presence   map[string]map[string]string
@@ -85,6 +93,8 @@ func New(home string) *Server {
 		pages:    map[string]*eventlog.Log{},
 		stores:   map[string]*page.Store{},
 		attached: map[string]map[string]time.Time{},
+		reopened: map[string]bool{},
+		viewers:  map[string]int{},
 		presence: map[string]map[string]string{},
 		watchers: map[string]map[string]int{},
 	}
@@ -122,11 +132,24 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		return err
 	}
+	s.stopping = ctx.Done()
+	recent := s.takeViewedPages()
+	if s.Browser == nil {
+		recent = nil
+	}
+	s.mu.Lock()
+	for _, p := range recent {
+		s.reopened[p.id] = true
+	}
+	s.mu.Unlock()
 	stopHTTP, err := s.serveHTTP(ctx)
 	if err != nil {
 		return err
 	}
 	defer stopHTTP()
+	var reopening sync.WaitGroup
+	defer reopening.Wait()
+	reopening.Go(func() { s.reopen(recent) })
 	os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {

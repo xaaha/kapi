@@ -32,7 +32,18 @@ func serving(t *testing.T) (home string, s *Server, stop func()) {
 
 func servingAt(t *testing.T, home string) (s *Server, stop func()) {
 	t.Helper()
+	return servingWith(t, home, nil)
+}
+
+func servingWith(t *testing.T, home string, open func(url string) error) (s *Server, stop func()) {
+	t.Helper()
 	s = New(home)
+	s.Browser = open
+	return s, serveServer(t, home, s)
+}
+
+func serveServer(t *testing.T, home string, s *Server) (stop func()) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(ctx) }()
@@ -53,7 +64,7 @@ func servingAt(t *testing.T, home string) (s *Server, stop func()) {
 		if _, err := os.Stat(HTTPURLPath(home)); err == nil {
 			if conn, err := net.Dial("unix", SocketPath(home)); err == nil {
 				conn.Close()
-				return s, stop
+				return stop
 			}
 		}
 		if time.Now().After(deadline) {

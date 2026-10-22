@@ -1,4 +1,10 @@
-# kapi
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" width="64" height="64" alt="" align="absmiddle">
+  </picture>
+  kapi
+</h1>
 
 Shared HTML pages that you and your coding agent both write to.
 

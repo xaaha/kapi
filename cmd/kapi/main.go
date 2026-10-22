@@ -211,17 +211,40 @@ func statusCmd(c api, out io.Writer) *cli.Command {
 }
 
 func daemonCmd() *cli.Command {
+	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
+	reopen := fs.Bool("reopen", false, "Reopen pages whose tab was open when the daemon last stopped; kapi sets this when it starts the daemon on demand")
+	except := fs.String("reopen-except", "", "Page id not to reopen, because the kapi open that starts the daemon opens it itself")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
-		Flags: flag.NewFlagSet("daemon", flag.ContinueOnError),
-		Long:  "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.",
+		Flags: fs,
+		Long: "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.\n" +
+			"With --reopen, up to 5 pages whose browser tab was open when the daemon last stopped open again,\n" +
+			"unless KAPI_NO_BROWSER, CI, SSH_CONNECTION or SSH_TTY is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
 		Run: func([]string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return daemon.New(home()).Serve(ctx)
+			s := daemon.New(home())
+			s.Browser = daemonBrowser(*reopen, os.Getenv, runtime.GOOS)
+			s.ReopenExcept = *except
+			return s.Serve(ctx)
 		},
 	}
+}
+
+func daemonBrowser(reopen bool, getenv func(string) string, goos string) func(url string) error {
+	if !reopen {
+		return nil
+	}
+	for _, v := range []string{"KAPI_NO_BROWSER", "SSH_CONNECTION", "SSH_TTY", "CI"} {
+		if getenv(v) != "" {
+			return nil
+		}
+	}
+	if goos == "linux" && getenv("DISPLAY") == "" && getenv("WAYLAND_DISPLAY") == "" {
+		return nil
+	}
+	return func(url string) error { return openBrowser(url) }
 }
 
 func newPublishCmd(out io.Writer) *cli.Command {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xaaha/kapi/internal/daemon"
+	"github.com/xaaha/kapi/internal/page"
 )
 
 var ErrConnectionLost = errors.New("daemon connection lost")
@@ -19,7 +20,7 @@ type Client struct {
 	Home string
 }
 
-func (c Client) dial() (net.Conn, error) {
+func (c Client) dial(openPage string) (net.Conn, error) {
 	if err := daemon.CheckSocketPath(c.Home); err != nil {
 		return nil, err
 	}
@@ -27,7 +28,7 @@ func (c Client) dial() (net.Conn, error) {
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
 	}
-	if err := c.startDaemon(); err != nil {
+	if err := c.startDaemon(openPage); err != nil {
 		return nil, err
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -43,7 +44,7 @@ func (c Client) dial() (net.Conn, error) {
 	}
 }
 
-func (c Client) startDaemon() error {
+func (c Client) startDaemon(openPage string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -56,7 +57,11 @@ func (c Client) startDaemon() error {
 		return err
 	}
 	defer logf.Close()
-	cmd := exec.Command(exe, "daemon")
+	args := []string{"daemon", "--reopen"}
+	if openPage != "" {
+		args = append(args, "--reopen-except", page.ID(openPage))
+	}
+	cmd := exec.Command(exe, args...)
 	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -67,7 +72,11 @@ func (c Client) startDaemon() error {
 }
 
 func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
-	conn, err := c.dial()
+	openPage := ""
+	if req.Op == "open" {
+		openPage = req.Page
+	}
+	conn, err := c.dial(openPage)
 	if err != nil {
 		return daemon.Response{}, err
 	}
@@ -87,7 +96,7 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 
 // Watch streams events to fn and acknowledges each one after fn returns nil.
 func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error {
-	conn, err := c.dial()
+	conn, err := c.dial("")
 	if err != nil {
 		return err
 	}
