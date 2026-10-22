@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"time"
 )
@@ -13,6 +14,8 @@ const (
 	reopenAtMost = 5
 	viewingName  = "viewing"
 )
+
+var pageID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 type viewedPage struct {
 	id, path string
@@ -61,6 +64,9 @@ func (s *Server) takeViewedPages() []viewedPage {
 	}
 	var out []viewedPage
 	for _, d := range dirs {
+		if !pageID.MatchString(d.Name()) {
+			continue
+		}
 		file := filepath.Join(root, d.Name(), viewingName)
 		fi, err := os.Stat(file)
 		if err != nil {
