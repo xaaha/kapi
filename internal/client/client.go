@@ -1,12 +1,17 @@
 package client
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,47 +33,92 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
 	}
-	if err := c.startDaemon(openPage); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), startWait)
+	defer cancel()
+	if err := c.startDaemon(ctx, openPage); err != nil {
+		if ctx.Err() != nil {
+			return nil, c.notStarted(sock, ctx.Err())
+		}
 		return nil, err
 	}
-	deadline := time.Now().Add(3 * time.Second)
 	for {
 		conn, err := net.Dial("unix", sock)
 		if err == nil {
 			return conn, nil
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("daemon did not start on %s: %w", sock, err)
+		if ctx.Err() != nil {
+			return nil, c.notStarted(sock, err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func (c Client) startDaemon(openPage string) error {
+const startWait = 3 * time.Second
+
+func (c Client) notStarted(sock string, err error) error {
+	return fmt.Errorf("daemon did not start within %v on %s, see %s: %w", startWait, sock, filepath.Join(c.Home, "daemon.log"), err)
+}
+
+func (c Client) startDaemon(ctx context.Context, openPage string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(c.Home, 0o700); err != nil {
+	args := []string{"daemon", "--spawn"}
+	if openPage != "" {
+		args = append(args, "--reopen-except", page.ID(openPage))
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("start daemon: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// Spawn starts the daemon in its own session with output to daemon.log and returns without waiting for it.
+func Spawn(home, reopenExcept string) error {
+	exe, err := os.Executable()
+	if err != nil {
 		return err
 	}
-	logf, err := os.OpenFile(c.Home+"/daemon.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return err
+	}
+	logf, err := os.OpenFile(filepath.Join(home, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer logf.Close()
 	args := []string{"daemon", "--reopen"}
-	if openPage != "" {
-		args = append(args, "--reopen-except", page.ID(openPage))
+	if reopenExcept != "" {
+		args = append(args, "--reopen-except", reopenExcept)
 	}
 	cmd := exec.Command(exe, args...)
-	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := closeInheritedOnExec(); err != nil {
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	return cmd.Process.Release()
+}
+
+func closeInheritedOnExec() error {
+	entries, err := os.ReadDir("/dev/fd")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if fd, err := strconv.Atoi(e.Name()); err == nil && fd > 2 {
+			syscall.CloseOnExec(fd)
+		}
+	}
+	return nil
 }
 
 func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
