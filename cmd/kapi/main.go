@@ -220,7 +220,7 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	return &cli.Command{
 		Name:       name,
 		Short:      short,
-		Long:       short + ". Prints the event number. Flags go before the page; every word after it is message text.",
+		Long:       short + ". Prints the event number. Flags go before the page; every word after it is message text, and a word such as --on that names one of its flags is refused.",
 		Flags:      fs,
 		FlagsFirst: true,
 		Args:       []cli.ArgDef{pageArg, {Name: "text", Required: true, Desc: "Message text; several words are joined"}},
@@ -232,8 +232,11 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 			if err != nil {
 				return err
 			}
-			if flagName, _, _ := strings.Cut(strings.TrimLeft(args[1], "-"), "="); strings.HasPrefix(args[1], "-") && fs.Lookup(flagName) != nil {
-				return fmt.Errorf("%s after the page would be sent as message text; put flags before the page: kapi %s %s ... %s <text>", args[1], name, args[1], args[0])
+			for _, word := range args[1:] {
+				flagName, _, _ := strings.Cut(strings.TrimPrefix(word, "--"), "=")
+				if strings.HasPrefix(word, "--") && fs.Lookup(flagName) != nil {
+					return fmt.Errorf("%s after the page would be sent as message text; put flags before the page: kapi %s %s ... %s <text>", word, name, word, args[0])
+				}
 			}
 			if author == "" {
 				if err := eventlog.CheckReader(*reader); err != nil {

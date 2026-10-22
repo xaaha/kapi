@@ -163,18 +163,19 @@ func TestD10HelpAndCompletion(t *testing.T) {
 
 func TestReviewF1MessageWordsStartingWithADashAreText(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 1}}}
-	if _, err := run(t, f, "say", "--on", "cutover", "plan.html", "-", "item", "-5", "--on", "x"); err != nil {
+	if _, err := run(t, f, "say", "--on", "cutover", "plan.html", "-on", "the", "other", "hand", "-", "item", "-5", "--x"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.requests[0]; got.Text != "- item -5 --on x" || got.Target != "cutover" {
+	if got := f.requests[0]; got.Text != "-on the other hand - item -5 --x" || got.Target != "cutover" {
 		t.Errorf("request = %+v", got)
 	}
 }
 
-func TestAFlagRightAfterThePageIsRefusedInsteadOfSentAsText(t *testing.T) {
+func TestACommandFlagAnywhereAfterThePageIsRefusedInsteadOfSentAsText(t *testing.T) {
 	for _, args := range [][]string{
 		{"say", "plan.html", "--seen", "3", "x"},
-		{"say", "plan.html", "-on=cutover", "x"},
+		{"say", "plan.html", "hello", "--seen", "1"},
+		{"say", "plan.html", "x", "--on=cutover"},
 		{"send", "plan.html", "--on", "cutover", "is this true?"},
 	} {
 		f := &fakeAPI{}
