@@ -9,6 +9,7 @@ import (
 const diagrams = "<kapi-diagram data-kapi-id=\"ffffffff\">\na -> b\n</kapi-diagram>\n" +
 	"<kapi-diagram type=\"architecture\" dir=\"lr\" data-kapi-id=\"aaaaaaaa\">\na: A\n</kapi-diagram>\n" +
 	"<kapi-diagram type=\"sequence\" data-kapi-id=\"ssssssss\">\na -> b: hi\n</kapi-diagram>\n" +
+	"<kapi-diagram type=\"gantt\" data-kapi-id=\"gggggggg\">\na -> b\n</kapi-diagram>\n" +
 	"<p data-kapi-id=\"pppppppp\">p</p>\n"
 
 func TestOrientSetsTheDiagramsDir(t *testing.T) {
@@ -37,6 +38,7 @@ func TestOrientRefusesBadTargetsAndDirs(t *testing.T) {
 		{Kind: "orient", ID: "ffffffff", Dir: "up"},
 		{Kind: "orient", ID: "ffffffff"},
 		{Kind: "orient", ID: "ssssssss", Dir: "lr"},
+		{Kind: "orient", ID: "gggggggg", Dir: "lr"},
 		{Kind: "orient", ID: "pppppppp", Dir: "lr"},
 	} {
 		if _, _, err := s.Apply(1, &op); err == nil || errors.Is(err, ErrStale) {

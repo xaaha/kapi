@@ -518,7 +518,7 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		}
 		return removeAttr(src, e, "done"), Summary{Text: "unchecked", IDs: one}, nil
 	case "orient":
-		if t, _ := e.attr("type"); e.name != "kapi-diagram" || t == "sequence" {
+		if t, _ := e.attr("type"); e.name != "kapi-diagram" || (t != "" && t != "flow" && t != "architecture") {
 			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram, and #%s is not one", op.ID)
 		}
 		texts := map[string]string{"tb": "drew top to bottom", "lr": "drew left to right"}
