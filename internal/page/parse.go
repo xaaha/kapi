@@ -56,7 +56,18 @@ var closesParagraph = map[string]bool{
 	"p": true, "pre": true, "section": true, "table": true, "ul": true,
 }
 
-var closesSelf = map[string]bool{"li": true, "dt": true, "dd": true, "tr": true, "td": true, "th": true, "option": true}
+var impliedEnd = map[string]map[string]bool{
+	"li":     {"li": true},
+	"dt":     {"dt": true, "dd": true},
+	"dd":     {"dt": true, "dd": true},
+	"option": {"option": true},
+	"td":     {"td": true, "th": true},
+	"th":     {"td": true, "th": true},
+	"tr":     {"td": true, "th": true, "tr": true},
+	"tbody":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+	"thead":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+	"tfoot":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+}
 
 func parse(src []byte) []element {
 	var els []element
@@ -76,12 +87,13 @@ func parse(src []byte) []element {
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
 			tok := z.Token()
-			if n := len(open); n > 0 {
+			for n := len(open); n > 0; n = len(open) {
 				top := els[open[n-1]].name
-				if (top == "p" && closesParagraph[tok.Data]) || (top == tok.Data && closesSelf[top]) {
-					closeAt(open[n-1], start, start)
-					open = open[:n-1]
+				if !(top == "p" && closesParagraph[tok.Data]) && !impliedEnd[tok.Data][top] {
+					break
 				}
+				closeAt(open[n-1], start, start)
+				open = open[:n-1]
 			}
 			e := element{name: tok.Data, attrs: tok.Attr, selfClosing: tt == html.SelfClosingTagToken, start: start, tagEnd: off, parent: -1}
 			if n := len(open); n > 0 {

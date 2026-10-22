@@ -1291,3 +1291,30 @@ func TestAnEditThatPullsInTheNextBlockIsRefused(t *testing.T) {
 		t.Errorf("refused edit changed the file:\n%s", got)
 	}
 }
+
+func TestACellsOpFollowsImpliedEndTags(t *testing.T) {
+	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>b<tr><td>c<td>d</table></kapi-table>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "B"}}})
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 0, Text: "C"}, {Row: 1, Col: 1, Text: "D"}}})
+	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>B<tr><td>C<td>D</table></kapi-table>\n"; got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	const sections = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>i<tbody><tr><td>a<td>b</table></kapi-table>\n"
+	home, path = newPage(t, sections)
+	s = open(t, home, path)
+	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "I"}, {Row: 1, Col: 0, Text: "A"}}})
+	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>I<tbody><tr><td>A<td>b</table></kapi-table>\n"; got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestOverlappingCellRangesAreRefused(t *testing.T) {
+	if _, err := spliceCells([]byte("0123456789"), 0, []cellChange{{2, 6, "x"}, {4, 8, "y"}}); err == nil {
+		t.Error("overlapping ranges were spliced")
+	}
+	if got, err := spliceCells([]byte("0123456789"), 0, []cellChange{{6, 8, "y"}, {2, 4, "x"}}); err != nil || string(got) != "01x45y89" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}

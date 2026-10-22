@@ -760,11 +760,7 @@ func setCells(src []byte, els []element, e *element, cells []Cell) (string, erro
 			rows[len(rows)-1] = append(rows[len(rows)-1], c)
 		}
 	}
-	type change struct {
-		from, to int
-		text     string
-	}
-	var changes []change
+	var changes []cellChange
 	seen := map[[2]int]bool{}
 	for _, c := range cells {
 		if c.Row < 0 || c.Row >= len(rows) || c.Col < 0 || c.Col >= len(rows[c.Row]) {
@@ -775,14 +771,28 @@ func setCells(src []byte, els []element, e *element, cells []Cell) (string, erro
 		}
 		seen[[2]int{c.Row, c.Col}] = true
 		cell := rows[c.Row][c.Col]
-		changes = append(changes, change{cell.tagEnd, cell.closeStart, html.EscapeString(c.Text)})
+		changes = append(changes, cellChange{cell.tagEnd, cell.closeStart, html.EscapeString(c.Text)})
 	}
-	slices.SortFunc(changes, func(a, b change) int { return b.from - a.from })
-	outer := src[e.start:e.end]
+	outer, err := spliceCells(src[e.start:e.end], e.start, changes)
+	return string(outer), err
+}
+
+type cellChange struct {
+	from, to int
+	text     string
+}
+
+func spliceCells(outer []byte, base int, changes []cellChange) ([]byte, error) {
+	slices.SortFunc(changes, func(a, b cellChange) int { return b.from - a.from })
+	for i := 1; i < len(changes); i++ {
+		if changes[i].to > changes[i-1].from {
+			return nil, errors.New("two cells of the op overlap in the source")
+		}
+	}
 	for _, c := range changes {
-		outer = splice(outer, c.from-e.start, c.to-e.start, c.text)
+		outer = splice(outer, c.from-base, c.to-base, c.text)
 	}
-	return string(outer), nil
+	return outer, nil
 }
 
 func nearest(els []element, i int, name string) int {
