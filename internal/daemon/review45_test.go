@@ -1,12 +1,32 @@
 package daemon
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
 )
+
+func TestReview45InboxMatchesTheSameDirectoryThroughASymlink(t *testing.T) {
+	home, _, _ := serving(t)
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ page, dir string }{{filepath.Join(link, "a.html"), resolved}, {filepath.Join(resolved, "b.html"), link}} {
+		call(t, home, &Request{Op: "append", Page: c.page, Author: "human", Kind: "message", Text: "hello"})
+		if got := call(t, home, &Request{Op: "inbox", Page: c.dir, Reader: "agent"}); len(got.Pages) != 1 || got.Pages[0].Path != c.page {
+			t.Errorf("inbox for %s = %+v, want the message on %s, the same directory", c.dir, got.Pages, c.page)
+		}
+	}
+}
 
 func TestReview45InboxDoesNotReportTheAgentsOwnFileEditAsAHumanMessage(t *testing.T) {
 	home, s, _ := serving(t)

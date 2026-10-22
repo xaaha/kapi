@@ -649,8 +649,15 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 }
 
 func within(dir, path string) bool {
-	rel, err := filepath.Rel(dir, path)
+	rel, err := filepath.Rel(resolved(dir), filepath.Join(resolved(filepath.Dir(path)), filepath.Base(path)))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func resolved(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	return path
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {
