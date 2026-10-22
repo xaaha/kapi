@@ -106,6 +106,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     rev: 1,
     blocks: blocks.map(withHTML),
     opDelay: 0,
+    messageDelay: 0,
     history: [],
     events: [],
     streams: new Set(),
@@ -249,6 +250,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return;
     }
     if (req.method === "POST" && rest === "messages") {
+      if (state.messageDelay) await new Promise((r) => setTimeout(r, state.messageDelay));
       const ev = push({ author: "human", kind: "message", target: parsed.target, text: parsed.text });
       return json(res, 200, { seq: ev.seq });
     }

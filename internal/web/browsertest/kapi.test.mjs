@@ -154,6 +154,21 @@ test("deletes an unlinked block", async () => {
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "delete", id: "cccccccc" } });
 });
 
+test("text typed while a message is sending stays in the composer", async () => {
+  server.state.messageDelay = 300;
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("first");
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 1);
+  await page.type("second");
+  await page.waitFor(`document.querySelector(".kapi-msg .kapi-msg-text")?.textContent === "first"`);
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "second");
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 2);
+  assert.equal(requests("POST", "/messages")[1].body.text, "second");
+});
+
 test("sends a chat message with Enter, targeted at the selected block", async () => {
   assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter to send, Shift+Enter for a new line");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
