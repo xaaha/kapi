@@ -306,15 +306,26 @@ func setAttr(src []byte, e *element, key, val string) []byte {
 	return splice(src, at, at, " "+key+"="+quoted)
 }
 
-func removeAttr(src []byte, e *element, key string) []byte {
-	from, _, to, ok := attrValue(src[e.start:e.tagEnd], key)
-	if !ok {
+func setFlag(src []byte, e *element, key string) []byte {
+	if _, _, _, ok := attrValue(src[e.start:e.tagEnd], key); ok {
 		return src
 	}
-	for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(src[e.start+from-1])) {
-		from--
+	at := e.start + 1 + len(e.name)
+	return splice(src, at, at, " "+key)
+}
+
+func removeAttr(src []byte, e *element, key string) []byte {
+	tag := src[e.start:e.tagEnd]
+	for {
+		from, _, to, ok := attrValue(tag, key)
+		if !ok {
+			return splice(src, e.start, e.tagEnd, string(tag))
+		}
+		for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(tag[from-1])) {
+			from--
+		}
+		tag = splice(tag, from, to, "")
 	}
-	return splice(src, e.start+from, e.start+to, "")
 }
 
 func attrValue(tag []byte, key string) (int, int, int, bool) {

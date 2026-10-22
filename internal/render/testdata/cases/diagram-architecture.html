@@ -1,0 +1,34 @@
+<kapi-diagram type="architecture" data-kapi-id="r0000001">
+  agent: Agent (any harness) | kapi watch: one line per event | kapi say, pending, preset | writes plan.html directly | built
+  plan: plan.html | page source: prose + kapi-* presets | every block has a data-kapi-id | built
+  daemon: kapi daemon (Go, one per machine) | event log and cursors per page | page store: ids, revisions, undo | renders presets to HTML + SVG | review
+  disk: ~/.kapi on disk | pages/&lt;id&gt;/events.ndjson | cursors.json, revs/&lt;n&gt;.html | built
+  browser: Browser page | Select toggle, block toolbar | chat panel, status dot | review
+  hub: Private hub | R2 + Worker + Access | planned
+  agent -> plan: edits file
+  plan <-> daemon: reads, writes ops, notices your edits
+  agent <-> daemon: socket
+  browser <-> daemon: HTTP + SSE
+  daemon -> disk: append
+  daemon --> hub: publish
+</kapi-diagram>
+<kapi-diagram type="architecture" dir="tb" data-kapi-id="r0000002">
+  a: Alpha | green
+  b: Beta | red
+  a -> b: calls
+  b -> b: retries
+</kapi-diagram>
+<kapi-diagram type="architecture" data-kapi-id="r0000003">
+  a: Alpha
+  a -> ghost: nobody declared it
+</kapi-diagram>
+<kapi-diagram type="architecture" data-kapi-id="r0000004">
+  a: Alpha
+  a: Alpha again
+</kapi-diagram>
+<kapi-diagram type="architecture" data-kapi-id="r0000005">
+  just a line
+</kapi-diagram>
+<kapi-diagram type="architecture" data-kapi-id="r0000006">
+  bad id!: Title
+</kapi-diagram>

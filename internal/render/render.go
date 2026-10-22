@@ -88,7 +88,11 @@ func dropDuplicateIDs(n *html.Node, seen map[string]bool) {
 	}
 }
 
-var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form")
+var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form", "kapi-kv", "kapi-details", "kapi-checklist")
+
+var inlinePresets = set("kapi-badge")
+
+func Inline(tag string) bool { return inlinePresets[tag] }
 
 var flowContainers = set("body", "div", "li", "td", "th", "blockquote", "section", "article", "aside", "header", "footer", "details", "dd", "figure", "ul", "ol")
 
@@ -107,7 +111,7 @@ func collectBlocks(n *html.Node, out *[]*html.Node) {
 }
 
 func hoist(n *html.Node) {
-	for parent := n.Parent; !flowContainers[parent.Data] && !strings.HasPrefix(parent.Data, "kapi-"); parent = n.Parent {
+	for parent := n.Parent; !flowContainers[parent.Data] && (!strings.HasPrefix(parent.Data, "kapi-") || inlinePresets[parent.Data]); parent = n.Parent {
 		rest := &html.Node{Type: parent.Type, Data: parent.Data, DataAtom: parent.DataAtom}
 		for _, a := range parent.Attr {
 			if a.Key != "id" && a.Key != "data-kapi-id" {

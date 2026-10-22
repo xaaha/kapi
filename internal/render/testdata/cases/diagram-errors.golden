@@ -1,4 +1,5 @@
-<div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000001"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> type must be flow or sequence, not "pie"</div>
+<div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000001"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> type must be flow, sequence or architecture, not "pie"</div>
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000002"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 2: expected `a -&gt; b: label`, got "this: is not an edge"</div>
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000003"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> has no edges; write one per line as `a -&gt; b: label`</div>
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000004"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 1: expected `a -&gt; b: label`, got "-&gt; b"</div>
+<div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="x0000005"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> dir must be tb (top to bottom) or lr (left to right), not "up"</div>

@@ -209,8 +209,18 @@ func TestPresetExamplesRenderCleanly(t *testing.T) {
 			t.Errorf("%s renders but is missing from Presets()", name)
 		}
 	}
-	if len(names) != 8 {
-		t.Errorf("Presets() has %d entries, the contract lists 8", len(names))
+	contract, err := os.ReadFile("../../docs/contract.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := regexp.MustCompile("(?m)^\\| `<(kapi-[a-z]+)>`").FindAllStringSubmatch(string(contract), -1)
+	for _, m := range listed {
+		if !names[m[1]] {
+			t.Errorf("the contract lists %s, but Presets() does not", m[1])
+		}
+	}
+	if len(names) != len(listed) {
+		t.Errorf("Presets() has %d entries, the contract lists %d", len(names), len(listed))
 	}
 }
 
@@ -219,6 +229,11 @@ func TestCSSCoversEveryPreset(t *testing.T) {
 	for _, sel := range []string{".kapi-callout", ".kapi-code", ".kapi-diff-add", ".kapi-diff-del", ".kapi-diff-hunk", ".kapi-table", ".kapi-compare", ".kapi-option", ".kapi-plan", ".kapi-step", ".kapi-risk", ".kapi-question", ".kapi-diagram", ".kd-node", ".kapi-form", ".kapi-opt", ".kapi-text", ".kapi-error", ".kapi-hl .t-k{", ".kapi-hl .t-s{", ".kapi-hl .t-c1{", "#kapi-page) h1", "#kapi-page) a", "@media (max-width"} {
 		if !strings.Contains(css, sel) {
 			t.Errorf("CSS has no rule for %s", sel)
+		}
+	}
+	for _, p := range Presets() {
+		if !regexp.MustCompile(`(?m)^\.` + p.Name + `[ ,]`).MatchString(css) {
+			t.Errorf("CSS has no rule for .%s", p.Name)
 		}
 	}
 	if strings.Contains(css, "url(") || strings.Contains(css, "@import") {
@@ -240,7 +255,7 @@ func TestColoursComeFromTheTheme(t *testing.T) {
 		t.Fatalf("theme.css defines only %d tokens", len(tokens))
 	}
 	for _, m := range tokens {
-		if strings.Contains(m[2], "#") && !strings.Contains(m[2], "light-dark(") && m[1] != "--kapi-on-accent" {
+		if strings.Contains(m[2], "#") && !strings.Contains(m[2], "light-dark(") && m[1] != "--kapi-on-solid" {
 			t.Errorf("%s is %s, with no dark value; wrap it in light-dark()", m[1], m[2])
 		}
 	}
@@ -251,7 +266,7 @@ func TestColoursComeFromTheTheme(t *testing.T) {
 		}
 	}
 	if strings.Contains(css, ".kapi-hl .t-") && regexp.MustCompile(`\.kapi-hl \.t-[a-z0-9]+\{color:#`).MatchString(css) {
-		t.Error("code token colours must come from --kapi-code-* tokens so they follow the theme")
+		t.Error("code token colours must come from theme tokens so they follow the theme")
 	}
 }
 

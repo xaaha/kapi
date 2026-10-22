@@ -45,8 +45,24 @@ func tokenCSS(b *bytes.Buffer) {
 	}
 }
 
+var syntaxColour = map[string]string{
+	"keyword":  "purple-text",
+	"type":     "blue-text",
+	"function": "blue-text",
+	"string":   "green-text",
+	"constant": "yellow-text",
+	"tag":      "red-text",
+	"variable": "red-text",
+	"comment":  "faint",
+	"operator": "muted",
+	"inserted": "green-text",
+	"deleted":  "red-text",
+	"heading":  "purple-text",
+	"output":   "muted",
+}
+
 func tokenDecl(t chroma.TokenType) string {
-	code := func(role string) string { return "color:var(--kapi-code-" + role + ");" }
+	code := func(role string) string { return "color:var(--kapi-" + syntaxColour[role] + ");" }
 	switch {
 	case t == chroma.KeywordType:
 		return code("type")
@@ -73,13 +89,13 @@ func tokenDecl(t chroma.TokenType) string {
 	case t.InCategory(chroma.Operator):
 		return code("operator")
 	case t == chroma.GenericInserted:
-		return "color:var(--kapi-success);"
+		return code("inserted")
 	case t == chroma.GenericDeleted, t == chroma.GenericError, t == chroma.Error:
-		return "color:var(--kapi-danger);"
+		return code("deleted")
 	case t == chroma.GenericHeading, t == chroma.GenericSubheading:
-		return "color:var(--kapi-accent);font-weight:600;"
+		return code("heading") + "font-weight:600;"
 	case t == chroma.GenericPrompt, t == chroma.GenericOutput, t == chroma.GenericTraceback:
-		return "color:var(--kapi-muted);"
+		return code("output")
 	case t == chroma.GenericEmph:
 		return "font-style:italic;"
 	case t == chroma.GenericStrong:

@@ -204,6 +204,9 @@
       bar.replaceChildren(...(archived ? [button("Unarchive", "unarchive")] : [button("Edit", "edit"), button("Archive", "archive")]),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"));
+      if (!archived && selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]')) {
+        bar.querySelector('[data-action="edit"]').after(button("Flip", "flip", "Flip between top to bottom and left to right"));
+      }
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
       bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
     }
@@ -342,6 +345,7 @@
     }
   }
 
+  const BLOCK = '[data-kapi-id]:not([data-kapi-id] [data-kapi-preset="badge"])';
   const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
   const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
 
@@ -480,6 +484,10 @@
     const id = idOf(selected);
     if (name === "edit") return startEdit();
     if (name === "archive" || name === "unarchive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "flip") {
+      const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
+      return (await op("orient", { id, dir }))?.ok && refresh([id]);
+    }
     if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
     const list = peers(selected);
     const i = list.indexOf(selected);
@@ -713,12 +721,27 @@
     if (editing) return;
     const th = closest(e.target, '[data-kapi-sort="on"] th');
     if (th && main.contains(th)) sortTable(th);
-    const el = closest(e.target, "[data-kapi-id]");
+    const el = closest(e.target, BLOCK);
     if (el && main.contains(el)) select(el);
   });
 
   main.addEventListener("dblclick", (e) => {
-    if (!editing && closest(e.target, "[data-kapi-id]") === selected) startEdit();
+    if (!editing && closest(e.target, BLOCK) === selected) startEdit();
+  });
+
+  main.addEventListener("change", async (e) => {
+    const box = closest(e.target, '.kapi-task > input[type="checkbox"]');
+    if (!box || !main.contains(box)) return;
+    if (busy) {
+      box.checked = !box.checked;
+      return;
+    }
+    const id = idOf(closest(box, ".kapi-task"));
+    box.disabled = true;
+    const res = await op("check", { id, done: box.checked });
+    box.disabled = false;
+    if (res?.ok) return refresh([id]);
+    if (res?.status !== 409) box.checked = !box.checked;
   });
 
   main.addEventListener("submit", (e) => {
