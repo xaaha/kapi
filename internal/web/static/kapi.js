@@ -64,7 +64,8 @@
   const roomStyle = h("style");
   const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
   const phone = matchMedia("(max-width: 760px)");
-  const BAR_GAP = 12;
+  const BAR_GAP = 8;
+  const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
   let room = null;
   document.body.append(root);
 
@@ -155,8 +156,12 @@
       return placeRing();
     }
     if (editing) {
-      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }),
-        button("Save", "save", "Save (Ctrl+Enter)"), button("Cancel", "cancel", "Cancel (Escape)"));
+      const changed = !!editing.op();
+      const primary = changed ? button("Save", "save", `Save (${SHORTCUT})`) : button("Cancel", "cancel", `Cancel (${SHORTCUT} or Escape)`);
+      primary.classList.add("kapi-primary");
+      primary.append(h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
+      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }), primary,
+        ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
     } else {
       const list = peers(selected);
       const i = list.indexOf(selected);
@@ -304,8 +309,8 @@
   const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
   const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
 
-  function editInPlace(el, hosts, rev, op) {
-    editing = { el, rev, hosts: hosts.map((host) => ({ host, original: host.innerHTML })), op };
+  function editInPlace(el, hosts, rev, op, singleLine = false) {
+    editing = { el, rev, hosts: hosts.map((host) => ({ host, original: host.innerHTML })), op, singleLine };
     for (const { host } of editing.hosts) host.contentEditable = host.matches("th, td") ? "plaintext-only" : "true";
     const first = hosts[0];
     first.focus();
@@ -338,7 +343,7 @@
     editInPlace(el, cells.map((c) => c.cell), Number(main.dataset.rev), () => {
       const changed = cells.filter((c) => c.cell.textContent !== c.text).map(({ row, col, cell }) => ({ row, col, text: cell.textContent }));
       return changed.length ? { kind: "cells", cells: changed } : null;
-    });
+    }, true);
   }
 
   function roundTrips(src, body) {
@@ -686,15 +691,25 @@
       else select(null);
       return;
     }
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && editing) {
+    if (!editing || e.isComposing || e.keyCode === 229) return;
+    const inContent = !bar.contains(document.activeElement);
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (editing.singleLine && inContent && !e.shiftKey))) {
       e.preventDefault();
-      saveEdit();
+      defaultAction();
+    } else if (e.key === "Tab" && !e.shiftKey && inContent) {
+      e.preventDefault();
+      bar.querySelector(".kapi-primary")?.focus();
     }
   });
 
+  function defaultAction() {
+    if (editing?.op()) saveEdit();
+    else cancelEdit();
+  }
+
   addEventListener("scroll", placeRing, { passive: true });
   addEventListener("resize", placeRing);
-  document.addEventListener("input", placeRing);
+  document.addEventListener("input", () => (editing ? renderBar() : placeRing()));
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {

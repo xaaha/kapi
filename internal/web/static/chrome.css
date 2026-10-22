@@ -200,6 +200,21 @@
   padding: 4px 6px;
 }
 
+#kapi-chrome > .kapi-bar[data-place="outside"] .kapi-primary {
+  padding: 5px 8px;
+}
+
+#kapi-chrome > .kapi-bar[data-place="outside"] .kapi-key {
+  display: block;
+  white-space: normal;
+}
+
+#kapi-chrome .kapi-key {
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: pre;
+}
+
 #kapi-chrome .kapi-bar-label {
   padding: 0 8px 0 6px;
   font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;

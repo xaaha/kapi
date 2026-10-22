@@ -112,7 +112,7 @@ export async function launch() {
           throw new Error(`timed out waiting for ${expression} (last: ${last})`);
         },
         async key(key, { ctrl = false, shift = false } = {}) {
-          const code = key === "Enter" ? 13 : key === "Escape" ? 27 : 0;
+          const code = { Enter: 13, Escape: 27, Tab: 9 }[key] || 0;
           const base = { key, code: key, windowsVirtualKeyCode: code, modifiers: (ctrl ? 2 : 0) | (shift ? 8 : 0) };
           const down = key === "Enter" ? { type: "keyDown", text: "\r" } : { type: "rawKeyDown" };
           await call("Input.dispatchKeyEvent", { ...down, ...base });

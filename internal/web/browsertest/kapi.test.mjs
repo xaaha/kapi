@@ -279,6 +279,79 @@ test("edits table cells in place as text and sends only the changed cells", asyn
   await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] td').textContent`)) === "b<e>ta & co");
 });
 
+const barButtons = () => page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => (b.classList.contains("kapi-primary") ? "*" : "") + b.textContent)`);
+const shortcut = () => page.eval(`/Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5"`);
+
+test("the edit bar offers Save only after a change and highlights the default action", async () => {
+  const mod = await shortcut();
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  assert.deepEqual(await barButtons(), [`*Cancel ${mod}`]);
+  await page.type("!");
+  await page.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="save"]')`);
+  assert.deepEqual(await barButtons(), [`*Save ${mod}`, "Cancel"]);
+  await page.eval(`(sel => { sel.collapseToEnd(); sel.modify("extend", "backward", "character"); })(getSelection())`);
+  await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+  await page.call("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 });
+  await page.waitFor(`!document.querySelector('.kapi-bar [data-action="save"]')`);
+  assert.deepEqual(await barButtons(), [`*Cancel ${mod}`]);
+  await page.key("Enter", { ctrl: true });
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
+test("Cmd or Ctrl+Enter runs the default action in every editor, and Escape cancels", async () => {
+  const kinds = [
+    { id: "bbbbbbbb", ready: `document.activeElement.dataset.kapiId === "bbbbbbbb"` },
+    { id: "ffffffff", ready: `document.activeElement?.classList.contains("kapi-callout-body")` },
+    { id: "gggggggg", ready: `document.activeElement?.matches('[data-kapi-id="gggggggg"] th')` },
+    { id: "jjjjjjjj", ready: `document.activeElement?.classList.contains("kapi-source")` },
+  ];
+  for (const { id, ready } of kinds) {
+    for (const end of ["ctrl unchanged", "escape changed"]) {
+      await select(id);
+      await click('.kapi-bar [data-action="edit"]');
+      await page.waitFor(ready);
+      if (end === "escape changed") {
+        await page.type("x");
+        await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="save"]')`);
+        await page.key("Escape");
+      } else await page.key("Enter", { ctrl: true });
+      await page.waitFor(`!document.querySelector('[contenteditable], .kapi-source')`);
+      assert.equal(requests("POST", "/ops").length, 0, `${id} ${end}`);
+    }
+  }
+  await select("jjjjjjjj");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(kinds[3].ready);
+  await page.type("x");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+});
+
+test("in a table cell plain Enter runs the default action, and Tab moves to the bar", async () => {
+  await click('[data-kapi-id="gggggggg"] th');
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
+  await page.key("Tab");
+  assert.equal(await page.eval(`document.activeElement.dataset.action`), "cancel");
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').focus()`);
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(requests("POST", "/ops").length, 0);
+
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
+  await page.type("!");
+  await page.key("Tab");
+  assert.equal(await page.eval(`document.activeElement.dataset.action`), "save");
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').focus()`);
+  await page.key("Enter");
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.equal(requests("POST", "/ops")[0].body.op.kind, "cells");
+});
+
 test("edits a block in place and posts its new outer HTML", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="edit"]');
@@ -707,14 +780,16 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
   const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
-  assert.ok(bar.left >= el.right && bar.left - el.right <= 16 && Math.abs(bar.top - el.top) <= 1, JSON.stringify({ bar, el }));
+  assert.ok(bar.left >= el.right && bar.left - el.right <= 12 && Math.abs(bar.top - el.top) <= 1, JSON.stringify({ bar, el }));
   assert.deepEqual(await page.eval(OVERLAPS), []);
   await click('.kapi-bar [data-action="edit"]');
-  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="save"]')`);
+  await page.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]')`);
   const editing = await barBox();
   assert.ok(Math.abs(editing.left - bar.left) <= 1 && Math.abs(editing.top - bar.top) <= 1, JSON.stringify({ bar, editing }));
   assert.deepEqual(await page.eval(OVERLAPS), []);
@@ -741,7 +816,7 @@ test("in a narrow window the toolbar goes inside the ring above the block's cont
     assert.ok(bar.top >= el.top && bar.right <= el.right && bar.left >= el.left, JSON.stringify({ bar, el }));
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     await narrow.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
-    await narrow.waitFor(`!!document.querySelector('.kapi-bar [data-action="save"]') && document.querySelector(".kapi-bar").dataset.place === "inside"`);
+    await narrow.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]') && document.querySelector(".kapi-bar").dataset.place === "inside"`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     await narrow.eval(`document.querySelector('.kapi-bar [data-action="cancel"]').click()`);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
@@ -773,7 +848,7 @@ test("the block toolbar never covers page content", async () => {
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.equal(await phone.eval(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`), true);
     await phone.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
-    await phone.waitFor(`!!document.querySelector('.kapi-panel .kapi-bar [data-action="save"]')`);
+    await phone.waitFor(`!!document.querySelector('.kapi-panel .kapi-bar .kapi-primary[data-action="cancel"]')`);
     await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-panel").getBoundingClientRect().height`);
   } finally {
     await phone.close();
