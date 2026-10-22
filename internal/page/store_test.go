@@ -1123,6 +1123,39 @@ func TestAnAgentRewritingIdenticalBytesIntoTheDisplacedFileStillWins(t *testing.
 	lateInPlaceWrite(t, "swap", 10*time.Millisecond, func(start string) string { return start })
 }
 
+func TestOpenUnderAnAgentThatKeepsWritingStillOpens(t *testing.T) {
+	fails := 0
+	for trial := 0; trial < 20; trial++ {
+		home, path := newPage(t, "<p>needs an id</p>\n")
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for i := 0; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				body := []byte("<p>needs an id " + string(rune('a'+i%26)) + "</p>\n")
+				_ = os.WriteFile(path, body, 0o600)
+				time.Sleep(time.Millisecond)
+			}
+		}()
+		_, err := Open(home, path)
+		close(stop)
+		<-done
+		if errors.Is(err, errFileChanged) {
+			fails++
+		} else if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fails > 0 {
+		t.Errorf("Open failed with errFileChanged in %d of 20 trials", fails)
+	}
+}
+
 func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
 	body := "a\r\nb\x00c"
 	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")

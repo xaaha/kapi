@@ -166,6 +166,9 @@ func Open(home, path string) (*Store, error) {
 		if errors.Is(err, errFileChanged) && attempt < 10 {
 			continue
 		}
+		if errors.Is(err, errFileChanged) {
+			return s, s.commit(raw, raw, s.rev+1, s.undo)
+		}
 		if err != nil {
 			return nil, err
 		}
