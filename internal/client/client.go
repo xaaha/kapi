@@ -33,23 +33,24 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
 	}
-	if err := c.startDaemon(openPage); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := c.startDaemon(ctx, openPage); err != nil {
 		return nil, err
 	}
-	deadline := time.Now().Add(3 * time.Second)
 	for {
 		conn, err := net.Dial("unix", sock)
 		if err == nil {
 			return conn, nil
 		}
-		if time.Now().After(deadline) {
+		if ctx.Err() != nil {
 			return nil, fmt.Errorf("daemon did not start on %s, see %s: %w", sock, filepath.Join(c.Home, "daemon.log"), err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func (c Client) startDaemon(openPage string) error {
+func (c Client) startDaemon(ctx context.Context, openPage string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -58,8 +59,6 @@ func (c Client) startDaemon(openPage string) error {
 	if openPage != "" {
 		args = append(args, "--reopen-except", page.ID(openPage))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
 	var stderr bytes.Buffer

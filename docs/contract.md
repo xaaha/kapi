@@ -196,8 +196,8 @@ its own session, with stdin from `/dev/null` and output appended to
 `$KAPI_HOME/daemon.log`, and exits at once. The daemon is then no longer a
 child of the command, so stopping the command or killing its process tree
 leaves the daemon running.
-The command waits up to 3 seconds for the socket and fails with the spawn's
-error if the spawn fails. Once HTTP is serving, that daemon
+The command waits up to 3 seconds in all for the spawn and the socket, and
+fails with the spawn's error if the spawn fails. Once HTTP is serving, that daemon
 opens the new URL of each collected page whose file still exists, newest
 `viewing` first, at most 5, with the same opener as `kapi open`. It logs
 each reopen to `$KAPI_HOME/daemon.log` by page path. It reopens nothing when

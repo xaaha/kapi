@@ -132,6 +132,29 @@ func TestAFailedSpawnIsReportedAtOnce(t *testing.T) {
 	}
 }
 
+func TestADaemonThatNeverListensFailsTheClientWithinThreeSeconds(t *testing.T) {
+	e := newE2E(t)
+	lock, err := os.OpenFile(filepath.Join(e.home, "kapi.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(e.bin, "pending", e.page) //nolint:gosec // runs the kapi binary this test just built
+	cmd.Env = e.env
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	took := time.Since(start)
+	if err == nil || !strings.Contains(string(out), "did not start") || !strings.Contains(string(out), "daemon.log") {
+		t.Errorf("kapi pending: %v\n%s; want a did not start error naming daemon.log", err, out)
+	}
+	if took > 3500*time.Millisecond {
+		t.Errorf("the client waited %v, want at most 3s", took)
+	}
+}
+
 func TestTheDaemonDoesNotHoldTheClientsInheritedFiles(t *testing.T) {
 	e := newE2E(t)
 	r, w, err := os.Pipe()
