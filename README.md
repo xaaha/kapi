@@ -8,6 +8,14 @@
 
 Shared HTML pages that you and your coding agent both write to.
 
+*Kapi* (कापी) is Nepali for notebook.
+
+A long session with an agent buries decisions in chat. kapi gives the two of
+you one page instead: the agent writes findings, plans, code and diagrams to an
+HTML file, you edit, archive, reorder or ask about any block in the browser,
+and every change reaches the agent as one line from `kapi watch`. It works with
+any agent that can run a command, and nothing is lost if either side restarts.
+
 ## Install
 
 kapi ships via [xaaha/tap](https://github.com/xaaha/homebrew-tap). Homebrew 6.0+ requires explicit trust for third-party taps; without it, `brew upgrade` silently skips kapi. One-time step per machine:
