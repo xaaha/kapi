@@ -18,8 +18,9 @@ func flowSources() map[string]string {
 		"fanout":  "hub -> one: a\nhub -> two: b\nhub -> three: c\nhub -> four: d\nhub -> five: e",
 		"bidirectional": "page file -> daemon: mtime change\ndaemon -> page file: applies\n" +
 			"daemon -> browser: revision event\nbrowser -> daemon: op\ndaemon -> event log: appends",
-		"parallel":  "a -> b: first long label\na -> b: second long label\na -> b: third long label",
-		"long edge": "a -> b\nb -> c\nc -> d\na -> d: skips two layers\nd -> a: loops back up",
+		"parallel":   "a -> b: first long label\na -> b: second long label\na -> b: third long label",
+		"self loops": "a -> b\na -> c\nb -> b: retries with a long label\nc -> c: also loops\nb -> d\nc -> d",
+		"long edge":  "a -> b\nb -> c\nc -> d\na -> d: skips two layers\nd -> a: loops back up",
 	}
 	seed := uint32(7)
 	pick := func(n int) int {
