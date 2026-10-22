@@ -117,6 +117,11 @@ func Open(home, path string) (*Store, error) {
 	if err := s.restoreDisplaced(&st); err != nil {
 		return nil, err
 	}
+	if st.Next != nil {
+		if err := s.saveState(state{Rev: s.rev, Undo: s.undo}); err != nil {
+			return nil, err
+		}
+	}
 	for attempt := 0; ; attempt++ {
 		raw, err := os.ReadFile(path)
 		if err != nil {

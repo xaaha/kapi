@@ -488,3 +488,23 @@ func TestOpenRemovesOnlyItsOwnTempFilesThatHoldARevision(t *testing.T) {
 		t.Errorf("files left %v, want %v", got, want)
 	}
 }
+
+func TestAnAdoptedRevisionIsNeverReusedAfterTheNextRestart(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	b, err := json.Marshal(state{Rev: 1, Undo: []uint64{}, Next: &state{Rev: 2, Undo: []uint64{1}, Temp: ".plan.html.kapi-1234"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.dir, "state.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, adopted := open(t, home, path).Source(); adopted != 2 {
+		t.Fatalf("adopted rev %d, want 2", adopted)
+	}
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">agent</p>\n")
+	if _, got := open(t, home, path).Source(); got <= 2 {
+		t.Fatalf("after a second restart the agent's edit is rev %d, want above the adopted rev 2", got)
+	}
+}

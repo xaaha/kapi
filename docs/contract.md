@@ -176,7 +176,8 @@ to `state.json`. `temp` names the temp file the swap will use, which the
 store creates only after recording it. Once the swap lands, it rewrites
 `state.json` without `next`. On open, the store moves to `next` only when
 the page file holds exactly `revs/<next rev>.html`. Otherwise it keeps `rev`,
-so a revision never goes back. Open also deletes its own temp files under
+so a revision never goes back. Once open has handled the temp files, it rewrites
+`state.json` without `next`. Open also deletes its own temp files under
 `pages/<id>/`. A temp file next to the page whose bytes equal `rev` or `next`
 is deleted. Only the temp file that `next` names can go back into the page,
 and only when the page holds exactly `next`, which means the swap landed and
