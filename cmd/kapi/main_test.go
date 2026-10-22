@@ -389,7 +389,7 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
 		}
 	}
-	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":"/w"}`, `{"hook_event_name":"Stop","cwd":"rel"}`} {
+	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":"/w"}`, `{"hook_event_name":"Stop","cwd":"rel"}`, `{"hook_event_name":"PostToolUse","cwd":"/w","agent_id":"a1","agent_type":"Explore"}`} {
 		f := &fakeAPI{resp: inbox, stdin: stdin}
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 0 {
 			t.Errorf("%s: %q, %v, %d requests; want nothing", stdin, out, err, len(f.requests))

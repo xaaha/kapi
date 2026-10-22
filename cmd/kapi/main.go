@@ -576,13 +576,14 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 
 func hookMessages(c api, in io.Reader, out io.Writer) error {
 	var hook struct {
-		Event string `json:"hook_event_name"`
-		Cwd   string `json:"cwd"`
+		Event   string `json:"hook_event_name"`
+		Cwd     string `json:"cwd"`
+		AgentID string `json:"agent_id"`
 	}
 	if err := json.NewDecoder(in).Decode(&hook); err != nil {
 		return fmt.Errorf("hook input: %w", err)
 	}
-	if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) {
+	if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) || hook.AgentID != "" {
 		return nil
 	}
 	resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent"})

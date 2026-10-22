@@ -307,7 +307,8 @@ show them. Events reach the agent three ways:
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
   so the agent does not go idle on them. That text is in the model's context,
   so it marks those events seen. A later `Stop` blocks only on events that
-  arrived since, so it never loops.
+  arrived since, so it never loops. A hook whose input has `agent_id` fired
+  inside a subagent and hands over nothing, so messages reach the main agent.
 
 The seen position moves only to what provably reached the model: a hook as
 above, `kapi pending`, which prints every unseen event and marks it seen, or
