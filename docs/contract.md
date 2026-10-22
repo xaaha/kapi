@@ -220,15 +220,22 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `message` | chat message from `human` or an agent | append to the chat panel |
 | `answer` | form answer | show as sent |
 | `revision` | page changed; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty |
-| `presence` | `text` is `watching`, `busy` or `none` | set the status dot |
+| `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
-Read receipts are not in the event log. When a reader's cursor advances (for
-example `kapi watch` acknowledging a line after printing it), and once right
-after a stream connects, the stream sends a message with no `id:` line, so
-`Last-Event-ID` resume is unaffected, and `data`
-`{"kind":"read","reader":"agent","seq":N}` with that reader's highest
-acknowledged seq. The browser shows 👀 on every human message or answer with
-`seq <= N` for any reader.
+Read receipts are not in the event log. Each reader has two positions:
+queued, the highest seq handed to its harness (printed by `kapi watch` or
+`kapi wait`, or given to a hook), and seen, the highest seq it confirmed. When
+either advances, and once right after a stream connects, the stream sends a
+message with no `id:` line, so `Last-Event-ID` resume is unaffected:
+`{"kind":"queued","reader":"agent","seq":N}` for the queued position and
+`{"kind":"read","reader":"agent","seq":N}` for the seen one. The browser shows
+a small Queued label on every human message or answer with a queued seq at or
+above it, and 👀 in its place once a seen seq covers it, for any reader.
+
+The status line under the newest message follows the newest human message
+when no agent message came after it: "Queued for the agent" while it is
+queued but not seen, then "Agent is working" once it is seen. Otherwise it
+follows presence.
 
 The browser keeps nothing: after any reconnect it refetches the page.
 
@@ -249,13 +256,37 @@ codex` writes author `codex`; the default is `agent`), so agents watching
 under different reader names see each other's messages, while sessions that
 share one reader name skip each other's. Edits made to the file itself are
 logged with author `file`. `human`, `kapi` and `file` are reserved:
-`watch`, `pending`, `ack` and `say` refuse them, and the events stream sends
+`watch`, `wait`, `pending`, `seen`, `ack` and `say` refuse them, and the events stream sends
 no read position for them.
 
 A reader never gets its own events back: `kapi watch` skips events whose
-author is the reader and acknowledges them once everything before them is
-acknowledged, and `kapi pending` and the home view's unread counts leave them
-out.
+author is the reader and queues them once everything before them is queued,
+and `kapi pending` and the home view's unread counts leave them out.
+
+### Delivery and seen
+
+A harness may hold or drop a line it was handed, so printing an event never
+marks it seen. Events reach the agent three ways:
+
+- `kapi wait <page>` blocks until the page has an unseen event that is not
+  queued yet, prints every unseen event, queues them and exits. The agent runs
+  it as a background command whose exit wakes it, and starts it again after
+  each exit. It is attached, so presence is `watching`, only while it blocks.
+- `kapi watch <page>` streams events and queues each after printing it. It
+  starts from the seen position, so a restarted watch prints every queued but
+  unseen event again.
+- `kapi setup hooks` adds Claude Code `UserPromptSubmit`, `PostToolUse` and
+  `Stop` hooks that run `kapi hook-messages`. It reads the hook's JSON on
+  stdin and hands over the unseen events of reader `agent` on every page
+  under the hook's `cwd`, and queues them. `PostToolUse` adds only events not
+  queued yet as `additionalContext`; `UserPromptSubmit` adds every unseen
+  one. `Stop` answers `{"decision":"block","reason":...}` while any are
+  unseen, so the agent does not go idle on them; when `stop_hook_active` is
+  set it blocks only for events not queued yet, so it never loops.
+
+The seen position moves only when the agent acts: `kapi say` by a reader and
+`kapi seen <page>` mark everything queued for that reader as seen, and
+`kapi pending` prints every unseen event and marks it seen.
 
 ## Out of scope for phase 2
 
