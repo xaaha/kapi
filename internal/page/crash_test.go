@@ -24,14 +24,18 @@ var crashOps = []*Op{
 	{Kind: "edit", ID: "bbbbbbbb", HTML: `<p data-kapi-id="bbbbbbbb">dos</p>`},
 }
 
-type writeEvent struct{ kind, from, to string }
+type writeEvent struct{ kind, from, to, data string }
 
 func traceWrites(on func(writeEvent)) (restore func()) {
-	sync0, rename0, swap0 := syncFile, renameFile, swapFiles
-	syncFile = func(f *os.File) error { on(writeEvent{"sync", f.Name(), ""}); return sync0(f) }
-	renameFile = func(a, b string) error { on(writeEvent{"rename", a, b}); return rename0(a, b) }
-	swapFiles = func(a, b string) error { on(writeEvent{"swap", a, b}); return swap0(a, b) }
-	return func() { syncFile, renameFile, swapFiles = sync0, rename0, swap0 }
+	sync0, rename0, swap0, write0 := syncFile, renameFile, swapFiles, writeTemp
+	syncFile = func(f *os.File) error { on(writeEvent{"sync", f.Name(), "", ""}); return sync0(f) }
+	renameFile = func(a, b string) error { on(writeEvent{"rename", a, b, ""}); return rename0(a, b) }
+	swapFiles = func(a, b string) error { on(writeEvent{"swap", a, b, ""}); return swap0(a, b) }
+	writeTemp = func(f *os.File, b []byte) (int, error) {
+		on(writeEvent{"write", f.Name(), "", string(b)})
+		return write0(f, b)
+	}
+	return func() { syncFile, renameFile, swapFiles, writeTemp = sync0, rename0, swap0, write0 }
 }
 
 func runCrashScenario(home, path string, after func(*Store)) error {
@@ -64,9 +68,15 @@ func TestCrashChildProcess(t *testing.T) {
 	if err != nil {
 		t.Skip("runs only as the child of TestAKilledStoreRecoversAtEveryWritePoint")
 	}
+	partial := os.Getenv("KAPI_CRASH_PARTIAL") != ""
 	n := 0
-	defer traceWrites(func(writeEvent) {
+	defer traceWrites(func(e writeEvent) {
 		if n++; n == at {
+			if partial {
+				if err := os.WriteFile(e.from, []byte(e.data[:len(e.data)/2]), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
 			select {}
 		}
@@ -86,7 +96,8 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 	home, path := newPage(t, crashStart)
 	marks := []crashMark{{0, crashStart, 0}}
 	n := 0
-	restore := traceWrites(func(writeEvent) { n++ })
+	var kinds []string
+	restore := traceWrites(func(e writeEvent) { n++; kinds = append(kinds, e.kind) })
 	err := runCrashScenario(home, path, func(s *Store) {
 		src, _ := s.Source()
 		marks = append(marks, crashMark{n, string(src), len(s.undo)})
@@ -108,52 +119,58 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 		for step < len(marks)-1 && marks[step].writes < at {
 			step++
 		}
-		t.Run(strconv.Itoa(at), func(t *testing.T) {
-			t.Parallel()
-			home, path := newPage(t, crashStart)
-			cmd := exec.Command(exe, "-test.run=^TestCrashChildProcess$", "-test.count=1")
-			cmd.Env = append(os.Environ(), "KAPI_CRASH_AT="+strconv.Itoa(at), "KAPI_CRASH_HOME="+home, "KAPI_CRASH_PAGE="+path)
-			out, err := cmd.CombinedOutput()
-			var exit *exec.ExitError
-			killed := errors.As(err, &exit) && exit.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL
-			if killed != (at <= n) || (!killed && err != nil) {
-				t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
-			}
-			checkWhole(t, home, path, whole)
-			s, err := Open(home, path)
-			if err != nil {
-				t.Fatalf("reopen after a kill at write %d: %v", at, err)
-			}
-			l, err := eventlog.Open(s.dir)
-			if err != nil {
-				t.Fatalf("event log after a kill at write %d: %v", at, err)
-			}
-			l.Close()
-			for _, dir := range []string{filepath.Dir(path), s.dir, filepath.Join(s.dir, "revs")} {
-				if left, _ := filepath.Glob(filepath.Join(dir, ".*.kapi-*")); len(left) > 0 {
-					t.Errorf("reopen after a kill at write %d left temp files %v", at, left)
+		variants := []string{""}
+		if at <= n && kinds[at-1] == "write" {
+			variants = append(variants, "partial")
+		}
+		for _, partial := range variants {
+			t.Run(strconv.Itoa(at)+partial, func(t *testing.T) {
+				t.Parallel()
+				home, path := newPage(t, crashStart)
+				cmd := exec.Command(exe, "-test.run=^TestCrashChildProcess$", "-test.count=1")
+				cmd.Env = append(os.Environ(), "KAPI_CRASH_AT="+strconv.Itoa(at), "KAPI_CRASH_PARTIAL="+partial, "KAPI_CRASH_HOME="+home, "KAPI_CRASH_PAGE="+path)
+				out, err := cmd.CombinedOutput()
+				var exit *exec.ExitError
+				killed := errors.As(err, &exit) && exit.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL
+				if killed != (at <= n) || (!killed && err != nil) {
+					t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
 				}
-			}
-			src, _ := s.Source()
-			got := crashMark{src: string(src), undo: len(s.undo)}
-			before, after := marks[step-1], marks[step]
-			if got != (crashMark{src: before.src, undo: before.undo}) && got != (crashMark{src: after.src, undo: after.undo}) {
-				t.Fatalf("after a kill at write %d: source %q with %d undo steps, want the state before or after step %d", at, got.src, got.undo, step)
-			}
-			for {
-				_, rev := s.Source()
-				_, _, err := s.Apply(rev, &Op{Kind: "undo"})
-				if errors.Is(err, ErrNothingToUndo) {
-					break
-				}
+				checkWhole(t, home, path, whole)
+				s, err := Open(home, path)
 				if err != nil {
-					t.Fatalf("undo after a kill at write %d: %v", at, err)
+					t.Fatalf("reopen after a kill at write %d: %v", at, err)
 				}
-			}
-			if src, _ := s.Source(); string(src) != crashStart {
-				t.Errorf("undoing everything after a kill at write %d left %q", at, src)
-			}
-		})
+				l, err := eventlog.Open(s.dir)
+				if err != nil {
+					t.Fatalf("event log after a kill at write %d: %v", at, err)
+				}
+				l.Close()
+				for _, dir := range []string{filepath.Dir(path), s.dir, filepath.Join(s.dir, "revs")} {
+					if left, _ := filepath.Glob(filepath.Join(dir, ".*.kapi-*")); len(left) > 0 {
+						t.Errorf("reopen after a kill at write %d left temp files %v", at, left)
+					}
+				}
+				src, _ := s.Source()
+				got := crashMark{src: string(src), undo: len(s.undo)}
+				before, after := marks[step-1], marks[step]
+				if got != (crashMark{src: before.src, undo: before.undo}) && got != (crashMark{src: after.src, undo: after.undo}) {
+					t.Fatalf("after a kill at write %d: source %q with %d undo steps, want the state before or after step %d", at, got.src, got.undo, step)
+				}
+				for {
+					_, rev := s.Source()
+					_, _, err := s.Apply(rev, &Op{Kind: "undo"})
+					if errors.Is(err, ErrNothingToUndo) {
+						break
+					}
+					if err != nil {
+						t.Fatalf("undo after a kill at write %d: %v", at, err)
+					}
+				}
+				if src, _ := s.Source(); string(src) != crashStart {
+					t.Errorf("undoing everything after a kill at write %d left %q", at, src)
+				}
+			})
+		}
 	}
 }
 
@@ -198,6 +215,9 @@ func TestEveryWriteIsSyncedBeforeItsRenameAndItsDirectoryAfter(t *testing.T) {
 	synced, renamed := map[string]bool{}, map[string]bool{}
 	unsyncedDir := ""
 	for i, e := range trace {
+		if e.kind == "write" {
+			continue
+		}
 		if e.kind == "sync" {
 			synced[e.from] = true
 			if e.from == unsyncedDir {
@@ -205,7 +225,7 @@ func TestEveryWriteIsSyncedBeforeItsRenameAndItsDirectoryAfter(t *testing.T) {
 			}
 			continue
 		}
-		if e.kind == "rename" && i > 0 && trace[i-1] == (writeEvent{"swap", e.from, e.to}) {
+		if e.kind == "rename" && i > 0 && trace[i-1] == (writeEvent{"swap", e.from, e.to, ""}) {
 			continue
 		}
 		if !synced[e.from] {
@@ -283,8 +303,8 @@ func TestRestoreChildProcess(t *testing.T) {
 	t.Fatal("the restore swap never ran")
 }
 
-func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
-	home, path := newPage(t, oneBlock)
+func killMidRestore(t *testing.T, home, path string) {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -296,6 +316,11 @@ func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
 	if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
 		t.Fatalf("child was not killed in the restore window: %v\n%s", err, out)
 	}
+}
+
+func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	killMidRestore(t, home, path)
 	if got := onDisk(t, path); got != oneBlockUno {
 		t.Fatalf("page after the kill is %q, want kapi's edit with the agent's write displaced", got)
 	}
@@ -334,20 +359,38 @@ func TestASwapLostToAnAgentLeavesNoRevisionInFlight(t *testing.T) {
 	}
 }
 
-func TestOpenKeepsAnUnknownTempFileWhenThePageChangedSince(t *testing.T) {
+func TestOpenKeepsADisplacedAgentWriteWhenThePageChangedSince(t *testing.T) {
 	home, path := newPage(t, oneBlock)
+	killMidRestore(t, home, path)
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">newer</p>\n")
 	open(t, home, path)
-	tmp := filepath.Join(filepath.Dir(path), ".plan.html.kapi-7")
-	if err := os.WriteFile(tmp, []byte(agentWrite), 0o600); err != nil {
-		t.Fatal(err)
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".plan.html.kapi-*"))
+	if len(left) != 1 {
+		t.Fatalf("temp files %v, want the displaced agent write kept", left)
 	}
-	externalWrite(t, path, oneBlockUno)
-	open(t, home, path)
-	if b, err := os.ReadFile(tmp); err != nil || string(b) != agentWrite {
-		t.Errorf("temp file now %q, %v; want it kept, since its bytes are in no revision", b, err)
+	if b, err := os.ReadFile(left[0]); err != nil || string(b) != agentWrite {
+		t.Errorf("temp file now %q, %v; want the agent's displaced write kept", b, err)
 	}
-	if got := onDisk(t, path); got != oneBlockUno {
+	if got := onDisk(t, path); !strings.Contains(got, ">newer<") {
 		t.Errorf("page = %q, want the newer edit kept", got)
+	}
+}
+
+func TestOpenDeletesItsOwnEmptyOrPartialTempInsteadOfSwappingItIn(t *testing.T) {
+	for name, temp := range map[string]string{"empty": "", "partial": `<p data-kapi-id="aaaaaaaa">u`} {
+		home, path := newPage(t, oneBlock)
+		s := open(t, home, path)
+		mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+		tmp := filepath.Join(filepath.Dir(path), ".plan.html.kapi-4265065571")
+		if err := os.WriteFile(tmp, []byte(temp), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if src, _ := open(t, home, path).Source(); string(src) != oneBlockUno {
+			t.Errorf("%s temp: source now %q, want the page unchanged", name, src)
+		}
+		if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s temp: still there (%v), want it deleted", name, err)
+		}
 	}
 }
 

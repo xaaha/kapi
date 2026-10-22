@@ -165,32 +165,26 @@ func (s *Store) restoreDisplaced(st *state) error {
 	if err != nil || len(temps) == 0 {
 		return err
 	}
-	var known [][]byte
-	for _, r := range []*state{st, st.Next} {
-		if r != nil && r.Rev > 0 {
-			b, err := os.ReadFile(s.revPath(r.Rev))
-			if err != nil {
-				return err
-			}
-			known = append(known, b)
+	var before, after, page []byte
+	if st.Next != nil {
+		if before, err = s.readRev(st.Rev); err != nil {
+			return err
 		}
-	}
-	isKnown := func(b []byte) bool {
-		return slices.ContainsFunc(known, func(k []byte) bool { return bytes.Equal(k, b) })
+		if after, err = s.readRev(st.Next.Rev); err != nil {
+			return err
+		}
+		if page, err = os.ReadFile(s.path); err != nil {
+			return err
+		}
 	}
 	for _, tmp := range temps {
 		theirs, err := os.ReadFile(tmp)
 		if err != nil {
 			return err
 		}
-		if !isKnown(theirs) {
-			page, err := os.ReadFile(s.path)
-			if err != nil {
-				return err
-			}
-			if !isKnown(page) {
-				continue
-			}
+		agent := st.Next != nil && !bytes.Equal(theirs, before) && !bytes.Equal(theirs, after)
+		switch {
+		case agent && bytes.Equal(page, after):
 			err = swapIn(tmp, s.path, theirs, page)
 			if errors.Is(err, errFileChanged) {
 				continue
@@ -201,12 +195,21 @@ func (s *Store) restoreDisplaced(st *state) error {
 			if err := syncDir(filepath.Dir(s.path)); err != nil {
 				return err
 			}
+		case agent && !bytes.Equal(page, before):
+			continue
 		}
 		if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) readRev(rev uint64) ([]byte, error) {
+	if rev == 0 {
+		return nil, nil
+	}
+	return os.ReadFile(s.revPath(rev))
 }
 
 func (s *Store) Path() string { return s.path }
@@ -431,6 +434,7 @@ var (
 	syncFile       = (*os.File).Sync
 	renameFile     = os.Rename
 	swapFiles      = exchangeFiles
+	writeTemp      = (*os.File).Write
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
@@ -506,7 +510,7 @@ func replaceFile(path string, b, expect []byte) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if _, err := f.Write(b); err != nil {
+	if _, err := writeTemp(f, b); err != nil {
 		f.Close()
 		return err
 	}

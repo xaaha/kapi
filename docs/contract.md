@@ -175,11 +175,14 @@ holds `{"rev":N,"undo":[...]}`. Before swapping the page, the store writes
 `state.json`. Once the swap lands, it rewrites `state.json` without `next`.
 On open, the store moves to `next` only when the page file holds exactly
 `revs/<next rev>.html`. Otherwise it keeps `rev`, so a revision never goes
-back. Open also deletes its own temp files under `pages/<id>/`. A temp file
-next to the page is deleted only when its bytes equal a revision that
-`state.json` names. When its bytes are unknown and the page still holds such
-a revision, those bytes are an agent write that a kill left displaced, and
-the store swaps them back into the page. Any other temp file stays.
+back. Open also deletes its own temp files under `pages/<id>/`. With no
+`next` in `state.json`, a temp file next to the page is kapi's own and is
+deleted, whether it is empty, partial or whole. With `next`, a temp file whose
+bytes are neither `rev` nor `next` is an agent write that a kill left
+displaced only if the page holds exactly `next`, which means the swap landed.
+The store then swaps it back into the page. If the page still holds `rev`,
+the swap never landed and the temp file is kapi's, so it is deleted. In any
+other case the page changed after the kill and the temp file stays.
 
 ## HTTP
 
