@@ -42,7 +42,7 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 			return conn, nil
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("daemon did not start on %s: %w", sock, err)
+			return nil, fmt.Errorf("daemon did not start on %s, see %s: %w", sock, filepath.Join(c.Home, "daemon.log"), err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
