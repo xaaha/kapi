@@ -404,6 +404,13 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
+	case "pending", "ack", "watch":
+		if err := eventlog.CheckReader(req.Reader); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+	}
+	switch req.Op {
 	case "append":
 		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
 		if err != nil {

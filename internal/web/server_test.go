@@ -698,6 +698,30 @@ func TestTheStreamSendsReadPositionsWithoutAnID(t *testing.T) {
 	}
 }
 
+func TestReservedReadersSendNoReadPosition(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"one"}`)
+	_, l, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []string{"human", "kapi", "agent"} {
+		if err := l.Ack(r, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st := s.stream(ctx, "1")
+	if _, data := st.raw(); data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Errorf("first read message = %s, want only the agent's", data)
+	}
+	s.post("/messages", `{"kind":"message","text":"two"}`)
+	if id, _ := st.raw(); id != "2" {
+		t.Errorf("next message has id %q, want the event 2 and no read position for human or kapi", id)
+	}
+}
+
 func (e *sse) next() (string, eventlog.Event) {
 	e.t.Helper()
 	select {

@@ -214,6 +214,13 @@ blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",
 "b", callout "c", and 1 more`). `target` still lists the ids. Agent-side
 `kapi op` and `kapi get` are phase 3.
 
+`kapi say` writes its message with the reader name as author (`--reader
+codex` writes author `codex`; the default is `agent`), so agents watching
+under different reader names see each other's messages, while sessions that
+share one reader name skip each other's. `human` and `kapi` are reserved:
+`watch`, `pending`, `ack` and `say` refuse them, and the events stream sends
+no read position for them.
+
 A reader never gets its own events back: `kapi watch` skips events whose
 author is the reader and acknowledges them once everything before them is
 acknowledged, and `kapi pending` and the home view's unread counts leave them

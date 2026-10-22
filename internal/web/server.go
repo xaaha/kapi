@@ -306,7 +306,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		}
 		cursors, acked := l.Cursors()
 		for _, reader := range slices.Sorted(maps.Keys(cursors)) {
-			if seq := cursors[reader]; seq != read[reader] {
+			if seq := cursors[reader]; seq != read[reader] && eventlog.CheckReader(reader) == nil {
 				read[reader] = seq
 				data, err := json.Marshal(readReceipt{Kind: "read", Reader: reader, Seq: seq})
 				if err != nil {

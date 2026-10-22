@@ -61,7 +61,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Run:    func([]string) error { return homeView(c, out) },
 		SubCommands: []*cli.Command{
 			watchCmd(c, out, sleep),
-			messageCmd(c, out, "say", "agent", "Reply on a page as the agent"),
+			messageCmd(c, out, "say", "", "Reply on a page as the agent"),
 			messageCmd(c, out, "send", "human", "Send a message on a page as the human"),
 			pendingCmd(c, out),
 			statusCmd(c, out),
@@ -92,6 +92,9 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 			if err != nil {
 				return err
 			}
+			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
 			return watch(c, page, *reader, out, sleep)
 		},
 	}
@@ -114,6 +117,10 @@ func watch(c api, page, reader string, out io.Writer, sleep func(time.Duration))
 func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	on := fs.String("on", "", "Element id the message is about")
+	reader := &author
+	if author == "" {
+		reader = fs.String("reader", "agent", "Reader name to send as; readers with other names see the message")
+	}
 	return &cli.Command{
 		Name:       name,
 		Short:      short,
@@ -129,7 +136,12 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: author, Kind: "message", Target: *on, Text: strings.Join(args[1:], " ")})
+			if author == "" {
+				if err := eventlog.CheckReader(*reader); err != nil {
+					return err
+				}
+			}
+			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: *reader, Kind: "message", Target: *on, Text: strings.Join(args[1:], " ")})
 			if err != nil {
 				return err
 			}
@@ -150,6 +162,9 @@ func pendingCmd(c api, out io.Writer) *cli.Command {
 		Run: func(args []string) error {
 			page, err := pagePath(args, 1, "pending")
 			if err != nil {
+				return err
+			}
+			if err := eventlog.CheckReader(*reader); err != nil {
 				return err
 			}
 			resp, err := c.Do(&daemon.Request{Op: "pending", Page: page, Reader: *reader})

@@ -423,3 +423,14 @@ func TestOpenReportsASplit(t *testing.T) {
 		t.Errorf("open dropped a script from the file: %s", b)
 	}
 }
+
+func TestTheDaemonRefusesReservedReaders(t *testing.T) {
+	home, _, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	for _, req := range []Request{{Op: "pending", Reader: "human"}, {Op: "ack", Reader: "kapi", Seq: 1}} {
+		req.Page = path
+		if resp := call(t, home, &req); !strings.Contains(resp.Error, "is reserved") {
+			t.Errorf("%s as %s: %+v, want a reserved reader error", req.Op, req.Reader, resp)
+		}
+	}
+}

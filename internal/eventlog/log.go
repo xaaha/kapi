@@ -218,3 +218,11 @@ func Printable(s string) string {
 		return r
 	}, s)
 }
+
+// CheckReader refuses the author names the browser and kapi itself write events as.
+func CheckReader(name string) error {
+	if name == "human" || name == "kapi" {
+		return fmt.Errorf("reader %q is reserved; pick another name, such as agent or codex", name)
+	}
+	return nil
+}
