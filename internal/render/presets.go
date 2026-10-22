@@ -31,9 +31,9 @@ func init() {
 		"kapi-compare":  renderCompare,
 		"kapi-option":   renderOption,
 		"kapi-plan":     renderPlan,
-		"kapi-step":     planItem("kapi-step", ""),
-		"kapi-risk":     planItem("kapi-risk", "Risk"),
-		"kapi-question": planItem("kapi-question", "Question"),
+		"kapi-step":     planItem("kapi-step", "", "accent"),
+		"kapi-risk":     planItem("kapi-risk", "Risk", "warning"),
+		"kapi-question": planItem("kapi-question", "Question", "info"),
 		"kapi-diagram":  renderDiagram,
 		"kapi-form":     renderForm,
 		"kapi-choice":   renderChoice,
@@ -105,19 +105,25 @@ func requireAttr(n *html.Node, key string) (string, error) {
 	return v, nil
 }
 
-var calloutLabels = map[string]string{"note": "Note", "warning": "Warning", "key": "Key point"}
+type calloutKind struct{ label, tone string }
+
+var calloutKinds = map[string]calloutKind{
+	"note":    {"Note", "info"},
+	"warning": {"Warning", "warning"},
+	"key":     {"Key point", "accent"},
+}
 
 func renderCallout(b *bytes.Buffer, n *html.Node) error {
 	kind := attrVal(n, "kind")
 	if kind == "" {
 		kind = "note"
 	}
-	label, ok := calloutLabels[kind]
+	k, ok := calloutKinds[kind]
 	if !ok {
 		return fmt.Errorf("kind must be note, warning or key, not %q", kind)
 	}
-	writeStart(b, "aside", outerAttrs(n, "kapi-callout kapi-callout-"+kind, "role", "note"))
-	b.WriteString(`<div class="kapi-callout-label">` + label + `</div><div class="kapi-callout-body">`)
+	writeStart(b, "aside", outerAttrs(n, "kapi-callout kapi-callout-"+kind+" kapi-tone-"+k.tone, "role", "note"))
+	b.WriteString(`<div class="kapi-callout-label">` + k.label + `</div><div class="kapi-callout-body">`)
 	renderChildren(b, n)
 	b.WriteString("</div></aside>")
 	return nil
@@ -175,9 +181,9 @@ func renderPlan(b *bytes.Buffer, n *html.Node) error {
 	return nil
 }
 
-func planItem(class, label string) presetFunc {
+func planItem(class, label, tone string) presetFunc {
 	return func(b *bytes.Buffer, n *html.Node) error {
-		writeStart(b, "div", outerAttrs(n, "kapi-plan-item "+class))
+		writeStart(b, "div", outerAttrs(n, "kapi-plan-item "+class+" kapi-tone-"+tone))
 		b.WriteString(`<span class="kapi-plan-mark">` + label + `</span><div class="kapi-plan-body">`)
 		renderChildren(b, n)
 		b.WriteString("</div></div>")

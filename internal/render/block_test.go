@@ -240,7 +240,7 @@ func TestColoursComeFromTheTheme(t *testing.T) {
 		t.Fatalf("theme.css defines only %d tokens", len(tokens))
 	}
 	for _, m := range tokens {
-		if strings.Contains(m[2], "#") && !strings.Contains(m[2], "light-dark(") && m[1] != "--kapi-on-accent" {
+		if strings.Contains(m[2], "#") && !strings.Contains(m[2], "light-dark(") && m[1] != "--kapi-on-solid" {
 			t.Errorf("%s is %s, with no dark value; wrap it in light-dark()", m[1], m[2])
 		}
 	}
@@ -251,7 +251,7 @@ func TestColoursComeFromTheTheme(t *testing.T) {
 		}
 	}
 	if strings.Contains(css, ".kapi-hl .t-") && regexp.MustCompile(`\.kapi-hl \.t-[a-z0-9]+\{color:#`).MatchString(css) {
-		t.Error("code token colours must come from --kapi-code-* tokens so they follow the theme")
+		t.Error("code token colours must come from theme tokens so they follow the theme")
 	}
 }
 

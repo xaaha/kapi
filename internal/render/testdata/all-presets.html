@@ -15,40 +15,38 @@
   --kapi-faint: light-dark(#71717a, #8a909c);
   --kapi-border: light-dark(#e7e7eb, #2a2e37);
   --kapi-border-strong: light-dark(#d4d4da, #3b404b);
-
-  --kapi-accent: light-dark(#4f46e5, #818cf8);
-  --kapi-accent-strong: light-dark(#4338ca, #a5b4fc);
-  --kapi-accent-soft: light-dark(#eef0ff, #242739);
-  --kapi-accent-border: light-dark(#c3c6fb, #414675);
-  --kapi-accent-fill: light-dark(#4f46e5, #5750e6);
-  --kapi-on-accent: #ffffff;
-
-  --kapi-success: light-dark(#047857, #34d399);
-  --kapi-success-soft: light-dark(#ecfdf5, #1a302d);
-  --kapi-success-border: light-dark(#a7f3d0, #22634f);
-  --kapi-warning: light-dark(#b45309, #fbbf24);
-  --kapi-warning-soft: light-dark(#fffbeb, #342e1e);
-  --kapi-warning-border: light-dark(#fcd98a, #725b20);
-  --kapi-danger: light-dark(#be123c, #fb7185);
-  --kapi-danger-soft: light-dark(#fff1f2, #34242b);
-  --kapi-danger-border: light-dark(#fecdd3, #723c47);
-  --kapi-info: light-dark(#0369a1, #38bdf8);
-  --kapi-info-soft: light-dark(#f0f9ff, #1a2d39);
-  --kapi-info-border: light-dark(#bae6fd, #245a75);
-
-  --kapi-mark: light-dark(#fef3c7, #56471f);
+  --kapi-on-solid: #ffffff;
   --kapi-shadow: 0 1px 2px light-dark(rgb(16 24 40 / 0.05), rgb(0 0 0 / 0.3)), 0 8px 24px light-dark(rgb(16 24 40 / 0.08), rgb(0 0 0 / 0.4));
 
-  --kapi-code-bg: light-dark(#fbfbfd, #13151a);
-  --kapi-code-keyword: light-dark(#7c3aed, #c4b5fd);
-  --kapi-code-string: light-dark(#047857, #6ee7b7);
-  --kapi-code-comment: light-dark(#6b7280, #8b93a1);
-  --kapi-code-constant: light-dark(#b45309, #fcd34d);
-  --kapi-code-function: light-dark(#1d4ed8, #93c5fd);
-  --kapi-code-type: light-dark(#0e7490, #67e8f9);
-  --kapi-code-tag: light-dark(#be123c, #fda4af);
-  --kapi-code-variable: light-dark(#c2410c, #fdba74);
-  --kapi-code-operator: light-dark(#52525b, #a3a9b5);
+  --kapi-neutral-fill: light-dark(#f1f2f4, #23262d);
+  --kapi-neutral-border: light-dark(#d4d4da, #3b404b);
+  --kapi-neutral-text: light-dark(#3f3f46, #cfd3db);
+  --kapi-neutral-solid: light-dark(#52525b, #5b6170);
+
+  --kapi-info-fill: light-dark(#eef7fd, #162a37);
+  --kapi-info-border: light-dark(#b6defa, #255a77);
+  --kapi-info-text: light-dark(#0368a0, #7cc8f5);
+  --kapi-info-solid: light-dark(#0369a1, #0b6aa2);
+
+  --kapi-success-fill: light-dark(#ecfbf3, #15302a);
+  --kapi-success-border: light-dark(#a6ebc9, #23634f);
+  --kapi-success-text: light-dark(#047857, #6ee7b7);
+  --kapi-success-solid: light-dark(#047857, #08785a);
+
+  --kapi-warning-fill: light-dark(#fef8e7, #33291a);
+  --kapi-warning-border: light-dark(#f6d27a, #775f22);
+  --kapi-warning-text: light-dark(#a14a06, #fcd34d);
+  --kapi-warning-solid: light-dark(#b45309, #a65006);
+
+  --kapi-danger-fill: light-dark(#fef1f2, #36222a);
+  --kapi-danger-border: light-dark(#fbc8d0, #7a3b4a);
+  --kapi-danger-text: light-dark(#be123c, #fda4af);
+  --kapi-danger-solid: light-dark(#be123c, #be123c);
+
+  --kapi-accent-fill: light-dark(#eef0ff, #24273b);
+  --kapi-accent-border: light-dark(#c3c6fb, #444a7c);
+  --kapi-accent-text: light-dark(#4f46e5, #a5b4fc);
+  --kapi-accent-solid: light-dark(#4f46e5, #5750e6);
 
   --kapi-radius: 12px;
   --kapi-radius-sm: 8px;
@@ -106,12 +104,12 @@ body {
 :where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
 :where(#kapi-page) li::marker { color: var(--kapi-faint); }
 :where(#kapi-page) a {
-  color: var(--kapi-accent);
+  color: var(--kapi-accent-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
-:where(#kapi-page) a:hover { color: var(--kapi-accent-strong); text-decoration-thickness: 2px; }
+:where(#kapi-page) a:hover { color: var(--kapi-accent-text); text-decoration-thickness: 2px; }
 :where(#kapi-page) :where(strong, b) { font-weight: 650; }
 :where(#kapi-page) :where(code, kbd, samp) { font-family: var(--kapi-mono); font-size: 0.875em; }
 :where(#kapi-page) :not(pre) > code {
@@ -134,7 +132,7 @@ body {
   overflow-x: auto;
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-code-bg);
+  background: var(--kapi-subtle);
   font-family: var(--kapi-mono);
   font-size: 13px;
   line-height: 1.6;
@@ -148,7 +146,7 @@ body {
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
-:where(#kapi-page) mark { background: var(--kapi-mark); color: inherit; padding: 0 0.2em; border-radius: 4px; }
+:where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-warning-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
 :where(#kapi-page) del { color: var(--kapi-muted); }
 :where(#kapi-page) details {
   margin: 1rem 0;
@@ -194,21 +192,23 @@ body {
 .kapi-table tbody tr:hover { background: var(--kapi-subtle); }
 .kapi-table[data-kapi-sort="on"] th { cursor: pointer; user-select: none; }
 .kapi-table[data-kapi-sort="on"] th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-accent); }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-accent); }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-accent-text); }
+.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-accent-text); }
+
+.kapi-tone-neutral { --kapi-tone-fill: var(--kapi-neutral-fill); --kapi-tone-border: var(--kapi-neutral-border); --kapi-tone-text: var(--kapi-neutral-text); --kapi-tone-solid: var(--kapi-neutral-solid); }
+.kapi-tone-info { --kapi-tone-fill: var(--kapi-info-fill); --kapi-tone-border: var(--kapi-info-border); --kapi-tone-text: var(--kapi-info-text); --kapi-tone-solid: var(--kapi-info-solid); }
+.kapi-tone-success { --kapi-tone-fill: var(--kapi-success-fill); --kapi-tone-border: var(--kapi-success-border); --kapi-tone-text: var(--kapi-success-text); --kapi-tone-solid: var(--kapi-success-solid); }
+.kapi-tone-warning { --kapi-tone-fill: var(--kapi-warning-fill); --kapi-tone-border: var(--kapi-warning-border); --kapi-tone-text: var(--kapi-warning-text); --kapi-tone-solid: var(--kapi-warning-solid); }
+.kapi-tone-danger { --kapi-tone-fill: var(--kapi-danger-fill); --kapi-tone-border: var(--kapi-danger-border); --kapi-tone-text: var(--kapi-danger-text); --kapi-tone-solid: var(--kapi-danger-solid); }
+.kapi-tone-accent { --kapi-tone-fill: var(--kapi-accent-fill); --kapi-tone-border: var(--kapi-accent-border); --kapi-tone-text: var(--kapi-accent-text); --kapi-tone-solid: var(--kapi-accent-solid); }
 
 .kapi-callout {
-  --kapi-tone: var(--kapi-info);
-  --kapi-tone-soft: var(--kapi-info-soft);
-  --kapi-tone-border: var(--kapi-info-border);
   margin: 1.25rem 0;
   padding: 0.85rem 1.1rem 0.9rem;
   border: 1px solid var(--kapi-tone-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-tone-soft);
+  background: var(--kapi-tone-fill);
 }
-.kapi-callout-warning { --kapi-tone: var(--kapi-warning); --kapi-tone-soft: var(--kapi-warning-soft); --kapi-tone-border: var(--kapi-warning-border); }
-.kapi-callout-key { --kapi-tone: var(--kapi-accent); --kapi-tone-soft: var(--kapi-accent-soft); --kapi-tone-border: var(--kapi-accent-border); }
 .kapi-callout-label {
   display: inline-block;
   margin-bottom: 0.4rem;
@@ -216,7 +216,7 @@ body {
   border: 1px solid var(--kapi-tone-border);
   border-radius: 999px;
   background: var(--kapi-surface);
-  color: var(--kapi-tone);
+  color: var(--kapi-tone-text);
   font-size: 0.7rem;
   font-weight: 650;
   line-height: 1.5;
@@ -236,7 +236,7 @@ body {
   overflow: hidden;
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-code-bg);
+  background: var(--kapi-subtle);
 }
 .kapi-code-head {
   display: flex;
@@ -257,15 +257,15 @@ body {
   padding: 0 0.5rem;
   border: 1px solid var(--kapi-accent-border);
   border-radius: 999px;
-  background: var(--kapi-accent-soft);
-  color: var(--kapi-accent);
+  background: var(--kapi-accent-fill);
+  color: var(--kapi-accent-text);
   font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: lowercase;
 }
 .kapi-diff-stat { white-space: nowrap; font-weight: 600; }
-.kapi-diff-added { color: var(--kapi-success); }
-.kapi-diff-removed { color: var(--kapi-danger); }
+.kapi-diff-added { color: var(--kapi-success-text); }
+.kapi-diff-removed { color: var(--kapi-danger-text); }
 
 #kapi-page pre.kapi-hl,
 pre.kapi-hl {
@@ -308,16 +308,16 @@ pre.kapi-hl {
 .kapi-src { display: inline-block; }
 .kapi-diff .kapi-ln + .kapi-ln { padding-left: 0; }
 .kapi-diff-sign { display: inline-block; width: 1.5ch; color: var(--kapi-faint); user-select: none; }
-.kapi-diff-add { background: var(--kapi-success-soft); }
-.kapi-diff-add .kapi-ln { background: color-mix(in srgb, var(--kapi-success) 12%, var(--kapi-success-soft)); color: var(--kapi-success); }
-.kapi-diff-add .kapi-diff-sign { color: var(--kapi-success); }
-.kapi-diff-del { background: var(--kapi-danger-soft); }
-.kapi-diff-del .kapi-ln { background: color-mix(in srgb, var(--kapi-danger) 12%, var(--kapi-danger-soft)); color: var(--kapi-danger); }
-.kapi-diff-del .kapi-diff-sign { color: var(--kapi-danger); }
+.kapi-diff-add { background: var(--kapi-success-fill); }
+.kapi-diff-add .kapi-ln { background: color-mix(in srgb, var(--kapi-success-text) 12%, var(--kapi-success-fill)); color: var(--kapi-success-text); }
+.kapi-diff-add .kapi-diff-sign { color: var(--kapi-success-text); }
+.kapi-diff-del { background: var(--kapi-danger-fill); }
+.kapi-diff-del .kapi-ln { background: color-mix(in srgb, var(--kapi-danger-text) 12%, var(--kapi-danger-fill)); color: var(--kapi-danger-text); }
+.kapi-diff-del .kapi-diff-sign { color: var(--kapi-danger-text); }
 .kapi-diff-hunk,
 .kapi-diff-file,
 .kapi-diff-meta { padding-left: 0.9rem; }
-.kapi-diff-hunk { margin: 0.2rem 0; background: var(--kapi-info-soft); color: var(--kapi-info); }
+.kapi-diff-hunk { margin: 0.2rem 0; background: var(--kapi-info-fill); color: var(--kapi-info-text); }
 .kapi-diff-hunk:first-child { margin-top: -0.55rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
 .kapi-diff-file { color: var(--kapi-muted); font-weight: 600; }
 .kapi-diff-meta { color: var(--kapi-faint); font-style: italic; }
@@ -334,7 +334,7 @@ pre.kapi-hl {
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius);
   background: var(--kapi-surface);
-  box-shadow: inset 0 3px 0 var(--kapi-accent);
+  box-shadow: inset 0 3px 0 var(--kapi-accent-text);
 }
 #kapi-page .kapi-option-title,
 .kapi-option-title {
@@ -354,9 +354,6 @@ pre.kapi-hl {
   counter-reset: kapi-step;
 }
 .kapi-plan-item {
-  --kapi-tone: var(--kapi-accent);
-  --kapi-tone-soft: var(--kapi-accent-soft);
-  --kapi-tone-border: var(--kapi-accent-border);
   display: grid;
   grid-template-columns: 1.75rem minmax(0, 1fr);
   gap: 0.8rem;
@@ -367,9 +364,7 @@ pre.kapi-hl {
   background: var(--kapi-surface);
 }
 .kapi-step { counter-increment: kapi-step; }
-.kapi-risk { --kapi-tone: var(--kapi-warning); --kapi-tone-soft: var(--kapi-warning-soft); --kapi-tone-border: var(--kapi-warning-border); }
-.kapi-question { --kapi-tone: var(--kapi-info); --kapi-tone-soft: var(--kapi-info-soft); --kapi-tone-border: var(--kapi-info-border); }
-:is(.kapi-risk, .kapi-question) { border-color: var(--kapi-tone-border); background: var(--kapi-tone-soft); }
+:is(.kapi-risk, .kapi-question) { border-color: var(--kapi-tone-border); background: var(--kapi-tone-fill); }
 .kapi-plan-mark {
   display: grid;
   place-items: center;
@@ -380,7 +375,7 @@ pre.kapi-hl {
   border: 1px solid var(--kapi-tone-border);
   border-radius: 50%;
   background: var(--kapi-surface);
-  color: var(--kapi-tone);
+  color: var(--kapi-tone-text);
   font-size: 0;
   font-weight: 700;
 }
@@ -407,9 +402,9 @@ pre.kapi-hl {
   vertical-align: top;
 }
 .kapi-diagram text { fill: var(--kapi-fg); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
-.kapi-diagram .kd-node rect { fill: var(--kapi-accent-soft); stroke: var(--kapi-accent); stroke-opacity: 0.55; stroke-width: 1.2; }
+.kapi-diagram .kd-node rect { fill: var(--kapi-accent-fill); stroke: var(--kapi-accent-text); stroke-opacity: 0.55; stroke-width: 1.2; }
 .kapi-diagram .kd-node text { font-weight: 600; }
-.kapi-diagram .kd-actor rect { fill: var(--kapi-warning-soft); stroke: var(--kapi-warning); }
+.kapi-diagram .kd-actor rect { fill: var(--kapi-warning-fill); stroke: var(--kapi-warning-text); }
 .kapi-diagram .kd-edge,
 .kapi-diagram .kd-msg { fill: none; stroke: var(--kapi-faint); stroke-width: 1.4; }
 .kapi-diagram .kd-dashed { stroke-dasharray: 5 4; }
@@ -442,8 +437,8 @@ pre.kapi-hl {
   cursor: pointer;
 }
 .kapi-opt:hover { border-color: var(--kapi-border-strong); }
-.kapi-opt:has(input:checked) { border-color: var(--kapi-accent); background: var(--kapi-accent-soft); }
-.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-accent); }
+.kapi-opt:has(input:checked) { border-color: var(--kapi-accent-text); background: var(--kapi-accent-fill); }
+.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-accent-text); }
 .kapi-text { display: flex; flex-direction: column; gap: 0.45rem; }
 .kapi-text-label { font-weight: 600; }
 .kapi-text textarea {
@@ -459,29 +454,29 @@ pre.kapi-hl {
   font-size: 0.95rem;
   resize: vertical;
 }
-.kapi-text textarea:focus { border-color: var(--kapi-accent); outline: 3px solid var(--kapi-accent-soft); outline-offset: 0; }
-.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-accent); outline-offset: 2px; }
+.kapi-text textarea:focus { border-color: var(--kapi-accent-text); outline: 3px solid var(--kapi-accent-fill); outline-offset: 0; }
+.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
 .kapi-form-actions { display: flex; justify-content: flex-end; }
 .kapi-form-actions button {
   padding: 0.5rem 1.1rem;
   border: 0;
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-accent-fill);
-  color: var(--kapi-on-accent);
+  background: var(--kapi-accent-solid);
+  color: var(--kapi-on-solid);
   font: inherit;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
 }
-.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-accent-fill) 88%, var(--kapi-fg)); }
+.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-accent-solid) 88%, var(--kapi-fg)); }
 
 .kapi-error {
   margin: 1.25rem 0;
   padding: 0.65rem 0.9rem;
   border: 1px solid var(--kapi-danger-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-danger-soft);
-  color: var(--kapi-danger);
+  background: var(--kapi-danger-fill);
+  color: var(--kapi-danger-text);
   font-size: 0.92rem;
 }
 span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }
@@ -499,73 +494,73 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
   .kapi-diagram svg { max-width: none; }
 }
 
-.kapi-hl .t-k{color:var(--kapi-code-keyword);}
-.kapi-hl .t-kc{color:var(--kapi-code-constant);}
-.kapi-hl .t-kd{color:var(--kapi-code-keyword);}
-.kapi-hl .t-kn{color:var(--kapi-code-keyword);}
-.kapi-hl .t-kp{color:var(--kapi-code-keyword);}
-.kapi-hl .t-kr{color:var(--kapi-code-keyword);}
-.kapi-hl .t-kt{color:var(--kapi-code-type);}
-.kapi-hl .t-na{color:var(--kapi-code-constant);}
-.kapi-hl .t-nc{color:var(--kapi-code-type);}
-.kapi-hl .t-no{color:var(--kapi-code-constant);}
-.kapi-hl .t-nd{color:var(--kapi-code-function);}
-.kapi-hl .t-ni{color:var(--kapi-code-constant);}
-.kapi-hl .t-ne{color:var(--kapi-code-type);}
-.kapi-hl .t-nl{color:var(--kapi-code-constant);}
-.kapi-hl .t-nn{color:var(--kapi-code-type);}
-.kapi-hl .t-nt{color:var(--kapi-code-tag);}
-.kapi-hl .t-nb{color:var(--kapi-code-type);}
-.kapi-hl .t-bp{color:var(--kapi-code-type);}
-.kapi-hl .t-nv{color:var(--kapi-code-variable);}
-.kapi-hl .t-vc{color:var(--kapi-code-variable);}
-.kapi-hl .t-vg{color:var(--kapi-code-variable);}
-.kapi-hl .t-vi{color:var(--kapi-code-variable);}
-.kapi-hl .t-vm{color:var(--kapi-code-variable);}
-.kapi-hl .t-nf{color:var(--kapi-code-function);}
-.kapi-hl .t-fm{color:var(--kapi-code-function);}
-.kapi-hl .t-l{color:var(--kapi-code-constant);}
-.kapi-hl .t-ld{color:var(--kapi-code-constant);}
-.kapi-hl .t-s{color:var(--kapi-code-string);}
-.kapi-hl .t-sa{color:var(--kapi-code-string);}
-.kapi-hl .t-sb{color:var(--kapi-code-string);}
-.kapi-hl .t-sc{color:var(--kapi-code-string);}
-.kapi-hl .t-dl{color:var(--kapi-code-string);}
-.kapi-hl .t-sd{color:var(--kapi-code-string);}
-.kapi-hl .t-s2{color:var(--kapi-code-string);}
-.kapi-hl .t-se{color:var(--kapi-code-string);}
-.kapi-hl .t-sh{color:var(--kapi-code-string);}
-.kapi-hl .t-si{color:var(--kapi-code-string);}
-.kapi-hl .t-sx{color:var(--kapi-code-string);}
-.kapi-hl .t-sr{color:var(--kapi-code-string);}
-.kapi-hl .t-s1{color:var(--kapi-code-string);}
-.kapi-hl .t-ss{color:var(--kapi-code-string);}
-.kapi-hl .t-m{color:var(--kapi-code-constant);}
-.kapi-hl .t-mb{color:var(--kapi-code-constant);}
-.kapi-hl .t-mf{color:var(--kapi-code-constant);}
-.kapi-hl .t-mh{color:var(--kapi-code-constant);}
-.kapi-hl .t-mi{color:var(--kapi-code-constant);}
-.kapi-hl .t-il{color:var(--kapi-code-constant);}
-.kapi-hl .t-mo{color:var(--kapi-code-constant);}
-.kapi-hl .t-o{color:var(--kapi-code-operator);}
-.kapi-hl .t-ow{color:var(--kapi-code-operator);}
-.kapi-hl .t-or{color:var(--kapi-code-operator);}
-.kapi-hl .t-c{color:var(--kapi-code-comment);font-style:italic;}
-.kapi-hl .t-ch{color:var(--kapi-code-comment);font-style:italic;}
-.kapi-hl .t-cm{color:var(--kapi-code-comment);font-style:italic;}
-.kapi-hl .t-c1{color:var(--kapi-code-comment);font-style:italic;}
-.kapi-hl .t-cs{color:var(--kapi-code-comment);font-style:italic;}
-.kapi-hl .t-cp{color:var(--kapi-code-keyword);}
-.kapi-hl .t-cpf{color:var(--kapi-code-keyword);}
-.kapi-hl .t-gd{color:var(--kapi-danger);}
+.kapi-hl .t-k{color:var(--kapi-accent-text);}
+.kapi-hl .t-kc{color:var(--kapi-warning-text);}
+.kapi-hl .t-kd{color:var(--kapi-accent-text);}
+.kapi-hl .t-kn{color:var(--kapi-accent-text);}
+.kapi-hl .t-kp{color:var(--kapi-accent-text);}
+.kapi-hl .t-kr{color:var(--kapi-accent-text);}
+.kapi-hl .t-kt{color:var(--kapi-info-text);}
+.kapi-hl .t-na{color:var(--kapi-warning-text);}
+.kapi-hl .t-nc{color:var(--kapi-info-text);}
+.kapi-hl .t-no{color:var(--kapi-warning-text);}
+.kapi-hl .t-nd{color:var(--kapi-info-text);}
+.kapi-hl .t-ni{color:var(--kapi-warning-text);}
+.kapi-hl .t-ne{color:var(--kapi-info-text);}
+.kapi-hl .t-nl{color:var(--kapi-warning-text);}
+.kapi-hl .t-nn{color:var(--kapi-info-text);}
+.kapi-hl .t-nt{color:var(--kapi-danger-text);}
+.kapi-hl .t-nb{color:var(--kapi-info-text);}
+.kapi-hl .t-bp{color:var(--kapi-info-text);}
+.kapi-hl .t-nv{color:var(--kapi-danger-text);}
+.kapi-hl .t-vc{color:var(--kapi-danger-text);}
+.kapi-hl .t-vg{color:var(--kapi-danger-text);}
+.kapi-hl .t-vi{color:var(--kapi-danger-text);}
+.kapi-hl .t-vm{color:var(--kapi-danger-text);}
+.kapi-hl .t-nf{color:var(--kapi-info-text);}
+.kapi-hl .t-fm{color:var(--kapi-info-text);}
+.kapi-hl .t-l{color:var(--kapi-warning-text);}
+.kapi-hl .t-ld{color:var(--kapi-warning-text);}
+.kapi-hl .t-s{color:var(--kapi-success-text);}
+.kapi-hl .t-sa{color:var(--kapi-success-text);}
+.kapi-hl .t-sb{color:var(--kapi-success-text);}
+.kapi-hl .t-sc{color:var(--kapi-success-text);}
+.kapi-hl .t-dl{color:var(--kapi-success-text);}
+.kapi-hl .t-sd{color:var(--kapi-success-text);}
+.kapi-hl .t-s2{color:var(--kapi-success-text);}
+.kapi-hl .t-se{color:var(--kapi-success-text);}
+.kapi-hl .t-sh{color:var(--kapi-success-text);}
+.kapi-hl .t-si{color:var(--kapi-success-text);}
+.kapi-hl .t-sx{color:var(--kapi-success-text);}
+.kapi-hl .t-sr{color:var(--kapi-success-text);}
+.kapi-hl .t-s1{color:var(--kapi-success-text);}
+.kapi-hl .t-ss{color:var(--kapi-success-text);}
+.kapi-hl .t-m{color:var(--kapi-warning-text);}
+.kapi-hl .t-mb{color:var(--kapi-warning-text);}
+.kapi-hl .t-mf{color:var(--kapi-warning-text);}
+.kapi-hl .t-mh{color:var(--kapi-warning-text);}
+.kapi-hl .t-mi{color:var(--kapi-warning-text);}
+.kapi-hl .t-il{color:var(--kapi-warning-text);}
+.kapi-hl .t-mo{color:var(--kapi-warning-text);}
+.kapi-hl .t-o{color:var(--kapi-muted);}
+.kapi-hl .t-ow{color:var(--kapi-muted);}
+.kapi-hl .t-or{color:var(--kapi-muted);}
+.kapi-hl .t-c{color:var(--kapi-faint);font-style:italic;}
+.kapi-hl .t-ch{color:var(--kapi-faint);font-style:italic;}
+.kapi-hl .t-cm{color:var(--kapi-faint);font-style:italic;}
+.kapi-hl .t-c1{color:var(--kapi-faint);font-style:italic;}
+.kapi-hl .t-cs{color:var(--kapi-faint);font-style:italic;}
+.kapi-hl .t-cp{color:var(--kapi-accent-text);}
+.kapi-hl .t-cpf{color:var(--kapi-accent-text);}
+.kapi-hl .t-gd{color:var(--kapi-danger-text);}
 .kapi-hl .t-ge{font-style:italic;}
-.kapi-hl .t-gr{color:var(--kapi-danger);}
-.kapi-hl .t-gh{color:var(--kapi-accent);font-weight:600;}
-.kapi-hl .t-gi{color:var(--kapi-success);}
+.kapi-hl .t-gr{color:var(--kapi-danger-text);}
+.kapi-hl .t-gh{color:var(--kapi-accent-text);font-weight:600;}
+.kapi-hl .t-gi{color:var(--kapi-success-text);}
 .kapi-hl .t-go{color:var(--kapi-muted);}
 .kapi-hl .t-gp{color:var(--kapi-muted);}
 .kapi-hl .t-gs{font-weight:600;}
-.kapi-hl .t-gu{color:var(--kapi-accent);font-weight:600;}
+.kapi-hl .t-gu{color:var(--kapi-accent-text);font-weight:600;}
 .kapi-hl .t-gt{color:var(--kapi-muted);}
 .kapi-hl .t-gl{text-decoration:underline;}
 </style>
@@ -575,9 +570,9 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
 <h1 data-kapi-id="a1b2c3d4">Page store cutover plan</h1>
 <p data-kapi-id="e5f6g7h2">This page walks through moving page state into the Go daemon. It uses every kapi preset, so it doubles as the visual reference for the design system. See <a href="#k3f9a2bq">the risky step</a> before you start, and <a href="https://github.com/xaaha/kapi">the repo</a> for context.</p>
 
-<aside class="kapi-callout kapi-callout-note" data-kapi-preset="callout" role="note" data-kapi-id="n0teaaaa"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></div></aside>
-<aside class="kapi-callout kapi-callout-warning" data-kapi-preset="callout" role="note" data-kapi-id="warnaaaa"><div class="kapi-callout-label">Warning</div><div class="kapi-callout-body"><p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p></div></aside>
-<aside class="kapi-callout kapi-callout-key" data-kapi-preset="callout" role="note" data-kapi-id="keyaaaaa"><div class="kapi-callout-label">Key point</div><div class="kapi-callout-body"><p>Go owns all state. The browser keeps nothing and refetches after any reconnect.</p></div></aside>
+<aside class="kapi-callout kapi-callout-note kapi-tone-info" data-kapi-preset="callout" role="note" data-kapi-id="n0teaaaa"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></div></aside>
+<aside class="kapi-callout kapi-callout-warning kapi-tone-warning" data-kapi-preset="callout" role="note" data-kapi-id="warnaaaa"><div class="kapi-callout-label">Warning</div><div class="kapi-callout-body"><p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p></div></aside>
+<aside class="kapi-callout kapi-callout-key kapi-tone-accent" data-kapi-preset="callout" role="note" data-kapi-id="keyaaaaa"><div class="kapi-callout-label">Key point</div><div class="kapi-callout-body"><p>Go owns all state. The browser keeps nothing and refetches after any reconnect.</p></div></aside>
 
 <h2 data-kapi-id="h2aaaaaa">Where the state lives</h2>
 <figure class="kapi-diagram kapi-diagram-flow" data-kapi-preset="diagram" data-kapi-id="flowaaaa"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-87.5 -12 262.1 540" width="262.1" height="540" role="img" aria-label="flow diagram: agent, page file, daemon, event log, browser, kapi watch"><title>flow diagram: agent, page file, daemon, event log, browser, kapi watch</title><defs><marker id="kapi-arrow-9e7c228e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="kd-arrow" d="M0,0 L10,5 L0,10 z"></path></marker></defs><path class="kd-edge" d="M73.6,36 L73.6,120" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M65.6,156 L65.6,240" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M57.6,276 C57.6,318 -24.5,318 -24.5,360" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M73.6,276 C73.6,318 114.7,318 114.7,360" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M130.7,360 C130.7,318 89.6,318 89.6,276" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M81.6,240 L81.6,156" marker-end="url(#kapi-arrow-9e7c228e)"></path><path class="kd-edge" d="M-24.5,396 L-24.5,480" marker-end="url(#kapi-arrow-9e7c228e)"></path><g class="kd-label"><rect x="48.8" y="69" width="49.6" height="18" rx="4"></rect><text x="73.6" y="78">writes</text></g><g class="kd-label"><rect x="-29.6" y="189" width="89.2" height="18" rx="4"></rect><text x="15" y="198">mtime change</text></g><g class="kd-label"><rect x="-45.7" y="309" width="56.2" height="18" rx="4"></rect><text x="-17.6" y="318">appends</text></g><g class="kd-label"><rect x="0.6" y="327.5" width="102.4" height="18" rx="4"></rect><text x="51.8" y="336.5">revision event</text></g><g class="kd-label"><rect x="116.1" y="309" width="23.2" height="18" rx="4"></rect><text x="127.7" y="318">op</text></g><g class="kd-label"><rect x="87.6" y="189" width="56.2" height="18" rx="4"></rect><text x="115.7" y="198">applies</text></g><g class="kd-label"><rect x="-52.6" y="429" width="56.2" height="18" rx="4"></rect><text x="-24.5" y="438">streams</text></g><g class="kd-node"><rect x="41.1" y="0" width="65" height="36" rx="10"></rect><text x="73.6" y="18">agent</text></g><g class="kd-node"><rect x="26.3" y="120" width="94.6" height="36" rx="10"></rect><text x="73.6" y="138">page file</text></g><g class="kd-node"><rect x="37.4" y="240" width="72.4" height="36" rx="10"></rect><text x="73.6" y="258">daemon</text></g><g class="kd-node"><rect x="-71.8" y="360" width="94.6" height="36" rx="10"></rect><text x="-24.5" y="378">event log</text></g><g class="kd-node"><rect x="82.8" y="360" width="79.8" height="36" rx="10"></rect><text x="122.7" y="378">browser</text></g><g class="kd-node"><rect x="-75.5" y="480" width="102" height="36" rx="10"></rect><text x="-24.5" y="498">kapi watch</text></g></svg></figure>
@@ -642,11 +637,11 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
 
 <h2 data-kapi-id="h2eeeeee">Steps</h2>
 <div class="kapi-plan" data-kapi-preset="plan" data-kapi-id="planaaaa">
-  <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="stepaaaa"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Add the page store with revisions under <code>revs/</code>.</div></div>
-  <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="k3f9a2bq"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Switch the daemon to serve rendered pages and single blocks.</div></div>
-  <div class="kapi-plan-item kapi-risk" data-kapi-preset="risk" data-kapi-id="riskaaaa"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body">An agent editing the file mid-request can race a browser op. The store must compare mtimes before it writes.</div></div>
-  <div class="kapi-plan-item kapi-step" data-kapi-preset="step" data-kapi-id="stepcccc"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Delete the old static page handler.</div></div>
-  <div class="kapi-plan-item kapi-question" data-kapi-preset="question" data-kapi-id="quesaaaa"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Should <em>undo</em> cross an agent edit, or stop at it?</div></div>
+  <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="stepaaaa"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Add the page store with revisions under <code>revs/</code>.</div></div>
+  <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="k3f9a2bq"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Switch the daemon to serve rendered pages and single blocks.</div></div>
+  <div class="kapi-plan-item kapi-risk kapi-tone-warning" data-kapi-preset="risk" data-kapi-id="riskaaaa"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body">An agent editing the file mid-request can race a browser op. The store must compare mtimes before it writes.</div></div>
+  <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="stepcccc"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Delete the old static page handler.</div></div>
+  <div class="kapi-plan-item kapi-question kapi-tone-info" data-kapi-preset="question" data-kapi-id="quesaaaa"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Should <em>undo</em> cross an agent edit, or stop at it?</div></div>
 </div>
 
 <h2 data-kapi-id="h2ffffff">Your call</h2>

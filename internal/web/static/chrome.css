@@ -10,7 +10,7 @@
 
 #kapi-page [contenteditable="true"] {
   outline: none;
-  caret-color: var(--kapi-accent);
+  caret-color: var(--kapi-accent-text);
 }
 
 #kapi-page [data-kapi-editing-source] {
@@ -24,7 +24,7 @@
 #kapi-page .kapi-source-label {
   margin: 0 0 6px;
   font: 600 12px/1.4 var(--kapi-font);
-  color: var(--kapi-accent);
+  color: var(--kapi-accent-text);
 }
 
 #kapi-page textarea.kapi-source {
@@ -34,10 +34,10 @@
   margin: 0;
   padding: 10px 12px;
   resize: vertical;
-  border: 1px solid var(--kapi-accent);
+  border: 1px solid var(--kapi-accent-text);
   border-radius: var(--kapi-radius-sm);
   outline: none;
-  box-shadow: 0 0 0 3px var(--kapi-accent-soft);
+  box-shadow: 0 0 0 3px var(--kapi-accent-fill);
   background: var(--kapi-bg);
   color: var(--kapi-fg);
   font: 13px/1.5 var(--kapi-mono);
@@ -73,7 +73,7 @@
 }
 
 #kapi-chrome button:focus-visible {
-  outline: 2px solid var(--kapi-accent);
+  outline: 2px solid var(--kapi-accent-text);
   outline-offset: 1px;
 }
 
@@ -91,7 +91,7 @@
   z-index: 2147482999;
   pointer-events: none;
   border-radius: 3px;
-  box-shadow: 0 0 0 2px var(--kapi-accent);
+  box-shadow: 0 0 0 2px var(--kapi-accent-text);
 }
 
 #kapi-chrome .kapi-ring[data-flash] {
@@ -100,7 +100,7 @@
 
 @keyframes kapi-flash {
   0% {
-    background: color-mix(in srgb, var(--kapi-accent) 22%, transparent);
+    background: color-mix(in srgb, var(--kapi-accent-text) 22%, transparent);
   }
 }
 
@@ -111,7 +111,7 @@
 }
 
 #kapi-chrome .kapi-ring[data-editing] {
-  background: color-mix(in srgb, var(--kapi-accent) 6%, transparent);
+  background: color-mix(in srgb, var(--kapi-accent-text) 6%, transparent);
 }
 
 #kapi-chrome .kapi-bar {
@@ -186,8 +186,8 @@
 }
 
 #kapi-chrome .kapi-panel-head .kapi-theme button[aria-pressed="true"] {
-  background: var(--kapi-accent-soft);
-  color: var(--kapi-accent);
+  background: var(--kapi-accent-fill);
+  color: var(--kapi-accent-text);
 }
 
 #kapi-chrome .kapi-theme svg {
@@ -222,19 +222,19 @@
 }
 
 #kapi-chrome .kapi-dot[data-state="watching"] {
-  background: var(--kapi-success);
-  box-shadow: 0 0 0 3px var(--kapi-success-soft);
+  background: var(--kapi-success-text);
+  box-shadow: 0 0 0 3px var(--kapi-success-fill);
 }
 
 #kapi-chrome .kapi-dot[data-state="busy"] {
-  background: var(--kapi-warning);
-  box-shadow: 0 0 0 3px var(--kapi-warning-soft);
+  background: var(--kapi-warning-text);
+  box-shadow: 0 0 0 3px var(--kapi-warning-fill);
   animation: kapi-pulse 1.4s ease-in-out infinite;
 }
 
 #kapi-chrome .kapi-dot[data-state="disconnected"] {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--kapi-danger);
+  box-shadow: inset 0 0 0 1.5px var(--kapi-danger-text);
 }
 
 #kapi-chrome .kapi-dot[data-state="connecting"] {
@@ -262,7 +262,7 @@
   padding: 10px 12px;
   border: 1px solid var(--kapi-danger-border);
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-danger-soft);
+  background: var(--kapi-danger-fill);
   color: var(--kapi-fg);
 }
 
@@ -287,14 +287,14 @@
   padding: 8px 10px;
   border: 1px solid var(--kapi-info-border);
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-info-soft);
+  background: var(--kapi-info-fill);
   cursor: pointer;
 }
 
 #kapi-chrome .kapi-notice[data-kind="error"] {
   border-color: var(--kapi-danger-border);
-  background: var(--kapi-danger-soft);
-  color: var(--kapi-danger);
+  background: var(--kapi-danger-fill);
+  color: var(--kapi-danger-text);
 }
 
 #kapi-chrome .kapi-scroll {
@@ -330,7 +330,7 @@
 #kapi-chrome .kapi-msg[data-author="human"] {
   align-self: flex-end;
   border-color: var(--kapi-accent-border);
-  background: var(--kapi-accent-soft);
+  background: var(--kapi-accent-fill);
 }
 
 #kapi-chrome .kapi-msg.kapi-answer {
@@ -366,7 +366,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font: 11.5px/1.4 var(--kapi-font);
-  color: var(--kapi-accent);
+  color: var(--kapi-accent-text);
 }
 
 #kapi-chrome .kapi-msg-text {
@@ -391,8 +391,8 @@
   padding: 2px 8px;
   border: 1px solid var(--kapi-accent-border);
   border-radius: 999px;
-  background: var(--kapi-accent-soft);
-  color: var(--kapi-accent);
+  background: var(--kapi-accent-fill);
+  color: var(--kapi-accent-text);
   font-size: 12px;
 }
 
@@ -411,8 +411,8 @@
 
 #kapi-chrome .kapi-composer textarea:focus {
   outline: none;
-  border-color: var(--kapi-accent);
-  box-shadow: 0 0 0 3px var(--kapi-accent-soft);
+  border-color: var(--kapi-accent-text);
+  box-shadow: 0 0 0 3px var(--kapi-accent-fill);
 }
 
 #kapi-chrome .kapi-composer-row {
@@ -429,13 +429,13 @@
 #kapi-chrome .kapi-primary {
   padding: 5px 14px;
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-accent-fill);
-  color: var(--kapi-on-accent);
+  background: var(--kapi-accent-solid);
+  color: var(--kapi-on-solid);
   font-weight: 600;
 }
 
 #kapi-chrome .kapi-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--kapi-accent-fill) 88%, var(--kapi-fg));
+  background: color-mix(in srgb, var(--kapi-accent-solid) 88%, var(--kapi-fg));
 }
 
 #kapi-chrome .kapi-primary:disabled {

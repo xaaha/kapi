@@ -8,40 +8,38 @@
   --kapi-faint: light-dark(#71717a, #8a909c);
   --kapi-border: light-dark(#e7e7eb, #2a2e37);
   --kapi-border-strong: light-dark(#d4d4da, #3b404b);
-
-  --kapi-accent: light-dark(#4f46e5, #818cf8);
-  --kapi-accent-strong: light-dark(#4338ca, #a5b4fc);
-  --kapi-accent-soft: light-dark(#eef0ff, #242739);
-  --kapi-accent-border: light-dark(#c3c6fb, #414675);
-  --kapi-accent-fill: light-dark(#4f46e5, #5750e6);
-  --kapi-on-accent: #ffffff;
-
-  --kapi-success: light-dark(#047857, #34d399);
-  --kapi-success-soft: light-dark(#ecfdf5, #1a302d);
-  --kapi-success-border: light-dark(#a7f3d0, #22634f);
-  --kapi-warning: light-dark(#b45309, #fbbf24);
-  --kapi-warning-soft: light-dark(#fffbeb, #342e1e);
-  --kapi-warning-border: light-dark(#fcd98a, #725b20);
-  --kapi-danger: light-dark(#be123c, #fb7185);
-  --kapi-danger-soft: light-dark(#fff1f2, #34242b);
-  --kapi-danger-border: light-dark(#fecdd3, #723c47);
-  --kapi-info: light-dark(#0369a1, #38bdf8);
-  --kapi-info-soft: light-dark(#f0f9ff, #1a2d39);
-  --kapi-info-border: light-dark(#bae6fd, #245a75);
-
-  --kapi-mark: light-dark(#fef3c7, #56471f);
+  --kapi-on-solid: #ffffff;
   --kapi-shadow: 0 1px 2px light-dark(rgb(16 24 40 / 0.05), rgb(0 0 0 / 0.3)), 0 8px 24px light-dark(rgb(16 24 40 / 0.08), rgb(0 0 0 / 0.4));
 
-  --kapi-code-bg: light-dark(#fbfbfd, #13151a);
-  --kapi-code-keyword: light-dark(#7c3aed, #c4b5fd);
-  --kapi-code-string: light-dark(#047857, #6ee7b7);
-  --kapi-code-comment: light-dark(#6b7280, #8b93a1);
-  --kapi-code-constant: light-dark(#b45309, #fcd34d);
-  --kapi-code-function: light-dark(#1d4ed8, #93c5fd);
-  --kapi-code-type: light-dark(#0e7490, #67e8f9);
-  --kapi-code-tag: light-dark(#be123c, #fda4af);
-  --kapi-code-variable: light-dark(#c2410c, #fdba74);
-  --kapi-code-operator: light-dark(#52525b, #a3a9b5);
+  --kapi-neutral-fill: light-dark(#f1f2f4, #23262d);
+  --kapi-neutral-border: light-dark(#d4d4da, #3b404b);
+  --kapi-neutral-text: light-dark(#3f3f46, #cfd3db);
+  --kapi-neutral-solid: light-dark(#52525b, #5b6170);
+
+  --kapi-info-fill: light-dark(#eef7fd, #162a37);
+  --kapi-info-border: light-dark(#b6defa, #255a77);
+  --kapi-info-text: light-dark(#0368a0, #7cc8f5);
+  --kapi-info-solid: light-dark(#0369a1, #0b6aa2);
+
+  --kapi-success-fill: light-dark(#ecfbf3, #15302a);
+  --kapi-success-border: light-dark(#a6ebc9, #23634f);
+  --kapi-success-text: light-dark(#047857, #6ee7b7);
+  --kapi-success-solid: light-dark(#047857, #08785a);
+
+  --kapi-warning-fill: light-dark(#fef8e7, #33291a);
+  --kapi-warning-border: light-dark(#f6d27a, #775f22);
+  --kapi-warning-text: light-dark(#a14a06, #fcd34d);
+  --kapi-warning-solid: light-dark(#b45309, #a65006);
+
+  --kapi-danger-fill: light-dark(#fef1f2, #36222a);
+  --kapi-danger-border: light-dark(#fbc8d0, #7a3b4a);
+  --kapi-danger-text: light-dark(#be123c, #fda4af);
+  --kapi-danger-solid: light-dark(#be123c, #be123c);
+
+  --kapi-accent-fill: light-dark(#eef0ff, #24273b);
+  --kapi-accent-border: light-dark(#c3c6fb, #444a7c);
+  --kapi-accent-text: light-dark(#4f46e5, #a5b4fc);
+  --kapi-accent-solid: light-dark(#4f46e5, #5750e6);
 
   --kapi-radius: 12px;
   --kapi-radius-sm: 8px;
