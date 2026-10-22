@@ -69,6 +69,7 @@ type Store struct {
 type state struct {
 	Rev  uint64   `json:"rev"`
 	Undo []uint64 `json:"undo"`
+	Prev *state   `json:"prev,omitempty"`
 }
 
 // ID is the 16-hex directory name under $KAPI_HOME/pages for an absolute page path.
@@ -96,9 +97,7 @@ func Open(home, path string) (*Store, error) {
 			return nil, fmt.Errorf("%s: %w", filepath.Join(s.dir, "state.json"), err)
 		}
 		s.rev, s.undo = st.Rev, st.Undo
-	}
-	if s.rev > 0 {
-		if s.src, err = os.ReadFile(s.revPath(s.rev)); err != nil {
+		if err := s.load(st.Prev); err != nil {
 			return nil, err
 		}
 	}
@@ -124,6 +123,28 @@ func Open(home, path string) (*Store, error) {
 		s.conversion = text
 		return s, nil
 	}
+}
+
+func (s *Store) load(prev *state) error {
+	if s.rev == 0 {
+		return nil
+	}
+	src, err := os.ReadFile(s.revPath(s.rev))
+	if err != nil {
+		return err
+	}
+	s.src = src
+	if prev == nil || prev.Rev == 0 {
+		return nil
+	}
+	raw, err := os.ReadFile(s.path)
+	if err != nil || bytes.Equal(raw, src) {
+		return err
+	}
+	if before, err := os.ReadFile(s.revPath(prev.Rev)); err == nil && bytes.Equal(raw, before) {
+		s.src, s.rev, s.undo = before, prev.Rev, prev.Undo
+	}
+	return nil
 }
 
 func (s *Store) Path() string { return s.path }
@@ -351,23 +372,28 @@ var (
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
-	if !bytes.Equal(src, base) {
-		if err := replaceFile(s.path, src, base); err != nil {
-			return err
-		}
-	}
 	if err := writeAtomic(s.revPath(rev), src); err != nil {
 		return err
 	}
-	b, err := json.Marshal(state{Rev: rev, Undo: undo})
-	if err != nil {
+	now := state{Rev: s.rev, Undo: s.undo}
+	if err := s.saveState(state{Rev: rev, Undo: undo, Prev: &now}); err != nil {
 		return err
 	}
-	if err := writeAtomic(filepath.Join(s.dir, "state.json"), b); err != nil {
-		return err
+	if !bytes.Equal(src, base) {
+		if err := replaceFile(s.path, src, base); err != nil {
+			return errors.Join(err, s.saveState(now))
+		}
 	}
 	s.src, s.rev, s.undo = src, rev, undo
 	return nil
+}
+
+func (s *Store) saveState(st state) error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(filepath.Join(s.dir, "state.json"), b)
 }
 
 func writeAtomic(path string, b []byte) error {

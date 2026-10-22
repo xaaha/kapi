@@ -102,6 +102,10 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	for at := 1; at <= n+1; at++ {
+		step := 1
+		for step < len(marks)-1 && marks[step].writes < at {
+			step++
+		}
 		t.Run(strconv.Itoa(at), func(t *testing.T) {
 			t.Parallel()
 			home, path := newPage(t, crashStart)
@@ -123,6 +127,25 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 				t.Fatalf("event log after a kill at write %d: %v", at, err)
 			}
 			l.Close()
+			src, _ := s.Source()
+			got := crashMark{src: string(src), undo: len(s.undo)}
+			before, after := marks[step-1], marks[step]
+			if got != (crashMark{src: before.src, undo: before.undo}) && got != (crashMark{src: after.src, undo: after.undo}) {
+				t.Fatalf("after a kill at write %d: source %q with %d undo steps, want the state before or after step %d", at, got.src, got.undo, step)
+			}
+			for {
+				_, rev := s.Source()
+				_, _, err := s.Apply(rev, &Op{Kind: "undo"})
+				if errors.Is(err, ErrNothingToUndo) {
+					break
+				}
+				if err != nil {
+					t.Fatalf("undo after a kill at write %d: %v", at, err)
+				}
+			}
+			if src, _ := s.Source(); string(src) != crashStart {
+				t.Errorf("undoing everything after a kill at write %d left %q", at, src)
+			}
 		})
 	}
 }
