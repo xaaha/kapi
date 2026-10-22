@@ -247,7 +247,8 @@ blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",
 `kapi say` writes its message with the reader name as author (`--reader
 codex` writes author `codex`; the default is `agent`), so agents watching
 under different reader names see each other's messages, while sessions that
-share one reader name skip each other's. `human` and `kapi` are reserved:
+share one reader name skip each other's. Edits made to the file itself are
+logged with author `file`. `human`, `kapi` and `file` are reserved:
 `watch`, `pending`, `ack` and `say` refuse them, and the events stream sends
 no read position for them.
 

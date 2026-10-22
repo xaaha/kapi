@@ -552,8 +552,8 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 				t.Errorf("file = %s, want the agent's edit kept", b)
 			}
 			ev := s.events()
-			if len(ev) != 1 || ev[0].Author != "agent" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
-				t.Errorf("events = %+v, want one agent revision on #aaaaaaaa", ev)
+			if len(ev) != 1 || ev[0].Author != "file" || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" {
+				t.Errorf("events = %+v, want one file revision on #aaaaaaaa", ev)
 			}
 		})
 	}
@@ -840,8 +840,8 @@ func TestPollStreamsAFileEditAsARevision(t *testing.T) {
 
 	editFile(t, s.path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p>new</p>\n")
 	_, ev := events.next()
-	if ev.Kind != "revision" || ev.Author != "agent" || ev.Target != "" || ev.Text != "edited in the file" {
-		t.Errorf("event = %+v, want an agent revision with no target", ev)
+	if ev.Kind != "revision" || ev.Author != "file" || ev.Target != "" || ev.Text != "edited in the file" {
+		t.Errorf("event = %+v, want a file revision with no target", ev)
 	}
 	if page := s.get("/p/" + s.id + "/").body; !strings.Contains(page, `data-rev="2"`) {
 		t.Errorf("page after the edit:\n%s", page)

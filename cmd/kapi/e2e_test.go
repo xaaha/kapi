@@ -313,3 +313,31 @@ func TestReservedReaderNamesAreRefused(t *testing.T) {
 		t.Errorf("pending = %q", got)
 	}
 }
+
+func TestTheAgentsWatchSeesFileEdits(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">a</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	resp, err := http.Get(url) //nolint:gosec // the local URL kapi just printed
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	w := e.watch()
+	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">edited by hand</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.event(t); got != `file revision on #aaaaaaaa: edited in the file: "edited by hand"` {
+		t.Errorf("watch printed %q, want the file edit", got)
+	}
+	for _, args := range [][]string{{"pending", "--reader", "file", e.page}} {
+		cmd := exec.Command(e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
+		cmd.Env = e.env
+		if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "is reserved") {
+			t.Errorf("kapi %v: %v\n%s; want a reserved reader error", args, err, out)
+		}
+	}
+}

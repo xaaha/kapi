@@ -210,7 +210,7 @@ func refresh(st *page.Store, l *eventlog.Log) error {
 	if err != nil || !changed {
 		return err
 	}
-	return appendRevision(l, "agent", sum)
+	return appendRevision(l, "file", sum)
 }
 
 func appendRevision(l *eventlog.Log, author string, sum page.Summary) error {
