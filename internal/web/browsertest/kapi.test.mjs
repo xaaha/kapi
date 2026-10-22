@@ -395,6 +395,25 @@ test("a reconnecting page gets the read position at once", async () => {
   await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-msg .kapi-read")`);
 });
 
+test("presence sits after the newest message and scrolls with the list", async () => {
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-panel-head .kapi-dot, .kapi-panel-head .kapi-status").length`), 0);
+  server.push({ kind: "presence", text: "watching" });
+  for (let i = 0; i < 30; i++) server.push({ author: i % 2 ? "agent" : "human", kind: "message", text: `message ${i}` });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 30`);
+  const [last, presence, scroll, text] = await page.eval(`(() => {
+    const box = (e) => (({ top, bottom }) => ({ top, bottom }))(e.getBoundingClientRect());
+    const p = document.querySelector(".kapi-presence");
+    return [box([...document.querySelectorAll(".kapi-msg")].at(-1)), box(p), box(document.querySelector(".kapi-scroll")), p.textContent];
+  })()`);
+  assert.equal(text, "Agent is watching");
+  assert.equal(await page.eval(`document.querySelector(".kapi-scroll").lastElementChild.className`), "kapi-presence");
+  assert.ok(presence.top >= last.bottom, JSON.stringify({ last, presence }));
+  assert.ok(presence.bottom <= scroll.bottom + 1, `presence ${JSON.stringify(presence)} not pinned in view ${JSON.stringify(scroll)}`);
+  await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
+  const moved = await page.eval(`document.querySelector(".kapi-presence").getBoundingClientRect().top`);
+  assert.ok(moved > scroll.bottom, `presence at ${moved} stayed put while the list scrolled`);
+});
+
 test("renders markup from events as literal text", async () => {
   const evil = `<img src=x onerror="window.pwned=1">`;
   server.push({ author: evil, kind: "message", target: evil, text: evil });

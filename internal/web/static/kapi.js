@@ -57,9 +57,9 @@
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, dot, statusText,
-      button("Undo", "undo", "Undo the last change")),
-    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
+    h("header", { class: "kapi-panel-head" }, button("Undo", "undo", "Undo the last change")),
+    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log,
+      h("div", { class: "kapi-presence", role: "status" }, dot, statusText)), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const root = h("div", { id: "kapi-chrome" }, ring, panel);
   document.body.append(root);
