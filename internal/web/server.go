@@ -60,7 +60,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
-	for _, name := range []string{"kapi.js", "chrome.css"} {
+	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg"} {
 		s.mux.HandleFunc("GET /static/"+name, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFileFS(w, r, static, "static/"+name)
@@ -220,6 +220,8 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
 	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(filepath.Base(st.Path())))
+	b.WriteString("<link rel=\"icon\" type=\"image/svg+xml\" href=\"../../static/favicon.svg\">\n")
+	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
 	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
 	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\">\n%s\n</main>\n", rev, body)

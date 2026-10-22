@@ -37,6 +37,36 @@
     return el;
   }
 
+  function themeToggle() {
+    const theme = window.kapiTheme;
+    if (!theme) return [];
+    const icons = {
+      system: ["M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", "M8 20h8M12 16v4"],
+      light: ["M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z", "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"],
+      dark: ["M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"],
+    };
+    const icon = (paths) => {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("aria-hidden", "true");
+      for (const d of paths) {
+        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        p.setAttribute("d", d);
+        svg.append(p);
+      }
+      return svg;
+    };
+    const names = { system: "System", light: "Light", dark: "Dark" };
+    const buttons = theme.choices.map((c) =>
+      h("button", { type: "button", "data-theme-choice": c, title: `${names[c]} theme`, "aria-label": `${names[c]} theme`, onclick: () => theme.set(c) }, icon(icons[c])));
+    const sync = () => {
+      for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === theme.get()));
+    };
+    document.addEventListener("kapi-theme", sync);
+    sync();
+    return [h("div", { class: "kapi-theme", role: "group", "aria-label": "Theme" }, ...buttons)];
+  }
+
   const button = (label, action, title = label) =>
     h("button", { type: "button", "data-action": action, title, text: label });
 
@@ -55,7 +85,7 @@
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, dot, statusText,
+    h("header", { class: "kapi-panel-head" }, h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), dot, statusText, ...themeToggle(),
       button("Undo", "undo", "Undo the last change")),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });

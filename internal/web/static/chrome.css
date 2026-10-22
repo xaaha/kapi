@@ -1,20 +1,5 @@
 :root {
   --kapi-panel-width: 340px;
-  --kapi-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --kapi-bg: #ffffff;
-  --kapi-surface: #f7f7f5;
-  --kapi-border: #e3e3de;
-  --kapi-text: #1f2328;
-  --kapi-muted: #6a6f76;
-  --kapi-accent: #3d6fd6;
-  --kapi-accent-soft: #e9effb;
-  --kapi-ok: #2e9d6a;
-  --kapi-busy: #d6951b;
-  --kapi-off: #a7abb1;
-  --kapi-error: #c2413a;
-  --kapi-error-soft: #fbeceb;
-  --kapi-radius: 8px;
-  --kapi-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
 }
 
 @media screen and (min-width: 761px) {
@@ -50,12 +35,12 @@
   padding: 10px 12px;
   resize: vertical;
   border: 1px solid var(--kapi-accent);
-  border-radius: 6px;
+  border-radius: var(--kapi-radius-sm);
   outline: none;
   box-shadow: 0 0 0 3px var(--kapi-accent-soft);
   background: var(--kapi-bg);
-  color: var(--kapi-text);
-  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--kapi-fg);
+  font: 13px/1.5 var(--kapi-mono);
   tab-size: 2;
 }
 
@@ -66,7 +51,7 @@
 
 #kapi-chrome {
   font: 13px/1.45 var(--kapi-font);
-  color: var(--kapi-text);
+  color: var(--kapi-fg);
 }
 
 #kapi-chrome button {
@@ -78,13 +63,13 @@
   padding: 4px 9px;
   border-radius: 6px;
   font: inherit;
-  color: var(--kapi-text);
+  color: var(--kapi-fg);
   cursor: pointer;
   white-space: nowrap;
 }
 
 #kapi-chrome button:hover:not(:disabled) {
-  background: var(--kapi-surface);
+  background: var(--kapi-subtle);
 }
 
 #kapi-chrome button:focus-visible {
@@ -93,7 +78,7 @@
 }
 
 #kapi-chrome button:disabled {
-  color: var(--kapi-off);
+  color: var(--kapi-faint);
   cursor: default;
 }
 
@@ -136,12 +121,12 @@
   gap: 2px;
   padding: 6px 8px;
   border-top: 1px solid var(--kapi-border);
-  background: var(--kapi-surface);
+  background: var(--kapi-subtle);
 }
 
 #kapi-chrome .kapi-bar-label {
   padding: 0 8px 0 6px;
-  font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1 var(--kapi-mono);
   color: var(--kapi-muted);
 }
 
@@ -154,31 +139,77 @@
   width: var(--kapi-panel-width);
   display: flex;
   flex-direction: column;
-  background: var(--kapi-bg);
+  background: var(--kapi-surface);
   border-left: 1px solid var(--kapi-border);
 }
 
 #kapi-chrome .kapi-panel-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 10px 10px 16px;
+  gap: 6px;
+  padding: 10px 10px 10px 12px;
   border-bottom: 1px solid var(--kapi-border);
 }
 
 #kapi-chrome .kapi-panel-head button {
   padding: 3px 10px;
   border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
   font-size: 12.5px;
   color: var(--kapi-muted);
 }
 
+#kapi-chrome .kapi-logo {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin-right: 2px;
+  background: currentColor;
+  -webkit-mask: url("logo.svg") center / contain no-repeat;
+  mask: url("logo.svg") center / contain no-repeat;
+}
+
+#kapi-chrome .kapi-theme {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+}
+
+#kapi-chrome .kapi-panel-head .kapi-theme button {
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--kapi-faint);
+}
+
+#kapi-chrome .kapi-panel-head .kapi-theme button[aria-pressed="true"] {
+  background: var(--kapi-accent-soft);
+  color: var(--kapi-accent);
+}
+
+#kapi-chrome .kapi-theme svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 #kapi-chrome .kapi-panel-head button:hover:not(:disabled) {
-  color: var(--kapi-text);
+  color: var(--kapi-fg);
 }
 
 #kapi-chrome .kapi-status {
   flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.3;
   color: var(--kapi-muted);
 }
 
@@ -187,26 +218,28 @@
   height: 8px;
   flex: none;
   border-radius: 50%;
-  background: var(--kapi-off);
+  background: var(--kapi-faint);
 }
 
 #kapi-chrome .kapi-dot[data-state="watching"] {
-  background: var(--kapi-ok);
+  background: var(--kapi-success);
+  box-shadow: 0 0 0 3px var(--kapi-success-soft);
 }
 
 #kapi-chrome .kapi-dot[data-state="busy"] {
-  background: var(--kapi-busy);
+  background: var(--kapi-warning);
+  box-shadow: 0 0 0 3px var(--kapi-warning-soft);
   animation: kapi-pulse 1.4s ease-in-out infinite;
 }
 
 #kapi-chrome .kapi-dot[data-state="disconnected"] {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--kapi-error);
+  box-shadow: inset 0 0 0 1.5px var(--kapi-danger);
 }
 
 #kapi-chrome .kapi-dot[data-state="connecting"] {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--kapi-off);
+  box-shadow: inset 0 0 0 1.5px var(--kapi-faint);
 }
 
 @keyframes kapi-pulse {
@@ -227,10 +260,10 @@
   gap: 10px;
   margin: 10px 12px 0;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--kapi-error) 35%, transparent);
-  border-radius: 6px;
-  background: var(--kapi-error-soft);
-  color: var(--kapi-text);
+  border: 1px solid var(--kapi-danger-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-danger-soft);
+  color: var(--kapi-fg);
 }
 
 #kapi-chrome .kapi-restart p {
@@ -239,27 +272,29 @@
 }
 
 #kapi-chrome .kapi-restart code {
-  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1.4 var(--kapi-mono);
   overflow-wrap: anywhere;
 }
 
 #kapi-chrome .kapi-copy {
   flex: none;
   border: 1px solid var(--kapi-border);
-  background: var(--kapi-bg);
+  background: var(--kapi-surface);
 }
 
 #kapi-chrome .kapi-notice {
   margin: 10px 12px 0;
   padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--kapi-accent-soft);
+  border: 1px solid var(--kapi-info-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-info-soft);
   cursor: pointer;
 }
 
 #kapi-chrome .kapi-notice[data-kind="error"] {
-  background: var(--kapi-error-soft);
-  color: var(--kapi-error);
+  border-color: var(--kapi-danger-border);
+  background: var(--kapi-danger-soft);
+  color: var(--kapi-danger);
 }
 
 #kapi-chrome .kapi-scroll {
@@ -287,18 +322,20 @@
   min-width: 0;
   max-width: 92%;
   padding: 8px 11px;
-  border-radius: 10px;
-  background: var(--kapi-surface);
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-subtle);
 }
 
 #kapi-chrome .kapi-msg[data-author="human"] {
   align-self: flex-end;
+  border-color: var(--kapi-accent-border);
   background: var(--kapi-accent-soft);
 }
 
 #kapi-chrome .kapi-msg.kapi-answer {
-  border: 1px dashed var(--kapi-border);
-  background: var(--kapi-bg);
+  border: 1px dashed var(--kapi-border-strong);
+  background: var(--kapi-surface);
 }
 
 #kapi-chrome .kapi-msg-meta {
@@ -313,7 +350,7 @@
 
 #kapi-chrome .kapi-author {
   font-weight: 600;
-  color: var(--kapi-text);
+  color: var(--kapi-fg);
 }
 
 #kapi-chrome .kapi-msg-meta time,
@@ -346,12 +383,13 @@
   border: 0;
   border-top: 1px solid var(--kapi-border);
   border-radius: 0;
-  background: var(--kapi-bg);
+  background: var(--kapi-surface);
 }
 
 #kapi-chrome .kapi-target {
   align-self: flex-start;
   padding: 2px 8px;
+  border: 1px solid var(--kapi-accent-border);
   border-radius: 999px;
   background: var(--kapi-accent-soft);
   color: var(--kapi-accent);
@@ -364,8 +402,8 @@
   margin: 0;
   padding: 8px 10px;
   resize: vertical;
-  border: 1px solid var(--kapi-border);
-  border-radius: 6px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-bg);
   font: inherit;
   color: inherit;
@@ -390,19 +428,20 @@
 
 #kapi-chrome .kapi-primary {
   padding: 5px 14px;
-  background: var(--kapi-accent);
-  color: #fff;
-  font-weight: 500;
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-accent-fill);
+  color: var(--kapi-on-accent);
+  font-weight: 600;
 }
 
 #kapi-chrome .kapi-primary:hover:not(:disabled) {
-  background: var(--kapi-accent);
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--kapi-accent-fill) 88%, var(--kapi-fg));
 }
 
 #kapi-chrome .kapi-primary:disabled {
-  background: var(--kapi-off);
-  color: #fff;
+  background: var(--kapi-subtle);
+  color: var(--kapi-faint);
+  box-shadow: inset 0 0 0 1px var(--kapi-border);
 }
 
 #kapi-chrome .kapi-composer-dot {

@@ -151,7 +151,7 @@ func f(v float64) string {
 
 func (s *svgWriter) box(class string, r rect, lines []string) {
 	s.extend(r)
-	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="6"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
+	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="10"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
 	top := r.y + (r.h-lineH*float64(len(lines)))/2 + lineH/2
 	for i, l := range lines {
 		fmt.Fprintf(&s.body, `<text x="%s" y="%s">`, f(r.x+r.w/2), f(top+lineH*float64(i)))

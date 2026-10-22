@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/render"
 )
 
 const (
@@ -348,18 +350,66 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
 	}
-	for _, p := range []string{"/static/kapi.js", "/static/chrome.css"} {
+	for _, p := range []string{"/static/kapi.js", "/static/chrome.css", "/static/logo.svg", "/static/favicon.svg"} {
 		if resp := s.get(p); resp.code != http.StatusOK {
 			t.Errorf("GET %s: %d", p, resp.code)
 		}
 	}
 	if resp := s.get("/p/0123456789abcdef/"); resp.code != http.StatusNotFound {
 		t.Errorf("unknown page: %d", resp.code)
+	}
+}
+
+func TestThemeScriptRunsBeforeAnyStyle(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	page := s.get("/p/" + s.id + "/").body
+	head, _, ok := strings.Cut(page, "</head>")
+	if !ok {
+		t.Fatalf("page has no head:\n%s", page)
+	}
+	script := strings.Index(head, `<script src="../../static/theme.js"></script>`)
+	if script < 0 {
+		t.Fatalf("head lacks a blocking theme.js script:\n%s", head)
+	}
+	for _, later := range []string{"<style>", `<link rel="stylesheet"`} {
+		if i := strings.Index(head, later); i < script {
+			t.Errorf("%s comes before theme.js (at %d, theme.js at %d)", later, i, script)
+		}
+	}
+	resp := s.get("/static/theme.js")
+	if resp.code != http.StatusOK || !strings.Contains(resp.header.Get("Content-Type"), "javascript") {
+		t.Fatalf("GET /static/theme.js: %d %q", resp.code, resp.header.Get("Content-Type"))
+	}
+	if !strings.Contains(resp.body, "prefers-color-scheme: dark") || !strings.Contains(resp.body, "localStorage") {
+		t.Errorf("theme.js does not look like the theme script:\n%s", resp.body)
+	}
+}
+
+var cssVar = regexp.MustCompile(`var\((--kapi-[a-z0-9-]+)`)
+var cssDef = regexp.MustCompile(`(--kapi-[a-z0-9-]+)\s*:`)
+
+func TestEveryColourTokenIsDefined(t *testing.T) {
+	chrome, err := static.ReadFile("static/chrome.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := string(render.CSS()) + string(chrome)
+	defined := map[string]bool{"--kapi-bar-height": true}
+	for _, m := range cssDef.FindAllStringSubmatch(all, -1) {
+		defined[m[1]] = true
+	}
+	for _, m := range cssVar.FindAllStringSubmatch(all, -1) {
+		if !defined[m[1]] {
+			t.Errorf("%s is used but never defined", m[1])
+		}
+	}
+	if hex := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`).FindAllString(string(chrome), -1); len(hex) > 0 {
+		t.Errorf("chrome.css hard-codes colours %v; use the theme tokens", hex)
 	}
 }
 
