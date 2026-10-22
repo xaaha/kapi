@@ -167,12 +167,14 @@ func Open(home, path string) (*Store, error) {
 			continue
 		}
 		if errors.Is(err, errFileChanged) {
-			return s, s.commit(raw, raw, s.rev+1, s.undo)
+			err = s.commit(raw, raw, s.rev+1, s.undo)
 		}
 		if err != nil {
 			return nil, err
 		}
-		s.conversion = text
+		if bytes.Equal(s.src, src) {
+			s.conversion = text
+		}
 		return s, nil
 	}
 }
