@@ -159,6 +159,12 @@ external edit first.
 
 The agent edits the file directly too. The store notices a changed mtime,
 assigns missing ids, and bumps the revision as if an `edit` happened.
+The agent's write always wins over a kapi write, whether the agent
+renames a file into place or writes into the file. Before kapi writes
+the file back, it rereads it 2ms later and starts over if the bytes
+changed. A write that lands in a file kapi moved aside is swapped back.
+When two writes carry the same mtime, the order comes from what kapi
+last put in place, not from the clock.
 
 ## HTTP
 
