@@ -57,6 +57,7 @@ type PageStatus struct {
 	Error   string           `json:"error,omitempty"`
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Queued  uint64           `json:"queued,omitempty"`
+	Hooked  uint64           `json:"hooked,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -440,7 +441,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "queue", "seen", "watch", "wait":
+	case "pending", "queue", "hooked", "seen", "watch", "wait":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -484,6 +485,8 @@ func (s *Server) handle(conn net.Conn) {
 		reply(enc, &Response{Event: &eventlog.Event{Seq: l.Cursor(req.Reader)}})
 	case "queue":
 		reply(enc, ackReply(l.Queue(req.Reader, req.Seq)))
+	case "hooked":
+		reply(enc, ackReply(l.Hook(req.Reader, req.Seq)))
 	case "status":
 		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
@@ -652,7 +655,7 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			continue
 		}
 		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued})
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader)})
 		}
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,22 +24,21 @@ func TestReview45cATruncatedEventIsHandedOverSoTheAgentCanNameItAndItIsNotReinje
 	t.Fatalf("requests after the hook showed #4 cut = %+v; #4 stays unqueued, so `kapi seen plan.html 4` and `kapi say --seen 4` are refused as never handed over, and every later PostToolUse injects the same 9,000 characters again", f.requests[1:])
 }
 
-func TestACutEventShowsAgainOnlyAtAPromptOrAStopAndStaysUnseen(t *testing.T) {
-	cutOnce := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Queued: 4, Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)}}}}}
-	f := &fakeAPI{resp: cutOnce, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
-	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
-		t.Errorf("PostToolUse after the cut was shown = %.100q, %v, %+v; want nothing", out, err, f.requests)
-	}
-	for _, event := range []string{"UserPromptSubmit", "Stop"} {
-		f := &fakeAPI{resp: cutOnce, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
+func TestEveryHookShowsANewCutEventOnceHandsItOverAndLeavesItUnseen(t *testing.T) {
+	cut := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)}}}}}
+	for _, event := range []string{"PostToolUse", "UserPromptSubmit", "Stop"} {
+		f := &fakeAPI{resp: cut, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
 		out, err := run(t, f, "hook-messages")
-		if err != nil || !strings.Contains(out, "#4 human message: xxx") || !strings.Contains(out, "kapi pending /w/plan.html") {
-			t.Errorf("%s = %.200q, %v; want the cut message and the pointer again", event, out, err)
+		if err != nil || !strings.Contains(out, "#4 human message: xxx") || !strings.Contains(out, "kapi pending /w/plan.html` to read #4") || len(out) > 1000 {
+			t.Errorf("%s = %.200q, %v; want a short placeholder for #4 and the pointer", event, out, err)
 		}
-		for _, r := range f.requests {
-			if r.Op == "seen" {
-				t.Errorf("%s marked %+v seen; the model saw only part of #4", event, r)
-			}
+		want := []daemon.Request{
+			{Op: "inbox", Page: "/w", Reader: "agent"},
+			{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+			{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+		}
+		if !slices.Equal(f.requests, want) {
+			t.Errorf("%s requests = %+v, want #4 handed over and not seen", event, f.requests)
 		}
 	}
 }

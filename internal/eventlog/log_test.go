@@ -118,6 +118,32 @@ func TestQueuedSurvivesReopenAndNeverTrailsSeen(t *testing.T) {
 	}
 }
 
+func TestTheHookPositionSurvivesReopenApartFromQueued(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "m"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := l.Queue("agent", 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Hook("agent", 2); err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	if l, err = Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	if h, q := l.Hooked("agent"), l.Queued("agent"); h != 2 || q != 3 {
+		t.Errorf("hooked %d, queued %d after reopen; want 2 and 3", h, q)
+	}
+}
+
 func TestCorruptCursorsFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {

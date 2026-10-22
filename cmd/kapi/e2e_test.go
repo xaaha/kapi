@@ -492,6 +492,40 @@ func TestWaitExitsWithTheMessageWithinSecondsAndTheReplyMarksItSeen(t *testing.T
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
 
+func TestAMessageBehindACutOneReachesTheModelAndStopDoesNotBlockTwice(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	hook := func(event string) string {
+		cmd, out := e.start(`{"hook_event_name":"`+event+`","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+		if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() {
+			t.Fatalf("%s hook failed: %v", event, cmd.ProcessState)
+		}
+		return out.String()
+	}
+	long := e.post(url, strings.Repeat("x", 12000))
+	if got := hook("PostToolUse"); !strings.Contains(got, fmt.Sprintf("to read #%d", long)) || len(got) > 2000 {
+		t.Fatalf("PostToolUse = %.300q, want a short placeholder for #%d", got, long)
+	}
+	urgent := e.post(url, "URGENT: stop the deploy")
+	if got := hook("PostToolUse"); !strings.Contains(got, "URGENT: stop the deploy") || strings.Contains(got, "xxxx") {
+		t.Fatalf("PostToolUse = %.300q, want only the new message", got)
+	}
+	if got := hook("Stop"); got != "" {
+		t.Errorf("Stop with nothing new = %.200q, want it to let the agent stop", got)
+	}
+	read, queued := receipts(t, url)
+	if queued < urgent || read >= long {
+		t.Errorf("read %d, queued %d; want both handed over and the cut #%d still unseen", read, queued, long)
+	}
+	e.kapi("seen", e.page, strconv.FormatUint(urgent, 10))
+	if read, _ := receipts(t, url); read < urgent {
+		t.Errorf("read %d after kapi seen %d", read, urgent)
+	}
+}
+
 func TestAHookDoesNotStartTheDaemon(t *testing.T) {
 	e := newE2E(t)
 	cmd, out := e.start(`{"hook_event_name":"Stop","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")

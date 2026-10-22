@@ -308,20 +308,18 @@ show them. Events reach the agent three ways:
   unseen event again.
 - `kapi setup hooks` adds Claude Code `UserPromptSubmit`, `PostToolUse` and
   `Stop` hooks that run `kapi hook-messages`. It reads the hook's JSON on
-  stdin and hands every unseen event of reader `agent` on the pages under the
+  stdin and hands the unseen events of reader `agent` on the pages under the
   hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
-  so the agent does not go idle on them. That text is in the model's context,
-  so once the hook has written it, it marks those events seen. The text stays
-  under 9,000 characters, because Claude Code swaps longer context for a short
-  preview: the hook shows events whole until the next one would not fit, cuts
-  a first event that cannot fit at all, points to `kapi pending <page>` for
-  the rest, and marks seen only through the last event it showed whole. A cut
-  event is queued, so the agent can name it, but stays unseen; `PostToolUse`
-  does not show a queued event that needs cutting again, while
-  `UserPromptSubmit` and `Stop` do. A
-  later `Stop` blocks only on events it can show whole and has not shown, so
-  it never loops. A hook whose input has `agent_id` fired
+  so the agent does not go idle on them. The rule, in two lines:
+  each hook shows, in order, only events past the reader's hook position, a too-long one as a short prefix with its `#n` and `kapi pending <page>`; it then moves the hook position and queued past all it showed.
+  the hook writes its text first, then marks seen only the events it showed whole with no cut event before them; `Stop` blocks only when something passed the hook position.
+  The hook position is separate from the queued position, so a message
+  `kapi watch` printed still reaches the model. A cut event is never shown
+  again; `UserPromptSubmit` adds a one-line reminder while it is unread. The
+  text stays under 9,000 characters, the point where Claude Code swaps
+  context for a short preview; events that do not fit wait for the next
+  hook. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.
   `kapi hook-messages` never starts the daemon, gives each daemon call 1
   second, and always exits 0; with no daemon running or answering it prints

@@ -55,19 +55,35 @@ func TestHookMarksSeenOnlyThroughTheLastEventItShowedWhole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "#2 human message: short") || strings.Contains(out, "yyyy") || strings.Contains(out, "after") || !strings.Contains(out, "kapi pending /w/plan.html") {
-		t.Errorf("output = %.400s", out)
+	if !strings.Contains(out, "#2 human message: short") || !strings.Contains(out, "#5 human message: after") || strings.Contains(out, strings.Repeat("y", 1000)) || !strings.Contains(out, "kapi pending /w/plan.html` to read #3") {
+		t.Errorf("output = %.600s", out)
 	}
-	if len(f.requests) != 3 || f.requests[2].Op != "seen" || f.requests[2].Seq != 2 {
-		t.Errorf("requests = %+v, want seen through #2 only", f.requests)
+	want := []daemon.Request{
+		{Op: "inbox", Page: "/w", Reader: "agent"},
+		{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 5},
+		{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 5},
+		{Op: "seen", Page: "/w/plan.html", Reader: "agent", Seq: 2},
+	}
+	if !slices.Equal(f.requests, want) {
+		t.Errorf("requests = %+v, want everything handed through #5 and seen only through #2, before the cut #3", f.requests)
 	}
 }
 
-func TestAStopHookThatCanShowNothingWholeLetsTheAgentStop(t *testing.T) {
-	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)}}}}}
-	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"Stop","cwd":"/w","stop_hook_active":true}`}
-	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
-		t.Errorf("Stop again on the same cut message = %.200q, %v; want it to let the agent stop instead of looping", out, err)
+func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing.T) {
+	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 5, Events: []eventlog.Event{
+		{Seq: 3, Author: "human", Kind: "message", Text: strings.Repeat("y", 9500)},
+		{Seq: 5, Author: "human", Kind: "message", Text: "after"},
+	}}}}
+	for _, event := range []string{"PostToolUse", "Stop"} {
+		f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
+		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
+			t.Errorf("%s with nothing past the hook position = %.200q, %v, %+v; want nothing", event, out, err, f.requests)
+		}
+	}
+	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`}
+	out, err := run(t, f, "hook-messages")
+	if err != nil || !strings.Contains(out, "#3 is still unread; run `kapi pending /w/plan.html`") || strings.Contains(out, "yyyy") || strings.Contains(out, "after") || len(f.requests) != 1 {
+		t.Errorf("prompt = %.300q, %v, %+v; want only a one-line reminder", out, err, f.requests)
 	}
 }
 

@@ -591,10 +591,9 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 
 func hookMessages(c api, in io.Reader, out io.Writer) error {
 	var hook struct {
-		Event      string `json:"hook_event_name"`
-		Cwd        string `json:"cwd"`
-		AgentID    string `json:"agent_id"`
-		StopActive bool   `json:"stop_hook_active"`
+		Event   string `json:"hook_event_name"`
+		Cwd     string `json:"cwd"`
+		AgentID string `json:"agent_id"`
 	}
 	if err := json.NewDecoder(in).Decode(&hook); err != nil {
 		return fmt.Errorf("hook input: %w", err)
@@ -611,8 +610,8 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
 		}
 	}
-	text, shown := hookText(resp.Pages, hook.Event != "PostToolUse")
-	if text == "" || (hook.StopActive && !slices.ContainsFunc(shown, func(s shownThrough) bool { return s.Seen > 0 })) {
+	text, handed := hookText(resp.Pages, hook.Event == "UserPromptSubmit")
+	if text == "" || (hook.Event == "Stop" && len(handed) == 0) {
 		return nil
 	}
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
@@ -624,71 +623,82 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 	if err := enc.Encode(reply); err != nil {
 		return err
 	}
-	for _, s := range shown {
-		if _, err := c.Do(&daemon.Request{Op: "queue", Page: s.Path, Reader: "agent", Seq: s.Queue}); err != nil {
-			return err
-		}
-		if s.Seen == 0 {
-			continue
-		}
-		if _, err := c.Do(&daemon.Request{Op: "seen", Page: s.Path, Reader: "agent", Seq: s.Seen}); err != nil {
-			return err
+	for _, h := range handed {
+		for _, op := range []struct {
+			name string
+			seq  uint64
+		}{{"queue", h.Hooked}, {"hooked", h.Hooked}, {"seen", h.Seen}} {
+			if op.seq == 0 {
+				continue
+			}
+			if _, err := c.Do(&daemon.Request{Op: op.name, Page: h.Path, Reader: "agent", Seq: op.seq}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-const hookTextLimit = 9000
+const (
+	hookTextLimit = 9000
+	tooLongLine   = hookTextLimit / 2
+	shownOfCut    = 300
+)
 
-type shownThrough struct {
-	Path  string
-	Seen  uint64
-	Queue uint64
+type hookHanded struct {
+	Path   string
+	Hooked uint64
+	Seen   uint64
 }
 
-func hookText(pages []daemon.PageStatus, repeatCut bool) (string, []shownThrough) {
-	const head = "kapi: new events on a shared page; the human now sees that you read them. Act on them and reply with `kapi say <page> <text>`.\n"
+func hookText(pages []daemon.PageStatus, remind bool) (string, []hookHanded) {
+	const head = "kapi: new events on a shared page; the human sees each one shown whole as read by you. Act on them and reply with `kapi say <page> <text>`.\n"
 	var b strings.Builder
-	var shown []shownThrough
+	var handed []hookHanded
 	room := func(page *strings.Builder) int { return hookTextLimit - len(head) - b.Len() - page.Len() - 200 }
 	for _, p := range pages {
 		if p.Error != "" || len(p.Events) == 0 {
 			continue
 		}
-		rest := fmt.Sprintf("  more unseen events here; run `kapi pending %s` to read them\n", p.Path)
+		pending := fmt.Sprintf("`kapi pending %s`", p.Path)
 		var page strings.Builder
 		page.WriteString(p.Path + ":\n")
-		if room(&page) < len(rest) {
-			break
+		h := hookHanded{Path: p.Path}
+		whole := p.Events[0].Seq > p.Hooked
+		if !whole && remind {
+			fmt.Fprintf(&page, "  #%d is still unread; run %s\n", p.Events[0].Seq, pending)
 		}
-		s := shownThrough{Path: p.Path}
 		for i := range p.Events {
 			e := &p.Events[i]
-			line := "  " + eventLine(e) + "\n"
-			if len(line)+len(rest) <= room(&page) {
-				page.WriteString(line)
-				s.Seen, s.Queue = e.Seq, e.Seq
+			if e.Seq <= p.Hooked {
 				continue
 			}
-			if s.Seen == 0 {
-				if !repeatCut && e.Seq <= p.Queued {
-					break
-				}
-				page.WriteString(cut(line, room(&page)-len(rest)) + "…\n")
-				s.Queue = e.Seq
+			line := "  " + eventLine(e) + "\n"
+			if len(line) > tooLongLine {
+				line = cut(line, shownOfCut) + fmt.Sprintf("… (too long to show here; run %s to read #%d)\n", pending, e.Seq)
+				whole = false
 			}
-			page.WriteString(rest)
-			break
+			if len(line) > room(&page) {
+				fmt.Fprintf(&page, "  more unseen events here; run %s to read them\n", pending)
+				break
+			}
+			page.WriteString(line)
+			h.Hooked = e.Seq
+			if whole {
+				h.Seen = e.Seq
+			}
 		}
-		if s.Queue > 0 {
+		if page.Len() > len(p.Path)+2 {
 			b.WriteString(page.String())
-			shown = append(shown, s)
+		}
+		if h.Hooked > 0 {
+			handed = append(handed, h)
 		}
 	}
 	if b.Len() == 0 {
 		return "", nil
 	}
-	return head + strings.TrimSuffix(b.String(), "\n"), shown
+	return head + strings.TrimSuffix(b.String(), "\n"), handed
 }
 
 func cut(s string, n int) string {

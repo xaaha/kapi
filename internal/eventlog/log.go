@@ -30,6 +30,7 @@ type Log struct {
 	events  []Event
 	cursors map[string]uint64
 	queued  map[string]uint64
+	hooked  map[string]uint64
 	changed chan struct{}
 	acked   chan struct{}
 }
@@ -38,6 +39,7 @@ const (
 	eventsFile  = "events.ndjson"
 	cursorsFile = "cursors.json"
 	queuedFile  = "queued.json"
+	hookedFile  = "hooked.json"
 )
 
 func Open(dir string) (*Log, error) {
@@ -56,11 +58,15 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
+	hooked, err := readCursors(filepath.Join(dir, hookedFile))
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, cursors: cursors, queued: queued, changed: make(chan struct{}), acked: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, events: events, cursors: cursors, queued: queued, hooked: hooked, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -141,6 +147,16 @@ func (l *Log) Queued(reader string) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return max(l.queued[reader], l.cursors[reader])
+}
+
+func (l *Log) Hook(reader string, seq uint64) error {
+	return l.advance(l.hooked, hookedFile, reader, seq)
+}
+
+func (l *Log) Hooked(reader string) uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return max(l.hooked[reader], l.cursors[reader])
 }
 
 func (l *Log) advance(positions map[string]uint64, file, reader string, seq uint64) error {

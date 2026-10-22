@@ -410,6 +410,7 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		want := []daemon.Request{
 			{Op: "inbox", Page: "/w", Reader: "agent"},
 			{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+			{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 4},
 			{Op: "seen", Page: "/w/plan.html", Reader: "agent", Seq: 4},
 		}
 		if !slices.Equal(f.requests, want) {
