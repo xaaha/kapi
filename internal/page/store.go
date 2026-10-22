@@ -349,6 +349,13 @@ var (
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	if !bytes.Equal(src, base) {
+		quiet, err := settled(s.path, placement{b: base})
+		if err != nil {
+			return err
+		}
+		if !quiet {
+			return errFileChanged
+		}
 		if err := replaceFile(s.path, src, base); err != nil {
 			return err
 		}
@@ -424,10 +431,21 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 	if err != nil {
 		return err
 	}
-	if displaced, err := os.ReadFile(tmp); err != nil || bytes.Equal(displaced, expect) {
+	displaced, err := capture(tmp)
+	if err != nil {
 		return err
 	}
+	if bytes.Equal(displaced.b, expect) {
+		if kept, err := settled(tmp, displaced); err != nil || kept {
+			return err
+		}
+	}
+	prev, placed := placement{b: expect}, placement{mine, ours}
 	for range 1 << 16 {
+		seen, err := capture(tmp)
+		if err != nil {
+			return err
+		}
 		atPath, err := stamp(path, mine, ours)
 		if err != nil {
 			return err
@@ -436,8 +454,21 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if err != nil {
 			return err
 		}
-		if !atTmp.After(atPath) {
-			return errFileChanged
+		newer := atTmp.After(atPath)
+		if atTmp.Equal(atPath) {
+			if newer, err = tiedTmpIsNewer(tmp, path, prev, placed); err != nil {
+				return err
+			}
+		}
+		if !newer {
+			kept, err := settled(tmp, seen)
+			if err != nil {
+				return err
+			}
+			if kept {
+				return errFileChanged
+			}
+			continue
 		}
 		if replaceHook != nil {
 			replaceHook("restore")
@@ -445,8 +476,47 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if err := swapFiles(tmp, path); err != nil {
 			return err
 		}
+		prev, placed = placed, seen
 	}
 	return errFileChanged
+}
+
+var settle = func() { time.Sleep(2 * time.Millisecond) }
+
+func settled(name string, p placement) (bool, error) {
+	settle()
+	return p.holds(name)
+}
+
+type placement struct {
+	fi os.FileInfo
+	b  []byte
+}
+
+func capture(name string) (placement, error) {
+	fi, err := os.Stat(name)
+	if err != nil {
+		return placement{}, err
+	}
+	b, err := os.ReadFile(name)
+	return placement{fi, b}, err
+}
+
+func (p placement) holds(name string) (bool, error) {
+	now, err := capture(name)
+	if err != nil {
+		return false, err
+	}
+	return (p.fi == nil || os.SameFile(now.fi, p.fi)) && bytes.Equal(now.b, p.b), nil
+}
+
+func tiedTmpIsNewer(tmp, path string, prev, placed placement) (bool, error) {
+	kept, err := placed.holds(path)
+	if err != nil || !kept {
+		return false, err
+	}
+	stale, err := prev.holds(tmp)
+	return !stale, err
 }
 
 func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
