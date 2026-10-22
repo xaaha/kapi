@@ -120,7 +120,7 @@ test("shows the 422 inbound-link error and keeps the block", async () => {
 });
 
 test("archives a block to one dimmed labelled line and unarchives it", async () => {
-  const height = () => page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().height`);
+  const height = () => page.eval(`(el => (s => el.getBoundingClientRect().height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom))(getComputedStyle(el)))(document.querySelector('[data-kapi-id="cccccccc"]'))`);
   const full = await height();
   await select("cccccccc");
   assert.equal(await page.eval(`document.querySelectorAll('.kapi-bar [data-action="done"]').length`), 0);
@@ -135,7 +135,7 @@ test("archives a block to one dimmed labelled line and unarchives it", async () 
   assert.ok(opacity < 1, `opacity ${opacity}`);
   assert.equal(label, '"archived"');
   assert.equal(excerpt, '"Copy data Flip reads"');
-  assert.ok((await height()) < 32, `archived height ${await height()}, full ${full}`);
+  assert.ok((await height()) < 24, `archived height ${await height()}, full ${full}`);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').checkVisibility()`), true);
 
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="unarchive"]')`);
