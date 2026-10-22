@@ -1,12 +1,16 @@
 package client
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,20 +53,41 @@ func (c Client) startDaemon(openPage string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(c.Home, 0o700); err != nil {
+	args := []string{"daemon", "--spawn"}
+	if openPage != "" {
+		args = append(args, "--reopen-except", page.ID(openPage))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("start daemon: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// Spawn starts the daemon in its own session with output to daemon.log and returns without waiting for it.
+func Spawn(home, reopenExcept string) error {
+	exe, err := os.Executable()
+	if err != nil {
 		return err
 	}
-	logf, err := os.OpenFile(c.Home+"/daemon.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return err
+	}
+	logf, err := os.OpenFile(filepath.Join(home, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer logf.Close()
 	args := []string{"daemon", "--reopen"}
-	if openPage != "" {
-		args = append(args, "--reopen-except", page.ID(openPage))
+	if reopenExcept != "" {
+		args = append(args, "--reopen-except", reopenExcept)
 	}
 	cmd := exec.Command(exe, args...)
-	cmd.Env = append(os.Environ(), "KAPI_HOME="+c.Home)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
