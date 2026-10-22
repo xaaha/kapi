@@ -3,10 +3,12 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/page"
 )
 
 func TestReview45InboxMatchesTheSameDirectoryThroughASymlink(t *testing.T) {
@@ -25,6 +27,31 @@ func TestReview45InboxMatchesTheSameDirectoryThroughASymlink(t *testing.T) {
 		if got := call(t, home, &Request{Op: "inbox", Page: c.dir, Reader: "agent"}); len(got.Pages) != 1 || got.Pages[0].Path != c.page {
 			t.Errorf("inbox for %s = %+v, want the message on %s, the same directory", c.dir, got.Pages, c.page)
 		}
+	}
+}
+
+func TestReview45OneBrokenPageDoesNotHideMessagesOnTheOthersInTheInbox(t *testing.T) {
+	home, _, stop := serving(t)
+	dir := t.TempDir()
+	good, bad := filepath.Join(dir, "good.html"), filepath.Join(dir, "bad.html")
+	call(t, home, &Request{Op: "append", Page: bad, Author: "human", Kind: "message", Text: "x"})
+	call(t, home, &Request{Op: "append", Page: good, Author: "human", Kind: "message", Text: "hello"})
+	stop()
+	broken := filepath.Join(home, "pages", page.ID(bad), "queued.json")
+	if err := os.WriteFile(broken, []byte("{bad"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	servingAt(t, home)
+	got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"})
+	byPath := map[string]PageStatus{}
+	for _, p := range got.Pages {
+		byPath[p.Path] = p
+	}
+	if got.Error != "" || len(got.Pages) != 2 || len(byPath[good].Events) != 1 {
+		t.Fatalf("inbox = %+v, error %q; want the message on %s", got.Pages, got.Error, good)
+	}
+	if !strings.Contains(byPath[bad].Error, broken) {
+		t.Errorf("error for the broken page = %q, want it to name %s", byPath[bad].Error, broken)
 	}
 }
 

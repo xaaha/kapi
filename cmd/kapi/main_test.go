@@ -399,7 +399,10 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 		t.Errorf("nothing unseen: %q, %v; want no output so the agent may stop", out, err)
 	}
-	if _, err := run(t, &fakeAPI{stdin: "not json"}, "hook-messages"); err == nil {
-		t.Error("bad hook input accepted")
+	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "queued.json: bad"}}}
+	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}} {
+		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
+		}
 	}
 }

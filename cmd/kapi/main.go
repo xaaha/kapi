@@ -566,38 +566,52 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 		Short:  "Hand a Claude Code hook the unseen events on pages under its directory",
 		Hidden: true,
 		Run: func([]string) error {
-			var hook struct {
-				Event string `json:"hook_event_name"`
-				Cwd   string `json:"cwd"`
+			if err := hookMessages(c, in, out); err != nil {
+				fmt.Fprintln(os.Stderr, "kapi hook-messages:", err)
 			}
-			if err := json.NewDecoder(in).Decode(&hook); err != nil {
-				return fmt.Errorf("hook input: %w", err)
-			}
-			if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) {
-				return nil
-			}
-			resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent"})
-			if err != nil || len(resp.Pages) == 0 {
-				return err
-			}
-			var b strings.Builder
-			b.WriteString("kapi: new events on a shared page, now shown to the human as read by you. Act on them and reply with `kapi say <page> <text>`.\n")
-			for _, p := range resp.Pages {
-				fmt.Fprintf(&b, "%s:\n", p.Path)
-				for i := range p.Events {
-					fmt.Fprintf(&b, "  %s\n", eventLine(&p.Events[i]))
-				}
-			}
-			text := strings.TrimSuffix(b.String(), "\n")
-			var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
-			if hook.Event == "Stop" {
-				reply = map[string]string{"decision": "block", "reason": text}
-			}
-			enc := json.NewEncoder(out)
-			enc.SetEscapeHTML(false)
-			return enc.Encode(reply)
+			return nil
 		},
 	}
+}
+
+func hookMessages(c api, in io.Reader, out io.Writer) error {
+	var hook struct {
+		Event string `json:"hook_event_name"`
+		Cwd   string `json:"cwd"`
+	}
+	if err := json.NewDecoder(in).Decode(&hook); err != nil {
+		return fmt.Errorf("hook input: %w", err)
+	}
+	if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) {
+		return nil
+	}
+	resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent"})
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, p := range resp.Pages {
+		if p.Error != "" {
+			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
+			continue
+		}
+		fmt.Fprintf(&b, "%s:\n", p.Path)
+		for i := range p.Events {
+			fmt.Fprintf(&b, "  %s\n", eventLine(&p.Events[i]))
+		}
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	text := "kapi: new events on a shared page, now shown to the human as read by you. Act on them and reply with `kapi say <page> <text>`.\n" +
+		strings.TrimSuffix(b.String(), "\n")
+	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
+	if hook.Event == "Stop" {
+		reply = map[string]string{"decision": "block", "reason": text}
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(reply)
 }
 
 func hookCommand() (string, error) {

@@ -216,7 +216,7 @@ func readCursors(path string) (map[string]uint64, error) {
 	}
 	cursors := map[string]uint64{}
 	if err := json.Unmarshal(b, &cursors); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return cursors, nil
 }
