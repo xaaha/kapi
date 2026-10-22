@@ -160,6 +160,21 @@ external edit first.
 The agent edits the file directly too. The store notices a changed mtime,
 assigns missing ids, and bumps the revision as if an `edit` happened.
 
+A kill or power cut at any point leaves the page file, `revs/` and
+`pages/<id>/state.json` whole. Every write goes to a temp file named
+`.<name>.kapi-<digits>` in the same folder, which is fsynced, renamed or
+swapped into place, and followed by an fsync of the folder. `state.json`
+holds `{"rev":N,"undo":[...]}`. Before swapping the page, the store writes
+`revs/<N+1>.html` and adds `"next":{"rev":N+1,"undo":[...]}` to
+`state.json`. Once the swap lands, it rewrites `state.json` without `next`.
+On open, the store moves to `next` only when the page file holds exactly
+`revs/<next rev>.html`. Otherwise it keeps `rev`, so a revision never goes
+back. Open also deletes its own temp files under `pages/<id>/`. A temp file
+next to the page is deleted only when its bytes equal a revision that
+`state.json` names. When its bytes are unknown and the page still holds such
+a revision, those bytes are an agent write that a kill left displaced, and
+the store swaps them back into the page. Any other temp file stays.
+
 ## HTTP
 
 The daemon also listens on `127.0.0.1` and writes
@@ -239,6 +254,12 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 `pages/<id>/`.
 
 ### Events stream
+
+The event log is `pages/<id>/events.ndjson`, one JSON event per line, and
+each append is fsynced before it is reported. A final line without its
+newline is a torn write: opening the log drops it and truncates the file to
+the last whole line. `cursors.json` is replaced through a fsynced temp file
+and rename.
 
 Each line of the event log is one SSE message with `id: <seq>`. The browser
 reconnects with `Last-Event-ID` and gets everything after it. Event `data` is
