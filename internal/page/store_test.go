@@ -1062,6 +1062,37 @@ func TestAnAgentWriteThatOpenedTheFileBeforeTheSwapStillWins(t *testing.T) {
 	}
 }
 
+func TestAnAgentRewritingIdenticalBytesIntoTheDisplacedFileStillWins(t *testing.T) {
+	start := "<p data-kapi-id=\"aaaaaaaa\">start</p>\n"
+	home, path := newPage(t, start)
+	s := open(t, home, path)
+	var held *os.File
+	replaceHook = func(st string) {
+		if st == "swap" && held == nil {
+			f, err := os.OpenFile(path, os.O_WRONLY, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			held = f
+		}
+	}
+	orig := settle
+	settle = func() {
+		if held != nil {
+			if _, err := held.WriteAt([]byte(start), 0); err != nil {
+				t.Fatal(err)
+			}
+			held.Close()
+			held = nil
+		}
+	}
+	_, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	replaceHook, settle = nil, orig
+	if got := onDisk(t, path); got != start {
+		t.Errorf("Apply err=%v, file = %q, want the agent's write %q", err, got, start)
+	}
+}
+
 func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
 	body := "a\r\nb\x00c"
 	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")

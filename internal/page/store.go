@@ -685,7 +685,10 @@ func (p placement) holds(name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return (p.fi == nil || os.SameFile(now.fi, p.fi)) && bytes.Equal(now.b, p.b), nil
+	if p.fi != nil && (!os.SameFile(now.fi, p.fi) || now.fi.Size() != p.fi.Size() || !now.fi.ModTime().Equal(p.fi.ModTime())) {
+		return false, nil
+	}
+	return bytes.Equal(now.b, p.b), nil
 }
 
 func tiedTmpIsNewer(tmp, path string, prev, placed placement) (bool, error) {
