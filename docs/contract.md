@@ -162,13 +162,24 @@ assigns missing ids, and bumps the revision as if an `edit` happened.
 The agent's write always wins over a kapi write, whether the agent
 renames a file into place or writes into the file. Before kapi writes
 the file back, it rereads it 2ms later and starts over if the bytes
-changed. kapi does not delete the file its swap moved aside. It records
-the file under `held` in `state.json`, with the inode, size, mtime, ctime
-and a hash of the moved-aside file and of the file kapi left in place. Each
-refresh and each op checks the moved-aside file. If it changed, and the page
-did not, a write landed in it after the swap, so kapi swaps it back. It is
-deleted once it has stayed unchanged for 3 checks, at the next kapi write,
-or when the page next opens.
+changed. kapi does not delete the file its swap moved aside. It keeps a
+hard link to it in `pages/<id>/held/` and deletes the temp next to the page at
+once, so nothing stays in the page's folder. Each swap adds its own entry to
+`held` in `state.json`, holding the size, mtime and a hash of the moved-aside
+file, the same for the file kapi left in place, and an expiry 10s later.
+ctime is never compared, so a chmod or an xattr changes nothing. A held file
+"changed" when its bytes, size or mtime differ. kapi checks every held file
+before each commit, including retries, on each refresh and op, and every
+second for each open page, with or without a browser. If a held file changed
+and the page still holds what kapi last put there, a write landed after the
+swap, so kapi swaps it back. Before that swap it records `back` (the stamps
+going in and coming out) in the entry, so a kill mid-swap is settled on the
+next open. If the page changed too, the page stays live and the held bytes
+are renamed to `.<name>.kapi-kept-<digits>` next to the page, never deleted.
+A held file that has not changed is deleted when its entry expires. When the
+daemon stops, and when a page opens, every held file is settled the same way
+and then deleted. If the page's folder is on another file system than
+`$KAPI_HOME`, the hard link fails and nothing is held.
 When two writes carry the same mtime, the order comes from what kapi
 last put in place, not from the clock.
 
