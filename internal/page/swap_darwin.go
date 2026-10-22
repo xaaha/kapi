@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func swapFiles(a, b string) error {
+func exchangeFiles(a, b string) error {
 	err := unix.RenamexNp(a, b, unix.RENAME_SWAP)
 	if errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EINVAL) {
 		return errNoSwap

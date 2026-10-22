@@ -345,6 +345,9 @@ var (
 	errFileChanged = errors.New("the file changed while kapi was writing it")
 	errNoSwap      = errors.New("this file system cannot swap files atomically")
 	replaceHook    func(stage string)
+	syncFile       = (*os.File).Sync
+	renameFile     = os.Rename
+	swapFiles      = exchangeFiles
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
@@ -389,7 +392,7 @@ func replaceFile(path string, b, expect []byte) error {
 		f.Close()
 		return err
 	}
-	if err := f.Sync(); err != nil {
+	if err := syncFile(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -397,7 +400,7 @@ func replaceFile(path string, b, expect []byte) error {
 		return err
 	}
 	if expect == nil {
-		return os.Rename(f.Name(), path)
+		return renameFile(f.Name(), path)
 	}
 	return swapIn(f.Name(), path, b, expect)
 }
@@ -419,7 +422,7 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if !bytes.Equal(cur, expect) {
 			return errFileChanged
 		}
-		return os.Rename(tmp, path)
+		return renameFile(tmp, path)
 	}
 	if err != nil {
 		return err

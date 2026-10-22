@@ -2,4 +2,4 @@
 
 package page
 
-func swapFiles(_, _ string) error { return errNoSwap }
+func exchangeFiles(_, _ string) error { return errNoSwap }
