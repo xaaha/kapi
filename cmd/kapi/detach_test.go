@@ -68,8 +68,8 @@ func TestAnAutostartedDaemonOutlivesTheClientsProcessTree(t *testing.T) {
 		return err == nil && len(e.daemonPIDs()) == 1
 	})
 	daemon := e.daemonPIDs()[0]
-	if ppid := parentOf(t, daemon); ppid != 1 {
-		t.Errorf("daemon %d has parent %d, want 1 (the watch is %d)", daemon, ppid, cmd.Process.Pid)
+	if ppid := parentOf(t, daemon); ppid == cmd.Process.Pid {
+		t.Errorf("daemon %d is a child of the watch %d", daemon, ppid)
 	}
 
 	killTree(t, cmd.Process.Pid)

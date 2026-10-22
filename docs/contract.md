@@ -193,8 +193,9 @@ and deletes every `viewing` file, so a restart loop with no tab reconnecting
 reopens each page at most once. When a kapi command starts the daemon on
 demand it runs `kapi daemon --spawn`, which starts `kapi daemon --reopen` in
 its own session, with stdin from `/dev/null` and output appended to
-`$KAPI_HOME/daemon.log`, and exits at once. The daemon's parent is then PID 1,
-so stopping the command or killing its process tree leaves the daemon running.
+`$KAPI_HOME/daemon.log`, and exits at once. The daemon is then no longer a
+child of the command, so stopping the command or killing its process tree
+leaves the daemon running.
 The command waits up to 3 seconds for the socket and fails with the spawn's
 error if the spawn fails. Once HTTP is serving, that daemon
 opens the new URL of each collected page whose file still exists, newest
