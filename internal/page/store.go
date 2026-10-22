@@ -424,11 +424,21 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 	if err != nil {
 		return err
 	}
-	if displaced, err := os.ReadFile(tmp); err != nil || bytes.Equal(displaced, expect) {
+	displaced, err := capture(tmp)
+	if err != nil {
 		return err
+	}
+	if bytes.Equal(displaced.b, expect) {
+		if kept, err := settled(tmp, displaced); err != nil || kept {
+			return err
+		}
 	}
 	prev, placed := placement{b: expect}, placement{mine, ours}
 	for range 1 << 16 {
+		seen, err := capture(tmp)
+		if err != nil {
+			return err
+		}
 		atPath, err := stamp(path, mine, ours)
 		if err != nil {
 			return err
@@ -444,11 +454,14 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 			}
 		}
 		if !newer {
-			return errFileChanged
-		}
-		next, err := capture(tmp)
-		if err != nil {
-			return err
+			kept, err := settled(tmp, seen)
+			if err != nil {
+				return err
+			}
+			if kept {
+				return errFileChanged
+			}
+			continue
 		}
 		if replaceHook != nil {
 			replaceHook("restore")
@@ -456,9 +469,16 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if err := swapFiles(tmp, path); err != nil {
 			return err
 		}
-		prev, placed = placed, next
+		prev, placed = placed, seen
 	}
 	return errFileChanged
+}
+
+var settle = func() { time.Sleep(2 * time.Millisecond) }
+
+func settled(name string, p placement) (bool, error) {
+	settle()
+	return p.holds(name)
 }
 
 type placement struct {

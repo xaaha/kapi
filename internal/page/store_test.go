@@ -1016,6 +1016,49 @@ func TestAnAgentWriteIntoTheFileWinsWhenItsMtimeTiesWithTheOneBefore(t *testing.
 	}
 }
 
+func TestAnAgentWriteThatOpenedTheFileBeforeTheSwapStillWins(t *testing.T) {
+	for _, holdAt := range []string{"swap", "restore"} {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		last := "<p data-kapi-id=\"aaaaaaaa\">late</p>\n"
+		var held *os.File
+		wrote := false
+		replaceHook = func(stage string) {
+			if holdAt == "restore" && stage == "swap" {
+				agentRename(t, path, "<p data-kapi-id=\"aaaaaaaa\">agent</p>\n")
+			}
+			if stage == holdAt && !wrote {
+				f, err := os.OpenFile(path, os.O_WRONLY, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				held = f
+			}
+		}
+		orig := settle
+		settle = func() {
+			if held != nil {
+				if err := held.Truncate(0); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := held.WriteAt([]byte(last), 0); err != nil {
+					t.Fatal(err)
+				}
+				held.Close()
+				held, wrote = nil, true
+			}
+		}
+		_, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"})
+		replaceHook, settle = nil, orig
+		if !errors.Is(err, ErrStale) {
+			t.Errorf("held at %s: Apply err = %v, want ErrStale", holdAt, err)
+		}
+		if got := onDisk(t, path); got != last {
+			t.Errorf("held at %s: file = %q, want the write that landed after the swap, %q", holdAt, got, last)
+		}
+	}
+}
+
 func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
 	body := "a\r\nb\x00c"
 	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")
