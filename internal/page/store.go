@@ -530,8 +530,9 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 		return nil, ErrInnerEscapes
 	}
 	if root.closeStart < root.end {
-		for _, f := range parse(frag)[1:] {
-			if !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && f.end == root.closeStart {
+		fels := parse(frag)
+		for i := 1; i < len(fels); i++ {
+			if f := &fels[i]; !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && f.end == root.closeStart && !closedByHTML(fels, i) {
 				return nil, ErrInnerEscapes
 			}
 		}
@@ -817,4 +818,21 @@ func topIDs(src []byte) []string {
 		}
 	}
 	return ids
+}
+
+var optionalEnd = map[string]bool{
+	"li": true, "dt": true, "dd": true, "p": true, "td": true, "th": true, "tr": true,
+	"option": true, "thead": true, "tbody": true, "tfoot": true,
+}
+
+func closedByHTML(els []element, i int) bool {
+	f := &els[i]
+	if !optionalEnd[f.name] {
+		return false
+	}
+	a := f.parent
+	for a >= 0 && els[a].closeStart == els[a].end {
+		a = els[a].parent
+	}
+	return a < 0 || f.end < els[a].closeStart || !strings.HasPrefix(els[a].name, "kapi-")
 }

@@ -1327,3 +1327,30 @@ func TestRevisionExcerptsCarryNoTerminalControls(t *testing.T) {
 		t.Errorf("summary = %q", sum.Text)
 	}
 }
+
+func TestAnEditMayOmitOptionalEndTags(t *testing.T) {
+	const src = "<ul data-kapi-id=\"aaaaaaaa\"><li>x</li></ul>\n<dl data-kapi-id=\"bbbbbbbb\"><dt>t</dt></dl>\n" +
+		"<table data-kapi-id=\"cccccccc\"><tr><td>1</td></tr></table>\n<div data-kapi-id=\"dddddddd\"><p>p</p></div>\n<p data-kapi-id=\"eeeeeeee\">next</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<li>a<li>b`)},
+		{Kind: "edit", ID: "aaaaaaaa", HTML: `<ul><li>a<li>b</ul>`},
+		{Kind: "edit", ID: "bbbbbbbb", Inner: ptr(`<dt>t<dd>d<dt>u<dd>e`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<thead><tr><th>h<th>i<tbody><tr><td>1<td>2<tr><td>3<td>4<tfoot><tr><td>f`)},
+		{Kind: "edit", ID: "dddddddd", Inner: ptr(`<p>one<p>two`)},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &op); err != nil {
+			t.Errorf("%+v: %v", op, err)
+		}
+	}
+}
+
+func TestAPresetEndTagDoesNotCloseAnOptionalEnd(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes, since HTML ignores a custom element's end tag while a p is open", err)
+	}
+}
