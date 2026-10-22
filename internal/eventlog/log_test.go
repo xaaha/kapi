@@ -127,7 +127,7 @@ func TestPrintableStripsTerminalControls(t *testing.T) {
 }
 
 func TestPrintableStripsMarksAndSeparators(t *testing.T) {
-	if got := Printable("a‎b‏c؜d e f"); got != "abcdef" {
+	if got := Printable("a\u200eb\u200fc\u061cd\u2028e\u2029f"); got != "abcdef" {
 		t.Errorf("Printable = %q", got)
 	}
 }
