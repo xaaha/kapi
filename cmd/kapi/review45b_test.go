@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -77,6 +78,18 @@ func shortHome(t *testing.T) string {
 	}
 	t.Cleanup(func() { os.RemoveAll(home) })
 	return home
+}
+
+func TestReview45bHookNeverStartsTheDaemon(t *testing.T) {
+	home := shortHome(t)
+	var out bytes.Buffer
+	err := newRoot(client.Client{Home: home}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":"/w"}`), &out, func(time.Duration) {}).Execute([]string{"hook-messages"})
+	if err != nil || out.Len() != 0 {
+		t.Fatalf("hook = %q, %v", out.String(), err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "daemon.log")); err == nil {
+		t.Fatal("the hook tried to start the daemon")
+	}
 }
 
 func TestReview45bHookReturnsQuicklyWhenTheDaemonDoesNotAnswer(t *testing.T) {
