@@ -457,9 +457,23 @@ func replaceFile(path string, b, expect []byte) error {
 		return err
 	}
 	if expect == nil {
-		return renameFile(f.Name(), path)
+		err = renameFile(f.Name(), path)
+	} else {
+		err = swapIn(f.Name(), path, b, expect)
 	}
-	return swapIn(f.Name(), path, b, expect)
+	if err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return syncFile(d)
 }
 
 func swapIn(tmp, path string, ours, expect []byte) error {

@@ -185,6 +185,52 @@ func checkWhole(t *testing.T, home, path string, whole map[string]bool) {
 	}
 }
 
+func TestEveryWriteIsSyncedBeforeItsRenameAndItsDirectoryAfter(t *testing.T) {
+	home, path := newPage(t, crashStart)
+	var trace []writeEvent
+	restore := traceWrites(func(e writeEvent) { trace = append(trace, e) })
+	err := runCrashScenario(home, path, func(*Store) {})
+	restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	synced, renamed := map[string]bool{}, map[string]bool{}
+	unsyncedDir := ""
+	for i, e := range trace {
+		if e.kind == "sync" {
+			synced[e.from] = true
+			if e.from == unsyncedDir {
+				unsyncedDir = ""
+			}
+			continue
+		}
+		if e.kind == "rename" && i > 0 && trace[i-1] == (writeEvent{"swap", e.from, e.to}) {
+			continue
+		}
+		if !synced[e.from] {
+			t.Errorf("%s of %s into %s before the file was synced", e.kind, e.from, e.to)
+		}
+		if unsyncedDir != "" {
+			t.Errorf("%s into %s before %s was synced", e.kind, e.to, unsyncedDir)
+		}
+		renamed[e.to] = true
+		unsyncedDir = filepath.Dir(e.to)
+	}
+	if unsyncedDir != "" {
+		t.Errorf("%s was never synced after its last rename", unsyncedDir)
+	}
+	dir := filepath.Join(home, "pages", ID(path))
+	want := []string{path, filepath.Join(dir, "state.json")}
+	for r := 1; r <= 1+len(crashOps); r++ {
+		want = append(want, filepath.Join(dir, "revs", strconv.Itoa(r)+".html"))
+	}
+	for _, p := range want {
+		if !renamed[p] {
+			t.Errorf("%s was not written through a synced temp file and a rename", p)
+		}
+	}
+}
+
 func TestOpenRemovesOnlyItsOwnTempFiles(t *testing.T) {
 	home, path := newPage(t, crashStart)
 	dir := filepath.Dir(path)
