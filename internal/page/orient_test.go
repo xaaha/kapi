@@ -14,11 +14,11 @@ const diagrams = "<kapi-diagram data-kapi-id=\"ffffffff\">\na -> b\n</kapi-diagr
 func TestOrientSetsTheDiagramsDir(t *testing.T) {
 	home, path := newPage(t, diagrams)
 	s := open(t, home, path)
-	sum := mustApply(t, s, Op{Kind: "orient", ID: "ffffffff", Dir: "lr"})
+	sum := mustApply(t, s, &Op{Kind: "orient", ID: "ffffffff", Dir: "lr"})
 	if sum.Text != "drew left to right" || len(sum.IDs) != 1 || sum.IDs[0] != "ffffffff" {
 		t.Errorf("summary = %+v", sum)
 	}
-	mustApply(t, s, Op{Kind: "orient", ID: "aaaaaaaa", Dir: "tb"})
+	mustApply(t, s, &Op{Kind: "orient", ID: "aaaaaaaa", Dir: "tb"})
 	got := onDisk(t, path)
 	for _, want := range []string{
 		"<kapi-diagram dir=\"lr\" data-kapi-id=\"ffffffff\">\na -> b\n</kapi-diagram>",
@@ -39,7 +39,7 @@ func TestOrientRefusesBadTargetsAndDirs(t *testing.T) {
 		{Kind: "orient", ID: "ssssssss", Dir: "lr"},
 		{Kind: "orient", ID: "pppppppp", Dir: "lr"},
 	} {
-		if _, _, err := s.Apply(1, op); err == nil || errors.Is(err, ErrStale) {
+		if _, _, err := s.Apply(1, &op); err == nil || errors.Is(err, ErrStale) {
 			t.Errorf("%+v: err = %v, want a refusal", op, err)
 		}
 	}
@@ -55,10 +55,10 @@ func TestOrientIsStaleOnlyWhenItsDiagramChanged(t *testing.T) {
 	if _, _, err := s.Refresh(); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Apply(1, Op{Kind: "orient", ID: "ffffffff", Dir: "lr"}); err != nil {
+	if _, _, err := s.Apply(1, &Op{Kind: "orient", ID: "ffffffff", Dir: "lr"}); err != nil {
 		t.Fatalf("orient at rev 1 after another block changed: %v", err)
 	}
-	if _, _, err := s.Apply(2, Op{Kind: "orient", ID: "ffffffff", Dir: "tb"}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(2, &Op{Kind: "orient", ID: "ffffffff", Dir: "tb"}); !errors.Is(err, ErrStale) {
 		t.Errorf("orient at rev 2 after the diagram itself changed: err = %v, want ErrStale", err)
 	}
 }

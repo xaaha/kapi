@@ -16,16 +16,16 @@ const checklist = "<kapi-checklist data-kapi-id=\"llllllll\">\n" +
 func TestCheckTicksAndUnticksATask(t *testing.T) {
 	home, path := newPage(t, checklist)
 	s := open(t, home, path)
-	sum := mustApply(t, s, Op{Kind: "check", ID: "aaaaaaaa", Done: true})
+	sum := mustApply(t, s, &Op{Kind: "check", ID: "aaaaaaaa", Done: true})
 	if sum.Text != "checked" || !slices.Equal(sum.IDs, []string{"aaaaaaaa"}) {
 		t.Errorf("summary = %+v", sum)
 	}
-	mustApply(t, s, Op{Kind: "check", ID: "bbbbbbbb", Done: false})
-	sum = mustApply(t, s, Op{Kind: "check", ID: "cccccccc", Done: false})
+	mustApply(t, s, &Op{Kind: "check", ID: "bbbbbbbb", Done: false})
+	sum = mustApply(t, s, &Op{Kind: "check", ID: "cccccccc", Done: false})
 	if sum.Text != "unchecked" {
 		t.Errorf("summary = %+v", sum)
 	}
-	mustApply(t, s, Op{Kind: "check", ID: "aaaaaaaa", Done: true})
+	mustApply(t, s, &Op{Kind: "check", ID: "aaaaaaaa", Done: true})
 	want := "<kapi-checklist data-kapi-id=\"llllllll\">\n" +
 		"  <kapi-task done data-kapi-id=\"aaaaaaaa\">Copy</kapi-task>\n" +
 		"  <kapi-task data-kapi-id=\"bbbbbbbb\">Flip</kapi-task>\n" +
@@ -40,11 +40,11 @@ func TestCheckRefusesAnythingButATask(t *testing.T) {
 	home, path := newPage(t, checklist)
 	s := open(t, home, path)
 	for _, id := range []string{"llllllll", "pppppppp"} {
-		if _, _, err := s.Apply(1, Op{Kind: "check", ID: id, Done: true}); err == nil || !strings.Contains(err.Error(), "kapi-task") {
+		if _, _, err := s.Apply(1, &Op{Kind: "check", ID: id, Done: true}); err == nil || !strings.Contains(err.Error(), "kapi-task") {
 			t.Errorf("check #%s: err = %v, want a refusal naming kapi-task", id, err)
 		}
 	}
-	if _, _, err := s.Apply(1, Op{Kind: "check", ID: "zzzzzzzz", Done: true}); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.Apply(1, &Op{Kind: "check", ID: "zzzzzzzz", Done: true}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("check of a missing id: err = %v", err)
 	}
 	if got := onDisk(t, path); got != checklist {
@@ -59,10 +59,10 @@ func TestCheckIsStaleOnlyWhenItsTaskChanged(t *testing.T) {
 	if _, _, err := s.Refresh(); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Apply(1, Op{Kind: "check", ID: "aaaaaaaa", Done: true}); err != nil {
+	if _, _, err := s.Apply(1, &Op{Kind: "check", ID: "aaaaaaaa", Done: true}); err != nil {
 		t.Fatalf("check at rev 1 after another block changed: %v", err)
 	}
-	if _, _, err := s.Apply(2, Op{Kind: "check", ID: "aaaaaaaa", Done: false}); !errors.Is(err, ErrStale) {
+	if _, _, err := s.Apply(2, &Op{Kind: "check", ID: "aaaaaaaa", Done: false}); !errors.Is(err, ErrStale) {
 		t.Errorf("check at rev 2 after the task itself changed: err = %v, want ErrStale", err)
 	}
 }
