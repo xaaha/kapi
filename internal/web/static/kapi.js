@@ -8,6 +8,7 @@
   const STATUS = {
     connecting: "Connecting to kapi\u2026",
     watching: "Agent is watching",
+    queued: "Queued for the agent",
     busy: "Agent is working",
     none: "No agent connected",
     disconnected: "Disconnected. Reconnecting\u2026",
@@ -19,6 +20,9 @@
   let lastSeq = 0;
   let readUpTo = 0;
   let readBy = "";
+  let queuedUpTo = 0;
+  let lastHuman = 0;
+  let lastReply = 0;
   let opened = false;
   let busy = false;
   let pending = null;
@@ -570,15 +574,30 @@
 
   function markRead() {
     for (const li of log.querySelectorAll('.kapi-msg[data-author="human"]:not([data-read])')) {
-      if (Number(li.dataset.seq) > readUpTo) continue;
-      li.setAttribute("data-read", "");
-      li.querySelector(".kapi-msg-meta").append(h("span", { class: "kapi-read", title: `Seen by ${readBy}`, "aria-label": `Seen by ${readBy}`, text: "\u{1F440}" }));
+      const seq = Number(li.dataset.seq);
+      const meta = li.querySelector(".kapi-msg-meta");
+      if (seq <= readUpTo) {
+        li.setAttribute("data-read", "");
+        meta.querySelector(".kapi-queued")?.remove();
+        meta.append(h("span", { class: "kapi-read", title: `Seen by ${readBy}`, "aria-label": `Seen by ${readBy}`, text: "\u{1F440}" }));
+      } else if (seq <= queuedUpTo && !meta.querySelector(".kapi-queued")) {
+        meta.append(h("span", { class: "kapi-queued", title: "Handed to the agent, not read yet", text: "Queued" }));
+      }
     }
+    setStatus(agentState());
+  }
+
+  function agentState() {
+    if (lastHuman > lastReply && lastHuman <= readUpTo) return "busy";
+    if (lastHuman > lastReply && lastHuman <= queuedUpTo) return "queued";
+    return presence;
   }
 
   function onEvent(ev) {
-    if (ev.kind === "read") {
-      if (typeof ev.seq === "number" && ev.seq > readUpTo) {
+    if (ev.kind === "read" || ev.kind === "queued") {
+      if (typeof ev.seq !== "number") return;
+      if (ev.kind === "queued") queuedUpTo = Math.max(queuedUpTo, ev.seq);
+      else if (ev.seq > readUpTo) {
         readUpTo = ev.seq;
         readBy = ev.reader || "the agent";
       }
@@ -590,11 +609,14 @@
     }
     if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
-    if (ev.kind === "message" || ev.kind === "answer") markRead();
-    else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
+    if (ev.kind === "message" || ev.kind === "answer") {
+      if (ev.author === "human") lastHuman = ev.seq;
+      else lastReply = ev.seq;
+      markRead();
+    } else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
     else if (ev.kind === "presence") {
-      presence = STATUS[ev.text] ? ev.text : "none";
-      setStatus(presence);
+      presence = ev.text === "watching" ? "watching" : "none";
+      setStatus(agentState());
     }
   }
 
@@ -613,7 +635,7 @@
     stream = es;
     es.onopen = () => {
       retryDelay = 1000;
-      setStatus(presence);
+      setStatus(agentState());
       if (opened) refresh(null);
       opened = true;
     };
