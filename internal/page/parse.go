@@ -89,7 +89,7 @@ func parse(src []byte) []element {
 			tok := z.Token()
 			for n := len(open); n > 0; n = len(open) {
 				top := els[open[n-1]].name
-				if !(top == "p" && closesParagraph[tok.Data]) && !impliedEnd[tok.Data][top] {
+				if closes := (top == "p" && closesParagraph[tok.Data]) || impliedEnd[tok.Data][top]; !closes {
 					break
 				}
 				closeAt(open[n-1], start, start)
