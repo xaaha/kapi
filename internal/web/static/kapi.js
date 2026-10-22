@@ -709,6 +709,10 @@
   main.addEventListener("change", async (e) => {
     const box = closest(e.target, '.kapi-task > input[type="checkbox"]');
     if (!box || !main.contains(box)) return;
+    if (busy) {
+      box.checked = !box.checked;
+      return;
+    }
     const id = idOf(closest(box, ".kapi-task"));
     box.disabled = true;
     const res = await op("check", { id, done: box.checked });

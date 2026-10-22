@@ -1177,6 +1177,20 @@ test("clicking a badge selects the block around it, never the badge", async () =
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`), false);
 });
 
+test("a box ticked while another op is in flight sends nothing and stays as it was", async () => {
+  await reopenWith([...CHECKLIST, { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
+  server.state.opDelay = 400;
+  await select("pppppppp");
+  await click('.kapi-bar [data-action="archive"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  await mouseClick('[data-kapi-id="tttttttt"] input');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="up"]').disabled`), true);
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(requests("POST", "/ops").length, 1);
+  assert.equal(await checked("tttttttt"), false);
+});
+
 test("a refused check puts the box back and says why", async () => {
   await reopenWith(CHECKLIST);
   server.state.nextOpError = "check needs a kapi-task";
