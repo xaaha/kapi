@@ -14,7 +14,10 @@ import (
 	"github.com/xaaha/kapi/internal/render"
 )
 
-const idAttr = "data-kapi-id"
+const (
+	idAttr    = "data-kapi-id"
+	stateAttr = "data-kapi-state"
+)
 
 type element struct {
 	name        string
@@ -278,7 +281,7 @@ func alignIDs(els []element, prev []byte) map[string]int {
 
 func setAttr(src []byte, e *element, key, val string) []byte {
 	quoted := `"` + html.EscapeString(val) + `"`
-	if from, to, ok := attrValue(src[e.start:e.tagEnd], key); ok {
+	if _, from, to, ok := attrValue(src[e.start:e.tagEnd], key); ok {
 		if from == to {
 			quoted = "=" + quoted
 		}
@@ -291,7 +294,18 @@ func setAttr(src []byte, e *element, key, val string) []byte {
 	return splice(src, at, at, " "+key+"="+quoted)
 }
 
-func attrValue(tag []byte, key string) (int, int, bool) {
+func removeAttr(src []byte, e *element, key string) []byte {
+	from, _, to, ok := attrValue(src[e.start:e.tagEnd], key)
+	if !ok {
+		return src
+	}
+	for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(src[e.start+from-1])) {
+		from--
+	}
+	return splice(src, e.start+from, e.start+to, "")
+}
+
+func attrValue(tag []byte, key string) (int, int, int, bool) {
 	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
 	i := 1
 	for i < len(tag) && !isSpace(tag[i]) && tag[i] != '/' && tag[i] != '>' {
@@ -302,7 +316,7 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 			i++
 		}
 		if i >= len(tag) || tag[i] == '>' {
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		nameStart := i
 		for i < len(tag) && !isSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
@@ -314,7 +328,7 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 		}
 		if i >= len(tag) || tag[i] != '=' {
 			if name == key {
-				return nameEnd, nameEnd, true
+				return nameStart, nameEnd, nameEnd, true
 			}
 			continue
 		}
@@ -338,10 +352,10 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 			}
 		}
 		if name == key {
-			return valStart, i, true
+			return nameStart, valStart, i, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
 func splice(src []byte, from, to int, with string) []byte {

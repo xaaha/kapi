@@ -101,7 +101,7 @@ test("refetches only the changed block, or the whole page when the target is emp
 test("on 409 it refetches the page and tells the user", async () => {
   server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Newer list</li></ul>');
   await select("cccccccc");
-  await click('.kapi-bar [data-action="done"]');
+  await click('.kapi-bar [data-action="archive"]');
   await until(async () => /page changed/.test(await notice()));
   assert.equal(await text("cccccccc"), "Newer list");
   assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
@@ -117,6 +117,34 @@ test("shows the 422 inbound-link error and keeps the block", async () => {
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   assert.equal(await notice(), "");
+});
+
+test("archives a block to one dimmed labelled line and unarchives it", async () => {
+  const height = () => page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().height`);
+  const full = await height();
+  await select("cccccccc");
+  assert.equal(await page.eval(`document.querySelectorAll('.kapi-bar [data-action="done"]').length`), 0);
+  await click('.kapi-bar [data-action="archive"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "archive", id: "cccccccc" } });
+  await page.waitFor(`document.querySelector('[data-kapi-id="cccccccc"]').dataset.kapiState === "archived"`);
+  const [opacity, label, excerpt] = await page.eval(`(() => {
+    const el = document.querySelector('[data-kapi-id="cccccccc"]');
+    return [Number(getComputedStyle(el).opacity), getComputedStyle(el, "::before").content, getComputedStyle(el, "::after").content];
+  })()`);
+  assert.ok(opacity < 1, `opacity ${opacity}`);
+  assert.equal(label, '"archived"');
+  assert.equal(excerpt, '"Copy data Flip reads"');
+  assert.ok((await height()) < 32, `archived height ${await height()}, full ${full}`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').checkVisibility()`), true);
+
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="unarchive"]')`);
+  assert.equal(await page.eval(`document.querySelectorAll('.kapi-bar [data-action="archive"], .kapi-bar [data-action="edit"]').length`), 0);
+  await click('.kapi-bar [data-action="unarchive"]');
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.deepEqual(requests("POST", "/ops")[1].body, { rev: 2, op: { kind: "unarchive", id: "cccccccc" } });
+  await page.waitFor(`!document.querySelector('[data-kapi-id="cccccccc"]').hasAttribute("data-kapi-state")`);
+  assert.equal(await height(), full);
 });
 
 test("deletes an unlinked block", async () => {
@@ -398,7 +426,7 @@ test("server error text renders as text in the notice", async () => {
   const evil = `<img src=x onerror="window.pwned=1">`;
   server.state.nextOpError = evil;
   await select("cccccccc");
-  await click('.kapi-bar [data-action="done"]');
+  await click('.kapi-bar [data-action="archive"]');
   await until(async () => (await notice()) === evil);
   assert.equal(await page.eval(`document.querySelectorAll("#kapi-chrome img").length`), 0);
   assert.equal(await page.eval(`window.pwned`), undefined);
@@ -516,7 +544,7 @@ test("every request carries the token prefix and every POST is JSON", async () =
   await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
   await click(".kapi-composer .kapi-primary");
   await select("cccccccc");
-  await click('.kapi-bar [data-action="done"]');
+  await click('.kapi-bar [data-action="archive"]');
   await click('kapi-form button[type="submit"]');
   await until(() => requests("POST", "").length === 3);
   const prefix = new URL(server.url).pathname.split("/p/")[0] + "/";

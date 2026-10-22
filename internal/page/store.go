@@ -311,7 +311,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
 	switch op.Kind {
-	case "edit", "done", "archive", "delete":
+	case "edit", "archive", "unarchive", "delete":
 	default:
 		return false
 	}
@@ -485,10 +485,10 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 			}
 		}
 		return cut(src, e), Summary{Text: about("deleted"), IDs: one}, nil
-	case "done":
-		return setAttr(src, e, "data-kapi-state", "done"), Summary{Text: about("marked done"), IDs: one}, nil
 	case "archive":
-		return setAttr(src, e, "data-kapi-state", "archived"), Summary{Text: about("archived"), IDs: one}, nil
+		return setAttr(src, e, stateAttr, "archived"), Summary{Text: about("archived"), IDs: one}, nil
+	case "unarchive":
+		return removeAttr(src, e, stateAttr), Summary{Text: about("unarchived"), IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := about("moved #"+op.ID) + " to the end"

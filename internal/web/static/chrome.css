@@ -28,6 +28,48 @@
   caret-color: var(--kapi-accent);
 }
 
+#kapi-page [data-kapi-state="archived"] {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 4px 0 !important;
+  border-color: transparent !important;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  overflow: hidden;
+  opacity: 0.55;
+}
+
+#kapi-page [data-kapi-state="archived"] > * {
+  display: none !important;
+}
+
+#kapi-page [data-kapi-state="archived"]::before {
+  content: "archived";
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--kapi-border);
+  border-radius: 999px;
+  background: var(--kapi-surface);
+  color: var(--kapi-muted);
+  font: 600 11px/1.6 var(--kapi-font);
+}
+
+#kapi-page [data-kapi-state="archived"]::after {
+  content: attr(data-kapi-excerpt);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--kapi-text);
+  font: 15px/1.5 var(--kapi-font);
+}
+
 #kapi-page [data-kapi-editing-source] {
   display: none !important;
 }

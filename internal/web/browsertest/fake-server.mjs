@@ -11,8 +11,6 @@ const PAGE_CSS = `
 body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #fff; }
 #kapi-page { max-width: 720px; margin: 0 auto; padding: 48px 32px; }
 h1 { font-size: 30px; line-height: 1.2; }
-[data-kapi-state="done"] { opacity: .55; }
-[data-kapi-state="archived"] { display: none; }
 [data-kapi-sort="on"] th { cursor: pointer; text-align: left; }
 [data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: " \\2191"; }
 [data-kapi-sort="on"] th[aria-sort="descending"]::after { content: " \\2193"; }
@@ -124,11 +122,9 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks[i].html = renderCallout(op.html);
     } else if (op.kind === "edit") state.blocks[i].html = op.html;
     else if (op.kind === "delete") state.blocks.splice(i, 1);
-    else if (op.kind === "done" || op.kind === "archive") {
-      const value = op.kind === "done" ? "done" : "archived";
-      state.blocks[i].html = state.blocks[i].html
-        .replace(/ data-kapi-state="[^"]*"/, "")
-        .replace(/^<([\w-]+)/, `<$1 data-kapi-state="${value}"`);
+    else if (op.kind === "archive" || op.kind === "unarchive") {
+      const html = state.blocks[i].html.replace(/ data-kapi-state="[^"]*"/, "");
+      state.blocks[i].html = op.kind === "archive" ? html.replace(/^<([\w-]+)/, '<$1 data-kapi-state="archived"') : html;
     } else if (op.kind === "move") {
       const [b] = state.blocks.splice(i, 1);
       const j = op.before ? state.blocks.findIndex((x) => x.id === op.before) : state.blocks.length;
@@ -140,7 +136,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks = prev;
     }
     state.rev++;
-    push({ author: "human", kind: "revision", target: op.kind === "edit" ? op.id : "", text: `${op.kind} #${op.id}` });
+    const target = op.kind === "edit" || op.kind === "archive" || op.kind === "unarchive" ? op.id : "";
+    push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev } };
   }
 

@@ -74,7 +74,7 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, delete, done, archive, move, undo
+    Kind string // edit, delete, archive, unarchive, move, undo
     ID   string
     HTML string // edit: new outer HTML of the element
     Inner *string // edit, instead of HTML: new source between the element's start and end tags
@@ -96,13 +96,16 @@ would close the element or leave it unclosed. An op with both `html` and
 An op whose result is byte for byte the current source changes nothing: it
 returns 200 with the current `rev`, writes no `revs/` file, adds no undo step
 and logs no event (`Apply` returns an empty `Summary`).
-`done` and `archive` set `data-kapi-state` on the element. Every applied op
+`archive` sets `data-kapi-state="archived"` on the element and `unarchive`
+removes `data-kapi-state`. An archived block renders dimmed and collapsed to
+one line: a small "archived" label and a text excerpt. Its toolbar offers
+Unarchive in place of Edit and Archive. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `done`, `archive` and `delete` only. `move` and `undo`
+This applies to `edit`, `archive`, `unarchive` and `delete` only. `move` and `undo`
 depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is

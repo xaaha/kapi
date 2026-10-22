@@ -67,10 +67,39 @@
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
   const peers = (el) => [...el.parentElement.children].filter((c) => c.hasAttribute("data-kapi-id"));
 
+  const INLINE = /^(A|ABBR|B|CITE|CODE|EM|I|KBD|MARK|Q|S|SMALL|SPAN|STRONG|SUB|SUP|U)$/;
+
+  function textOf(el) {
+    let out = "";
+    const walk = (node) => {
+      for (const c of node.childNodes) {
+        if (c.nodeType === Node.TEXT_NODE) out += c.data;
+        else if (c.nodeType === Node.ELEMENT_NODE) {
+          const gap = INLINE.test(c.tagName) ? "" : " ";
+          out += gap;
+          walk(c);
+          out += gap;
+        }
+      }
+    };
+    walk(el);
+    return out.replace(/\s+/g, " ").trim();
+  }
+
+  function labelArchived(scope) {
+    const els = [...scope.querySelectorAll('[data-kapi-state="archived"]')];
+    if (scope.matches?.('[data-kapi-state="archived"]')) els.push(scope);
+    for (const el of els) {
+      const text = textOf(el);
+      const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
+      el.setAttribute("data-kapi-excerpt", preset && text ? `${preset}: ${text}` : preset || text);
+    }
+  }
+
   function describe(id) {
     const el = find(id);
     if (!el) return "a block no longer on the page";
-    const text = (el.innerText || el.textContent).replace(/\s+/g, " ").trim();
+    const text = textOf(el);
     const short = text.length > 40 ? `${text.slice(0, 39).trimEnd()}\u2026` : text;
     const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
     if (!preset) return short || "an empty block";
@@ -124,12 +153,10 @@
     } else {
       const list = peers(selected);
       const i = list.indexOf(selected);
-      const state = selected.getAttribute("data-kapi-state");
-      bar.replaceChildren(button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
+      const archived = selected.getAttribute("data-kapi-state") === "archived";
+      bar.replaceChildren(...(archived ? [button("Unarchive", "unarchive")] : [button("Edit", "edit"), button("Archive", "archive")]),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"));
-      bar.querySelector('[data-action="done"]').disabled = state === "done";
-      bar.querySelector('[data-action="archive"]').disabled = state === "archived";
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
       bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
     }
@@ -276,6 +303,7 @@
     const copy = el.cloneNode(true);
     copy.removeAttribute("contenteditable");
     copy.removeAttribute("data-kapi-selected");
+    copy.removeAttribute("data-kapi-excerpt");
     return copy.outerHTML;
   }
 
@@ -306,7 +334,7 @@
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
-    if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "archive" || name === "unarchive") return (await op(name, { id }))?.ok && refresh([id]);
     if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
     const list = peers(selected);
     const i = list.indexOf(selected);
@@ -352,6 +380,7 @@
     selected = null;
     main.replaceChildren(...fresh.childNodes);
     main.dataset.rev = fresh.dataset.rev;
+    labelArchived(main);
     select(keep ? find(keep) : null);
   }
 
@@ -370,6 +399,7 @@
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
       el.replaceWith(next);
+      labelArchived(next);
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
       if (selected === el) {
@@ -555,5 +585,6 @@
     if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
   });
 
+  labelArchived(main);
   connect();
 })();

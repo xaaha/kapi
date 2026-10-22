@@ -432,12 +432,12 @@ func TestAnUnchangedEditLogsNothing(t *testing.T) {
 
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
-	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`)
 	if code != http.StatusOK || out["rev"] != 2.0 {
-		t.Fatalf("done: %d %v", code, out)
+		t.Fatalf("archive: %d %v", code, out)
 	}
 	ev := s.events()
-	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != `marked done "see a"` {
+	if len(ev) != 1 || ev[0].Author != "human" || ev[0].Kind != "revision" || ev[0].Target != "bbbbbbbb" || ev[0].Text != `archived "see a"` {
 		t.Errorf("events = %+v", ev)
 	}
 
@@ -476,7 +476,7 @@ func TestAStaleOpAfterAFileEditLogsTheEditAndReturns409(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 			edit(t, s.path, `<p data-kapi-id="aaaaaaaa">b</p>`)
-			code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`)
+			code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`)
 			if code != http.StatusConflict || out["rev"] != 2.0 {
 				t.Fatalf("op over a file edit: %d %v, want 409 rev 2", code, out)
 			}
@@ -516,17 +516,17 @@ func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
 	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","html":"<p>a, by the human</p>"}}`); code != http.StatusOK || out["rev"] != 3.0 {
 		t.Errorf("save on an untouched block: %d %v, want 200 rev 3", code, out)
 	}
-	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
 		t.Errorf("op on the block the agent changed: %d %v, want 409 rev 3", code, out)
 	}
 }
 
 func TestUndoAcrossAFileEditIs422(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"done","id":"aaaaaaaa"}}`); code != http.StatusOK {
-		t.Fatalf("done: %d", code)
+	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`); code != http.StatusOK {
+		t.Fatalf("archive: %d", code)
 	}
-	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa" data-kapi-state="done">a, by the agent</p>`)
+	editFile(t, s.path, `<p data-kapi-id="aaaaaaaa" data-kapi-state="archived">a, by the agent</p>`)
 	code, out := s.post("/ops", `{"rev":3,"op":{"kind":"undo"}}`)
 	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out["error"]), "changed outside the browser") {
 		t.Errorf("undo across a file edit: %d %v, want 422", code, out)
