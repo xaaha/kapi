@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var toneRoles = []string{"fill", "border", "text", "solid"}
+var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
 var surfaceRoles = []string{"bg", "surface", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "on-solid"}
 
@@ -98,7 +98,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 	}
 	for _, tone := range tones {
 		text := pair(tone + "-text")
-		for _, bg := range []string{tone + "-fill", "surface", "subtle", "bg"} {
+		for _, bg := range []string{tone + "-fill", tone + "-tint", "surface", "subtle", "bg"} {
 			check(tone+"-text on "+bg, text, pair(bg), 4.5)
 		}
 		check("on-solid on "+tone+"-solid", [2]string{onSolid, onSolid}, pair(tone+"-solid"), 4.5)

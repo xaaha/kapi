@@ -132,13 +132,13 @@ body {
 .kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-purple-text); }
 .kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-purple-text); }
 
-.kapi-tone-red { --kapi-tone-fill: var(--kapi-red-fill); --kapi-tone-border: var(--kapi-red-border); --kapi-tone-text: var(--kapi-red-text); --kapi-tone-solid: var(--kapi-red-solid); }
-.kapi-tone-orange { --kapi-tone-fill: var(--kapi-orange-fill); --kapi-tone-border: var(--kapi-orange-border); --kapi-tone-text: var(--kapi-orange-text); --kapi-tone-solid: var(--kapi-orange-solid); }
-.kapi-tone-yellow { --kapi-tone-fill: var(--kapi-yellow-fill); --kapi-tone-border: var(--kapi-yellow-border); --kapi-tone-text: var(--kapi-yellow-text); --kapi-tone-solid: var(--kapi-yellow-solid); }
-.kapi-tone-green { --kapi-tone-fill: var(--kapi-green-fill); --kapi-tone-border: var(--kapi-green-border); --kapi-tone-text: var(--kapi-green-text); --kapi-tone-solid: var(--kapi-green-solid); }
-.kapi-tone-blue { --kapi-tone-fill: var(--kapi-blue-fill); --kapi-tone-border: var(--kapi-blue-border); --kapi-tone-text: var(--kapi-blue-text); --kapi-tone-solid: var(--kapi-blue-solid); }
-.kapi-tone-purple { --kapi-tone-fill: var(--kapi-purple-fill); --kapi-tone-border: var(--kapi-purple-border); --kapi-tone-text: var(--kapi-purple-text); --kapi-tone-solid: var(--kapi-purple-solid); }
-.kapi-tone-grey { --kapi-tone-fill: var(--kapi-grey-fill); --kapi-tone-border: var(--kapi-grey-border); --kapi-tone-text: var(--kapi-grey-text); --kapi-tone-solid: var(--kapi-grey-solid); }
+.kapi-tone-red { --kapi-tone-fill: var(--kapi-red-fill); --kapi-tone-border: var(--kapi-red-border); --kapi-tone-text: var(--kapi-red-text); --kapi-tone-solid: var(--kapi-red-solid); --kapi-tone-tint: var(--kapi-red-tint); }
+.kapi-tone-orange { --kapi-tone-fill: var(--kapi-orange-fill); --kapi-tone-border: var(--kapi-orange-border); --kapi-tone-text: var(--kapi-orange-text); --kapi-tone-solid: var(--kapi-orange-solid); --kapi-tone-tint: var(--kapi-orange-tint); }
+.kapi-tone-yellow { --kapi-tone-fill: var(--kapi-yellow-fill); --kapi-tone-border: var(--kapi-yellow-border); --kapi-tone-text: var(--kapi-yellow-text); --kapi-tone-solid: var(--kapi-yellow-solid); --kapi-tone-tint: var(--kapi-yellow-tint); }
+.kapi-tone-green { --kapi-tone-fill: var(--kapi-green-fill); --kapi-tone-border: var(--kapi-green-border); --kapi-tone-text: var(--kapi-green-text); --kapi-tone-solid: var(--kapi-green-solid); --kapi-tone-tint: var(--kapi-green-tint); }
+.kapi-tone-blue { --kapi-tone-fill: var(--kapi-blue-fill); --kapi-tone-border: var(--kapi-blue-border); --kapi-tone-text: var(--kapi-blue-text); --kapi-tone-solid: var(--kapi-blue-solid); --kapi-tone-tint: var(--kapi-blue-tint); }
+.kapi-tone-purple { --kapi-tone-fill: var(--kapi-purple-fill); --kapi-tone-border: var(--kapi-purple-border); --kapi-tone-text: var(--kapi-purple-text); --kapi-tone-solid: var(--kapi-purple-solid); --kapi-tone-tint: var(--kapi-purple-tint); }
+.kapi-tone-grey { --kapi-tone-fill: var(--kapi-grey-fill); --kapi-tone-border: var(--kapi-grey-border); --kapi-tone-text: var(--kapi-grey-text); --kapi-tone-solid: var(--kapi-grey-solid); --kapi-tone-tint: var(--kapi-grey-tint); }
 
 .kapi-callout {
   margin: 1.25rem 0;
@@ -170,14 +170,13 @@ body {
 
 .kapi-badge {
   display: inline-block;
-  padding: 0 0.6em;
-  border: 1px solid var(--kapi-tone-border);
-  border-radius: 999px;
-  background: var(--kapi-tone-fill);
+  padding: 0.0625rem 0.5rem;
+  border-radius: 6px;
+  background: var(--kapi-tone-tint);
   color: var(--kapi-tone-text);
-  font-size: 0.8em;
-  font-weight: 600;
-  line-height: 1.6;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
   white-space: nowrap;
 }
 
@@ -486,7 +485,7 @@ pre.kapi-hl {
   font-size: 0.95rem;
   text-align: left;
 }
-.kapi-diagram-legend .kd-legend-planned { border-style: dashed; border-color: var(--kapi-faint); }
+.kapi-diagram-legend .kd-legend-planned { outline: 1px dashed var(--kapi-faint); outline-offset: -1px; background: var(--kapi-surface); }
 .kapi-diagram .kd-label rect { fill: var(--kapi-surface); fill-opacity: 0.92; }
 .kapi-diagram .kd-label text { fill: var(--kapi-muted); font-size: 11.5px; }
 
