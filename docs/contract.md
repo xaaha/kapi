@@ -34,7 +34,7 @@ load and writes the file back. Ids never change after that.
 
 | Element | Attributes | Body |
 |---|---|---|
-| `<kapi-callout>` | `kind` = `note`, `warning`, `key` | prose |
+| `<kapi-callout>` | `kind` = `note`, `warning`, `key`, `danger`, `success` | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |

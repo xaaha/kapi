@@ -7,8 +7,8 @@ func Presets() []Preset {
 var catalog = []Preset{
 	{
 		Name:    "kapi-callout",
-		Summary: "Boxed aside for a note, a warning or the key point of a section",
-		Example: `<!-- kind: note (default), warning or key. Body: prose. -->
+		Summary: "Boxed aside for a note, a warning, the key point, a danger or a success",
+		Example: `<!-- kind: note (default, info tone), warning, key (accent tone), danger or success. Body: prose. -->
 <kapi-callout kind="warning">
   <p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p>
 </kapi-callout>`,
