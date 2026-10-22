@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,5 +129,35 @@ func TestAFailedSpawnIsReportedAtOnce(t *testing.T) {
 	}
 	if pids := e.daemonPIDs(); len(pids) != 0 {
 		t.Errorf("daemon processes %v, want none", pids)
+	}
+}
+
+func TestTheDaemonDoesNotHoldTheClientsInheritedFiles(t *testing.T) {
+	e := newE2E(t)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	cmd := exec.Command(e.bin, "send", e.page, "hello") //nolint:gosec // runs the kapi binary this test just built
+	cmd.Env = e.env
+	cmd.ExtraFiles = []*os.File{w}
+	out, err := cmd.CombinedOutput()
+	w.Close()
+	if err != nil {
+		t.Fatalf("kapi send: %v\n%s", err, out)
+	}
+	eof := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, r)
+		eof <- err
+	}()
+	select {
+	case err := <-eof:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the pipe passed to kapi send as fd 3 stayed open, so the daemon holds it")
 	}
 }
