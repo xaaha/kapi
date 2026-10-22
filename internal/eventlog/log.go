@@ -1,7 +1,7 @@
 package eventlog
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,7 +42,7 @@ func Open(dir string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	events, err := readEvents(filepath.Join(dir, eventsFile))
+	events, whole, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +54,16 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := f.Truncate(whole); err != nil {
+		f.Close()
+		return nil, err
+	}
 	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
 func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
-	events, err := readEvents(filepath.Join(dir, eventsFile))
+	events, _, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,26 +161,24 @@ func unread(events []Event, reader string) []Event {
 	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
 }
 
-func readEvents(path string) ([]Event, error) {
-	f, err := os.Open(path)
+func readEvents(path string) ([]Event, int64, error) {
+	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	defer f.Close()
+	whole := bytes.LastIndexByte(b, '\n') + 1
 	var events []Event
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for sc.Scan() {
+	for line := range bytes.Lines(b[:whole]) {
 		var e Event
-		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
-			return nil, fmt.Errorf("%s line %d: %w", path, len(events)+1, err)
+		if err := json.Unmarshal(line, &e); err != nil {
+			return nil, 0, fmt.Errorf("%s line %d: %w", path, len(events)+1, err)
 		}
 		events = append(events, e)
 	}
-	return events, sc.Err()
+	return events, int64(whole), nil
 }
 
 func readCursors(path string) (map[string]uint64, error) {

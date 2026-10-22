@@ -93,6 +93,32 @@ func TestCorruptCursorsFileIsAnError(t *testing.T) {
 	}
 }
 
+func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
+	dir := t.TempDir()
+	whole := `{"seq":1,"time":"2026-01-02T03:04:05Z","author":"human","kind":"message","text":"one"}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, eventsFile), []byte(whole+`{"seq":2,"time":"2026-01`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, pending, err := Summary(dir); err != nil || pending("agent") != 1 {
+		t.Fatalf("Summary of a log with a torn last line: err = %v", err)
+	}
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open of a log with a torn last line: %v", err)
+	}
+	if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "two"}); err != nil || e.Seq != 2 {
+		t.Fatalf("Append after a torn line = %+v, %v", e, err)
+	}
+	l.Close()
+	l, err = Open(dir)
+	if err != nil {
+		t.Fatalf("reopen after appending past a torn line: %v", err)
+	}
+	if events, _ := l.After(0); len(events) != 2 || events[1].Text != "two" {
+		t.Errorf("events = %+v, want one and two", events)
+	}
+}
+
 func TestPresenceIsNeverPending(t *testing.T) {
 	dir := t.TempDir()
 	l, err := Open(dir)
