@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -384,8 +385,12 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		if !strings.HasPrefix(out, tc.want) || !strings.Contains(out, `/w/plan.html:\n  #4 human message: <ship it>`) || !strings.Contains(out, "kapi say <page> <text>") {
 			t.Errorf("%s: output = %s", tc.stdin, out)
 		}
-		want := daemon.Request{Op: "inbox", Page: "/w", Reader: "agent"}
-		if len(f.requests) != 1 || f.requests[0] != want {
+		want := []daemon.Request{
+			{Op: "inbox", Page: "/w", Reader: "agent"},
+			{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+			{Op: "seen", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+		}
+		if !slices.Equal(f.requests, want) {
 			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
 		}
 	}

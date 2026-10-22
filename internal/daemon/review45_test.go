@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,8 @@ func TestReview45InboxMatchesTheSameDirectoryThroughASymlink(t *testing.T) {
 	}
 	for _, c := range []struct{ page, dir string }{{filepath.Join(link, "a.html"), resolved}, {filepath.Join(resolved, "b.html"), link}} {
 		call(t, home, &Request{Op: "append", Page: c.page, Author: "human", Kind: "message", Text: "hello"})
-		if got := call(t, home, &Request{Op: "inbox", Page: c.dir, Reader: "agent"}); len(got.Pages) != 1 || got.Pages[0].Path != c.page {
+		got := call(t, home, &Request{Op: "inbox", Page: c.dir, Reader: "agent"})
+		if !slices.ContainsFunc(got.Pages, func(p PageStatus) bool { return p.Path == c.page }) {
 			t.Errorf("inbox for %s = %+v, want the message on %s, the same directory", c.dir, got.Pages, c.page)
 		}
 	}
@@ -105,7 +107,7 @@ func TestReview45AMessageQueuedByWatchIsSeenOnlyOnceAHookHandsItToTheModel(t *te
 	if len(got.Pages) != 1 || got.Pages[0].Events[0].Seq != m {
 		t.Fatalf("inbox = %+v, want the watch-queued #%d handed to the model", got.Pages, m)
 	}
-	if l.Cursor("agent") < m {
-		t.Errorf("seen = %d after the hook put #%d in the model's context", l.Cursor("agent"), m)
+	if l.Cursor("agent") >= m {
+		t.Errorf("seen = %d after the inbox read; only the hook, once its output is written, may mark #%d seen", l.Cursor("agent"), m)
 	}
 }

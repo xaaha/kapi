@@ -102,8 +102,8 @@ func TestInboxHandsOverUnseenEventsOfPagesUnderTheDirectory(t *testing.T) {
 	if len(got.Pages) != 1 || got.Pages[0].Path != inside || len(got.Pages[0].Events) != 1 || got.Pages[0].Events[0].Text != "hello" {
 		t.Fatalf("inbox = %+v, want only the page under the directory", got.Pages)
 	}
-	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 0 {
-		t.Errorf("inbox again = %+v, want nothing once it reached the model", got.Pages)
+	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 1 {
+		t.Errorf("inbox again = %+v, want the same message, since the inbox only reads", got.Pages)
 	}
 	for _, req := range []Request{{Op: "inbox", Page: "rel", Reader: "agent"}, {Op: "inbox", Page: dir, Reader: "human"}} {
 		if got := call(t, home, &req); got.Error == "" {

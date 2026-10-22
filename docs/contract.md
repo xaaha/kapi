@@ -306,8 +306,13 @@ show them. Events reach the agent three ways:
   hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
   so the agent does not go idle on them. That text is in the model's context,
-  so it marks those events seen. A later `Stop` blocks only on events that
-  arrived since, so it never loops. A hook whose input has `agent_id` fired
+  so once the hook has written it, it marks those events seen. The text stays
+  under 9,000 characters, because Claude Code swaps longer context for a short
+  preview: the hook shows events whole until the next one would not fit, cuts
+  a first event that cannot fit at all, points to `kapi pending <page>` for
+  the rest, and marks seen only through the last event it showed whole. A
+  later `Stop` blocks only on events it can show whole and has not shown, so
+  it never loops. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.
   `kapi hook-messages` never starts the daemon and always exits 0; with no
   daemon running it prints nothing.

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/xaaha/cli"
 
@@ -580,9 +581,10 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 
 func hookMessages(c api, in io.Reader, out io.Writer) error {
 	var hook struct {
-		Event   string `json:"hook_event_name"`
-		Cwd     string `json:"cwd"`
-		AgentID string `json:"agent_id"`
+		Event      string `json:"hook_event_name"`
+		Cwd        string `json:"cwd"`
+		AgentID    string `json:"agent_id"`
+		StopActive bool   `json:"stop_hook_active"`
 	}
 	if err := json.NewDecoder(in).Decode(&hook); err != nil {
 		return fmt.Errorf("hook input: %w", err)
@@ -594,29 +596,89 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var b strings.Builder
 	for _, p := range resp.Pages {
 		if p.Error != "" {
 			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
-			continue
-		}
-		fmt.Fprintf(&b, "%s:\n", p.Path)
-		for i := range p.Events {
-			fmt.Fprintf(&b, "  %s\n", eventLine(&p.Events[i]))
 		}
 	}
-	if b.Len() == 0 {
+	text, shown := hookText(resp.Pages)
+	if text == "" || (hook.StopActive && len(shown) == 0) {
 		return nil
 	}
-	text := "kapi: new events on a shared page, now shown to the human as read by you. Act on them and reply with `kapi say <page> <text>`.\n" +
-		strings.TrimSuffix(b.String(), "\n")
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
 	if hook.Event == "Stop" {
 		reply = map[string]string{"decision": "block", "reason": text}
 	}
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	return enc.Encode(reply)
+	if err := enc.Encode(reply); err != nil {
+		return err
+	}
+	for _, s := range shown {
+		if _, err := c.Do(&daemon.Request{Op: "queue", Page: s.Path, Reader: "agent", Seq: s.Seq}); err != nil {
+			return err
+		}
+		if _, err := c.Do(&daemon.Request{Op: "seen", Page: s.Path, Reader: "agent", Seq: s.Seq}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const hookTextLimit = 9000
+
+type shownThrough struct {
+	Path string
+	Seq  uint64
+}
+
+func hookText(pages []daemon.PageStatus) (string, []shownThrough) {
+	const head = "kapi: new events on a shared page; the human now sees that you read them. Act on them and reply with `kapi say <page> <text>`.\n"
+	var b strings.Builder
+	var shown []shownThrough
+	room := func() int { return hookTextLimit - len(head) - b.Len() - 200 }
+	for _, p := range pages {
+		if p.Error != "" || len(p.Events) == 0 {
+			continue
+		}
+		rest := fmt.Sprintf("  more unseen events here; run `kapi pending %s` to read them\n", p.Path)
+		title := p.Path + ":\n"
+		if room() < len(title)+len(rest) {
+			break
+		}
+		b.WriteString(title)
+		var through uint64
+		for i := range p.Events {
+			line := "  " + eventLine(&p.Events[i]) + "\n"
+			if len(line)+len(rest) <= room() {
+				b.WriteString(line)
+				through = p.Events[i].Seq
+				continue
+			}
+			if through == 0 {
+				b.WriteString(cut(line, room()-len(rest)) + "…\n")
+			}
+			b.WriteString(rest)
+			break
+		}
+		if through > 0 {
+			shown = append(shown, shownThrough{p.Path, through})
+		}
+	}
+	if b.Len() == 0 {
+		return "", nil
+	}
+	return head + strings.TrimSuffix(b.String(), "\n"), shown
+}
+
+func cut(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:max(n, 0)]
 }
 
 func hookCommand() (string, error) {

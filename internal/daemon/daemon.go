@@ -641,15 +641,9 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			out = append(out, PageStatus{Path: p.Path, Error: err.Error()})
 			continue
 		}
-		events, _ := unseenForAgent(l, reader)
-		if len(events) == 0 {
-			continue
+		if events, _ := unseenForAgent(l, reader); len(events) > 0 {
+			out = append(out, PageStatus{Path: p.Path, Events: events})
 		}
-		if err := l.Ack(reader, events[len(events)-1].Seq); err != nil {
-			out = append(out, PageStatus{Path: p.Path, Error: err.Error()})
-			continue
-		}
-		out = append(out, PageStatus{Path: p.Path, Events: events})
 	}
 	return out, nil
 }
