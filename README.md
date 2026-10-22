@@ -54,8 +54,8 @@ events. The browser editor comes next.
 ```sh
 kapi send plan.html --on cutover "is this still true?"   # as the human
 kapi wait plan.html                                        # as the agent: print what is unseen and exit
-kapi say plan.html "yes, confirmed at 14:20"               # reply as the agent
-kapi seen plan.html                                        # or mark it read without replying
+kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
+kapi seen plan.html 4                                      # or say you read #4 without replying
 kapi status plan.html
 kapi version
 kapi --help
@@ -63,8 +63,9 @@ kapi --help
 
 In Claude Code, run `kapi wait <page>` as a background command and start it
 again each time it exits; its exit wakes the agent within seconds. The page
-shows a message as Queued once kapi has handed it over, and 👀 only after the
-agent replies, runs `kapi seen` or runs `kapi pending`. `kapi watch <page>`
+shows a message as Queued once kapi has handed it over, and 👀 only once the
+agent names it with `--seen` or `kapi seen`, runs `kapi pending`, or a kapi
+hook puts it in the agent's context. `kapi watch <page>`
 still streams one line per event for harnesses that deliver every line.
 
 ## Agent harnesses

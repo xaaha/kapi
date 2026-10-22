@@ -58,19 +58,26 @@ func TestWaitRepliesOnceAnUnseenEventIsNotQueuedAndRepeatsTheUnseenOnes(t *testi
 	}
 }
 
-func TestAReplyMarksSeenOnlyWhatWasQueued(t *testing.T) {
+func TestOnlyTheNumberTheAgentStatesMovesSeen(t *testing.T) {
 	home, s, _ := serving(t)
 	path := writePage(t, "<p>x</p>")
 	l, err := s.page(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	printed := call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "printed"}).Event.Seq
-	call(t, home, &Request{Op: "queue", Page: path, Reader: "agent", Seq: printed})
+	read := call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "read"}).Event.Seq
+	call(t, home, &Request{Op: "queue", Page: path, Reader: "agent", Seq: read})
+	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "unrelated"})
+	if c := l.Cursor("agent"); c != 0 {
+		t.Fatalf("seen = %d after a reply that named no event, want 0", c)
+	}
 	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "not printed"})
-	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "reply"})
-	if c := l.Cursor("agent"); c != printed {
-		t.Fatalf("seen = %d, want #%d, the last event handed to the agent", c, printed)
+	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "reply", Seq: read})
+	if c := l.Cursor("agent"); c != read {
+		t.Fatalf("seen = %d, want #%d, the event the reply named", c, read)
+	}
+	if got := call(t, home, &Request{Op: "seen", Page: path, Reader: "agent"}); got.Error == "" {
+		t.Error("seen without a number was accepted")
 	}
 	if got := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); !slices.Equal(texts(&got), []string{"not printed"}) {
 		t.Fatalf("pending = %v", texts(&got))
@@ -95,15 +102,8 @@ func TestInboxHandsOverUnseenEventsOfPagesUnderTheDirectory(t *testing.T) {
 	if len(got.Pages) != 1 || got.Pages[0].Path != inside || len(got.Pages[0].Events) != 1 || got.Pages[0].Events[0].Text != "hello" {
 		t.Fatalf("inbox = %+v, want only the page under the directory", got.Pages)
 	}
-	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent", Fresh: true}); len(got.Pages) != 0 {
-		t.Errorf("fresh inbox = %+v, want nothing once handed over", got.Pages)
-	}
-	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 1 {
-		t.Errorf("inbox = %+v, want the handed over but unseen message again", got.Pages)
-	}
-	call(t, home, &Request{Op: "seen", Page: inside, Reader: "agent"})
 	if got := call(t, home, &Request{Op: "inbox", Page: dir, Reader: "agent"}); len(got.Pages) != 0 {
-		t.Errorf("inbox after seen = %+v", got.Pages)
+		t.Errorf("inbox again = %+v, want nothing once it reached the model", got.Pages)
 	}
 	for _, req := range []Request{{Op: "inbox", Page: "rel", Reader: "agent"}, {Op: "inbox", Page: dir, Reader: "human"}} {
 		if got := call(t, home, &req); got.Error == "" {

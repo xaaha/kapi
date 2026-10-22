@@ -300,16 +300,18 @@ marks it seen. Events reach the agent three ways:
   unseen event again.
 - `kapi setup hooks` adds Claude Code `UserPromptSubmit`, `PostToolUse` and
   `Stop` hooks that run `kapi hook-messages`. It reads the hook's JSON on
-  stdin and hands over the unseen events of reader `agent` on every page
-  under the hook's `cwd`, and queues them. `PostToolUse` adds only events not
-  queued yet as `additionalContext`; `UserPromptSubmit` adds every unseen
-  one. `Stop` answers `{"decision":"block","reason":...}` while any are
-  unseen, so the agent does not go idle on them; when `stop_hook_active` is
-  set it blocks only for events not queued yet, so it never loops.
+  stdin and hands every unseen event of reader `agent` on the pages under the
+  hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
+  `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
+  so the agent does not go idle on them. That text is in the model's context,
+  so it marks those events seen. A later `Stop` blocks only on events that
+  arrived since, so it never loops.
 
-The seen position moves only when the agent acts: `kapi say` by a reader and
-`kapi seen <page>` mark everything queued for that reader as seen, and
-`kapi pending` prints every unseen event and marks it seen.
+The seen position moves only to what provably reached the model: a hook as
+above, `kapi pending`, which prints every unseen event and marks it seen, or
+an event number the agent states. `kapi seen <page> <n>` and
+`kapi say --seen <n>` mark every event through `#n` seen; the agent takes `n`
+from the printed lines. A plain `kapi say` moves nothing.
 
 ## Out of scope for phase 2
 

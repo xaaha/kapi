@@ -218,11 +218,11 @@ pages[2]:
   /w/plan.html: agent 2 unread (watching), codex 0 unread
   /w/notes.html: agent 0 unread
 next:
-  kapi wait <page>        wait for the next event, print every unseen one and exit; run it in the background, again after each exit
-  kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
-  kapi seen <page>        show the human you read what was printed, without replying
-  kapi pending <page>     list unseen events and mark them seen
-  kapi --help             every command
+  kapi wait <page>                   wait for the next event, print every unseen one and exit; run it in the background, again after each exit
+  kapi say --seen <n> <page> <text>  reply; n is the number of the last event you read, so the page shows you read it
+  kapi seen <page> <n>               show you read every event through #n, without replying
+  kapi pending <page>                list unseen events and mark them seen
+  kapi --help                        every command
 `
 	if out != want {
 		t.Errorf("home view:\n%s\nwant:\n%s", out, want)
@@ -338,26 +338,42 @@ func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
 
 func TestSeenReportsHowFarItMarked(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 9}}}
-	out, err := run(t, f, "seen", "plan.html")
+	out, err := run(t, f, "seen", "plan.html", "#9")
 	if err != nil || out != "seen through #9\n" {
 		t.Fatalf("seen = %q, %v", out, err)
 	}
-	if f.requests[0].Op != "seen" || f.requests[0].Reader != "agent" {
+	if f.requests[0].Op != "seen" || f.requests[0].Reader != "agent" || f.requests[0].Seq != 9 {
 		t.Errorf("request = %+v", f.requests[0])
+	}
+}
+
+func TestSayWithSeenNamesTheLastEventRead(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 7}}}
+	if _, err := run(t, f, "say", "--seen", "#5", "plan.html", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if f.requests[0].Seq != 5 || f.requests[0].Author != "agent" {
+		t.Errorf("request = %+v, want seen #5", f.requests[0])
+	}
+	for _, bad := range []string{"0", "x", "#"} {
+		if _, err := run(t, &fakeAPI{}, "say", "--seen", bad, "plan.html", "ok"); err == nil {
+			t.Errorf("--seen %q accepted", bad)
+		}
+	}
+	if _, err := run(t, &fakeAPI{}, "send", "--seen", "3", "plan.html", "hi"); err == nil {
+		t.Error("send accepted --seen, which only a reader can give")
 	}
 }
 
 func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: "<ship it>"}}}}}
 	cases := []struct {
-		stdin     string
-		wantFresh bool
-		want      string
+		stdin string
+		want  string
 	}{
-		{`{"hook_event_name":"Stop","cwd":"/w"}`, false, `{"decision":"block","reason":"kapi: `},
-		{`{"hook_event_name":"Stop","cwd":"/w","stop_hook_active":true}`, true, `{"decision":"block","reason":"kapi: `},
-		{`{"hook_event_name":"PostToolUse","cwd":"/w"}`, true, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
-		{`{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`, false, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"Stop","cwd":"/w"}`, `{"decision":"block","reason":"kapi: `},
+		{`{"hook_event_name":"PostToolUse","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
 	}
 	for _, tc := range cases {
 		f := &fakeAPI{resp: inbox, stdin: tc.stdin}
@@ -368,7 +384,7 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		if !strings.HasPrefix(out, tc.want) || !strings.Contains(out, `/w/plan.html:\n  #4 human message: <ship it>`) || !strings.Contains(out, "kapi say <page> <text>") {
 			t.Errorf("%s: output = %s", tc.stdin, out)
 		}
-		want := daemon.Request{Op: "inbox", Page: "/w", Reader: "agent", Fresh: tc.wantFresh}
+		want := daemon.Request{Op: "inbox", Page: "/w", Reader: "agent"}
 		if len(f.requests) != 1 || f.requests[0] != want {
 			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
 		}

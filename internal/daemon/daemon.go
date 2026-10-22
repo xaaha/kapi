@@ -39,7 +39,6 @@ type Request struct {
 	Target string `json:"target,omitempty"`
 	Text   string `json:"text,omitempty"`
 	Seq    uint64 `json:"seq,omitempty"`
-	Fresh  bool   `json:"fresh,omitempty"`
 }
 
 type Response struct {
@@ -417,7 +416,7 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		pages, err := s.inbox(req.Page, req.Reader, req.Fresh)
+		pages, err := s.inbox(req.Page, req.Reader)
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -440,7 +439,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "ack", "queue", "seen", "watch", "wait":
+	case "pending", "queue", "seen", "watch", "wait":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -453,8 +452,8 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		if e.Author != "" && eventlog.CheckReader(e.Author) == nil {
-			if err := l.Ack(e.Author, l.Queued(e.Author)); err != nil {
+		if req.Seq > 0 && e.Author != "" && eventlog.CheckReader(e.Author) == nil {
+			if err := l.Ack(e.Author, min(req.Seq, e.Seq)); err != nil {
 				reply(enc, &Response{Error: err.Error()})
 				return
 			}
@@ -468,14 +467,15 @@ func (s *Server) handle(conn net.Conn) {
 		}
 		reply(enc, &Response{Events: events})
 	case "seen":
-		seq := l.Queued(req.Reader)
-		if err := l.Ack(req.Reader, seq); err != nil {
+		if req.Seq == 0 {
+			reply(enc, &Response{Error: "seen needs the number of the last event you read"})
+			return
+		}
+		if err := l.Ack(req.Reader, req.Seq); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, &Response{Event: &eventlog.Event{Seq: seq}})
-	case "ack":
-		reply(enc, ackReply(l.Ack(req.Reader, req.Seq)))
+		reply(enc, &Response{Event: &eventlog.Event{Seq: l.Cursor(req.Reader)}})
 	case "queue":
 		reply(enc, ackReply(l.Queue(req.Reader, req.Seq)))
 	case "status":
@@ -617,7 +617,7 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 	}
 }
 
-func (s *Server) inbox(dir, reader string, fresh bool) ([]PageStatus, error) {
+func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 	pages, err := s.listPages()
 	if err != nil {
 		return nil, err
@@ -631,14 +631,11 @@ func (s *Server) inbox(dir, reader string, fresh bool) ([]PageStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		events, _, queued := l.Unseen(reader)
-		if fresh {
-			events = slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Seq <= queued })
-		}
+		events, _, _ := l.Unseen(reader)
 		if len(events) == 0 {
 			continue
 		}
-		if err := l.Queue(reader, events[len(events)-1].Seq); err != nil {
+		if err := l.Ack(reader, events[len(events)-1].Seq); err != nil {
 			return nil, err
 		}
 		out = append(out, PageStatus{Path: p.Path, Events: events})

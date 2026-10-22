@@ -63,7 +63,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 		SubCommands: []*cli.Command{
 			waitCmd(c, out, sleep),
 			watchCmd(c, out, sleep),
-			messageCmd(c, out, "say", "", "Reply on a page as the agent, which marks every event you were shown as seen"),
+			messageCmd(c, out, "say", "", "Reply on a page as the agent"),
 			seenCmd(c, out),
 			messageCmd(c, out, "send", "human", "Send a message on a page as the human"),
 			pendingCmd(c, out),
@@ -85,7 +85,7 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Name:  "watch",
 		Short: "Stream a page's events, one line each",
 		Long: "Stream every unseen event on a page, one line each, and keep streaming. Reconnects if the daemon restarts.\n" +
-			"A printed line shows as Queued on the page until you run kapi say, kapi pending or kapi seen, so a\n" +
+			"A printed line shows as Queued on the page until you run kapi say --seen or kapi seen with its number, so a\n" +
 			"restarted watch prints every unseen event again. Prefer kapi wait where lines can be delayed or dropped.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
@@ -127,7 +127,7 @@ func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Short: "Wait for a page's next event, print every unseen one, and exit",
 		Long: "Block until the page has an event you have not been handed yet, print every unseen event, one line each,\n" +
 			"and exit. Run it as a background command whose exit wakes you, and start it again each time it exits.\n" +
-			"Printed events show as Queued on the page until you run kapi say, kapi pending or kapi seen.",
+			"Printed events show as Queued on the page until you run kapi say --seen or kapi seen with its number.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -171,18 +171,25 @@ func seenCmd(c api, out io.Writer) *cli.Command {
 	reader := fs.String("reader", "agent", "Reader name")
 	return &cli.Command{
 		Name:  "seen",
-		Short: "Mark every event handed to you as seen, without replying",
+		Short: "Tell the page you read every event through the given number, without replying",
 		Flags: fs,
-		Args:  []cli.ArgDef{pageArg},
+		Args:  []cli.ArgDef{pageArg, {Name: "seq", Required: true, Desc: "Number of the last event you read, as printed: #12 or 12"}},
+		Examples: []cli.Example{
+			{Command: "kapi seen plan.html 12", Description: "You read every event through #12"},
+		},
 		Run: func(args []string) error {
-			page, err := pagePath(args, 1, "seen")
+			page, err := pagePath(args, 2, "seen")
 			if err != nil {
 				return err
 			}
 			if err := eventlog.CheckReader(*reader); err != nil {
 				return err
 			}
-			resp, err := c.Do(&daemon.Request{Op: "seen", Page: page, Reader: *reader})
+			seq, err := parseSeq(args[1])
+			if err != nil {
+				return err
+			}
+			resp, err := c.Do(&daemon.Request{Op: "seen", Page: page, Reader: *reader, Seq: seq})
 			if err != nil {
 				return err
 			}
@@ -192,12 +199,22 @@ func seenCmd(c api, out io.Writer) *cli.Command {
 	}
 }
 
+func parseSeq(s string) (uint64, error) {
+	n, err := strconv.ParseUint(strings.TrimPrefix(s, "#"), 10, 64)
+	if err != nil || n == 0 {
+		return 0, fmt.Errorf("want an event number such as #12, got %q", s)
+	}
+	return n, nil
+}
+
 func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	on := fs.String("on", "", "Element id the message is about")
 	reader := &author
+	seen := new(string)
 	if author == "" {
 		reader = fs.String("reader", "agent", "Reader name to send as; readers with other names see the message")
+		seen = fs.String("seen", "", "Number of the last event you read, as printed: #12 or 12; the page shows the human you read it")
 	}
 	return &cli.Command{
 		Name:       name,
@@ -219,7 +236,13 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 					return err
 				}
 			}
-			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: *reader, Kind: "message", Target: *on, Text: strings.Join(args[1:], " ")})
+			var seq uint64
+			if *seen != "" {
+				if seq, err = parseSeq(*seen); err != nil {
+					return err
+				}
+			}
+			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: *reader, Kind: "message", Target: *on, Text: strings.Join(args[1:], " "), Seq: seq})
 			if err != nil {
 				return err
 			}
@@ -456,11 +479,11 @@ func homeView(c api, out io.Writer) error {
 		}
 	}
 	b.WriteString(`next:
-  kapi wait <page>        wait for the next event, print every unseen one and exit; run it in the background, again after each exit
-  kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
-  kapi seen <page>        show the human you read what was printed, without replying
-  kapi pending <page>     list unseen events and mark them seen
-  kapi --help             every command
+  kapi wait <page>                   wait for the next event, print every unseen one and exit; run it in the background, again after each exit
+  kapi say --seen <n> <page> <text>  reply; n is the number of the last event you read, so the page shows you read it
+  kapi seen <page> <n>               show you read every event through #n, without replying
+  kapi pending <page>                list unseen events and mark them seen
+  kapi --help                        every command
 `)
 	_, err = io.WriteString(out, b.String())
 	return err
@@ -544,9 +567,8 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 		Hidden: true,
 		Run: func([]string) error {
 			var hook struct {
-				Event      string `json:"hook_event_name"`
-				Cwd        string `json:"cwd"`
-				StopActive bool   `json:"stop_hook_active"`
+				Event string `json:"hook_event_name"`
+				Cwd   string `json:"cwd"`
 			}
 			if err := json.NewDecoder(in).Decode(&hook); err != nil {
 				return fmt.Errorf("hook input: %w", err)
@@ -554,13 +576,12 @@ func hookMessagesCmd(c api, in io.Reader, out io.Writer) *cli.Command {
 			if !slices.Contains([]string{"Stop", "PostToolUse", "UserPromptSubmit"}, hook.Event) || !filepath.IsAbs(hook.Cwd) {
 				return nil
 			}
-			fresh := hook.Event == "PostToolUse" || hook.StopActive
-			resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent", Fresh: fresh})
+			resp, err := c.Do(&daemon.Request{Op: "inbox", Page: hook.Cwd, Reader: "agent"})
 			if err != nil || len(resp.Pages) == 0 {
 				return err
 			}
 			var b strings.Builder
-			b.WriteString("kapi: the human wrote on a shared page and does not know yet that you read it. Act on it, then reply with `kapi say <page> <text>` or run `kapi seen <page>`.\n")
+			b.WriteString("kapi: new events on a shared page, now shown to the human as read by you. Act on them and reply with `kapi say <page> <text>`.\n")
 			for _, p := range resp.Pages {
 				fmt.Fprintf(&b, "%s:\n", p.Path)
 				for i := range p.Events {

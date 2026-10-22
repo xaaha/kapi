@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -231,7 +232,7 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w.event(t); got != "human message on #cutover: second note" {
 		t.Fatalf("second event = %q", got)
 	}
-	e.seen()
+	e.seen(w.seq)
 
 	w.kill9(t)
 	e.kapi("send", e.page, "sent while the watcher is dead")
@@ -243,7 +244,7 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w2.event(t); got != "human message: sent while the watcher is dead" {
 		t.Fatalf("after restart, first event = %q, want only the message sent while it was dead", got)
 	}
-	e.seen()
+	e.seen(w2.seq)
 
 	e.killDaemon()
 	e.kapi("send", e.page, "after the daemon restarted")
@@ -345,12 +346,11 @@ func TestTheAgentsWatchSeesFileEdits(t *testing.T) {
 	}
 }
 
-func (e *e2e) seen() {
+func (e *e2e) seen(seq uint64) {
 	e.t.Helper()
-	waitFor(e.t, "every printed event to be seen", func() bool {
-		e.kapi("seen", e.page)
-		return strings.Contains(e.kapi("status", e.page), ", 0 unread")
-	})
+	if got := e.kapi("seen", e.page, strconv.FormatUint(seq, 10)); got != fmt.Sprintf("seen through #%d\n", seq) {
+		e.t.Fatalf("kapi seen printed %q", got)
+	}
 }
 
 func (e *e2e) post(url, text string) uint64 {
@@ -428,7 +428,7 @@ func TestAPrintedMessageIsQueuedAndSeenOnlyWhenTheAgentActs(t *testing.T) {
 		t.Fatalf("a new watch printed %q, want the unseen message again", got)
 	}
 
-	e.kapi("say", e.page, "yes")
+	e.kapi("say", "--seen", strconv.FormatUint(seq, 10), e.page, "yes")
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
 
@@ -485,7 +485,7 @@ func TestWaitExitsWithTheMessageWithinSecondsAndTheReplyMarksItSeen(t *testing.T
 	if exited(again, 500*time.Millisecond) {
 		t.Fatal("a second kapi wait exited at once with nothing new")
 	}
-	e.kapi("say", e.page, "yes")
+	e.kapi("say", "--seen", strconv.FormatUint(seq, 10), e.page, "yes")
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
 
@@ -506,27 +506,34 @@ func TestTheStopHookHoldsTheAgentUntilItHasSeenTheMessage(t *testing.T) {
 		}
 		return out.String()
 	}
+	w := e.watch()
 	seq := e.post(url, "stop and look")
+	if got := w.event(t); got != "human message: stop and look" {
+		t.Fatalf("watch printed %q", got)
+	}
+	waitFor(t, "the watch to queue it", func() bool { _, q := receipts(t, url); return q >= seq })
+	e.kapi("say", e.page, "about something else")
+	if read, _ := receipts(t, url); read >= seq {
+		t.Fatalf("read %d covers #%d after a reply that named no event", read, seq)
+	}
 	if got := hook("PostToolUse", false); !strings.Contains(got, `"additionalContext"`) || !strings.Contains(got, "human message: stop and look") {
-		t.Fatalf("PostToolUse hook = %q, want the new message as context", got)
+		t.Fatalf("PostToolUse hook = %q, want the watch-printed message as context", got)
 	}
-	if got := hook("PostToolUse", false); got != "" {
-		t.Errorf("second PostToolUse hook = %q, want nothing new", got)
+	if read, _ := receipts(t, url); read < seq {
+		t.Errorf("read %d, want #%d seen once the hook put it in the model's context", read, seq)
 	}
-	if read, queued := receipts(t, url); queued < seq || read >= seq {
-		t.Errorf("read %d, queued %d; want #%d queued and not yet seen", read, queued, seq)
+	if got := hook("PostToolUse", false) + hook("Stop", false); got != "" {
+		t.Errorf("hooks after delivery = %q, want nothing new", got)
 	}
-	if got := hook("Stop", false); !strings.Contains(got, `"decision":"block"`) || !strings.Contains(got, "human message: stop and look") {
-		t.Fatalf("Stop hook = %q, want it to block on the unseen message", got)
+
+	next := e.post(url, "one more")
+	if got := hook("Stop", false); !strings.Contains(got, `"decision":"block"`) || !strings.Contains(got, "human message: one more") || strings.Contains(got, "stop and look") {
+		t.Fatalf("Stop hook = %q, want it to block on the new message only", got)
 	}
 	if got := hook("Stop", true); got != "" {
 		t.Errorf("Stop hook while already continuing = %q, want it to let the agent stop", got)
 	}
-	e.kapi("say", e.page, "looked")
-	if got := hook("Stop", false); got != "" {
-		t.Errorf("Stop hook after the reply = %q, want nothing", got)
-	}
-	if read, _ := receipts(t, url); read < seq {
-		t.Errorf("read %d, want #%d seen after the reply", read, seq)
+	if read, _ := receipts(t, url); read < next {
+		t.Errorf("read %d, want #%d seen after the Stop hook showed it", read, next)
 	}
 }

@@ -245,8 +245,8 @@ func TestWatchSkipsAndAcknowledgesTheReadersOwnEvents(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 0 {
-		t.Errorf("pending = %+v, want nothing", p.Events)
+	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "theirs" {
+		t.Errorf("pending = %+v, want only the human's message and none of the agent's own", p.Events)
 	}
 }
 
@@ -289,7 +289,7 @@ func TestAnOwnEventIsNotAcknowledgedPastAnUnacknowledgedOne(t *testing.T) {
 		t.Fatalf("queued = %d, passed the unacknowledged #%d", c, got.Event.Seq)
 	}
 	conn.Close()
-	call(t, home, &Request{Op: "seen", Page: path, Reader: "agent"})
+	call(t, home, &Request{Op: "seen", Page: path, Reader: "agent", Seq: human})
 	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "sync" {
 		t.Errorf("pending = %+v, want the unqueued sync event", p.Events)
 	}
@@ -449,7 +449,7 @@ func TestOpenReportsASplit(t *testing.T) {
 func TestTheDaemonRefusesReservedReaders(t *testing.T) {
 	home, _, _ := serving(t)
 	path := writePage(t, "<p>x</p>")
-	for _, req := range []Request{{Op: "pending", Reader: "human"}, {Op: "ack", Reader: "kapi", Seq: 1}} {
+	for _, req := range []Request{{Op: "pending", Reader: "human"}, {Op: "seen", Reader: "kapi", Seq: 1}, {Op: "wait", Reader: "file"}} {
 		req.Page = path
 		if resp := call(t, home, &req); !strings.Contains(resp.Error, "is reserved") {
 			t.Errorf("%s as %s: %+v, want a reserved reader error", req.Op, req.Reader, resp)
