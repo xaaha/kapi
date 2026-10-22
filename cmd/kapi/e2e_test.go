@@ -241,6 +241,7 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w2.event(t); got != "human message: sent while the watcher is dead" {
 		t.Fatalf("after restart, first event = %q, want only the message sent while it was dead", got)
 	}
+	waitFor(t, "the ack for the message sent while it was dead", func() bool { return e.kapi("pending", e.page) == "" })
 
 	e.killDaemon()
 	e.kapi("send", e.page, "after the daemon restarted")
