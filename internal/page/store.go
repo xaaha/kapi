@@ -250,7 +250,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 	return Summary{}, false, nil
 }
 
-func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) {
+func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
@@ -316,7 +316,7 @@ func stale(err error) error {
 	return err
 }
 
-func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
+func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
 	case "edit", "cells", "archive", "unarchive", "delete":
 	default:
@@ -458,7 +458,7 @@ func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
 	return fi.ModTime(), nil
 }
 
-func apply(src []byte, op Op) ([]byte, Summary, error) {
+func apply(src []byte, op *Op) ([]byte, Summary, error) {
 	els := parse(src)
 	e, err := find(els, op.ID)
 	if err != nil {

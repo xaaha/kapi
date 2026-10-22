@@ -88,7 +88,7 @@ type Preset struct{ Name, Summary, Example string }
 type Store struct{ /* one per page, under $KAPI_HOME/pages/<id>/ */ }
 func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
-func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) // ErrStale when rev != current
+func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
     Kind string // edit, cells, delete, archive, unarchive, move, undo
     ID   string

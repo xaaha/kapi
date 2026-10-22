@@ -341,7 +341,7 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 	if !decode(w, r, &in) {
 		return
 	}
-	rev, sum, err := st.Apply(in.Rev, in.Op)
+	rev, sum, err := st.Apply(in.Rev, &in.Op)
 	if errors.Is(err, page.ErrStale) {
 		writeJSON(w, http.StatusConflict, map[string]uint64{"rev": rev})
 		return
