@@ -706,7 +706,7 @@
   });
 
   main.addEventListener("change", async (e) => {
-    const box = closest(e.target, '.kapi-task > label > input[type="checkbox"]');
+    const box = closest(e.target, '.kapi-task > input[type="checkbox"]');
     if (!box || !main.contains(box)) return;
     const id = idOf(closest(box, ".kapi-task"));
     box.disabled = true;

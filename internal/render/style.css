@@ -251,16 +251,14 @@ body {
   list-style: none;
 }
 #kapi-page .kapi-task,
-.kapi-task { margin: 0; }
-.kapi-task > label {
+.kapi-task {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
+  margin: 0;
   padding: 0.3rem 0.5rem;
   border-radius: var(--kapi-radius-sm);
-  cursor: pointer;
 }
-.kapi-task > label:hover { background: var(--kapi-subtle); }
 .kapi-task input {
   flex: none;
   width: 1.05rem;
@@ -273,7 +271,7 @@ body {
 .kapi-task-body { min-width: 0; }
 .kapi-task-body > :first-child { margin-top: 0; }
 .kapi-task-body > :last-child { margin-bottom: 0; }
-.kapi-task:has(> label > input:checked) .kapi-task-body {
+.kapi-task:has(> input:checked) > .kapi-task-body {
   color: var(--kapi-muted);
   text-decoration: line-through;
   text-decoration-color: var(--kapi-faint);

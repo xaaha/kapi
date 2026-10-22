@@ -390,14 +390,28 @@ func renderChecklist(b *bytes.Buffer, n *html.Node) error {
 
 func renderTask(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "li", outerAttrs(n, "kapi-task"))
-	b.WriteString("<label>")
 	box := kv("type", "checkbox")
 	if _, done := attr(n, "done"); done {
 		box = append(box, kv("checked", "")...)
 	}
-	writeStart(b, "input", box)
+	writeStart(b, "input", append(box, kv("aria-label", nodeText(n))...))
 	b.WriteString(`<span class="kapi-task-body">`)
 	renderChildren(b, n)
-	b.WriteString("</span></label></li>")
+	b.WriteString("</span></li>")
 	return nil
+}
+
+func nodeText(n *html.Node) string {
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.TextNode {
+				sb.WriteString(c.Data)
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return strings.Join(strings.Fields(sb.String()), " ")
 }

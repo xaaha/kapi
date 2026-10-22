@@ -327,16 +327,14 @@ body {
   list-style: none;
 }
 #kapi-page .kapi-task,
-.kapi-task { margin: 0; }
-.kapi-task > label {
+.kapi-task {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
+  margin: 0;
   padding: 0.3rem 0.5rem;
   border-radius: var(--kapi-radius-sm);
-  cursor: pointer;
 }
-.kapi-task > label:hover { background: var(--kapi-subtle); }
 .kapi-task input {
   flex: none;
   width: 1.05rem;
@@ -349,7 +347,7 @@ body {
 .kapi-task-body { min-width: 0; }
 .kapi-task-body > :first-child { margin-top: 0; }
 .kapi-task-body > :last-child { margin-bottom: 0; }
-.kapi-task:has(> label > input:checked) .kapi-task-body {
+.kapi-task:has(> input:checked) > .kapi-task-body {
   color: var(--kapi-muted);
   text-decoration: line-through;
   text-decoration-color: var(--kapi-faint);
@@ -810,8 +808,8 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
 </div>
 
 <ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="checkaaa">
-  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskaaaa"><label><input type="checkbox" checked=""><span class="kapi-task-body">Write the page store tests</span></label></li>
-  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskbbbb"><label><input type="checkbox"><span class="kapi-task-body">Run the cutover on staging</span></label></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskaaaa"><input type="checkbox" checked="" aria-label="Write the page store tests"><span class="kapi-task-body">Write the page store tests</span></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskbbbb"><input type="checkbox" aria-label="Run the cutover on staging"><span class="kapi-task-body">Run the cutover on staging</span></li>
 </ul>
 
 <h2 data-kapi-id="h2ffffff">Your call</h2>

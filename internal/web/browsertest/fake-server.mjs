@@ -139,7 +139,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (!b) return { status: 422, body: { error: `#${op.id} is not a kapi-task` } };
       state.history.push(state.blocks.map((x) => ({ ...x })));
       b.html = b.html.replace(taskPattern(op.id), (li) =>
-        li.replace(/<input type="checkbox"[^>]*>/, `<input type="checkbox"${op.done ? ' checked=""' : ""}>`));
+        li.replace(/<input type="checkbox"( checked="")?/, `<input type="checkbox"${op.done ? ' checked=""' : ""}`));
       state.rev++;
       push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
       return { status: 200, body: { rev: state.rev } };

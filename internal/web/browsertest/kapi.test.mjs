@@ -1111,8 +1111,8 @@ test("a message refused after a restart without a reopen shows the command, neve
 
 
 const task = (id, done, label) =>
-  `<li class="kapi-task" data-kapi-preset="task" data-kapi-id="${id}"><label><input type="checkbox"${done ? ' checked=""' : ""}>` +
-  `<span class="kapi-task-body">${label}</span></label></li>`;
+  `<li class="kapi-task" data-kapi-preset="task" data-kapi-id="${id}"><input type="checkbox"${done ? ' checked=""' : ""} aria-label="${label}">` +
+  `<span class="kapi-task-body">${label}</span></li>`;
 
 async function reopenWith(blocks) {
   await page.close();
@@ -1146,6 +1146,26 @@ test("ticking a task sends a check op and refetches only that task", async () =>
   await until(() => requests("GET", "/blocks/uuuuuuuu").length === 1);
   assert.equal(await checked("uuuuuuuu"), false);
   assert.equal(pageLoads(), loads);
+});
+
+async function mouseClick(selector, clickCount = 1) {
+  const { x, y } = await page.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  for (let n = 1; n <= clickCount; n++) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: n });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: n });
+  }
+}
+
+test("clicking or double-clicking a task's text selects it and never ticks the box", async () => {
+  await reopenWith(CHECKLIST);
+  await mouseClick('[data-kapi-id="tttttttt"] .kapi-task-body');
+  await page.waitFor(`document.querySelector('[data-kapi-id="tttttttt"]').hasAttribute("data-kapi-selected")`);
+  await mouseClick('[data-kapi-id="uuuuuuuu"] .kapi-task-body', 2);
+  await page.waitFor(`document.querySelector('[data-kapi-id="uuuuuuuu"]').hasAttribute("data-kapi-selected")`);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(await checked("tttttttt"), false);
+  assert.equal(await checked("uuuuuuuu"), true);
 });
 
 test("a refused check puts the box back and says why", async () => {

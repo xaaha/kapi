@@ -19,7 +19,7 @@ func TestACheckOpTicksTheTaskInTheFile(t *testing.T) {
 	if ev := s.events(); len(ev) != 1 || ev[0].Kind != "revision" || ev[0].Target != "aaaaaaaa" || ev[0].Text != "checked" {
 		t.Errorf("events = %+v", ev)
 	}
-	if b := s.get("/p/" + s.id + "/blocks/aaaaaaaa"); b.code != http.StatusOK || !strings.Contains(b.body, `<input type="checkbox" checked="">`) {
+	if b := s.get("/p/" + s.id + "/blocks/aaaaaaaa"); b.code != http.StatusOK || !strings.Contains(b.body, `<input type="checkbox" checked=""`) {
 		t.Errorf("block after check: %d %s", b.code, b.body)
 	}
 	code, _ = s.post("/ops", `{"rev":2,"op":{"kind":"check","id":"aaaaaaaa"}}`)
