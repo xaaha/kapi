@@ -668,7 +668,6 @@
     if (!text) return;
     input.value = "";
     sendButton.disabled = true;
-    input.value = "";
     const res = await request("/messages", { kind: "message", target: selected ? idOf(selected) : "", text });
     sendButton.disabled = false;
     if (res?.ok) return;
