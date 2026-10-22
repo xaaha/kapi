@@ -693,3 +693,57 @@ test("a POST refused after a restart shows the reopen command as text", async ()
   assert.equal(await notice(), "");
 });
 
+const REOPENED = "Kapi restarted and reopened this page in a new tab. You can close this one.";
+const composerText = () => page.eval(`document.querySelector(".kapi-composer textarea").value`);
+const copyable = (selector) =>
+  page.eval(`(el => !el.disabled && !el.readOnly && getComputedStyle(el).userSelect !== "none")(document.querySelector(${JSON.stringify(selector)}))`);
+
+test("after a restart that reopened the page, the old tab says so and keeps unsent and unsaved text", async () => {
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "unsent note"`);
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  server.state.restarted = "kapi open plan.html";
+  server.state.reopened = true;
+  server.dropStreams();
+  await until(async () => (await restartText()) === REOPENED);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-restart code, .kapi-restart button").length`), 0);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 1);
+  assert.equal(await composerText(), "unsent note");
+  assert.equal(await copyable(".kapi-composer textarea"), true);
+  assert.equal(await copyable('[data-kapi-id="bbbbbbbb"]'), true);
+
+  await click(".kapi-composer .kapi-primary");
+  await until(() => requests("POST", "/messages").length === 1);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await restartText(), REOPENED);
+  assert.equal(await notice(), "");
+  assert.equal(await composerText(), "unsent note");
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+});
+
+test("a message refused after a restart that reopened the page names the new tab, never HTTP 403", async () => {
+  server.state.restarted = "kapi open plan.html";
+  server.state.reopened = true;
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
+  await click(".kapi-composer .kapi-primary");
+  await until(async () => (await restartText()) === REOPENED);
+  assert.equal(await notice(), "");
+  assert.equal(await composerText(), "hi");
+  assert.equal(await copyable(".kapi-composer textarea"), true);
+});
+
+test("a message refused after a restart without a reopen shows the command, never HTTP 403", async () => {
+  server.state.restarted = "kapi open plan.html";
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
+  await click(".kapi-composer .kapi-primary");
+  await until(async () => (await restartText()).startsWith("Kapi restarted."));
+  assert.match(await restartText(), /^Kapi restarted\. Run kapi open plan\.html to continue\./);
+  assert.doesNotMatch(await restartText(), /new tab/);
+  assert.equal(await notice(), "");
+  assert.equal(await composerText(), "hi");
+  assert.equal(await copyable(".kapi-composer textarea"), true);
+});
+

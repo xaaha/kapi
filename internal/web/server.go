@@ -33,6 +33,8 @@ var static embed.FS
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
 	PagePath(id string) (string, error)
+	Viewing(id string) (done func())
+	Reopened(id string) bool
 }
 
 type Server struct {
@@ -96,7 +98,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|ops|answers)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -104,11 +106,16 @@ func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 		http.Error(w, "wrong token; open the page with kapi open", http.StatusForbidden)
 		return
 	}
-	reopen := "kapi open <page>"
-	if path, err := s.pages.PagePath(m[1]); err == nil && s.issuedBefore(seg) {
-		reopen = "kapi open " + path
+	body := map[string]any{"error": "kapi restarted", "reopen": "kapi open <page>"}
+	if s.issuedBefore(seg) {
+		if path, err := s.pages.PagePath(m[1]); err == nil {
+			body["reopen"] = "kapi open " + path
+		}
+		if s.pages.Reopened(m[1]) {
+			body["reopened"] = true
+		}
 	}
-	writeJSON(w, http.StatusForbidden, map[string]string{"error": "kapi restarted", "reopen": reopen})
+	writeJSON(w, http.StatusForbidden, body)
 }
 
 func (s *Server) issuedBefore(seg string) bool {
@@ -282,6 +289,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
+	defer s.pages.Viewing(r.PathValue("id"))()
 	for {
 		events, changed := l.After(after)
 		for _, e := range events {
