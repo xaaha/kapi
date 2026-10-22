@@ -111,10 +111,9 @@ func TestApplyReplacesTheFileInsteadOfWritingIntoIt(t *testing.T) {
 	if fi.Mode().Perm() != 0o640 {
 		t.Errorf("mode = %v, want 0640 kept", fi.Mode().Perm())
 	}
-	tick(t, s, heldTicks)
 	left, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".*kapi-*"))
 	if err != nil || len(left) != 0 {
-		t.Errorf("temp files left behind after %d refreshes: %v %v", heldTicks, left, err)
+		t.Errorf("temp files left behind: %v %v", left, err)
 	}
 }
 
@@ -1065,9 +1064,8 @@ func lateInPlaceWrite(t *testing.T, holdAt string, gap time.Duration, body func(
 	if got := onDisk(t, path); got != last {
 		t.Errorf("held at %s, wrote %v later: file = %q after a refresh, want the agent's write %q", holdAt, gap, got, last)
 	}
-	tick(t, s, heldTicks)
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*kapi-*")); len(left) > 0 {
-		t.Errorf("held at %s: files left after %d more refreshes: %v", holdAt, heldTicks, left)
+		t.Errorf("held at %s: files left next to the page: %v", holdAt, left)
 	}
 }
 
