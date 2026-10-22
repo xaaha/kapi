@@ -874,6 +874,9 @@ func TestAPastedDuplicateKeepsTheIDOnTheOriginal(t *testing.T) {
 }
 
 func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
+	orig := syncFile
+	syncFile = func(*os.File) error { return nil }
+	defer func() { syncFile = orig }()
 	lost := 0
 	for trial := 0; trial < 400; trial++ {
 		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
