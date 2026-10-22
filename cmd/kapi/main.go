@@ -319,6 +319,7 @@ func daemonCmd() *cli.Command {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	reopen := fs.Bool("reopen", false, "Reopen pages whose tab was open when the daemon last stopped; kapi sets this when it starts the daemon on demand")
 	except := fs.String("reopen-except", "", "Page id not to reopen, because the kapi open that starts the daemon opens it itself")
+	spawn := fs.Bool("spawn", false, "Start the daemon with --reopen in its own session, detached from this process, and exit; kapi runs this when it starts the daemon on demand")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
@@ -327,6 +328,9 @@ func daemonCmd() *cli.Command {
 			"With --reopen, up to 5 pages whose browser tab was open when the daemon last stopped open again,\n" +
 			"unless KAPI_NO_BROWSER, CI, SSH_CONNECTION or SSH_TTY is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
 		Run: func([]string) error {
+			if *spawn {
+				return client.Spawn(home(), *except)
+			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			s := daemon.New(home())
