@@ -371,6 +371,17 @@ test("while a block is being edited the composer keys belong to the composer", a
   assert.equal(await page.eval(`!!document.querySelector('.kapi-bar [data-action="save"]')`), true);
 });
 
+test("text typed while a message is still sending stays in the composer", async () => {
+  server.state.messageDelay = 300;
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("first");
+  await page.key("Enter");
+  await page.type("second");
+  await until(() => server.state.events.some((e) => e.text === "first"));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "second");
+});
+
 test("Shift+Enter in a table cell inserts nothing", async () => {
   await click('[data-kapi-id="gggggggg"] th');
   await click('.kapi-bar [data-action="edit"]');

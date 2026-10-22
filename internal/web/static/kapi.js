@@ -636,12 +636,13 @@
   async function send() {
     const text = input.value.trim();
     if (!text) return;
+    input.value = "";
     sendButton.disabled = true;
     const res = await request("/messages", { kind: "message", target: selected ? idOf(selected) : "", text });
     sendButton.disabled = false;
-    if (!res) return;
-    if (!res.ok) return say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
-    input.value = "";
+    if (res?.ok) return;
+    input.value = input.value ? `${text}\n${input.value}` : text;
+    if (res) say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
   }
 
   async function answer(form) {
