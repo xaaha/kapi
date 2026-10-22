@@ -35,6 +35,7 @@ type Op struct {
 	HTML   string `json:"html,omitempty"`
 	Before string `json:"before,omitempty"`
 	Done   bool   `json:"done,omitempty"`
+	Dir    string `json:"dir,omitempty"`
 }
 
 type Summary struct {
@@ -301,7 +302,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
 	switch op.Kind {
-	case "edit", "done", "archive", "delete", "check":
+	case "edit", "done", "archive", "delete", "check", "orient":
 	default:
 		return false
 	}
@@ -476,6 +477,16 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 			return setFlag(src, e, "done"), Summary{Text: "checked", IDs: one}, nil
 		}
 		return removeAttr(src, e, "done"), Summary{Text: "unchecked", IDs: one}, nil
+	case "orient":
+		if t, _ := e.attr("type"); e.name != "kapi-diagram" || t == "sequence" {
+			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram, and #%s is not one", op.ID)
+		}
+		texts := map[string]string{"tb": "drew top to bottom", "lr": "drew left to right"}
+		text, ok := texts[op.Dir]
+		if !ok {
+			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
+		}
+		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := "moved #" + op.ID + " to the end"

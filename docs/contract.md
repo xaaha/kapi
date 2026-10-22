@@ -79,11 +79,12 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, delete, done, archive, move, undo, check
+    Kind string // edit, delete, done, archive, move, undo, check, orient
     ID   string
     HTML string // edit: new outer HTML of the element
     Before string // move: id to insert before, "" means end
     Done bool // check: true adds done to the kapi-task, false removes it
+    Dir string // orient: tb or lr
 }
 type Summary struct{ Text string; IDs []string } // "edited #k3f9a2bq" etc., goes into the event log
 var ErrStale, ErrNotFound, ErrInboundLinks error
@@ -96,13 +97,17 @@ elements link to.
 `done` and `archive` set `data-kapi-state` on the element. `check`, sent as
 `{"kind":"check","id":"<task id>","done":true}`, adds or removes the `done`
 attribute on a `<kapi-task>` and is refused with 422 for any other element;
-its summary is `checked` or `unchecked`. Every applied op
+its summary is `checked` or `unchecked`. `orient`, sent as
+`{"kind":"orient","id":"<diagram id>","dir":"lr"}`, sets `dir` on a flow or
+architecture `<kapi-diagram>`; a sequence diagram, any other element, or a
+`dir` other than `tb` or `lr` is refused with 422. The browser shows a Flip
+action for diagrams that carry `data-kapi-dir`. Every applied op
 saves the previous source as `revs/<rev>.html` so `undo` restores it.
 
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `done`, `archive`, `delete` and `check` only. `move` and `undo`
+This applies to `edit`, `done`, `archive`, `delete`, `check` and `orient` only. `move` and `undo`
 depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
