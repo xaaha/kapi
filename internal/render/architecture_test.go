@@ -106,7 +106,7 @@ func TestArchitectureNodesShowStateAndTone(t *testing.T) {
 		`<g class="kd-node kd-arch kapi-tone-neutral kd-planned"><rect`,
 		`<g class="kd-node kd-arch kapi-tone-danger"><rect`,
 		`<g class="kd-node kd-arch kapi-tone-neutral"><rect`,
-		`class="kd-title"`, `>Agent</text>`, `class="kd-sub"`, `>one</text>`, `>two</text>`,
+		`class="kd-title"`, `>Agent</text>`, `<text class="kd-title kd-centred"`, `class="kd-sub"`, `>one</text>`, `>two</text>`,
 		`marker-start="url(#`, `class="kd-edge kd-dashed"`,
 		`<figcaption class="kapi-diagram-legend"><span class="kapi-badge kapi-tone-accent">built</span> <span class="kapi-badge kapi-tone-warning">in review</span> <span class="kapi-badge kapi-tone-neutral kd-legend-planned">planned</span></figcaption>`,
 	} {

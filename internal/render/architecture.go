@@ -206,8 +206,12 @@ func (s *svgWriter) archBox(n archNode, at rect) {
 	}
 	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="10"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
 	x, y := r.x+archPadX, r.y+archPadY
+	title := "kd-title"
+	if len(n.subs) == 0 {
+		x, title = r.x+r.w/2, "kd-title kd-centred"
+	}
 	for _, l := range n.title {
-		fmt.Fprintf(&s.body, `<text class="kd-title" x="%s" y="%s">`, f(x), f(y+archTitleH/2))
+		fmt.Fprintf(&s.body, `<text class="%s" x="%s" y="%s">`, title, f(x), f(y+archTitleH/2))
 		writeText(&s.body, l)
 		s.body.WriteString("</text>")
 		y += archTitleH
