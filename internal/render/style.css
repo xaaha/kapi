@@ -415,8 +415,9 @@ pre.kapi-hl {
 .kapi-step { counter-increment: kapi-step; }
 :is(.kapi-risk, .kapi-question) { border-color: var(--kapi-tone-border); background: var(--kapi-tone-fill); }
 .kapi-plan-mark {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 1.75rem;
   height: 1.75rem;
   margin-top: -0.05rem;
