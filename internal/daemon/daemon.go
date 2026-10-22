@@ -147,11 +147,13 @@ func (s *Server) Serve(ctx context.Context) error {
 		s.reopened[p.id] = true
 	}
 	s.mu.Unlock()
+	defer s.settleStores()
 	stopHTTP, err := s.serveHTTP(ctx)
 	if err != nil {
 		return err
 	}
 	defer stopHTTP()
+	go s.tickStores(ctx, time.Second)
 	var reopening sync.WaitGroup
 	defer reopening.Wait()
 	reopening.Go(func() { s.reopen(recent) })
@@ -173,6 +175,41 @@ func (s *Server) Serve(ctx context.Context) error {
 			return err
 		}
 		go s.handle(conn)
+	}
+}
+
+func (s *Server) openStores() []*page.Store {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stores := make([]*page.Store, 0, len(s.stores))
+	for _, st := range s.stores {
+		stores = append(stores, st)
+	}
+	return stores
+}
+
+func (s *Server) tickStores(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		for _, st := range s.openStores() {
+			if err := st.Tick(); err != nil {
+				log.Printf("tick %s: %v", st.Path(), err)
+			}
+		}
+	}
+}
+
+func (s *Server) settleStores() {
+	for _, st := range s.openStores() {
+		if err := st.Settle(); err != nil {
+			log.Printf("settle %s: %v", st.Path(), err)
+		}
 	}
 }
 
