@@ -1,6 +1,7 @@
 package page
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -364,9 +365,9 @@ func TestOpenKeepsADisplacedAgentWriteWhenThePageChangedSince(t *testing.T) {
 	killMidRestore(t, home, path)
 	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">newer</p>\n")
 	open(t, home, path)
-	left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".plan.html.kapi-*"))
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".plan.html.kapi-kept-*"))
 	if len(left) != 1 {
-		t.Fatalf("temp files %v, want the displaced agent write kept", left)
+		t.Fatalf("kept files %v, want the displaced agent write set aside", left)
 	}
 	if b, err := os.ReadFile(left[0]); err != nil || string(b) != agentWrite {
 		t.Errorf("temp file now %q, %v; want the agent's displaced write kept", b, err)
@@ -376,21 +377,91 @@ func TestOpenKeepsADisplacedAgentWriteWhenThePageChangedSince(t *testing.T) {
 	}
 }
 
-func TestOpenDeletesItsOwnEmptyOrPartialTempInsteadOfSwappingItIn(t *testing.T) {
+func TestOpenNeverSwapsInALeftoverTempAndKeepsItsBytesAside(t *testing.T) {
 	for name, temp := range map[string]string{"empty": "", "partial": `<p data-kapi-id="aaaaaaaa">u`} {
 		home, path := newPage(t, oneBlock)
 		s := open(t, home, path)
 		mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
-		tmp := filepath.Join(filepath.Dir(path), ".plan.html.kapi-4265065571")
-		if err := os.WriteFile(tmp, []byte(temp), 0o600); err != nil {
+		dir := filepath.Dir(path)
+		if err := os.WriteFile(filepath.Join(dir, ".plan.html.kapi-4265065571"), []byte(temp), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if src, _ := open(t, home, path).Source(); string(src) != oneBlockUno {
 			t.Errorf("%s temp: source now %q, want the page unchanged", name, src)
 		}
-		if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s temp: still there (%v), want it deleted", name, err)
+		if b, err := os.ReadFile(filepath.Join(dir, ".plan.html.kapi-kept-4265065571")); err != nil || string(b) != temp {
+			t.Errorf("%s temp: kept copy is %q, %v; want its bytes set aside", name, b, err)
 		}
+		if src, _ := open(t, home, path).Source(); string(src) != oneBlockUno {
+			t.Errorf("%s temp: a second open changed the source to %q", name, src)
+		}
+	}
+}
+
+func TestOnlyTheTempTheIntentNamesIsSwappedBackIn(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	b, err := json.Marshal(state{Rev: 1, Next: &state{Rev: 2, Undo: []uint64{1}, Temp: ".plan.html.kapi-2222222222"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.dir, "state.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(path)
+	stale := "<p>stale</p>\n"
+	for name, body := range map[string]string{".plan.html.kapi-1111111111": stale, ".plan.html.kapi-2222222222": agentWrite} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open(t, home, path)
+	if got := onDisk(t, path); !strings.Contains(got, "agent wrote this") {
+		t.Errorf("page = %q, want the named temp's agent write swapped back", got)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, ".plan.html.kapi-kept-1111111111")); err != nil || string(b) != stale {
+		t.Errorf("unnamed temp kept as %q, %v; want it set aside, never swapped in", b, err)
+	}
+}
+
+func TestAKeptTempIsNeverSwappedInByALaterCrash(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	writeState := func(st state) {
+		b, err := json.Marshal(st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(s.dir, "state.json"), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	intended := "<p data-kapi-id=\"aaaaaaaa\">tres</p>\n"
+	if err := os.WriteFile(s.revPath(3), []byte(intended), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	temp := ".plan.html.kapi-1111111111"
+	writeState(state{Rev: 2, Undo: []uint64{1}, Next: &state{Rev: 3, Undo: []uint64{1, 2}, Temp: temp}})
+	dir := filepath.Dir(path)
+	if err := os.WriteFile(filepath.Join(dir, temp), []byte(intended[:12]), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">agent</p>\n")
+	s = open(t, home, path)
+	before, rev := s.Source()
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">later</p>`})
+	after, next := s.Source()
+	writeState(state{Rev: rev, Undo: s.undo[:len(s.undo)-1], Next: &state{Rev: next, Undo: s.undo, Temp: ".plan.html.kapi-2222222222"}})
+	if err := os.WriteFile(filepath.Join(dir, ".plan.html.kapi-2222222222"), before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if src, _ := open(t, home, path).Source(); !bytes.Equal(src, after) {
+		t.Fatalf("after the second crash the source is %q, want %q", src, after)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, ".plan.html.kapi-kept-1111111111")); err != nil || string(b) != intended[:12] {
+		t.Errorf("the first crash's temp is %q, %v; want it kept aside", b, err)
 	}
 }
 

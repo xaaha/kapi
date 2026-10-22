@@ -171,18 +171,19 @@ A kill or power cut at any point leaves the page file, `revs/` and
 `.<name>.kapi-<digits>` in the same folder, which is fsynced, renamed or
 swapped into place, and followed by an fsync of the folder. `state.json`
 holds `{"rev":N,"undo":[...]}`. Before swapping the page, the store writes
-`revs/<N+1>.html` and adds `"next":{"rev":N+1,"undo":[...]}` to
-`state.json`. Once the swap lands, it rewrites `state.json` without `next`.
-On open, the store moves to `next` only when the page file holds exactly
-`revs/<next rev>.html`. Otherwise it keeps `rev`, so a revision never goes
-back. Open also deletes its own temp files under `pages/<id>/`. With no
-`next` in `state.json`, a temp file next to the page is kapi's own and is
-deleted, whether it is empty, partial or whole. With `next`, a temp file whose
-bytes are neither `rev` nor `next` is an agent write that a kill left
-displaced only if the page holds exactly `next`, which means the swap landed.
-The store then swaps it back into the page. If the page still holds `rev`,
-the swap never landed and the temp file is kapi's, so it is deleted. In any
-other case the page changed after the kill and the temp file stays.
+`revs/<N+1>.html` and adds `"next":{"rev":N+1,"undo":[...],"temp":"<name>"}`
+to `state.json`. `temp` names the temp file the swap will use, which the
+store creates only after recording it. Once the swap lands, it rewrites
+`state.json` without `next`. On open, the store moves to `next` only when
+the page file holds exactly `revs/<next rev>.html`. Otherwise it keeps `rev`,
+so a revision never goes back. Open also deletes its own temp files under
+`pages/<id>/`. A temp file next to the page whose bytes equal `rev` or `next`
+is deleted. Only the temp file that `next` names can go back into the page,
+and only when the page holds exactly `next`, which means the swap landed and
+the temp file holds a displaced agent write. When the page still holds `rev`,
+the named temp file is kapi's unfinished write, so it is deleted. Any other
+temp file is never swapped in. It is renamed to `.<name>.kapi-kept-<digits>`,
+so its bytes are not lost and open does not consider it again.
 
 ## HTTP
 

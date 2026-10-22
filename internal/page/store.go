@@ -2,7 +2,9 @@ package page
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -70,6 +72,7 @@ type state struct {
 	Rev  uint64   `json:"rev"`
 	Undo []uint64 `json:"undo"`
 	Next *state   `json:"next,omitempty"`
+	Temp string   `json:"temp,omitempty"`
 }
 
 // ID is the 16-hex directory name under $KAPI_HOME/pages for an absolute page path.
@@ -165,29 +168,32 @@ func (s *Store) restoreDisplaced(st *state) error {
 	if err != nil || len(temps) == 0 {
 		return err
 	}
-	var before, after, page []byte
+	before, err := s.readRev(st.Rev)
+	if err != nil {
+		return err
+	}
+	var after []byte
 	if st.Next != nil {
-		if before, err = s.readRev(st.Rev); err != nil {
-			return err
-		}
 		if after, err = s.readRev(st.Next.Rev); err != nil {
 			return err
 		}
-		if page, err = os.ReadFile(s.path); err != nil {
-			return err
-		}
+	}
+	page, err := os.ReadFile(s.path)
+	if err != nil {
+		return err
 	}
 	for _, tmp := range temps {
 		theirs, err := os.ReadFile(tmp)
 		if err != nil {
 			return err
 		}
-		agent := st.Next != nil && !bytes.Equal(theirs, before) && !bytes.Equal(theirs, after)
+		named := st.Next != nil && filepath.Base(tmp) == st.Next.Temp
 		switch {
-		case agent && bytes.Equal(page, after):
+		case bytes.Equal(theirs, before) || (st.Next != nil && bytes.Equal(theirs, after)):
+		case named && bytes.Equal(page, after):
 			err = swapIn(tmp, s.path, theirs, page)
 			if errors.Is(err, errFileChanged) {
-				continue
+				err = keep(tmp)
 			}
 			if err != nil {
 				return err
@@ -195,7 +201,11 @@ func (s *Store) restoreDisplaced(st *state) error {
 			if err := syncDir(filepath.Dir(s.path)); err != nil {
 				return err
 			}
-		case agent && !bytes.Equal(page, before):
+		case named && bytes.Equal(page, before):
+		default:
+			if err := keep(tmp); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -203,6 +213,18 @@ func (s *Store) restoreDisplaced(st *state) error {
 		}
 	}
 	return nil
+}
+
+func keep(tmp string) error {
+	dir, name := filepath.Split(tmp)
+	i := strings.LastIndex(name, tempMark) + len(tempMark)
+	kept := filepath.Join(dir, name[:i]+"kept-"+name[i:])
+	for n := 2; ; n++ {
+		if _, err := os.Lstat(kept); errors.Is(err, os.ErrNotExist) {
+			return os.Rename(tmp, kept)
+		}
+		kept = filepath.Join(dir, name[:i]+"kept-"+name[i:]+"-"+strconv.Itoa(n))
+	}
 }
 
 func (s *Store) readRev(rev uint64) ([]byte, error) {
@@ -453,10 +475,15 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	next := state{Rev: rev, Undo: undo}
 	if !bytes.Equal(src, base) {
 		now := state{Rev: s.rev, Undo: s.undo}
-		if err := s.saveState(state{Rev: s.rev, Undo: s.undo, Next: &next}); err != nil {
+		var n [4]byte
+		if _, err := rand.Read(n[:]); err != nil {
 			return err
 		}
-		if err := replaceFile(s.path, src, base); err != nil {
+		intent := state{Rev: rev, Undo: undo, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
+		if err := s.saveState(state{Rev: s.rev, Undo: s.undo, Next: &intent}); err != nil {
+			return err
+		}
+		if err := replaceFileVia(filepath.Join(filepath.Dir(s.path), intent.Temp), s.path, src, base); err != nil {
 			return errors.Join(err, s.saveState(now))
 		}
 	}
@@ -501,11 +528,21 @@ func writeAtomic(path string, b []byte) error {
 }
 
 func replaceFile(path string, b, expect []byte) error {
+	return replaceFileVia("", path, b, expect)
+}
+
+func replaceFileVia(tmp, path string, b, expect []byte) error {
 	mode := os.FileMode(0o600)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+tempMark+"*")
+	var f *os.File
+	var err error
+	if tmp == "" {
+		f, err = os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+tempMark+"*")
+	} else {
+		f, err = os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	}
 	if err != nil {
 		return err
 	}
