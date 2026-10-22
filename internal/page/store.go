@@ -427,6 +427,7 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 	if displaced, err := os.ReadFile(tmp); err != nil || bytes.Equal(displaced, expect) {
 		return err
 	}
+	prev, placed := placement{b: expect}, placement{mine, ours}
 	for range 1 << 16 {
 		atPath, err := stamp(path, mine, ours)
 		if err != nil {
@@ -436,8 +437,18 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if err != nil {
 			return err
 		}
-		if !atTmp.After(atPath) {
+		newer := atTmp.After(atPath)
+		if atTmp.Equal(atPath) {
+			if newer, err = tiedTmpIsNewer(tmp, path, prev, placed); err != nil {
+				return err
+			}
+		}
+		if !newer {
 			return errFileChanged
+		}
+		next, err := capture(tmp)
+		if err != nil {
+			return err
 		}
 		if replaceHook != nil {
 			replaceHook("restore")
@@ -445,8 +456,40 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if err := swapFiles(tmp, path); err != nil {
 			return err
 		}
+		prev, placed = placed, next
 	}
 	return errFileChanged
+}
+
+type placement struct {
+	fi os.FileInfo
+	b  []byte
+}
+
+func capture(name string) (placement, error) {
+	fi, err := os.Stat(name)
+	if err != nil {
+		return placement{}, err
+	}
+	b, err := os.ReadFile(name)
+	return placement{fi, b}, err
+}
+
+func (p placement) holds(name string) (bool, error) {
+	now, err := capture(name)
+	if err != nil {
+		return false, err
+	}
+	return (p.fi == nil || os.SameFile(now.fi, p.fi)) && bytes.Equal(now.b, p.b), nil
+}
+
+func tiedTmpIsNewer(tmp, path string, prev, placed placement) (bool, error) {
+	kept, err := placed.holds(path)
+	if err != nil || !kept {
+		return false, err
+	}
+	stale, err := prev.holds(tmp)
+	return !stale, err
 }
 
 func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {

@@ -959,6 +959,63 @@ func TestAnAgentRenameInsideTheWriteWindowWins(t *testing.T) {
 	}
 }
 
+func TestTheLastAgentRenameWinsWhenItsMtimeTiesWithTheOneBefore(t *testing.T) {
+	tick := time.Now().Truncate(time.Second)
+	for _, stages := range [][]string{{"swap", "restore"}, {"swap", "restore", "restore"}} {
+		home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+		s := open(t, home, path)
+		var last string
+		n := 0
+		replaceHook = func(stage string) {
+			if n < len(stages) && stage == stages[n] {
+				last = fmt.Sprintf("<p data-kapi-id=\"aaaaaaaa\">agent %d</p>\n", n)
+				agentRename(t, path, last)
+				if err := os.Chtimes(path, tick, tick); err != nil {
+					t.Fatal(err)
+				}
+				n++
+			}
+		}
+		_, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"})
+		replaceHook = nil
+		if !errors.Is(err, ErrStale) {
+			t.Errorf("%v: Apply err = %v, want ErrStale", stages, err)
+		}
+		if got := onDisk(t, path); got != last {
+			t.Errorf("%v: file = %q, want the agent's last write %q", stages, got, last)
+		}
+	}
+}
+
+func TestAnAgentWriteIntoTheFileWinsWhenItsMtimeTiesWithTheOneBefore(t *testing.T) {
+	tick := time.Now().Truncate(time.Second)
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
+	s := open(t, home, path)
+	last := "<p data-kapi-id=\"aaaaaaaa\">agent 1</p>\n"
+	replaceHook = func(stage string) {
+		switch stage {
+		case "swap":
+			agentRename(t, path, "<p data-kapi-id=\"aaaaaaaa\">agent 0</p>\n")
+		case "restore":
+			if err := os.WriteFile(path, []byte(last), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			replaceHook = nil
+		}
+		if err := os.Chtimes(path, tick, tick); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	replaceHook = nil
+	if !errors.Is(err, ErrStale) {
+		t.Errorf("Apply err = %v, want ErrStale", err)
+	}
+	if got := onDisk(t, path); got != last {
+		t.Errorf("file = %q, want the agent's last write %q", got, last)
+	}
+}
+
 func TestSplittingKeepsCodeBodyBytes(t *testing.T) {
 	body := "a\r\nb\x00c"
 	home, path := newPage(t, "<p>x <kapi-code>"+body+"</kapi-code> y</p>\n")
