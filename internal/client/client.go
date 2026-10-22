@@ -33,9 +33,12 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), startWait)
 	defer cancel()
 	if err := c.startDaemon(ctx, openPage); err != nil {
+		if ctx.Err() != nil {
+			return nil, c.notStarted(sock, ctx.Err())
+		}
 		return nil, err
 	}
 	for {
@@ -44,10 +47,16 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 			return conn, nil
 		}
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("daemon did not start on %s, see %s: %w", sock, filepath.Join(c.Home, "daemon.log"), err)
+			return nil, c.notStarted(sock, err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+const startWait = 3 * time.Second
+
+func (c Client) notStarted(sock string, err error) error {
+	return fmt.Errorf("daemon did not start within %v on %s, see %s: %w", startWait, sock, filepath.Join(c.Home, "daemon.log"), err)
 }
 
 func (c Client) startDaemon(ctx context.Context, openPage string) error {

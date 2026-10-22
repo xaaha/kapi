@@ -132,26 +132,42 @@ func TestAFailedSpawnIsReportedAtOnce(t *testing.T) {
 	}
 }
 
-func TestADaemonThatNeverListensFailsTheClientWithinThreeSeconds(t *testing.T) {
-	e := newE2E(t)
-	lock, err := os.OpenFile(filepath.Join(e.home, "kapi.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(e.bin, "pending", e.page) //nolint:gosec // runs the kapi binary this test just built
-	cmd.Env = e.env
-	start := time.Now()
-	out, err := cmd.CombinedOutput()
-	took := time.Since(start)
-	if err == nil || !strings.Contains(string(out), "did not start") || !strings.Contains(string(out), "daemon.log") {
-		t.Errorf("kapi pending: %v\n%s; want a did not start error naming daemon.log", err, out)
-	}
-	if took > 3500*time.Millisecond {
-		t.Errorf("the client waited %v, want at most 3s", took)
+func TestAStartThatRunsOutOfTimeFailsTheClientWithinThreeSeconds(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		block func(t *testing.T, home string)
+	}{
+		{"daemon never listens", func(t *testing.T, home string) {
+			lock, err := os.OpenFile(filepath.Join(home, "kapi.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { lock.Close() })
+			if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"spawn never returns", func(t *testing.T, home string) {
+			if err := syscall.Mkfifo(filepath.Join(home, "daemon.log"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2E(t)
+			tc.block(t, e.home)
+			cmd := exec.Command(e.bin, "pending", e.page) //nolint:gosec // runs the kapi binary this test just built
+			cmd.Env = e.env
+			start := time.Now()
+			out, err := cmd.CombinedOutput()
+			took := time.Since(start)
+			if err == nil || !strings.Contains(string(out), "daemon did not start within 3s") || !strings.Contains(string(out), "see "+filepath.Join(e.home, "daemon.log")) {
+				t.Errorf("kapi pending: %v\n%s; want a did not start within 3s error naming daemon.log", err, out)
+			}
+			if took > 3500*time.Millisecond {
+				t.Errorf("the client waited %v, want at most 3s", took)
+			}
+		})
 	}
 }
 
