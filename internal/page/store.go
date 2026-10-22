@@ -29,7 +29,7 @@ var (
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
-	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
+	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
 	ErrInnerEscapes  = errors.New("the new source closes the element early or leaves an element inside it open; edit only what goes between its tags")
 )
 
@@ -40,6 +40,8 @@ type Op struct {
 	Inner  *string `json:"inner,omitempty"`
 	Cells  []Cell  `json:"cells,omitempty"`
 	Before string  `json:"before,omitempty"`
+	Done   bool    `json:"done,omitempty"`
+	Dir    string  `json:"dir,omitempty"`
 }
 
 type Cell struct {
@@ -319,7 +321,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
-	case "edit", "cells", "archive", "unarchive", "delete":
+	case "edit", "cells", "archive", "unarchive", "delete", "check", "orient":
 	default:
 		return false
 	}
@@ -507,6 +509,24 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		return setAttr(src, e, stateAttr, "archived"), Summary{Text: about("archived"), IDs: one}, nil
 	case "unarchive":
 		return removeAttr(src, e, stateAttr), Summary{Text: about("unarchived"), IDs: one}, nil
+	case "check":
+		if e.name != "kapi-task" {
+			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)
+		}
+		if op.Done {
+			return setFlag(src, e, "done"), Summary{Text: "checked", IDs: one}, nil
+		}
+		return removeAttr(src, e, "done"), Summary{Text: "unchecked", IDs: one}, nil
+	case "orient":
+		if t, _ := e.attr("type"); e.name != "kapi-diagram" || (t != "" && t != "flow" && t != "architecture") {
+			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram, and #%s is not one", op.ID)
+		}
+		texts := map[string]string{"tb": "drew top to bottom", "lr": "drew left to right"}
+		text, ok := texts[op.Dir]
+		if !ok {
+			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
+		}
+		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := about("moved #"+op.ID) + " to the end"
@@ -539,7 +559,7 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 	}
 	if !strings.HasPrefix(root.name, "kapi-") {
 		for _, f := range parse(frag) {
-			if _, ok := f.attr("data-kapi-preset"); ok || strings.HasPrefix(f.name, "kapi-") {
+			if _, ok := f.attr("data-kapi-preset"); ok || (strings.HasPrefix(f.name, "kapi-") && !render.Inline(f.name)) {
 				return nil, ErrPresetInProse
 			}
 		}

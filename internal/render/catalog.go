@@ -7,8 +7,8 @@ func Presets() []Preset {
 var catalog = []Preset{
 	{
 		Name:    "kapi-callout",
-		Summary: "Boxed aside for a note, a warning or the key point of a section",
-		Example: `<!-- kind: note (default), warning or key. Body: prose. -->
+		Summary: "Boxed aside for a note, a warning, the key point, a danger or a success",
+		Example: `<!-- kind: note (default, blue), warning (yellow), key (purple), danger (red) or success (green). Body: prose. -->
 <kapi-callout kind="warning">
   <p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p>
 </kapi-callout>`,
@@ -86,8 +86,9 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-diagram",
-		Summary: "A flow chart or sequence diagram drawn from one edge per line",
-		Example: `<!-- type: flow (default, top to bottom) or sequence (lifelines, messages in order).
+		Summary: "A flow chart, sequence diagram or architecture diagram drawn from one line per node or edge",
+		Example: `<!-- type: flow (default) or sequence (lifelines, messages in order).
+     dir: tb (top to bottom, the default for flow) or lr (left to right). Sequence diagrams ignore dir.
      Body: one edge per line, "a -> b: label". The label is optional. "a --> b" draws a dashed line.
      A line with only a name declares a node (flow) or fixes participant order (sequence). Keep it under ~15 nodes. -->
 <kapi-diagram type="flow">
@@ -103,6 +104,21 @@ func (s *Store) Source() ([]byte, uint64) {
   daemon -> store: Apply(rev, op)
   store --> daemon: new rev
   daemon --> browser: 200 {"rev":N}
+</kapi-diagram>
+
+<!-- type: architecture (left to right by default; dir="tb" stacks it top to bottom).
+     Node lines: "id: Title | subtitle | subtitle | state". id is letters, digits, - _ or .
+     state is built, review, planned (dashed) or a colour: red, orange, yellow, green, blue, purple, grey.
+     Edges: "a -> b: label", "a <-> b: label" (both ways, may share a column), "a --> b: label" (dashed).
+     Every edge names declared ids. A legend for built, review and planned is added when they are used. -->
+<kapi-diagram type="architecture">
+  agent: Agent | kapi watch: one line per event | built
+  daemon: kapi daemon | event log, page store | review
+  disk: ~/.kapi | pages, cursors, revisions | built
+  hub: Private hub | R2 + Worker | planned
+  agent <-> daemon: socket
+  daemon -> disk: append
+  daemon --> hub: publish
 </kapi-diagram>`,
 	},
 	{
@@ -123,5 +139,41 @@ func (s *Store) Source() ([]byte, uint64) {
   </kapi-choice>
   <kapi-text name="notes">Anything else?</kapi-text>
 </kapi-form>`,
+	},
+	{
+		Name:    "kapi-badge",
+		Summary: "A small coloured label for a status, inside prose or a table cell",
+		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default). Body: a word or two.
+     Use it inline: inside a <p>, an <li> or a table cell. -->
+<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>`,
+	},
+	{
+		Name:    "kapi-kv",
+		Summary: "Key and value pairs, like owner, status and due date, as a definition list",
+		Example: `<!-- Children: <kapi-item key="..."> each holding prose. Keep keys to a word or two. -->
+<kapi-kv>
+  <kapi-item key="Owner">Pratik</kapi-item>
+  <kapi-item key="Status"><kapi-badge tone="yellow">in review</kapi-badge></kapi-item>
+  <kapi-item key="Rollback">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
+</kapi-kv>`,
+	},
+	{
+		Name:    "kapi-details",
+		Summary: "A collapsed section the reader opens, for detail most readers can skip",
+		Example: `<!-- summary: the line shown while closed. open: add it to start open. Body: prose. -->
+<kapi-details summary="Why copy before flipping reads?">
+  <p>Copying first lets us compare row counts before any reads move, so a bad copy never serves traffic.</p>
+</kapi-details>`,
+	},
+	{
+		Name:    "kapi-checklist",
+		Summary: "Tasks with tick boxes; ticking one in the browser writes done back to the file",
+		Example: `<!-- Children: <kapi-task> each holding prose. Add done to a task that is finished.
+     When the reader ticks or unticks a box, kapi adds or removes done in the file and kapi watch reports it. -->
+<kapi-checklist>
+  <kapi-task done>Copy the session store to the new cluster</kapi-task>
+  <kapi-task>Compare row counts</kapi-task>
+  <kapi-task>Flip reads</kapi-task>
+</kapi-checklist>`,
 	},
 }

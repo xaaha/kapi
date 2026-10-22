@@ -1109,3 +1109,132 @@ test("a message refused after a restart without a reopen shows the command, neve
   assert.equal(await copyable(".kapi-composer textarea"), true);
 });
 
+
+const task = (id, done, label) =>
+  `<li class="kapi-task" data-kapi-preset="task" data-kapi-id="${id}"><input type="checkbox"${done ? ' checked=""' : ""} aria-label="${label}">` +
+  `<span class="kapi-task-body">${label}</span></li>`;
+
+async function reopenWith(blocks) {
+  await page.close();
+  await server.close();
+  server = await startFakeServer({ blocks });
+  page = await browser.open(server.url);
+  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+}
+
+const CHECKLIST = [
+  {
+    id: "llllllll",
+    html: `<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="llllllll">${task("tttttttt", false, "Copy")}${task("uuuuuuuu", true, "Flip")}</ul>`,
+  },
+];
+const checked = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"] input').checked`);
+
+test("ticking a task sends a check op and refetches only that task", async () => {
+  await reopenWith(CHECKLIST);
+  const loads = pageLoads();
+  await click('[data-kapi-id="tttttttt"] input');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "check", id: "tttttttt", done: true } });
+  await until(() => requests("GET", "/blocks/tttttttt").length === 1);
+  assert.equal(await checked("tttttttt"), true);
+  await page.waitFor(`!document.querySelector('[data-kapi-id="tttttttt"] input').disabled`);
+
+  await click('[data-kapi-id="uuuuuuuu"] input');
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.deepEqual(requests("POST", "/ops")[1].body, { rev: 2, op: { kind: "check", id: "uuuuuuuu", done: false } });
+  await until(() => requests("GET", "/blocks/uuuuuuuu").length === 1);
+  assert.equal(await checked("uuuuuuuu"), false);
+  assert.equal(pageLoads(), loads);
+});
+
+async function mouseClick(selector, clickCount = 1) {
+  const { x, y } = await page.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  for (let n = 1; n <= clickCount; n++) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: n });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: n });
+  }
+}
+
+test("clicking or double-clicking a task's text selects it and never ticks the box", async () => {
+  await reopenWith(CHECKLIST);
+  await mouseClick('[data-kapi-id="tttttttt"] .kapi-task-body');
+  await page.waitFor(`document.querySelector('[data-kapi-id="tttttttt"]').hasAttribute("data-kapi-selected")`);
+  await mouseClick('[data-kapi-id="uuuuuuuu"] .kapi-task-body', 2);
+  await page.waitFor(`document.querySelector('[data-kapi-id="uuuuuuuu"]').hasAttribute("data-kapi-selected")`);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(await checked("tttttttt"), false);
+  assert.equal(await checked("uuuuuuuu"), true);
+});
+
+test("clicking a badge selects the block around it, never the badge", async () => {
+  await reopenWith([
+    { id: "pppppppp", html: '<p data-kapi-id="pppppppp">PR #19 is <span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb">merged</span>.</p>' },
+  ]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="pppppppp"]').hasAttribute("data-kapi-selected")`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`), false);
+});
+
+test("a top-level badge is a block of its own and selects on click", async () => {
+  await reopenWith([
+    { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' },
+    { id: "bbbbbbbb", html: '<span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb">merged</span>' },
+  ]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`);
+});
+
+test("a box ticked while another op is in flight sends nothing and stays as it was", async () => {
+  await reopenWith([...CHECKLIST, { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
+  server.state.opDelay = 400;
+  await select("pppppppp");
+  await click('.kapi-bar [data-action="archive"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  await mouseClick('[data-kapi-id="tttttttt"] input');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="up"]').disabled`), true);
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(requests("POST", "/ops").length, 1);
+  assert.equal(await checked("tttttttt"), false);
+});
+
+test("a refused check puts the box back and says why", async () => {
+  await reopenWith(CHECKLIST);
+  server.state.nextOpError = "check needs a kapi-task";
+  await click('[data-kapi-id="tttttttt"] input');
+  await until(async () => (await notice()) === "check needs a kapi-task");
+  assert.equal(await checked("tttttttt"), false);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="tttttttt"] input').disabled`), false);
+});
+
+const DIAGRAMS = [
+  { id: "ffffffff", html: '<figure class="kapi-diagram kapi-diagram-flow" data-kapi-preset="diagram" data-kapi-dir="tb" data-kapi-id="ffffffff"><svg width="40" height="40"></svg></figure>' },
+  { id: "ssssssss", html: '<figure class="kapi-diagram kapi-diagram-sequence" data-kapi-preset="diagram" data-kapi-id="ssssssss"><svg width="40" height="40"></svg></figure>' },
+  { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' },
+];
+const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+
+test("Flip on a diagram sends an orient op and refetches the diagram", async () => {
+  await reopenWith(DIAGRAMS);
+  await select("ffffffff");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+  await click('.kapi-bar [data-action="flip"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "orient", id: "ffffffff", dir: "lr" } });
+  await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').dataset.kapiDir`)) === "lr");
+  assert.equal(requests("GET", "/blocks/ffffffff").length, 1);
+  await click('.kapi-bar [data-action="flip"]');
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.equal(requests("POST", "/ops")[1].body.op.dir, "tb");
+});
+
+test("sequence diagrams and prose show no Flip", async () => {
+  await reopenWith(DIAGRAMS);
+  for (const id of ["ssssssss", "pppppppp"]) {
+    await select(id);
+    await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.equal(await hasFlip(), false, id);
+  }
+});

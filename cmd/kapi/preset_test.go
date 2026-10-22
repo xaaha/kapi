@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestPresetListsEveryPreset(t *testing.T) {
 		t.Fatal(err)
 	}
 	presets := render.Presets()
-	if !strings.HasPrefix(out, "presets[8]:\n") || len(presets) != 8 {
+	if !strings.HasPrefix(out, fmt.Sprintf("presets[%d]:\n", len(presets))) {
 		t.Errorf("output does not start with the preset count:\n%s", out)
 	}
 	for _, p := range presets {

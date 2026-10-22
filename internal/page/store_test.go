@@ -653,6 +653,16 @@ func TestEditRefusesProseThatHoldsPresets(t *testing.T) {
 	}
 }
 
+func TestEditKeepsBadgesInProse(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s := open(t, home, path)
+	h := `<p data-kapi-id="aaaaaaaa">PR #19 is <kapi-badge tone="green">merged</kapi-badge></p>`
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: h})
+	if got := onDisk(t, path); !regexp.MustCompile(`^<p data-kapi-id="aaaaaaaa">PR #19 is <kapi-badge data-kapi-id="[a-z2-7]{8}" tone="green">merged</kapi-badge></p>$`).MatchString(got) {
+		t.Errorf("after the edit: %s", got)
+	}
+}
+
 const lavishPage = "<!doctype html>\n<html><head><style>body{color:red}</style></head><body>\n" +
 	"<h1 class=title>Report</h1>\n<p onclick=\"go()\">Hello &amp; welcome</p>\n<script>go()</script>\n</body></html>\n"
 

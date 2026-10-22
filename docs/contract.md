@@ -34,19 +34,28 @@ load and writes the file back. Ids never change after that.
 
 | Element | Attributes | Body |
 |---|---|---|
-| `<kapi-callout>` | `kind` = `note`, `warning`, `key` | prose |
+| `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` (red), `success` (green) | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow` or `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence) |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built` (purple), `review` (yellow), `planned` (grey, dashed) or a colour, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |
+| `<kapi-badge>` | optional `tone` = `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default) | short inline text; allowed inside prose and table cells |
+| `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
+| `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
+| `<kapi-checklist>` | none | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Ticking a box in the browser sends a `check` op |
 | `<kapi-form>` | `name` | `<kapi-choice name="..." multiple?>` with `<kapi-opt value="...">label</kapi-opt>`, and `<kapi-text name="...">label</kapi-text>` |
+
+The colours are the seven shared tones: `red`, `orange`, `yellow`, `green`,
+`blue`, `purple` and `grey`. Each is a `--kapi-<colour>-fill`, `-border`,
+`-text`, `-solid` and `-tint` token in `theme.css`, for light and dark.
 
 Unknown `kapi-*` elements render as a visible error box, never silently.
 
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
-rendered preset. Prose elements render to the same HTML as their source.
+rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
+direction it was drawn in. Prose elements render to the same HTML as their source.
 
 ### Editing
 
@@ -74,6 +83,10 @@ twice, an empty `cells` list or a target that is not a `kapi-table` is 422.
 Adding or removing rows and columns is out of scope. A `cells` op follows the
 same staleness, dangling-link and no-change rules as `edit`.
 
+A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
+a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
+or a `data-kapi-preset` attribute in it is refused with 422.
+
 ## Go interfaces
 
 ```go
@@ -90,12 +103,14 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, cells, delete, archive, unarchive, move, undo
+    Kind string // edit, cells, delete, archive, unarchive, move, undo, check, orient
     ID   string
     HTML string // edit: new outer HTML of the element
     Inner *string // edit, instead of HTML: new source between the element's start and end tags
     Cells []Cell  // cells: {Row, Col, Text} for each changed table cell
     Before string // move: id to insert before, "" means end
+    Done bool // check: true adds done to the kapi-task, false removes it
+    Dir string // orient: tb or lr
 }
 type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
 var ErrStale, ErrNotFound, ErrInboundLinks error
@@ -116,14 +131,22 @@ and logs no event (`Apply` returns an empty `Summary`).
 `archive` sets `data-kapi-state="archived"` on the element and `unarchive`
 removes `data-kapi-state`. An archived block renders dimmed and collapsed to
 one line: a small "archived" label and a text excerpt. Its toolbar offers
-Unarchive in place of Edit and Archive. Every applied op
-saves the previous source as `revs/<rev>.html` so `undo` restores it.
+Unarchive in place of Edit and Archive.
+`check`, sent as `{"kind":"check","id":"<task id>","done":true}`, adds or
+removes the `done` attribute on a `<kapi-task>` and is refused with 422 for
+any other element; its summary is `checked` or `unchecked`. `orient`, sent as
+`{"kind":"orient","id":"<diagram id>","dir":"lr"}`, sets `dir` on a flow or
+architecture `<kapi-diagram>`; a sequence diagram, any other element, or a
+`dir` other than `tb` or `lr` is refused with 422. The browser shows a Flip
+action for diagrams that carry `data-kapi-dir`, except an archived one.
+Every applied op saves the previous source as `revs/<rev>.html` so `undo`
+restores it.
 
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `cells`, `archive`, `unarchive` and `delete` only. `move` and `undo`
-depend on the whole page, so they need the exact current `rev`. `ErrStale`
+This applies to `edit`, `cells`, `archive`, `unarchive`, `delete`, `check` and
+`orient` only. `move` and `undo` depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
 422.

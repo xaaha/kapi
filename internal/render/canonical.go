@@ -12,12 +12,16 @@ var presetSourceAttrs = map[string]map[string]bool{
 	"kapi-code":    set("lang", "file", "lines"),
 	"kapi-diff":    set("lang", "file"),
 	"kapi-table":   set("sort"),
-	"kapi-diagram": set("type"),
+	"kapi-diagram": set("type", "dir"),
 	"kapi-form":    set("name"),
 	"kapi-choice":  set("name", "multiple"),
 	"kapi-opt":     set("value"),
 	"kapi-text":    set("name"),
 	"kapi-option":  set("title"),
+	"kapi-badge":   set("tone"),
+	"kapi-item":    set("key"),
+	"kapi-details": set("summary", "open"),
+	"kapi-task":    set("done"),
 }
 
 var rawEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;")

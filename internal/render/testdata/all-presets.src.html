@@ -1,6 +1,12 @@
 <h1 data-kapi-id="a1b2c3d4">Page store cutover plan</h1>
 <p data-kapi-id="e5f6g7h2">This page walks through moving page state into the Go daemon. It uses every kapi preset, so it doubles as the visual reference for the design system. See <a href="#k3f9a2bq">the risky step</a> before you start, and <a href="https://github.com/xaaha/kapi">the repo</a> for context.</p>
 
+<kapi-kv data-kapi-id="kvaaaaaa">
+  <kapi-item key="Owner" data-kapi-id="kvitemaa">Track A, the server</kapi-item>
+  <kapi-item key="Status" data-kapi-id="kvitembb"><kapi-badge tone="yellow" data-kapi-id="badgebbb">in review</kapi-badge></kapi-item>
+  <kapi-item key="Rollback" data-kapi-id="kvitemcc">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
+</kapi-kv>
+
 <kapi-callout kind="note" data-kapi-id="n0teaaaa"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></kapi-callout>
 <kapi-callout kind="warning" data-kapi-id="warnaaaa"><p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p></kapi-callout>
 <kapi-callout kind="key" data-kapi-id="keyaaaaa"><p>Go owns all state. The browser keeps nothing and refetches after any reconnect.</p></kapi-callout>
@@ -71,10 +77,14 @@ diff --git a/internal/page/store.go b/internal/page/store.go
     <tbody>
       <tr><td><code>GET /p/{id}/</code></td><td>4</td><td>11</td><td>Full render with CSS</td></tr>
       <tr><td><code>GET /p/{id}/blocks/{block}</code></td><td>1</td><td>3</td><td>One element</td></tr>
-      <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision</td></tr>
+      <tr><td><code>POST /p/{id}/ops</code></td><td>6</td><td>19</td><td>Writes the file and a revision <kapi-badge tone="yellow" data-kapi-id="badgeaaa">slowest</kapi-badge></td></tr>
     </tbody>
   </table>
 </kapi-table>
+
+<kapi-details summary="Why the p99 for ops is high" data-kapi-id="detailsa">
+  <p>Every op writes the page file and a revision copy, and both are synced to disk before the reply.</p>
+</kapi-details>
 
 <h2 data-kapi-id="h2dddddd">Transport options</h2>
 <kapi-compare data-kapi-id="compaaaa">
@@ -99,6 +109,11 @@ diff --git a/internal/page/store.go b/internal/page/store.go
   <kapi-step data-kapi-id="stepcccc">Delete the old static page handler.</kapi-step>
   <kapi-question data-kapi-id="quesaaaa">Should <em>undo</em> cross an agent edit, or stop at it?</kapi-question>
 </kapi-plan>
+
+<kapi-checklist data-kapi-id="checkaaa">
+  <kapi-task done data-kapi-id="taskaaaa">Write the page store tests</kapi-task>
+  <kapi-task data-kapi-id="taskbbbb">Run the cutover on staging</kapi-task>
+</kapi-checklist>
 
 <h2 data-kapi-id="h2ffffff">Your call</h2>
 <kapi-form name="cutover" data-kapi-id="formaaaa">

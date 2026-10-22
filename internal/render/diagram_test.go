@@ -18,8 +18,9 @@ func flowSources() map[string]string {
 		"fanout":  "hub -> one: a\nhub -> two: b\nhub -> three: c\nhub -> four: d\nhub -> five: e",
 		"bidirectional": "page file -> daemon: mtime change\ndaemon -> page file: applies\n" +
 			"daemon -> browser: revision event\nbrowser -> daemon: op\ndaemon -> event log: appends",
-		"parallel":  "a -> b: first long label\na -> b: second long label\na -> b: third long label",
-		"long edge": "a -> b\nb -> c\nc -> d\na -> d: skips two layers\nd -> a: loops back up",
+		"parallel":   "a -> b: first long label\na -> b: second long label\na -> b: third long label",
+		"self loops": "a -> b\na -> c\nb -> b: retries with a long label\nc -> c: also loops\nb -> d\nc -> d",
+		"long edge":  "a -> b\nb -> c\nc -> d\na -> d: skips two layers\nd -> a: loops back up",
 	}
 	seed := uint32(7)
 	pick := func(n int) int {
@@ -44,17 +45,28 @@ func flowSources() map[string]string {
 }
 
 func diagram(kind, body string) string {
-	return `<kapi-diagram type="` + kind + `" data-kapi-id="dddddddd">` + "\n" + body + "\n</kapi-diagram>"
+	return diagramDir(kind, "", body)
 }
+
+func diagramDir(kind, dir, body string) string {
+	if dir != "" {
+		dir = ` dir="` + dir + `"`
+	}
+	return `<kapi-diagram type="` + kind + `"` + dir + ` data-kapi-id="dddddddd">` + "\n" + body + "\n</kapi-diagram>"
+}
+
+var dirs = []string{"tb", "lr"}
 
 func TestDiagramLayoutIsDeterministic(t *testing.T) {
 	for name, body := range flowSources() {
 		for _, kind := range []string{"flow", "sequence"} {
-			src := diagram(kind, body)
-			first := render(t, src)
-			for i := 0; i < 20; i++ {
-				if got := render(t, src); got != first {
-					t.Fatalf("%s %s: render %d differs from the first", kind, name, i)
+			for _, dir := range dirs {
+				src := diagramDir(kind, dir, body)
+				first := render(t, src)
+				for i := 0; i < 20; i++ {
+					if got := render(t, src); got != first {
+						t.Fatalf("%s %s %s: render %d differs from the first", kind, dir, name, i)
+					}
 				}
 			}
 		}
@@ -105,18 +117,53 @@ func diagramBoxes(t *testing.T, out string) []box {
 
 func TestFlowLayoutHasNoOverlaps(t *testing.T) {
 	for name, body := range flowSources() {
-		out := render(t, diagram("flow", body))
-		if strings.Contains(out, "kapi-error") {
-			t.Fatalf("%s: %s", name, out)
+		for _, dir := range dirs {
+			out := render(t, diagramDir("flow", dir, body))
+			if strings.Contains(out, "kapi-error") {
+				t.Fatalf("%s %s: %s", dir, name, out)
+			}
+			assertNoOverlaps(t, dir+" "+name, diagramBoxes(t, out))
 		}
-		boxes := diagramBoxes(t, out)
-		for i := range boxes {
-			for j := i + 1; j < len(boxes); j++ {
-				if boxes[i].r.overlaps(boxes[j].r) {
-					t.Errorf("%s: %s %q overlaps %s %q", name, boxes[i].class, boxes[i].text, boxes[j].class, boxes[j].text)
-				}
+	}
+}
+
+func assertNoOverlaps(t *testing.T, name string, boxes []box) {
+	t.Helper()
+	for i := range boxes {
+		for j := i + 1; j < len(boxes); j++ {
+			if boxes[i].r.overlaps(boxes[j].r) {
+				t.Errorf("%s: %s %q overlaps %s %q", name, boxes[i].class, boxes[i].text, boxes[j].class, boxes[j].text)
 			}
 		}
+	}
+}
+
+func TestFlowLeftToRightPointsRight(t *testing.T) {
+	out := render(t, diagramDir("flow", "lr", "a -> b\nb -> c\na -> c"))
+	x := map[string]float64{}
+	for _, b := range diagramBoxes(t, out) {
+		x[b.text] = b.r.x
+	}
+	if x["a"] >= x["b"] || x["b"] >= x["c"] {
+		t.Errorf("lr flow layers are not left to right: %v", x)
+	}
+	if !strings.Contains(out, `data-kapi-dir="lr"`) {
+		t.Errorf("rendered diagram does not say its direction: %s", out)
+	}
+	if tb := render(t, diagram("flow", "a -> b")); !strings.Contains(tb, `data-kapi-dir="tb"`) {
+		t.Errorf("flow should default to tb: %s", tb)
+	}
+}
+
+func TestSequenceIgnoresDir(t *testing.T) {
+	plain := render(t, diagram("sequence", "a -> b: hi"))
+	for _, dir := range []string{"lr", "tb", "sideways"} {
+		if got := render(t, diagramDir("sequence", dir, "a -> b: hi")); got != plain {
+			t.Errorf("dir=%s changed a sequence diagram:\n%s\n%s", dir, got, plain)
+		}
+	}
+	if strings.Contains(plain, "data-kapi-dir") {
+		t.Errorf("a sequence diagram has no direction to flip: %s", plain)
 	}
 }
 
