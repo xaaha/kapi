@@ -40,7 +40,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow` or `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence) |
+| `<kapi-diagram>` | `type` = `flow` or `sequence`; optional `dir` = `tb` (flow default) or `lr`, ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence) |
 | `<kapi-badge>` | optional `tone` = `neutral` (default), `info`, `success`, `warning`, `danger`, `accent` | short inline text; allowed inside prose and table cells |
 | `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
@@ -50,7 +50,8 @@ load and writes the file back. Ids never change after that.
 Unknown `kapi-*` elements render as a visible error box, never silently.
 
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
-rendered preset. Prose elements render to the same HTML as their source.
+rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
+direction it was drawn in. Prose elements render to the same HTML as their source.
 
 ### Editing
 

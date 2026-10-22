@@ -87,7 +87,8 @@ func (s *Store) Source() ([]byte, uint64) {
 	{
 		Name:    "kapi-diagram",
 		Summary: "A flow chart or sequence diagram drawn from one edge per line",
-		Example: `<!-- type: flow (default, top to bottom) or sequence (lifelines, messages in order).
+		Example: `<!-- type: flow (default) or sequence (lifelines, messages in order).
+     dir: tb (top to bottom, the default for flow) or lr (left to right). Sequence diagrams ignore dir.
      Body: one edge per line, "a -> b: label". The label is optional. "a --> b" draws a dashed line.
      A line with only a name declares a node (flow) or fixes participant order (sequence). Keep it under ~15 nodes. -->
 <kapi-diagram type="flow">
