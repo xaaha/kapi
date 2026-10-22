@@ -38,7 +38,10 @@ const (
 	cursorsFile = "cursors.json"
 )
 
-var syncFile = (*os.File).Sync
+var (
+	syncFile   = (*os.File).Sync
+	renameFile = os.Rename
+)
 
 func Open(dir string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -223,7 +226,7 @@ func writeCursors(path string, cursors map[string]uint64) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := renameFile(tmp, path); err != nil {
 		return err
 	}
 	return syncDir(filepath.Dir(path))
