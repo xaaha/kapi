@@ -86,24 +86,33 @@ func Open(home, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(s.dir, "revs"), 0o700); err != nil {
 		return nil, err
 	}
-	for dir, base := range map[string]string{filepath.Dir(path): filepath.Base(path), s.dir: "", filepath.Join(s.dir, "revs"): "", filepath.Join(s.dir, "raw"): ""} {
-		if err := removeTemps(dir, base); err != nil {
+	for _, dir := range []string{s.dir, filepath.Join(s.dir, "revs"), filepath.Join(s.dir, "raw")} {
+		temps, err := findTemps(dir, "")
+		if err != nil {
 			return nil, err
 		}
+		for _, tmp := range temps {
+			if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+		}
 	}
+	var st state
 	b, err := os.ReadFile(filepath.Join(s.dir, "state.json"))
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
 		return nil, err
 	default:
-		var st state
 		if err := json.Unmarshal(b, &st); err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Join(s.dir, "state.json"), err)
 		}
-		if err := s.load(&st); err != nil {
-			return nil, err
-		}
+	}
+	if err := s.load(&st); err != nil {
+		return nil, err
+	}
+	if err := s.restoreDisplaced(&st); err != nil {
+		return nil, err
 	}
 	for attempt := 0; ; attempt++ {
 		raw, err := os.ReadFile(path)
@@ -147,6 +156,53 @@ func (s *Store) load(st *state) error {
 	}
 	if after, err := os.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
 		s.src, s.rev, s.undo = after, st.Next.Rev, st.Next.Undo
+	}
+	return nil
+}
+
+func (s *Store) restoreDisplaced(st *state) error {
+	temps, err := findTemps(filepath.Dir(s.path), filepath.Base(s.path))
+	if err != nil || len(temps) == 0 {
+		return err
+	}
+	var known [][]byte
+	for _, r := range []*state{st, st.Next} {
+		if r != nil && r.Rev > 0 {
+			b, err := os.ReadFile(s.revPath(r.Rev))
+			if err != nil {
+				return err
+			}
+			known = append(known, b)
+		}
+	}
+	isKnown := func(b []byte) bool { return slices.ContainsFunc(known, func(k []byte) bool { return bytes.Equal(k, b) }) }
+	for _, tmp := range temps {
+		theirs, err := os.ReadFile(tmp)
+		if err != nil {
+			return err
+		}
+		if !isKnown(theirs) {
+			page, err := os.ReadFile(s.path)
+			if err != nil {
+				return err
+			}
+			if !isKnown(page) {
+				continue
+			}
+			err = swapIn(tmp, s.path, theirs, page)
+			if errors.Is(err, errFileChanged) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if err := syncDir(filepath.Dir(s.path)); err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
@@ -403,28 +459,26 @@ func (s *Store) saveState(st state) error {
 
 const tempMark = ".kapi-"
 
-func removeTemps(dir, base string) error {
+func findTemps(dir, base string) ([]string, error) {
 	ents, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var temps []string
 	for _, e := range ents {
 		name, ok := strings.CutPrefix(e.Name(), ".")
 		i := strings.LastIndex(name, tempMark)
 		if !ok || i < 1 || (base != "" && name[:i] != base) {
 			continue
 		}
-		if _, err := strconv.ParseUint(name[i+len(tempMark):], 10, 64); err != nil {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		if _, err := strconv.ParseUint(name[i+len(tempMark):], 10, 64); err == nil {
+			temps = append(temps, filepath.Join(dir, e.Name()))
 		}
 	}
-	return nil
+	return temps, nil
 }
 
 func writeAtomic(path string, b []byte) error {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -261,11 +262,78 @@ func TestUndoKeepsAFileEditMadeWhileKapiWasDown(t *testing.T) {
 	}
 }
 
-func TestOpenRemovesOnlyItsOwnTempFiles(t *testing.T) {
+const agentWrite = "<p>agent wrote this</p>\n"
+
+func TestRestoreChildProcess(t *testing.T) {
+	path := os.Getenv("KAPI_RESTORE_PAGE")
+	if path == "" {
+		t.Skip("runs only as the child of TestOpenRestoresAnAgentWriteAKillLeftInATempFile")
+	}
+	s := open(t, os.Getenv("KAPI_RESTORE_HOME"), path)
+	replaceHook = func(stage string) {
+		switch stage {
+		case "swap":
+			agentRename(t, path, agentWrite)
+		case "restore":
+			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			select {}
+		}
+	}
+	_, _, _ = s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	t.Fatal("the restore swap never ran")
+}
+
+func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(exe, "-test.run=^TestRestoreChildProcess$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "KAPI_RESTORE_HOME="+home, "KAPI_RESTORE_PAGE="+path)
+	out, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+		t.Fatalf("child was not killed in the restore window: %v\n%s", err, out)
+	}
+	if got := onDisk(t, path); got != oneBlockUno {
+		t.Fatalf("page after the kill is %q, want kapi's edit with the agent's write displaced", got)
+	}
+	s := open(t, home, path)
+	if src, _ := s.Source(); !strings.Contains(string(src), "agent wrote this") {
+		t.Errorf("after reopening, the source is %q; the agent's write is lost", src)
+	}
+	if got := onDisk(t, path); !strings.Contains(got, "agent wrote this") {
+		t.Errorf("after reopening, the page file is %q; the agent's write is lost", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.kapi-*")); len(left) > 0 {
+		t.Errorf("temp files left %v", left)
+	}
+}
+
+func TestOpenKeepsAnUnknownTempFileWhenThePageChangedSince(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	open(t, home, path)
+	tmp := filepath.Join(filepath.Dir(path), ".plan.html.kapi-7")
+	if err := os.WriteFile(tmp, []byte(agentWrite), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	externalWrite(t, path, oneBlockUno)
+	open(t, home, path)
+	if b, err := os.ReadFile(tmp); err != nil || string(b) != agentWrite {
+		t.Errorf("temp file now %q, %v; want it kept, since its bytes are in no revision", b, err)
+	}
+	if got := onDisk(t, path); got != oneBlockUno {
+		t.Errorf("page = %q, want the newer edit kept", got)
+	}
+}
+
+func TestOpenRemovesOnlyItsOwnTempFilesThatHoldARevision(t *testing.T) {
 	home, path := newPage(t, crashStart)
+	open(t, home, path)
 	dir := filepath.Dir(path)
 	for _, name := range []string{".plan.html.kapi-123", ".other.html.kapi-123", ".plan.html.kapi-notes", "plan.html.kapi-123"} {
-		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(crashStart), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
