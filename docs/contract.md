@@ -141,7 +141,7 @@ demand it runs `kapi daemon --reopen`. Once HTTP is serving, that daemon
 opens the new URL of each collected page whose file still exists, newest
 `viewing` first, at most 5, with the same opener as `kapi open`. It logs
 each reopen to `$KAPI_HOME/daemon.log` by page path. It reopens nothing when
-`KAPI_NO_BROWSER` is set, on Linux when neither `DISPLAY` nor
+`KAPI_NO_BROWSER`, `CI`, `SSH_CONNECTION` or `SSH_TTY` is set, on Linux when neither `DISPLAY` nor
 `WAYLAND_DISPLAY` is set, or when run as plain `kapi daemon` in the
 foreground. A page whose opener fails is not reported as `reopened`.
 When `kapi open <page>` is what starts the daemon, the client adds

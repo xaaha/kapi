@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,7 +38,13 @@ func newE2E(t *testing.T) *e2e {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &e2e{t: t, bin: bin, home: home, env: append(os.Environ(), "KAPI_HOME="+home), page: filepath.Join(dir, "plan.html")}
+	var env []string
+	for _, kv := range os.Environ() {
+		if name, _, _ := strings.Cut(kv, "="); !slices.Contains([]string{"KAPI_NO_BROWSER", "SSH_CONNECTION", "SSH_TTY", "CI"}, name) {
+			env = append(env, kv)
+		}
+	}
+	e := &e2e{t: t, bin: bin, home: home, env: append(env, "KAPI_HOME="+home), page: filepath.Join(dir, "plan.html")}
 	e.fakeOpeners(dir)
 	t.Cleanup(func() {
 		e.killDaemon()

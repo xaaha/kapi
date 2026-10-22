@@ -205,7 +205,7 @@ func daemonCmd() *cli.Command {
 		Flags: fs,
 		Long: "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.\n" +
 			"With --reopen, up to 5 pages whose browser tab was open when the daemon last stopped open again,\n" +
-			"unless KAPI_NO_BROWSER is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
+			"unless KAPI_NO_BROWSER, CI, SSH_CONNECTION or SSH_TTY is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
 		Run: func([]string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -218,8 +218,13 @@ func daemonCmd() *cli.Command {
 }
 
 func daemonBrowser(reopen bool, getenv func(string) string, goos string) func(url string) error {
-	if !reopen || getenv("KAPI_NO_BROWSER") != "" {
+	if !reopen {
 		return nil
+	}
+	for _, v := range []string{"KAPI_NO_BROWSER", "SSH_CONNECTION", "SSH_TTY", "CI"} {
+		if getenv(v) != "" {
+			return nil
+		}
 	}
 	if goos == "linux" && getenv("DISPLAY") == "" && getenv("WAYLAND_DISPLAY") == "" {
 		return nil

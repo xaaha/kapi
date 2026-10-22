@@ -27,6 +27,10 @@ func TestTheDaemonGetsABrowserOnlyWhenStartedOnDemandWithADisplay(t *testing.T) 
 		{"KAPI_NO_BROWSER", true, map[string]string{"KAPI_NO_BROWSER": "1"}, "darwin", false},
 		{"KAPI_NO_BROWSER with a display", true, map[string]string{"KAPI_NO_BROWSER": "1", "DISPLAY": ":0"}, "linux", false},
 		{"Linux without a display", true, nil, "linux", false},
+		{"SSH on macOS", true, map[string]string{"SSH_CONNECTION": "10.0.0.1 22 10.0.0.2 22"}, "darwin", false},
+		{"SSH TTY on Linux with a display", true, map[string]string{"SSH_TTY": "/dev/pts/0", "DISPLAY": ":0"}, "linux", false},
+		{"CI on macOS", true, map[string]string{"CI": "true"}, "darwin", false},
+		{"CI on Linux with a display", true, map[string]string{"CI": "1", "DISPLAY": ":0"}, "linux", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opened := stubBrowser(t, nil)
