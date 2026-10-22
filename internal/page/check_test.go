@@ -68,3 +68,13 @@ func TestCheckIsStaleOnlyWhenItsTaskChanged(t *testing.T) {
 		t.Errorf("check at rev 2 after the task itself changed: err = %v, want ErrStale", err)
 	}
 }
+
+func TestUncheckRemovesEveryDoneOnTheTask(t *testing.T) {
+	home, path := newPage(t, "<kapi-checklist data-kapi-id=\"llllllll\">\n  <kapi-task done data-kapi-id=\"aaaaaaaa\" done=\"\">Copy</kapi-task>\n</kapi-checklist>\n")
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "check", ID: "aaaaaaaa", Done: false})
+	want := "<kapi-checklist data-kapi-id=\"llllllll\">\n  <kapi-task data-kapi-id=\"aaaaaaaa\">Copy</kapi-task>\n</kapi-checklist>\n"
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file:\n%s\nwant:\n%s", got, want)
+	}
+}

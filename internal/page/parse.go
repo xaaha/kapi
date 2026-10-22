@@ -315,14 +315,17 @@ func setFlag(src []byte, e *element, key string) []byte {
 }
 
 func removeAttr(src []byte, e *element, key string) []byte {
-	from, _, to, ok := attrValue(src[e.start:e.tagEnd], key)
-	if !ok {
-		return src
+	tag := src[e.start:e.tagEnd]
+	for {
+		from, _, to, ok := attrValue(tag, key)
+		if !ok {
+			return splice(src, e.start, e.tagEnd, string(tag))
+		}
+		for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(tag[from-1])) {
+			from--
+		}
+		tag = splice(tag, from, to, "")
 	}
-	for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(src[e.start+from-1])) {
-		from--
-	}
-	return splice(src, e.start+from, e.start+to, "")
 }
 
 func attrValue(tag []byte, key string) (int, int, int, bool) {
