@@ -794,3 +794,33 @@ test("a refused check puts the box back and says why", async () => {
   assert.equal(await checked("tttttttt"), false);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="tttttttt"] input').disabled`), false);
 });
+
+const DIAGRAMS = [
+  { id: "ffffffff", html: '<figure class="kapi-diagram kapi-diagram-flow" data-kapi-preset="diagram" data-kapi-dir="tb" data-kapi-id="ffffffff"><svg width="40" height="40"></svg></figure>' },
+  { id: "ssssssss", html: '<figure class="kapi-diagram kapi-diagram-sequence" data-kapi-preset="diagram" data-kapi-id="ssssssss"><svg width="40" height="40"></svg></figure>' },
+  { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' },
+];
+const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+
+test("Flip on a diagram sends an orient op and refetches the diagram", async () => {
+  await reopenWith(DIAGRAMS);
+  await select("ffffffff");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+  await click('.kapi-bar [data-action="flip"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "orient", id: "ffffffff", dir: "lr" } });
+  await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').dataset.kapiDir`)) === "lr");
+  assert.equal(requests("GET", "/blocks/ffffffff").length, 1);
+  await click('.kapi-bar [data-action="flip"]');
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.equal(requests("POST", "/ops")[1].body.op.dir, "tb");
+});
+
+test("sequence diagrams and prose show no Flip", async () => {
+  await reopenWith(DIAGRAMS);
+  for (const id of ["ssssssss", "pppppppp"]) {
+    await select(id);
+    await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.equal(await hasFlip(), false, id);
+  }
+});

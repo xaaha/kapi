@@ -125,7 +125,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (linked) return { status: 422, body: { error: `#${op.id} is linked from #${linked.id}` } };
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
-    if (op.kind === "edit" && state.blocks[i].source) {
+    if (op.kind === "orient") state.blocks[i].html = state.blocks[i].html.replace(/data-kapi-dir="[^"]*"/, `data-kapi-dir="${op.dir}"`);
+    else if (op.kind === "edit" && state.blocks[i].source) {
       state.blocks[i].source = op.html;
       state.blocks[i].html = renderCallout(op.html);
     } else if (op.kind === "edit") state.blocks[i].html = op.html;
@@ -146,7 +147,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks = prev;
     }
     state.rev++;
-    push({ author: "human", kind: "revision", target: op.kind === "edit" ? op.id : "", text: `${op.kind} #${op.id}` });
+    push({ author: "human", kind: "revision", target: op.kind === "edit" || op.kind === "orient" ? op.id : "", text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev } };
   }
 

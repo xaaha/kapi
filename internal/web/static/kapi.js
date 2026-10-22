@@ -160,6 +160,9 @@
       bar.replaceChildren(button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"));
+      if (selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]')) {
+        bar.querySelector('[data-action="edit"]').after(button("Flip", "flip", "Flip between top to bottom and left to right"));
+      }
       bar.querySelector('[data-action="done"]').disabled = state === "done";
       bar.querySelector('[data-action="archive"]').disabled = state === "archived";
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
@@ -340,6 +343,10 @@
     const id = idOf(selected);
     if (name === "edit") return startEdit();
     if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "flip") {
+      const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
+      return (await op("orient", { id, dir }))?.ok && refresh([id]);
+    }
     if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
     const list = peers(selected);
     const i = list.indexOf(selected);
