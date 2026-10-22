@@ -126,10 +126,11 @@ test("deletes an unlinked block", async () => {
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "delete", id: "cccccccc" } });
 });
 
-test("sends a chat message with Ctrl+Enter, targeted at the selected block", async () => {
+test("sends a chat message with Enter, targeted at the selected block", async () => {
+  assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter to send, Shift+Enter for a new line");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("Looks good");
-  await page.key("Enter", { ctrl: true });
+  await page.key("Enter");
   await page.waitFor(`document.querySelector(".kapi-msg .kapi-msg-text")?.textContent === "Looks good"`);
   assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", target: "", text: "Looks good" });
   await page.waitFor(`document.querySelector(".kapi-composer textarea").value === ""`);
@@ -145,6 +146,60 @@ test("sends a chat message with Ctrl+Enter, targeted at the selected block", asy
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").textContent`), "Move the session store to the new clust…");
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").title`), "#bbbbbbbb");
+});
+
+test("Shift+Enter in the composer adds a new line and Enter sends both lines", async () => {
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("line one");
+  await page.key("Enter", { shift: true });
+  await page.type("line two");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/messages").length, 0);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "line one\nline two");
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 1);
+  assert.equal(requests("POST", "/messages")[0].body.text, "line one\nline two");
+});
+
+test("Enter does not send while an input method is composing", async () => {
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("nihon");
+  const sent = await page.eval(`(() => {
+    const input = document.querySelector(".kapi-composer textarea");
+    const events = [{ isComposing: true }, { keyCode: 229 }].map((init) =>
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
+    return events.map((e) => [e.isComposing || e.keyCode === 229, input.dispatchEvent(e)]);
+  })()`);
+  assert.deepEqual(sent, [[true, true], [true, true]]);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/messages").length, 0);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "nihon");
+});
+
+test("plain Enter in the block and source editors is a new line, not a save", async () => {
+  await select("bbbbbbbb");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.key("Enter");
+  await page.type("next line");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 1);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  await page.eval(`(a => a.setSelectionRange(a.value.length, a.value.length))(document.activeElement)`);
+  await page.key("Enter");
+  await page.type("more");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.\nmore");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.equal(requests("POST", "/ops")[0].body.op.inner, "Copy during the <em>quiet</em> window.\nmore");
 });
 
 test("edits a block in place and posts its new outer HTML", async () => {

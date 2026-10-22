@@ -53,7 +53,7 @@
   const composer = h("form", { class: "kapi-composer" },
     targetChip, input,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
-      h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
+      h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, dot, statusText,
       button("Undo", "undo", "Undo the last change")),
@@ -61,8 +61,6 @@
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const root = h("div", { id: "kapi-chrome" }, ring, panel);
   document.body.append(root);
-
-  if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
 
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
@@ -521,6 +519,13 @@
     send();
   });
 
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    if (editing && (e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    send();
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (editing) cancelEdit();
@@ -529,14 +534,9 @@
       else select(null);
       return;
     }
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      if (editing) {
-        e.preventDefault();
-        saveEdit();
-      } else if (document.activeElement === input) {
-        e.preventDefault();
-        send();
-      }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && editing) {
+      e.preventDefault();
+      saveEdit();
     }
   });
 
