@@ -348,9 +348,12 @@ func TestTheAgentsWatchSeesFileEdits(t *testing.T) {
 
 func (e *e2e) seen(seq uint64) {
 	e.t.Helper()
-	if got := e.kapi("seen", e.page, strconv.FormatUint(seq, 10)); got != fmt.Sprintf("seen through #%d\n", seq) {
-		e.t.Fatalf("kapi seen printed %q", got)
-	}
+	waitFor(e.t, "watch to queue the line so kapi seen accepts it", func() bool {
+		cmd := exec.Command(e.bin, "seen", e.page, strconv.FormatUint(seq, 10)) //nolint:gosec // runs the kapi binary this test just built
+		cmd.Env = e.env
+		out, err := cmd.Output()
+		return err == nil && string(out) == fmt.Sprintf("seen through #%d\n", seq)
+	})
 }
 
 func (e *e2e) post(url, text string) uint64 {

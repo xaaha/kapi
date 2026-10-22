@@ -471,7 +471,7 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: "seen needs the number of the last event you read"})
 			return
 		}
-		if err := l.Ack(req.Reader, req.Seq); err != nil {
+		if err := ackHanded(l, req.Reader, req.Seq); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
@@ -578,6 +578,13 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			return
 		}
 	}
+}
+
+func ackHanded(l *eventlog.Log, reader string, seq uint64) error {
+	if queued := l.Queued(reader); seq > queued {
+		return fmt.Errorf("#%d was never handed to %s; the last event handed over is #%d", seq, reader, queued)
+	}
+	return l.Ack(reader, seq)
 }
 
 func ackReply(err error) *Response {

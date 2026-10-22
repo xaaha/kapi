@@ -321,7 +321,8 @@ The seen position moves only to what provably reached the model: a hook as
 above, `kapi pending`, which prints every unseen event and marks it seen, or
 an event number the agent states. `kapi seen <page> <n>` and
 `kapi say --seen <n>` mark every event through `#n` seen; the agent takes `n`
-from the printed lines. A plain `kapi say` moves nothing.
+from the printed lines. An `n` above the reader's queued position names an
+event nothing handed over, so it is refused. A plain `kapi say` moves nothing.
 
 ## Out of scope for phase 2
 
