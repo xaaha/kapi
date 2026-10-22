@@ -636,33 +636,31 @@ func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, qu
 }
 
 func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
-	pages, err := s.listPages()
+	dirs, err := s.pageDirs()
 	if err != nil {
 		return nil, err
 	}
+	dir = resolved(dir)
 	var out []PageStatus
-	for _, p := range pages {
-		if !within(dir, p.Path) {
+	for _, d := range dirs {
+		if d.err != nil || !within(dir, d.path) {
 			continue
 		}
-		if p.Error != "" {
-			out = append(out, p)
-			continue
-		}
-		l, err := s.page(p.Path)
+		l, err := s.page(d.path)
 		if err != nil {
-			out = append(out, PageStatus{Path: p.Path, Error: err.Error()})
+			out = append(out, PageStatus{Path: d.path, Error: err.Error()})
 			continue
 		}
 		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: p.Path, Events: events, Queued: queued})
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued})
 		}
 	}
+	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
 	return out, nil
 }
 
 func within(dir, path string) bool {
-	rel, err := filepath.Rel(resolved(dir), filepath.Join(resolved(filepath.Dir(path)), filepath.Base(path)))
+	rel, err := filepath.Rel(dir, filepath.Join(resolved(filepath.Dir(path)), filepath.Base(path)))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
@@ -702,7 +700,12 @@ func (s *Server) status(page string, l *eventlog.Log) []ReaderStatus {
 	return out
 }
 
-func (s *Server) listPages() ([]PageStatus, error) {
+type pageDir struct {
+	path, dir string
+	err       error
+}
+
+func (s *Server) pageDirs() ([]pageDir, error) {
 	root := filepath.Join(s.home, "pages")
 	dirs, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -711,7 +714,7 @@ func (s *Server) listPages() ([]PageStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []PageStatus
+	var out []pageDir
 	for _, d := range dirs {
 		if !d.IsDir() {
 			continue
@@ -721,11 +724,23 @@ func (s *Server) listPages() ([]PageStatus, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		if err != nil {
-			out = append(out, PageStatus{Path: dir, Error: err.Error()})
+		out = append(out, pageDir{path: strings.TrimSuffix(string(b), "\n"), dir: dir, err: err})
+	}
+	return out, nil
+}
+
+func (s *Server) listPages() ([]PageStatus, error) {
+	dirs, err := s.pageDirs()
+	if err != nil {
+		return nil, err
+	}
+	var out []PageStatus
+	for _, d := range dirs {
+		if d.err != nil {
+			out = append(out, PageStatus{Path: d.dir, Error: d.err.Error()})
 			continue
 		}
-		out = append(out, s.pageStatus(strings.TrimSuffix(string(b), "\n"), dir))
+		out = append(out, s.pageStatus(d.path, d.dir))
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
 	return out, nil
