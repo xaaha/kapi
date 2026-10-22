@@ -100,12 +100,12 @@
   <table>
     <thead><tr><th>PR</th><th>Title</th><th>State</th></tr></thead>
     <tbody>
+      <tr><td>#12</td><td>Drop the v1 socket</td><td><kapi-badge tone="red">failing</kapi-badge></td></tr>
+      <tr><td>#14</td><td>Old session handler</td><td><kapi-badge tone="orange">stale</kapi-badge></td></tr>
       <tr><td>#18</td><td>Edit what you see</td><td><kapi-badge tone="yellow">in review</kapi-badge></td></tr>
       <tr><td>#19</td><td>Light and dark theme</td><td><kapi-badge tone="green">merged</kapi-badge></td></tr>
       <tr><td>#20</td><td>Reopen after restart</td><td><kapi-badge tone="green">merged</kapi-badge></td></tr>
-      <tr><td>#21</td><td>Component system</td><td><kapi-badge tone="blue">open</kapi-badge></td></tr>
-      <tr><td>#14</td><td>Old session handler</td><td><kapi-badge tone="orange">stale</kapi-badge></td></tr>
-      <tr><td>#12</td><td>Drop the v1 socket</td><td><kapi-badge tone="red">failing</kapi-badge></td></tr>
+      <tr><td>#22</td><td>Component system</td><td><kapi-badge tone="blue">open</kapi-badge></td></tr>
     </tbody>
   </table>
 </kapi-table>
@@ -125,12 +125,12 @@ func (s *Store) Source() ([]byte, uint64) {
 }
 </kapi-code>
 <kapi-diff file="internal/page/store.go">
-@@ -12,6 +12,7 @@ type Op struct {
+@@ -12,4 +12,5 @@ type Op struct {
  	Kind   string
  	ID     string
--	HTML   string
-+	HTML   string
+-	State  string
 +	Done   bool
++	Dir    string
  }
 </kapi-diff>
 
