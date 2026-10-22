@@ -690,11 +690,73 @@ test("forms whose names shadow DOM properties still select and submit", async ()
 
 const OVERLAPS = `(() => {
   const b = document.querySelector(".kapi-bar").getBoundingClientRect();
-  return [...document.querySelectorAll("#kapi-page *")].filter((e) => {
-    const r = e.getBoundingClientRect();
-    return r.width && r.height && r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
-  }).map((e) => e.tagName + (e.dataset.kapiId ? "#" + e.dataset.kapiId : ""));
+  const hit = (r) => r.width && r.height && r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
+  const hits = [];
+  const walk = document.createTreeWalker(document.getElementById("kapi-page"), NodeFilter.SHOW_TEXT);
+  for (let n; (n = walk.nextNode()); ) {
+    if (!n.data.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    if ([...range.getClientRects()].some(hit)) hits.push(n.data.trim().slice(0, 24));
+  }
+  for (const e of document.querySelectorAll("#kapi-page :is(input, img, svg, textarea, button)")) if (hit(e.getBoundingClientRect())) hits.push(e.tagName);
+  return hits;
 })()`;
+
+const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+
+test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
+  const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
+  assert.ok(bar.left >= el.right && bar.left - el.right <= 16 && Math.abs(bar.top - el.top) <= 1, JSON.stringify({ bar, el }));
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="save"]')`);
+  const editing = await barBox();
+  assert.ok(Math.abs(editing.left - bar.left) <= 1 && Math.abs(editing.top - bar.top) <= 1, JSON.stringify({ bar, editing }));
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+});
+
+test("on a tall block the toolbar stays in view while the block scrolls", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
+  await select("cccccccc");
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+  await page.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
+  await page.waitFor(`(b => b.top >= 0 && b.bottom <= innerHeight)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+  await page.eval(`scrollTo(0, document.body.scrollHeight)`);
+  await page.waitFor(`(b => b.bottom <= document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().bottom + 1)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+});
+
+test("in a narrow window the toolbar goes inside the ring above the block's content", async () => {
+  const narrow = await browser.open(server.url, { width: 900, height: 700 });
+  try {
+    await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "inside"`);
+    assert.equal(await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-bar-room")`), true);
+    const [bar, el] = await narrow.eval(`[".kapi-bar", '[data-kapi-id="bbbbbbbb"]'].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+    assert.ok(bar.top >= el.top && bar.right <= el.right && bar.left >= el.left, JSON.stringify({ bar, el }));
+    assert.deepEqual(await narrow.eval(OVERLAPS), []);
+    await narrow.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
+    await narrow.waitFor(`!!document.querySelector('.kapi-bar [data-action="save"]') && document.querySelector(".kapi-bar").dataset.place === "inside"`);
+    assert.deepEqual(await narrow.eval(OVERLAPS), []);
+    await narrow.eval(`document.querySelector('.kapi-bar [data-action="cancel"]').click()`);
+    await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
+    await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "inside"`);
+    await narrow.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
+    await narrow.waitFor(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`);
+    assert.deepEqual(await narrow.eval(OVERLAPS), []);
+    assert.equal(await narrow.eval(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").checkVisibility()`), true);
+    await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await narrow.waitFor(`!document.querySelector('[data-kapi-id="cccccccc"]').hasAttribute("data-kapi-bar-room")`);
+  } finally {
+    await narrow.close();
+  }
+});
 
 test("the block toolbar never covers page content", async () => {
   await select("bbbbbbbb");
@@ -709,6 +771,9 @@ test("the block toolbar never covers page content", async () => {
   try {
     await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`), true);
+    await phone.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
+    await phone.waitFor(`!!document.querySelector('.kapi-panel .kapi-bar [data-action="save"]')`);
     await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-panel").getBoundingClientRect().height`);
   } finally {
     await phone.close();

@@ -61,7 +61,11 @@
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log,
       h("div", { class: "kapi-presence", role: "status" }, dot, statusText)), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, ring, panel);
+  const roomStyle = h("style");
+  const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
+  const phone = matchMedia("(max-width: 760px)");
+  const BAR_GAP = 12;
+  let room = null;
   document.body.append(root);
 
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
@@ -168,7 +172,55 @@
     placeRing();
   }
 
+  function setRoom(el, px) {
+    if (room?.el === el && room.px === px) return;
+    if (room && room.el !== el) room.el.removeAttribute("data-kapi-bar-room");
+    if (!el) {
+      room = null;
+      roomStyle.textContent = "";
+      return;
+    }
+    const base = room?.el === el ? room.base : parseFloat(getComputedStyle(el).paddingTop) || 0;
+    room = { el, px, base };
+    el.setAttribute("data-kapi-bar-room", "");
+    roomStyle.textContent = `#kapi-page [data-kapi-bar-room] { padding-top: ${base + px}px !important; }`;
+  }
+
+  function dockBar(floating) {
+    if (floating && bar.parentElement !== root) root.append(bar);
+    if (!floating && bar.parentElement !== panel) panel.insertBefore(bar, composer);
+    if (!floating) bar.removeAttribute("data-place");
+  }
+
+  function placeBar() {
+    const target = editing?.box || selected;
+    if (phone.matches || bar.hidden || !target?.isConnected) {
+      dockBar(false);
+      return setRoom(null);
+    }
+    dockBar(true);
+    bar.dataset.place = "outside";
+    const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    let r = target.getBoundingClientRect();
+    let { width, height } = bar.getBoundingClientRect();
+    if (r.right + BAR_GAP + width <= areaRight - 4) {
+      setRoom(null);
+      r = target.getBoundingClientRect();
+      bar.style.left = `${r.right + BAR_GAP}px`;
+      bar.style.top = `${Math.max(r.top, Math.min(8, r.bottom - height))}px`;
+      return;
+    }
+    bar.dataset.place = "inside";
+    ({ width, height } = bar.getBoundingClientRect());
+    setRoom(target, Math.ceil(height) + 8);
+    r = target.getBoundingClientRect();
+    if (r.top + 4 < 0) return dockBar(false);
+    bar.style.left = `${r.right - width - 4}px`;
+    bar.style.top = `${r.top + 4}px`;
+  }
+
   function placeRing() {
+    placeBar();
     ring.hidden = bar.hidden || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
@@ -354,6 +406,7 @@
     copy.removeAttribute("contenteditable");
     copy.removeAttribute("data-kapi-selected");
     copy.removeAttribute("data-kapi-excerpt");
+    copy.removeAttribute("data-kapi-bar-room");
     return copy.outerHTML;
   }
 

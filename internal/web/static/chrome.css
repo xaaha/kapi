@@ -181,6 +181,25 @@
   background: var(--kapi-surface);
 }
 
+#kapi-chrome > .kapi-bar {
+  position: fixed;
+  z-index: 2147483000;
+  padding: 4px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  box-shadow: var(--kapi-shadow);
+  flex-wrap: nowrap;
+}
+
+#kapi-chrome > .kapi-bar[data-place="outside"] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#kapi-chrome > .kapi-bar[data-place="outside"] .kapi-bar-label {
+  padding: 4px 6px;
+}
+
 #kapi-chrome .kapi-bar-label {
   padding: 0 8px 0 6px;
   font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
