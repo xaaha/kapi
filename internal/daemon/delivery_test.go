@@ -1,8 +1,11 @@
 package daemon
 
 import (
+	"encoding/json"
+	"net"
 	"slices"
 	"testing"
+	"time"
 )
 
 func texts(r *Response) []string {
@@ -11,6 +14,46 @@ func texts(r *Response) []string {
 		out = append(out, e.Text)
 	}
 	return out
+}
+
+func TestWaitRepliesOnceAnUnseenEventIsNotQueuedAndRepeatsTheUnseenOnes(t *testing.T) {
+	home, _, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	first := call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "first"}).Event.Seq
+	if got := call(t, home, &Request{Op: "wait", Page: path, Reader: "agent"}); !slices.Equal(texts(&got), []string{"first"}) {
+		t.Fatalf("wait = %+v, want the waiting message", got)
+	}
+	call(t, home, &Request{Op: "queue", Page: path, Reader: "agent", Seq: first})
+
+	conn, err := net.Dial("unix", SocketPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := json.NewEncoder(conn).Encode(Request{Op: "wait", Page: path, Reader: "agent"}); err != nil {
+		t.Fatal(err)
+	}
+	replies := make(chan Response, 1)
+	go func() {
+		var r Response
+		if json.NewDecoder(conn).Decode(&r) == nil {
+			replies <- r
+		}
+	}()
+	select {
+	case r := <-replies:
+		t.Fatalf("wait replied %+v although everything unseen was already queued", r)
+	case <-time.After(300 * time.Millisecond):
+	}
+	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "second"})
+	select {
+	case r := <-replies:
+		if !slices.Equal(texts(&r), []string{"first", "second"}) {
+			t.Fatalf("wait = %v, want the queued but unseen message again with the new one", texts(&r))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("wait did not reply to a new message")
+	}
 }
 
 func TestAReplyMarksSeenOnlyWhatWasQueued(t *testing.T) {

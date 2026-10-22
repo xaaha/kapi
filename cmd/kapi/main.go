@@ -60,6 +60,7 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Config: &cli.Config{Out: out},
 		Run:    func([]string) error { return homeView(c, out) },
 		SubCommands: []*cli.Command{
+			waitCmd(c, out, sleep),
 			watchCmd(c, out, sleep),
 			messageCmd(c, out, "say", "", "Reply on a page as the agent, which marks every event you were shown as seen"),
 			seenCmd(c, out),
@@ -84,7 +85,7 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Short: "Stream a page's events, one line each",
 		Long: "Stream every unseen event on a page, one line each, and keep streaming. Reconnects if the daemon restarts.\n" +
 			"A printed line shows as Queued on the page until you run kapi say, kapi pending or kapi seen, so a\n" +
-			"restarted watch prints every unseen event again.",
+			"restarted watch prints every unseen event again. Prefer kapi wait where lines can be delayed or dropped.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -114,6 +115,53 @@ func watch(c api, page, reader string, out io.Writer, sleep func(time.Duration))
 		}
 		fmt.Fprintln(os.Stderr, "kapi: daemon connection lost, reconnecting")
 		sleep(500 * time.Millisecond)
+	}
+}
+
+func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
+	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
+	reader := fs.String("reader", "agent", "Reader name; each reader keeps its own position")
+	return &cli.Command{
+		Name:  "wait",
+		Short: "Wait for a page's next event, print every unseen one, and exit",
+		Long: "Block until the page has an event you have not been handed yet, print every unseen event, one line each,\n" +
+			"and exit. Run it as a background command whose exit wakes you, and start it again each time it exits.\n" +
+			"Printed events show as Queued on the page until you run kapi say, kapi pending or kapi seen.",
+		Flags: fs,
+		Args:  []cli.ArgDef{pageArg},
+		Examples: []cli.Example{
+			{Command: "kapi wait plan.html", Description: "Wait for the human's next message"},
+		},
+		Run: func(args []string) error {
+			page, err := pagePath(args, 1, "wait")
+			if err != nil {
+				return err
+			}
+			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
+			for {
+				resp, err := c.Do(&daemon.Request{Op: "wait", Page: page, Reader: *reader})
+				if errors.Is(err, client.ErrConnectionLost) {
+					fmt.Fprintln(os.Stderr, "kapi: daemon connection lost, reconnecting")
+					sleep(500 * time.Millisecond)
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				for i := range resp.Events {
+					if _, err := fmt.Fprintln(out, eventLine(&resp.Events[i])); err != nil {
+						return err
+					}
+				}
+				if len(resp.Events) == 0 {
+					continue
+				}
+				_, err = c.Do(&daemon.Request{Op: "queue", Page: page, Reader: *reader, Seq: resp.Events[len(resp.Events)-1].Seq})
+				return err
+			}
+		},
 	}
 }
 
@@ -407,7 +455,7 @@ func homeView(c api, out io.Writer) error {
 		}
 	}
 	b.WriteString(`next:
-  kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
+  kapi wait <page>        wait for the next event, print every unseen one and exit; run it in the background, again after each exit
   kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
   kapi seen <page>        show the human you read what was printed, without replying
   kapi pending <page>     list unseen events and mark them seen

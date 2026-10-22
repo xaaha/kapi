@@ -217,7 +217,7 @@ pages[2]:
   /w/plan.html: agent 2 unread (watching), codex 0 unread
   /w/notes.html: agent 0 unread
 next:
-  kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
+  kapi wait <page>        wait for the next event, print every unseen one and exit; run it in the background, again after each exit
   kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
   kapi seen <page>        show the human you read what was printed, without replying
   kapi pending <page>     list unseen events and mark them seen
@@ -236,7 +236,7 @@ func TestHomeViewWithNoPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "pages: none yet\n") || !strings.Contains(out, "kapi watch <page>") {
+	if !strings.Contains(out, "pages: none yet\n") || !strings.Contains(out, "kapi wait <page>") {
 		t.Errorf("home view:\n%s", out)
 	}
 }
@@ -319,6 +319,19 @@ func TestEventLinesCarryNoTerminalControls(t *testing.T) {
 	e := &eventlog.Event{Seq: 4, Author: "human\x1b[31m", Kind: "revision", Target: "a\x1b[2J", Text: "edited \"\x1b]0;owned\x07\x1b[2J\u202ex\""}
 	if got, want := eventLine(e), `#4 human[31m revision on #a[2J: edited "]0;owned[2Jx"`; got != want {
 		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
+func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{{Seq: 2, Author: "human", Kind: "message", Text: "one"}, {Seq: 5, Author: "human", Kind: "answer", Text: "two"}}}}
+	out, err := run(t, f, "wait", "--reader", "codex", "plan.html")
+	if err != nil || out != "#2 human message: one\n#5 human answer: two\n" {
+		t.Fatalf("wait = %q, %v", out, err)
+	}
+	page := abs(t, "plan.html")
+	want := []daemon.Request{{Op: "wait", Page: page, Reader: "codex"}, {Op: "queue", Page: page, Reader: "codex", Seq: 5}}
+	if len(f.requests) != 2 || f.requests[0] != want[0] || f.requests[1] != want[1] {
+		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
 }
 

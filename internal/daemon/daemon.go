@@ -421,7 +421,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "ack", "queue", "seen", "watch":
+	case "pending", "ack", "queue", "seen", "watch", "wait":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -463,6 +463,8 @@ func (s *Server) handle(conn net.Conn) {
 		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
 		s.watch(dec, enc, &req, l)
+	case "wait":
+		s.wait(dec, enc, &req, l)
 	default:
 		reply(enc, &Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
 	}
@@ -564,6 +566,36 @@ func ackReply(err error) *Response {
 		return &Response{Error: err.Error()}
 	}
 	return &Response{}
+}
+
+func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eventlog.Log) {
+	s.attach(req.Page, req.Reader, l)
+	defer s.detach(req.Page, req.Reader, l)
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		var discard json.RawMessage
+		for {
+			if dec.Decode(&discard) != nil {
+				return
+			}
+		}
+	}()
+	for {
+		_, changed := l.After(^uint64(0))
+		events, _, queued := l.Unseen(req.Reader)
+		if len(events) > 0 && events[len(events)-1].Seq > queued {
+			reply(enc, &Response{Events: events})
+			return
+		}
+		select {
+		case <-changed:
+		case <-gone:
+			return
+		case <-s.stopping:
+			return
+		}
+	}
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {

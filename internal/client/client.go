@@ -86,7 +86,7 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 	}
 	var resp daemon.Response
 	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
-		return daemon.Response{}, err
+		return daemon.Response{}, fmt.Errorf("%w: %v", ErrConnectionLost, err)
 	}
 	if resp.Error != "" {
 		return resp, fmt.Errorf("%s", resp.Error)

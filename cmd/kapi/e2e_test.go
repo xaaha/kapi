@@ -431,3 +431,60 @@ func TestAPrintedMessageIsQueuedAndSeenOnlyWhenTheAgentActs(t *testing.T) {
 	e.kapi("say", e.page, "yes")
 	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }
+
+func (e *e2e) start(stdin string, args ...string) (*exec.Cmd, *bytes.Buffer) {
+	e.t.Helper()
+	cmd := exec.Command(e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
+	cmd.Env = e.env
+	cmd.Stdin = strings.NewReader(stdin)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Start(); err != nil {
+		e.t.Fatal(err)
+	}
+	e.t.Cleanup(func() { _ = cmd.Process.Kill() })
+	return cmd, &out
+}
+
+func exited(cmd *exec.Cmd, within time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(within):
+		return false
+	}
+}
+
+func TestWaitExitsWithTheMessageWithinSecondsAndTheReplyMarksItSeen(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	wait, out := e.start("", "wait", e.page)
+	waitFor(t, "the wait to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	sent := time.Now()
+	seq := e.post(url, "are you there?")
+	if !exited(wait, 3*time.Second) {
+		t.Fatal("kapi wait did not exit within 3s of the message")
+	}
+	if !strings.HasSuffix(out.String(), " human message: are you there?\n") {
+		t.Fatalf("wait printed %q", out.String())
+	}
+	t.Logf("message reached the agent in %v", time.Since(sent))
+	if read, queued := receipts(t, url); queued < seq || read >= seq {
+		t.Fatalf("read %d, queued %d; want #%d queued and not yet seen", read, queued, seq)
+	}
+
+	again, _ := e.start("", "wait", e.page)
+	if exited(again, 500*time.Millisecond) {
+		t.Fatal("a second kapi wait exited at once with nothing new")
+	}
+	e.kapi("say", e.page, "yes")
+	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
+}
