@@ -608,8 +608,8 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
 		}
 	}
-	text, shown := hookText(resp.Pages)
-	if text == "" || (hook.StopActive && len(shown) == 0) {
+	text, shown := hookText(resp.Pages, hook.Event != "PostToolUse")
+	if text == "" || (hook.StopActive && !slices.ContainsFunc(shown, func(s shownThrough) bool { return s.Seen > 0 })) {
 		return nil
 	}
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
@@ -622,10 +622,13 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		return err
 	}
 	for _, s := range shown {
-		if _, err := c.Do(&daemon.Request{Op: "queue", Page: s.Path, Reader: "agent", Seq: s.Seq}); err != nil {
+		if _, err := c.Do(&daemon.Request{Op: "queue", Page: s.Path, Reader: "agent", Seq: s.Queue}); err != nil {
 			return err
 		}
-		if _, err := c.Do(&daemon.Request{Op: "seen", Page: s.Path, Reader: "agent", Seq: s.Seq}); err != nil {
+		if s.Seen == 0 {
+			continue
+		}
+		if _, err := c.Do(&daemon.Request{Op: "seen", Page: s.Path, Reader: "agent", Seq: s.Seen}); err != nil {
 			return err
 		}
 	}
@@ -635,41 +638,48 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 const hookTextLimit = 9000
 
 type shownThrough struct {
-	Path string
-	Seq  uint64
+	Path  string
+	Seen  uint64
+	Queue uint64
 }
 
-func hookText(pages []daemon.PageStatus) (string, []shownThrough) {
+func hookText(pages []daemon.PageStatus, repeatCut bool) (string, []shownThrough) {
 	const head = "kapi: new events on a shared page; the human now sees that you read them. Act on them and reply with `kapi say <page> <text>`.\n"
 	var b strings.Builder
 	var shown []shownThrough
-	room := func() int { return hookTextLimit - len(head) - b.Len() - 200 }
+	room := func(page *strings.Builder) int { return hookTextLimit - len(head) - b.Len() - page.Len() - 200 }
 	for _, p := range pages {
 		if p.Error != "" || len(p.Events) == 0 {
 			continue
 		}
 		rest := fmt.Sprintf("  more unseen events here; run `kapi pending %s` to read them\n", p.Path)
-		title := p.Path + ":\n"
-		if room() < len(title)+len(rest) {
+		var page strings.Builder
+		page.WriteString(p.Path + ":\n")
+		if room(&page) < len(rest) {
 			break
 		}
-		b.WriteString(title)
-		var through uint64
+		s := shownThrough{Path: p.Path}
 		for i := range p.Events {
-			line := "  " + eventLine(&p.Events[i]) + "\n"
-			if len(line)+len(rest) <= room() {
-				b.WriteString(line)
-				through = p.Events[i].Seq
+			e := &p.Events[i]
+			line := "  " + eventLine(e) + "\n"
+			if len(line)+len(rest) <= room(&page) {
+				page.WriteString(line)
+				s.Seen, s.Queue = e.Seq, e.Seq
 				continue
 			}
-			if through == 0 {
-				b.WriteString(cut(line, room()-len(rest)) + "…\n")
+			if s.Seen == 0 {
+				if !repeatCut && e.Seq <= p.Queued {
+					break
+				}
+				page.WriteString(cut(line, room(&page)-len(rest)) + "…\n")
+				s.Queue = e.Seq
 			}
-			b.WriteString(rest)
+			page.WriteString(rest)
 			break
 		}
-		if through > 0 {
-			shown = append(shown, shownThrough{p.Path, through})
+		if s.Queue > 0 {
+			b.WriteString(page.String())
+			shown = append(shown, s)
 		}
 	}
 	if b.Len() == 0 {

@@ -316,7 +316,10 @@ show them. Events reach the agent three ways:
   under 9,000 characters, because Claude Code swaps longer context for a short
   preview: the hook shows events whole until the next one would not fit, cuts
   a first event that cannot fit at all, points to `kapi pending <page>` for
-  the rest, and marks seen only through the last event it showed whole. A
+  the rest, and marks seen only through the last event it showed whole. A cut
+  event is queued, so the agent can name it, but stays unseen; `PostToolUse`
+  does not show a queued event that needs cutting again, while
+  `UserPromptSubmit` and `Stop` do. A
   later `Stop` blocks only on events it can show whole and has not shown, so
   it never loops. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.

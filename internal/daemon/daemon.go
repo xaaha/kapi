@@ -56,6 +56,7 @@ type PageStatus struct {
 	Readers []ReaderStatus   `json:"readers,omitempty"`
 	Error   string           `json:"error,omitempty"`
 	Events  []eventlog.Event `json:"events,omitempty"`
+	Queued  uint64           `json:"queued,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -653,8 +654,8 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			out = append(out, PageStatus{Path: p.Path, Error: err.Error()})
 			continue
 		}
-		if events, _ := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: p.Path, Events: events})
+		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
+			out = append(out, PageStatus{Path: p.Path, Events: events, Queued: queued})
 		}
 	}
 	return out, nil

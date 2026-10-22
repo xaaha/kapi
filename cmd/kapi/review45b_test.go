@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func TestReview45bHookContextFitsClaudeCodesTenThousandCharacterCap(t *testing.T
 	if !strings.Contains(reply.HookSpecificOutput.AdditionalContext, "kapi pending /w/plan.html") {
 		t.Errorf("a cut message does not point to kapi pending:\n%s", reply.HookSpecificOutput.AdditionalContext[:300])
 	}
-	if len(f.requests) != 1 {
+	if slices.ContainsFunc(f.requests, func(r daemon.Request) bool { return r.Op == "seen" }) {
 		t.Errorf("requests = %+v; a message the model only saw part of must stay unseen", f.requests)
 	}
 }
