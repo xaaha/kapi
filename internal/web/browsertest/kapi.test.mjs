@@ -429,11 +429,78 @@ test("on phones chat is a composer bar that expands to 40% and collapses back", 
 });
 
 test("Undo renders as a quiet bordered button", async () => {
-  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head button")].map((b) => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
   assert.deepEqual(styles, [["Undo", "1px", "solid"]]);
+});
+
+const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-theme button")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.themeChoice).join()]`);
+const prefer = async (scheme) => {
+  await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
+  await page.waitFor(`matchMedia("(prefers-color-scheme: ${scheme})").matches`);
+};
+const expectTheme = async (want) => {
+  await until(async () => JSON.stringify(await theme()) === JSON.stringify(want)).catch(() => {});
+  assert.deepEqual(await theme(), want);
+};
+const reload = async () => {
+  await page.call("Page.reload");
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-theme")`, 5000);
+};
+
+test("the theme toggle switches light and dark and remembers the choice across a reload", async () => {
+  await prefer("light");
+  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await click('.kapi-theme [data-theme-choice="dark"]');
+  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
+  await reload();
+  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await click('.kapi-theme [data-theme-choice="system"]');
+  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
+});
+
+test("the theme is set before the first paint, not after the chat panel loads", async () => {
+  await page.eval(`localStorage.setItem("kapi-theme", "dark")`);
+  await page.call("Page.addScriptToEvaluateOnNewDocument", {
+    source: `document.addEventListener("readystatechange", () => { if (!window.firstTheme) window.firstTheme = document.documentElement.dataset.theme || "unset"; }, { once: true });`,
+  });
+  await reload();
+  assert.equal(await page.eval(`window.firstTheme`), "dark");
+});
+
+test("System follows the OS colour scheme live, and an explicit choice ignores it", async () => {
+  await prefer("light");
+  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await prefer("dark");
+  await expectTheme(["dark", "rgb(15, 17, 21)", "system"]);
+  await click('.kapi-theme [data-theme-choice="light"]');
+  await prefer("light");
+  await prefer("dark");
+  await expectTheme(["light", "rgb(255, 255, 255)", "light"]);
+});
+
+test("the theme toggle still works when storage is blocked", async () => {
+  await page.call("Page.addScriptToEvaluateOnNewDocument", {
+    source: `Object.defineProperty(window, "localStorage", { get() { throw new DOMException("blocked", "SecurityError"); } });`,
+  });
+  await prefer("light");
+  await reload();
+  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await click('.kapi-theme [data-theme-choice="dark"]');
+  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+});
+
+test("printing stays light when the dark theme is on", async () => {
+  await click('.kapi-theme [data-theme-choice="dark"]');
+  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await page.call("Emulation.setEmulatedMedia", { media: "print" });
+  const bg = await page.eval(`getComputedStyle(document.body).backgroundColor`);
+  await page.call("Emulation.setEmulatedMedia", { media: "" });
+  assert.equal(bg, "rgb(255, 255, 255)");
 });
 
 test("printing hides all chrome and the space it reserves", async () => {

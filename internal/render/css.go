@@ -8,17 +8,21 @@ import (
 	"sync"
 
 	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/styles"
 )
+
+//go:embed theme.css
+var themeCSS []byte
 
 //go:embed style.css
 var baseCSS []byte
 
 var css = sync.OnceValue(func() []byte {
 	var b bytes.Buffer
+	b.Write(themeCSS)
+	b.WriteString("\n")
 	b.Write(baseCSS)
 	b.WriteString("\n")
-	tokenCSS(&b, styles.Get("github"))
+	tokenCSS(&b)
 	return b.Bytes()
 })
 
@@ -26,8 +30,7 @@ func CSS() []byte {
 	return bytes.Clone(css())
 }
 
-func tokenCSS(b *bytes.Buffer, style *chroma.Style) {
-	base := style.Get(chroma.Text)
+func tokenCSS(b *bytes.Buffer) {
 	types := make([]chroma.TokenType, 0, len(chroma.StandardTypes))
 	for t, cls := range chroma.StandardTypes {
 		if t >= 0 && cls != "" && cls != "w" {
@@ -36,22 +39,53 @@ func tokenCSS(b *bytes.Buffer, style *chroma.Style) {
 	}
 	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })
 	for _, t := range types {
-		e := style.Get(t)
-		var decl bytes.Buffer
-		if e.Colour.IsSet() && e.Colour != base.Colour {
-			fmt.Fprintf(&decl, "color:%s;", e.Colour)
-		}
-		if e.Bold == chroma.Yes {
-			decl.WriteString("font-weight:600;")
-		}
-		if e.Italic == chroma.Yes {
-			decl.WriteString("font-style:italic;")
-		}
-		if e.Underline == chroma.Yes {
-			decl.WriteString("text-decoration:underline;")
-		}
-		if decl.Len() > 0 {
-			fmt.Fprintf(b, ".kapi-hl .t-%s{%s}\n", chroma.StandardTypes[t], decl.String())
+		if decl := tokenDecl(t); decl != "" {
+			fmt.Fprintf(b, ".kapi-hl .t-%s{%s}\n", chroma.StandardTypes[t], decl)
 		}
 	}
+}
+
+func tokenDecl(t chroma.TokenType) string {
+	code := func(role string) string { return "color:var(--kapi-code-" + role + ");" }
+	switch {
+	case t == chroma.KeywordType:
+		return code("type")
+	case t == chroma.KeywordConstant:
+		return code("constant")
+	case t.InCategory(chroma.Keyword), t == chroma.CommentPreproc, t == chroma.CommentPreprocFile:
+		return code("keyword")
+	case t.InCategory(chroma.Comment):
+		return code("comment") + "font-style:italic;"
+	case t == chroma.NameFunction, t == chroma.NameFunctionMagic, t == chroma.NameDecorator:
+		return code("function")
+	case t == chroma.NameClass, t == chroma.NameBuiltin, t == chroma.NameBuiltinPseudo, t == chroma.NameNamespace, t == chroma.NameException:
+		return code("type")
+	case t == chroma.NameTag:
+		return code("tag")
+	case t == chroma.NameAttribute, t == chroma.NameConstant, t == chroma.NameEntity, t == chroma.NameLabel:
+		return code("constant")
+	case t.InSubCategory(chroma.NameVariable):
+		return code("variable")
+	case t.InSubCategory(chroma.LiteralString):
+		return code("string")
+	case t == chroma.Literal, t == chroma.LiteralDate, t.InSubCategory(chroma.LiteralNumber):
+		return code("constant")
+	case t.InCategory(chroma.Operator):
+		return code("operator")
+	case t == chroma.GenericInserted:
+		return "color:var(--kapi-success);"
+	case t == chroma.GenericDeleted, t == chroma.GenericError, t == chroma.Error:
+		return "color:var(--kapi-danger);"
+	case t == chroma.GenericHeading, t == chroma.GenericSubheading:
+		return "color:var(--kapi-accent);font-weight:600;"
+	case t == chroma.GenericPrompt, t == chroma.GenericOutput, t == chroma.GenericTraceback:
+		return "color:var(--kapi-muted);"
+	case t == chroma.GenericEmph:
+		return "font-style:italic;"
+	case t == chroma.GenericStrong:
+		return "font-weight:600;"
+	case t == chroma.GenericUnderline:
+		return "text-decoration:underline;"
+	}
+	return ""
 }
