@@ -17,6 +17,8 @@
   let editing = null;
   let presence = "none";
   let lastSeq = 0;
+  let readUpTo = 0;
+  let readBy = "";
   let opened = false;
   let busy = false;
   let pending = null;
@@ -476,13 +478,29 @@
     if (near) log.parentElement.scrollTop = log.parentElement.scrollHeight;
   }
 
+  function markRead() {
+    for (const li of log.querySelectorAll('.kapi-msg[data-author="human"]:not([data-read])')) {
+      if (Number(li.dataset.seq) > readUpTo) continue;
+      li.setAttribute("data-read", "");
+      li.querySelector(".kapi-msg-meta").append(h("span", { class: "kapi-read", title: `Seen by ${readBy}`, "aria-label": `Seen by ${readBy}`, text: "\u{1F440}" }));
+    }
+  }
+
   function onEvent(ev) {
+    if (ev.kind === "read") {
+      if (typeof ev.seq === "number" && ev.seq > readUpTo) {
+        readUpTo = ev.seq;
+        readBy = ev.reader || "the agent";
+      }
+      return markRead();
+    }
     if (typeof ev.seq === "number") {
       if (ev.seq <= lastSeq) return;
       lastSeq = ev.seq;
     }
     if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
+    if (ev.kind === "message" || ev.kind === "answer") markRead();
     else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
     else if (ev.kind === "presence") {
       presence = STATUS[ev.text] ? ev.text : "none";

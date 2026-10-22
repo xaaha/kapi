@@ -112,6 +112,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     refuseEvents: false,
     restarted: "",
     refused: 0,
+    read: {},
   };
 
   const pageHTML = () =>
@@ -224,6 +225,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       res.write("retry: 100\n\n");
       const after = Number(req.headers["last-event-id"] || 0);
       for (const ev of state.events.filter((e) => e.seq > after)) res.write(`id: ${ev.seq}\ndata: ${JSON.stringify(ev)}\n\n`);
+      for (const [reader, seq] of Object.entries(state.read)) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
       state.streams.add(res);
       req.on("close", () => state.streams.delete(res));
       return;
@@ -256,6 +258,10 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     state,
     push,
     url: `http://127.0.0.1:${port}/${TOKEN}/p/${PAGE_ID}/`,
+    ack(reader, seq) {
+      state.read[reader] = seq;
+      for (const res of state.streams) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
+    },
     dropStreams() {
       for (const res of state.streams) res.destroy();
       state.streams.clear();

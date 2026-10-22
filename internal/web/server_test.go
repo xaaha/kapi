@@ -638,6 +638,9 @@ func (s *site) stream(ctx context.Context, lastID string) *sse {
 			if v, ok := strings.CutPrefix(line, "id: "); ok {
 				id = v
 			}
+			if line == "" {
+				id = ""
+			}
 			if v, ok := strings.CutPrefix(line, "data: "); ok {
 				out.msgs <- [2]string{id, v}
 			}
@@ -645,6 +648,54 @@ func (s *site) stream(ctx context.Context, lastID string) *sse {
 		close(out.msgs)
 	}()
 	return out
+}
+
+func (e *sse) raw() (id, data string) {
+	e.t.Helper()
+	select {
+	case m, ok := <-e.msgs:
+		if !ok {
+			e.t.Fatal("stream closed")
+		}
+		return m[0], m[1]
+	case <-time.After(5 * time.Second):
+		e.t.Fatal("no message within 5s")
+	}
+	return "", ""
+}
+
+func TestTheStreamSendsReadPositionsWithoutAnID(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"one"}`)
+	s.post("/messages", `{"kind":"message","text":"two"}`)
+	_, l, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	live := s.stream(ctx, "")
+	for _, want := range []string{"1", "2"} {
+		if id, _ := live.raw(); id != want {
+			t.Fatalf("event id %q, want %s", id, want)
+		}
+	}
+	if err := l.Ack("agent", 1); err != nil {
+		t.Fatal(err)
+	}
+	if id, data := live.raw(); id != "" || data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Fatalf("after an ack: id %q data %s, want a read message with no id", id, data)
+	}
+	s.post("/messages", `{"kind":"message","text":"three"}`)
+	if id, _ := live.raw(); id != "3" {
+		t.Fatalf("event after the read message has id %q, want 3", id)
+	}
+
+	again := s.stream(ctx, "3")
+	if id, data := again.raw(); id != "" || data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Fatalf("a reconnect starts with id %q data %s, want the current read position", id, data)
+	}
 }
 
 func (e *sse) next() (string, eventlog.Event) {

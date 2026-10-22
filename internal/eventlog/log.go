@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,6 +29,7 @@ type Log struct {
 	events  []Event
 	cursors map[string]uint64
 	changed chan struct{}
+	acked   chan struct{}
 }
 
 const (
@@ -51,7 +53,7 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, events: events, cursors: cursors, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -130,7 +132,16 @@ func (l *Log) Ack(reader string, seq uint64) error {
 		return nil
 	}
 	l.cursors[reader] = seq
+	close(l.acked)
+	l.acked = make(chan struct{})
 	return writeCursors(filepath.Join(l.dir, cursorsFile), l.cursors)
+}
+
+// Cursors returns every reader's cursor and a channel closed when the next one advances.
+func (l *Log) Cursors() (map[string]uint64, <-chan struct{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return maps.Clone(l.cursors), l.acked
 }
 
 // Pending returns the events a reader has not acknowledged, leaving out presence events and the reader's own.

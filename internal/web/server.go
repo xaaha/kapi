@@ -11,11 +11,13 @@ import (
 	"html"
 	"io/fs"
 	"log"
+	"maps"
 	"mime"
 	"net/http"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -289,6 +291,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
+	read := map[string]uint64{}
 	for {
 		events, changed := l.After(after)
 		for _, e := range events {
@@ -301,15 +304,35 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 			}
 			after = e.Seq
 		}
+		cursors, acked := l.Cursors()
+		for _, reader := range slices.Sorted(maps.Keys(cursors)) {
+			if seq := cursors[reader]; seq != read[reader] {
+				read[reader] = seq
+				data, err := json.Marshal(readReceipt{Kind: "read", Reader: reader, Seq: seq})
+				if err != nil {
+					return
+				}
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					return
+				}
+			}
+		}
 		if err := rc.Flush(); err != nil {
 			return
 		}
 		select {
 		case <-changed:
+		case <-acked:
 		case <-r.Context().Done():
 			return
 		}
 	}
+}
+
+type readReceipt struct {
+	Kind   string `json:"kind"`
+	Reader string `json:"reader"`
+	Seq    uint64 `json:"seq"`
 }
 
 func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {

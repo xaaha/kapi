@@ -366,6 +366,35 @@ test("ignores Escape and a second save while a save is in flight", async () => {
   assert.equal(await notice(), "");
 });
 
+test("marks human messages the agent has read with eyes, and keeps them after a reconnect", async () => {
+  server.push({ author: "human", kind: "message", text: "first" });
+  server.push({ author: "agent", kind: "message", text: "reply" });
+  server.push({ author: "human", kind: "message", text: "second" });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 3`);
+  const eyes = () => page.eval(`[...document.querySelectorAll(".kapi-msg")].map((m) => m.querySelector(".kapi-read")?.textContent || "")`);
+  assert.deepEqual(await eyes(), ["", "", ""]);
+  server.ack("agent", 2);
+  await until(async () => (await eyes())[0] === "\u{1F440}");
+  assert.deepEqual(await eyes(), ["\u{1F440}", "", ""]);
+  assert.equal(await page.eval(`document.querySelector(".kapi-read").title`), "Seen by agent");
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "1");
+
+  const streams = requests("GET", "/events").length;
+  server.dropStreams();
+  await until(() => requests("GET", "/events").length > streams);
+  server.ack("agent", 3);
+  await until(async () => (await eyes())[2] === "\u{1F440}");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg").length`), 3);
+  assert.equal(requests("GET", "/events").at(-1).headers["last-event-id"], "3");
+});
+
+test("a reconnecting page gets the read position at once", async () => {
+  server.push({ author: "human", kind: "message", text: "seen before load" });
+  server.ack("agent", 1);
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-msg .kapi-read")`);
+});
+
 test("renders markup from events as literal text", async () => {
   const evil = `<img src=x onerror="window.pwned=1">`;
   server.push({ author: evil, kind: "message", target: evil, text: evil });

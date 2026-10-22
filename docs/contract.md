@@ -192,6 +192,14 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `revision` | page changed; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty |
 | `presence` | `text` is `watching`, `busy` or `none` | set the status dot |
 
+Read receipts are not in the event log. When a reader's cursor advances (for
+example `kapi watch` acknowledging a line after printing it), and once right
+after a stream connects, the stream sends a message with no `id:` line, so
+`Last-Event-ID` resume is unaffected, and `data`
+`{"kind":"read","reader":"agent","seq":N}` with that reader's highest
+acknowledged seq. The browser shows 👀 on every human message or answer with
+`seq <= N` for any reader.
+
 The browser keeps nothing: after any reconnect it refetches the page.
 
 ## Agent side

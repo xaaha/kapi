@@ -353,6 +353,12 @@
   color: var(--kapi-muted);
 }
 
+#kapi-chrome .kapi-read {
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 1;
+}
+
 #kapi-chrome .kapi-author {
   font-weight: 600;
   color: var(--kapi-text);
