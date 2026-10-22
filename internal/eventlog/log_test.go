@@ -212,7 +212,7 @@ func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
 	dir := t.TempDir()
 	type syncAt struct {
 		name, positions string
-		events        bool
+		events          bool
 	}
 	var syncs []syncAt
 	orig := syncFile
