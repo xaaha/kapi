@@ -93,3 +93,29 @@ func TestAllPresetsSample(t *testing.T) {
 		}
 	}
 }
+
+func TestGalleryUsesEveryPresetAndTone(t *testing.T) {
+	src, err := os.ReadFile("testdata/gallery.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := render(t, string(src))
+	if strings.Contains(out, "kapi-error") {
+		t.Errorf("the gallery renders an error box:\n%s", out)
+	}
+	for _, p := range Presets() {
+		if !strings.Contains(out, `data-kapi-preset="`+strings.TrimPrefix(p.Name, "kapi-")+`"`) {
+			t.Errorf("the gallery does not use %s", p.Name)
+		}
+	}
+	for _, tone := range tones {
+		if strings.Count(out, "kapi-tone-"+tone) < 2 {
+			t.Errorf("the gallery shows the %s tone fewer than twice", tone)
+		}
+	}
+	for _, want := range []string{`kapi-diagram-architecture`, `kapi-diagram-flow`, `kapi-diagram-sequence`, `data-kapi-dir="lr"`, `data-kapi-dir="tb"`, `kd-planned`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the gallery lacks %s", want)
+		}
+	}
+}

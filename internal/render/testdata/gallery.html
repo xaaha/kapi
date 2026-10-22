@@ -1,0 +1,140 @@
+<h1>Kapi component gallery</h1>
+<p>Every preset and every tone on one page. Status pills sit in prose: <kapi-badge tone="neutral">draft</kapi-badge> <kapi-badge tone="info">open</kapi-badge> <kapi-badge tone="success">merged</kapi-badge> <kapi-badge tone="warning">in review</kapi-badge> <kapi-badge tone="danger">failing</kapi-badge> <kapi-badge tone="accent">new</kapi-badge>.</p>
+
+<kapi-kv>
+  <kapi-item key="Owner">Track C, presets</kapi-item>
+  <kapi-item key="Status"><kapi-badge tone="warning">in review</kapi-badge></kapi-item>
+  <kapi-item key="Branch"><code>components</code></kapi-item>
+  <kapi-item key="Rollback">Revert the merge and restart the daemon. Pages keep their source, so nothing on disk changes.</kapi-item>
+</kapi-kv>
+
+<h2>Callouts</h2>
+<kapi-callout kind="note"><p>A note uses the info tone.</p></kapi-callout>
+<kapi-callout kind="key"><p>The key point uses the accent tone.</p></kapi-callout>
+<kapi-callout kind="success"><p>All 12 shards copied and row counts match.</p></kapi-callout>
+<kapi-callout kind="warning"><p>The cutover drops writes for about <strong>30 seconds</strong>.</p></kapi-callout>
+<kapi-callout kind="danger"><p>This deletes the old session table. There is no undo.</p></kapi-callout>
+
+<h2>What exists and what is still a box on paper</h2>
+<kapi-diagram type="architecture">
+  agent: Agent (any harness) | kapi watch: one line per event | kapi say, pending, preset | writes plan.html directly | built
+  plan: plan.html | page source: prose + kapi-* presets | every block has a data-kapi-id | built
+  daemon: kapi daemon (Go, one per machine) | event log and cursors per page | page store: ids, revisions, undo | renders presets to HTML + SVG | review
+  disk: ~/.kapi on disk | pages/&lt;id&gt;/events.ndjson | cursors.json, revs/&lt;n&gt;.html | built
+  browser: Browser page | Select toggle, block toolbar | chat panel, status dot | review
+  hub: Private hub | R2 + Worker + Access | auto-save wiring next | planned
+  agent -> plan: edits file
+  plan <-> daemon: reads, writes ops, notices your edits
+  agent <-> daemon: socket
+  browser <-> daemon: HTTP + SSE
+  daemon -> disk: append
+  daemon --> hub: publish
+</kapi-diagram>
+
+<p>The same kind of diagram flipped top to bottom, with nodes in each tone:</p>
+<kapi-diagram type="architecture" dir="tb">
+  cli: kapi CLI | neutral
+  sock: Unix socket | info
+  store: Page store | success
+  queue: Retry queue | warning
+  dead: Dead letters | danger
+  hub: Hub | accent
+  cli <-> sock: requests
+  sock -> store: ops
+  store -> queue: on failure
+  queue -> dead: after 5 tries
+  store --> hub: publish
+</kapi-diagram>
+
+<h2>Flow, both ways</h2>
+<kapi-diagram type="flow">
+  agent -> page file: writes
+  page file -> daemon: mtime change
+  daemon -> browser: revision event
+  browser -> daemon: op
+  daemon -> page file: applies
+</kapi-diagram>
+<kapi-diagram type="flow" dir="lr">
+  agent -> page file: writes
+  page file -> daemon: mtime change
+  daemon -> browser: revision event
+  browser -> daemon: op
+  daemon -> page file: applies
+</kapi-diagram>
+
+<h2>Sequence</h2>
+<kapi-diagram type="sequence">
+  browser -> daemon: POST /ops
+  daemon -> store: Apply(rev, op)
+  store --> daemon: new rev
+  daemon --> browser: 200 {"rev":N}
+</kapi-diagram>
+
+<h2>Checklist</h2>
+<kapi-checklist>
+  <kapi-task done>Copy the session store to the new cluster</kapi-task>
+  <kapi-task done>Compare row counts</kapi-task>
+  <kapi-task>Flip reads to the <code>new</code> cluster</kapi-task>
+  <kapi-task>Delete the old handler</kapi-task>
+</kapi-checklist>
+
+<kapi-details summary="Why copy before flipping reads?">
+  <p>Copying first lets us compare row counts before any reads move, so a bad copy never serves traffic.</p>
+</kapi-details>
+<kapi-details summary="Open by default" open>
+  <p>Details can start open when most readers need them.</p>
+</kapi-details>
+
+<h2>Plan</h2>
+<kapi-plan>
+  <kapi-step>Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step>Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-risk>Agents editing the file mid-request can race a browser op.</kapi-risk>
+  <kapi-question>Should undo cross an agent edit?</kapi-question>
+</kapi-plan>
+
+<h2>Table</h2>
+<kapi-table sort="on">
+  <table>
+    <thead><tr><th>PR</th><th>Title</th><th>State</th></tr></thead>
+    <tbody>
+      <tr><td>#18</td><td>Edit what you see</td><td><kapi-badge tone="warning">in review</kapi-badge></td></tr>
+      <tr><td>#19</td><td>Light and dark theme</td><td><kapi-badge tone="success">merged</kapi-badge></td></tr>
+      <tr><td>#20</td><td>Reopen after restart</td><td><kapi-badge tone="success">merged</kapi-badge></td></tr>
+      <tr><td>#21</td><td>Component system</td><td><kapi-badge tone="info">open</kapi-badge></td></tr>
+    </tbody>
+  </table>
+</kapi-table>
+
+<h2>Compare</h2>
+<kapi-compare>
+  <kapi-option title="Server-sent events"><p>One long GET per tab. Reconnects with <code>Last-Event-ID</code>.</p></kapi-option>
+  <kapi-option title="WebSocket"><p>Two-way, but needs its own reconnect and replay logic.</p></kapi-option>
+</kapi-compare>
+
+<h2>Code and diff</h2>
+<kapi-code lang="go" file="internal/page/store.go" lines="41-47">
+func (s *Store) Source() ([]byte, uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.src), s.rev
+}
+</kapi-code>
+<kapi-diff file="internal/page/store.go">
+@@ -12,6 +12,7 @@ type Op struct {
+ 	Kind   string
+ 	ID     string
+-	HTML   string
++	HTML   string
++	Done   bool
+ }
+</kapi-diff>
+
+<h2>Your call</h2>
+<kapi-form name="cutover">
+  <kapi-choice name="window">When should the cutover run?
+    <kapi-opt value="tonight">Tonight, 22:00</kapi-opt>
+    <kapi-opt value="weekend">Saturday morning</kapi-opt>
+  </kapi-choice>
+  <kapi-text name="notes">Anything else?</kapi-text>
+</kapi-form>
