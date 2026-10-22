@@ -279,7 +279,7 @@ codex` writes author `codex`; the default is `agent`), so agents watching
 under different reader names see each other's messages, while sessions that
 share one reader name skip each other's. Edits made to the file itself are
 logged with author `file`. `human`, `kapi` and `file` are reserved:
-`watch`, `wait`, `pending`, `seen`, `ack` and `say` refuse them, and the events stream sends
+`watch`, `wait`, `pending`, `seen` and `say` refuse them, and the events stream sends
 no read position for them.
 
 A reader never gets its own events back: `kapi watch` skips events whose
