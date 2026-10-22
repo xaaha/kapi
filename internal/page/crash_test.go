@@ -311,6 +311,29 @@ func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
 	}
 }
 
+func TestASwapLostToAnAgentLeavesNoRevisionInFlight(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	replaceHook = func(stage string) {
+		if stage == "swap" {
+			agentRename(t, path, agentWrite)
+		}
+	}
+	_, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	replaceHook = nil
+	if !errors.Is(err, ErrStale) {
+		t.Fatalf("Apply err = %v, want ErrStale", err)
+	}
+	b, err := os.ReadFile(filepath.Join(s.dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st state
+	if err := json.Unmarshal(b, &st); err != nil || st.Rev != 1 || st.Next != nil {
+		t.Errorf("state.json = %s, %v; want revision 1 with nothing in flight", b, err)
+	}
+}
+
 func TestOpenKeepsAnUnknownTempFileWhenThePageChangedSince(t *testing.T) {
 	home, path := newPage(t, oneBlock)
 	open(t, home, path)
