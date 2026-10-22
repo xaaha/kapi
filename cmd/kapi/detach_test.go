@@ -63,12 +63,11 @@ func TestAnAutostartedDaemonOutlivesTheClientsProcessTree(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
-	pids := e.daemonPIDs()
-	if len(pids) != 1 {
-		t.Fatalf("daemon processes %v, want one", pids)
-	}
-	daemon := pids[0]
+	waitFor(t, "the socket and one daemon", func() bool {
+		_, err := os.Stat(filepath.Join(e.home, "kapi.sock"))
+		return err == nil && len(e.daemonPIDs()) == 1
+	})
+	daemon := e.daemonPIDs()[0]
 	if ppid := parentOf(t, daemon); ppid != 1 {
 		t.Errorf("daemon %d has parent %d, want 1 (the watch is %d)", daemon, ppid, cmd.Process.Pid)
 	}
