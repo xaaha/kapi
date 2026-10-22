@@ -7,7 +7,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A sync client or Finder tag setting an xattr on the held file reverts the human's op.
 func TestReview51XattrOnHeldFileRevertsTheOp(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)

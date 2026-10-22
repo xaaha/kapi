@@ -9,7 +9,6 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 )
 
-// kapi open on a page that needs ids, with no browser tab, leaves the moved-aside file next to the page after the daemon stops.
 func TestReview51OpenWithoutABrowserLeavesTheHeldFile(t *testing.T) {
 	home := shortHome(t)
 	path := writePage(t, "<p>needs an id</p>\n")

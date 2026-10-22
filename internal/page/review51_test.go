@@ -40,7 +40,6 @@ func r51write(t *testing.T, f *os.File, body string) {
 	f.Close()
 }
 
-// A metadata-only change to the held file (chmod to the same mode) is read as an agent write and reverts the human's op.
 func TestReview51CtimeOnlyChangeToHeldFileRevertsTheOp(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -59,7 +58,6 @@ func TestReview51CtimeOnlyChangeToHeldFileRevertsTheOp(t *testing.T) {
 	}
 }
 
-// A metadata-only change to the page (chmod to the same mode) makes kapi delete a held file that has a late agent write.
 func TestReview51CtimeOnlyChangeToPageDropsALateWrite(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -78,7 +76,6 @@ func TestReview51CtimeOnlyChangeToPageDropsALateWrite(t *testing.T) {
 	}
 }
 
-// Three quick refreshes (a browser refetching changed blocks) retire the held file in milliseconds, not about 1s.
 func TestReview51ThreeQuickRefreshesRetireTheHeldFileInMilliseconds(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -97,7 +94,6 @@ func TestReview51ThreeQuickRefreshesRetireTheHeldFileInMilliseconds(t *testing.T
 	}
 }
 
-// A second op right after the first deletes the first op's held file, so a late write into it is lost.
 func TestReview51ASecondOpDeletesTheHeldFileOfTheFirst(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -114,7 +110,6 @@ func TestReview51ASecondOpDeletesTheHeldFileOfTheFirst(t *testing.T) {
 	}
 }
 
-// The page changed by an agent rename, then a later in-place write landed in the held file: kapi deletes the later write, with no kapi-kept copy.
 func TestReview51BothChangedTheLaterHeldWriteIsDeletedUnkept(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -133,7 +128,6 @@ func TestReview51BothChangedTheLaterHeldWriteIsDeletedUnkept(t *testing.T) {
 	}
 }
 
-// Refresh retries after errFileChanged and its next commit deletes the held file at once, so a late write after a restore is lost.
 func TestReview51RefreshRetryDeletesARestoreStageLateWrite(t *testing.T) {
 	for _, gap := range []time.Duration{0, 5 * time.Millisecond} {
 		home, path := newPage(t, r51start)
@@ -170,7 +164,6 @@ func TestReview51RefreshRetryDeletesARestoreStageLateWrite(t *testing.T) {
 	}
 }
 
-// Open without any later refresh leaves the moved-aside file next to the page.
 func TestReview51OpenWithNoRefreshLeavesTheHeldFile(t *testing.T) {
 	home, path := newPage(t, "<p>needs an id</p>\n")
 	open(t, home, path)
@@ -180,7 +173,6 @@ func TestReview51OpenWithNoRefreshLeavesTheHeldFile(t *testing.T) {
 	}
 }
 
-// A kill right after checkHeld's swap-back, when an agent rename raced it, deletes the agent's newest write at the next open.
 func TestReview51KillAfterSwapBackDropsTheNewestWrite(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
@@ -210,7 +202,6 @@ func TestReview51KillAfterSwapBackDropsTheNewestWrite(t *testing.T) {
 	}
 }
 
-// Open after a restart deletes a held file holding a later agent write when the page also changed, with no kapi-kept copy.
 func TestReview51OpenDeletesUnknownHeldBytesUnkept(t *testing.T) {
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
