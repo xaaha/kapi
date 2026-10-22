@@ -34,6 +34,7 @@ type Op struct {
 	ID     string `json:"id"`
 	HTML   string `json:"html,omitempty"`
 	Before string `json:"before,omitempty"`
+	Done   bool   `json:"done,omitempty"`
 }
 
 type Summary struct {
@@ -300,7 +301,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
 	switch op.Kind {
-	case "edit", "done", "archive", "delete":
+	case "edit", "done", "archive", "delete", "check":
 	default:
 		return false
 	}
@@ -467,6 +468,14 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 		return setAttr(src, e, "data-kapi-state", "done"), Summary{Text: "marked done", IDs: one}, nil
 	case "archive":
 		return setAttr(src, e, "data-kapi-state", "archived"), Summary{Text: "archived", IDs: one}, nil
+	case "check":
+		if e.name != "kapi-task" {
+			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)
+		}
+		if op.Done {
+			return setFlag(src, e, "done"), Summary{Text: "checked", IDs: one}, nil
+		}
+		return removeAttr(src, e, "done"), Summary{Text: "unchecked", IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := "moved #" + op.ID + " to the end"

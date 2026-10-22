@@ -283,6 +283,35 @@ func setAttr(src []byte, e *element, key, val string) []byte {
 	return splice(src, at, at, " "+key+"="+quoted)
 }
 
+func setFlag(src []byte, e *element, key string) []byte {
+	if _, _, ok := attrValue(src[e.start:e.tagEnd], key); ok {
+		return src
+	}
+	at := e.start + 1 + len(e.name)
+	return splice(src, at, at, " "+key)
+}
+
+func removeAttr(src []byte, e *element, key string) []byte {
+	tag := src[e.start:e.tagEnd]
+	from, to, ok := attrValue(tag, key)
+	if !ok {
+		return src
+	}
+	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
+	start := from
+	if from != to {
+		start = bytes.LastIndexByte(tag[:from], '=')
+		for isSpace(tag[start-1]) {
+			start--
+		}
+	}
+	start -= len(key)
+	for isSpace(tag[start-1]) {
+		start--
+	}
+	return splice(src, e.start+start, e.start+to, "")
+}
+
 func attrValue(tag []byte, key string) (int, int, bool) {
 	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
 	i := 1
