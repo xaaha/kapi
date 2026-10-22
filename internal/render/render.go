@@ -92,6 +92,8 @@ var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "
 
 var inlinePresets = set("kapi-badge")
 
+func Inline(tag string) bool { return inlinePresets[tag] }
+
 var flowContainers = set("body", "div", "li", "td", "th", "blockquote", "section", "article", "aside", "header", "footer", "details", "dd", "figure", "ul", "ol")
 
 func collectBlocks(n *html.Node, out *[]*html.Node) {

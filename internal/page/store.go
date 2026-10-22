@@ -26,7 +26,7 @@ var (
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
-	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
+	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
 )
 
 type Op struct {
@@ -485,7 +485,7 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 	}
 	if !strings.HasPrefix(root.name, "kapi-") {
 		for _, f := range parse(frag) {
-			if _, ok := f.attr("data-kapi-preset"); ok || strings.HasPrefix(f.name, "kapi-") {
+			if _, ok := f.attr("data-kapi-preset"); ok || (strings.HasPrefix(f.name, "kapi-") && !render.Inline(f.name)) {
 				return nil, ErrPresetInProse
 			}
 		}

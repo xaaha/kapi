@@ -55,7 +55,9 @@ Prose elements (no `data-kapi-preset`) are edited in place and saved as an
 `edit` op with the element's outer HTML. Preset elements are edited as source:
 the browser fetches `GET /p/{id}/source/{block}`, shows it in a textarea, and
 saves the textarea as the `edit` op's `HTML`. Rendered preset HTML is never
-sent back.
+sent back. The `HTML` of a prose element may hold `<kapi-badge>`
+elements, since a badge stays inline; any other `kapi-*` element or a
+`data-kapi-preset` attribute in it is refused with 422.
 
 ## Go interfaces
 
