@@ -1168,6 +1168,15 @@ test("clicking or double-clicking a task's text selects it and never ticks the b
   assert.equal(await checked("uuuuuuuu"), true);
 });
 
+test("clicking a badge selects the block around it, never the badge", async () => {
+  await reopenWith([
+    { id: "pppppppp", html: '<p data-kapi-id="pppppppp">PR #19 is <span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb">merged</span>.</p>' },
+  ]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="pppppppp"]').hasAttribute("data-kapi-selected")`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`), false);
+});
+
 test("a refused check puts the box back and says why", async () => {
   await reopenWith(CHECKLIST);
   server.state.nextOpError = "check needs a kapi-task";

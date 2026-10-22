@@ -341,6 +341,7 @@
     }
   }
 
+  const BLOCK = '[data-kapi-id]:not([data-kapi-preset="badge"])';
   const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
   const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
 
@@ -697,12 +698,12 @@
     if (editing) return;
     const th = closest(e.target, '[data-kapi-sort="on"] th');
     if (th && main.contains(th)) sortTable(th);
-    const el = closest(e.target, "[data-kapi-id]");
+    const el = closest(e.target, BLOCK);
     if (el && main.contains(el)) select(el);
   });
 
   main.addEventListener("dblclick", (e) => {
-    if (!editing && closest(e.target, "[data-kapi-id]") === selected) startEdit();
+    if (!editing && closest(e.target, BLOCK) === selected) startEdit();
   });
 
   main.addEventListener("change", async (e) => {
