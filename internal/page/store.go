@@ -532,7 +532,7 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 	if root.closeStart < root.end {
 		fels := parse(frag)
 		for i := 1; i < len(fels); i++ {
-			if f := &fels[i]; !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && f.end == root.closeStart && !closedByHTML(fels, i) {
+			if f := &fels[i]; !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && !closedByHTML(fels, i) {
 				return nil, ErrInnerEscapes
 			}
 		}
@@ -562,8 +562,7 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
 	out := splice(src, e.start, e.end, string(frag))
-	was, is := topIDs(src), topIDs(out)
-	if lost := slices.DeleteFunc(slices.Clone(was), func(id string) bool { return id == e.id }); !slices.Equal(was, is) && !slices.Equal(lost, is) {
+	if !sameTopLevel(src, out, e.id) {
 		return nil, ErrInnerEscapes
 	}
 	before := dangling(src)
@@ -806,18 +805,32 @@ func nearest(els []element, i int, name string) int {
 	return -1
 }
 
-func topIDs(src []byte) []string {
+func sameTopLevel(src, out []byte, id string) bool {
+	was, wasN := topLevel(src)
+	is, isN := topLevel(out)
+	if slices.Equal(was, is) && isN >= wasN {
+		return true
+	}
+	lost := slices.DeleteFunc(slices.Clone(was), func(v string) bool { return v == id })
+	return slices.Equal(lost, is) && isN >= wasN-1
+}
+
+func topLevel(src []byte) ([]string, int) {
 	canon, err := render.Canonical(src)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	var ids []string
+	n := 0
 	for _, e := range parse(canon) {
-		if e.parent < 0 && e.id != "" {
-			ids = append(ids, e.id)
+		if e.parent < 0 {
+			n++
+			if e.id != "" {
+				ids = append(ids, e.id)
+			}
 		}
 	}
-	return ids
+	return ids, n
 }
 
 var optionalEnd = map[string]bool{

@@ -1354,3 +1354,29 @@ func TestAPresetEndTagDoesNotCloseAnOptionalEnd(t *testing.T) {
 		t.Errorf("err = %v, want ErrInnerEscapes, since HTML ignores a custom element's end tag while a p is open", err)
 	}
 }
+
+func TestAnInnerEditCannotLeaveAnElementOpenInsideAClosedChild(t *testing.T) {
+	for _, src := range []string{
+		"<div data-kapi-id=\"aaaaaaaa\">a</div>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n",
+		"<p data-kapi-id=\"bbbbbbbb\">b</p>\n<div data-kapi-id=\"aaaaaaaa\">a</div>\n",
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<span><b>x</span>`)}); !errors.Is(err, ErrInnerEscapes) {
+			t.Errorf("err = %v, want ErrInnerEscapes", err)
+		}
+		if got := onDisk(t, path); got != src {
+			t.Errorf("refused edit changed the file:\n%s", got)
+		}
+	}
+}
+
+func TestTheTopLevelCheckCountsBlocksWithoutIDs(t *testing.T) {
+	before := []byte(`<div data-kapi-id="aaaaaaaa">a</div><hr>`)
+	if !sameTopLevel(before, before, "aaaaaaaa") {
+		t.Error("an unchanged page differs from itself")
+	}
+	if sameTopLevel(before, []byte(`<div data-kapi-id="aaaaaaaa">a<hr></div>`), "aaaaaaaa") {
+		t.Error("a page that lost a top-level block without an id passed")
+	}
+}
