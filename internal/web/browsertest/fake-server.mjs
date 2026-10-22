@@ -14,8 +14,9 @@ h1 { font-size: 30px; line-height: 1.2; }
 [data-kapi-sort="on"] th { cursor: pointer; text-align: left; }
 [data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: " \\2191"; }
 [data-kapi-sort="on"] th[aria-sort="descending"]::after { content: " \\2193"; }
-.callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
-.callout p { margin: 0; }
+.kapi-callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
+.kapi-callout-label { font: 600 12px sans-serif; text-transform: uppercase; }
+.kapi-code pre { margin: 0; padding: 12px; background: #f6f6f4; font: 13px monospace; }
 form { display: grid; gap: 10px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
 `;
 
@@ -48,7 +49,7 @@ export const SAMPLE = [
     source: '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p><kapi-callout kind="note">Freeze writes.</kapi-callout></div>',
     html:
       '<div data-kapi-id="hhhhhhhh"><p>Before the cutover:</p>' +
-      '<aside data-kapi-preset="callout" class="callout"><p>Freeze writes.</p></aside></div>',
+      '<aside data-kapi-preset="callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">Freeze writes.</div></aside></div>',
   },
   {
     id: "iiiiiiii",
@@ -63,17 +64,41 @@ export const SAMPLE = [
     id: "ffffffff",
     source: '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window.</kapi-callout>',
   },
+  {
+    id: "jjjjjjjj",
+    source: '<kapi-code data-kapi-id="jjjjjjjj" lang="go">if a &lt; b {\n\tswap()\n}</kapi-code>',
+  },
 ];
 
-const renderCallout = (src) =>
-  src.replace(
-    /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
-    '<aside$1 data-kapi-preset="kapi-callout" class="callout"><p>$2</p></aside>',
-  );
+const renderSource = (src) =>
+  src
+    .replace(
+      /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
+      '<aside$1 data-kapi-preset="kapi-callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">$2</div></aside>',
+    )
+    .replace(
+      /^<kapi-code([^>]*)>([\s\S]*)<\/kapi-code>$/,
+      '<figure$1 data-kapi-preset="code" class="kapi-code"><pre><code>$2</code></pre></figure>',
+    );
+
+const escapeText = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function setCells(html, cells) {
+  let row = -1;
+  return html.replace(/<tr>([\s\S]*?)<\/tr>/g, (tr, body) => {
+    row++;
+    let col = -1;
+    return tr.replace(/<(t[hd])([^>]*)>([\s\S]*?)<\/\1>/g, (cell, tag, attrs, text) => {
+      col++;
+      const c = cells.find((x) => x.row === row && x.col === col);
+      return c ? `<${tag}${attrs}>${escapeText(c.text)}</${tag}>` : cell;
+    });
+  });
+}
 
 const tags = (src) => src.match(/^(<[^>]*>)([\s\S]*)(<\/[\w-]+>)$/);
 
-const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderCallout(b.source) } : { ...b });
+const withHTML = (b) => (b.source && !b.html ? { ...b, html: renderSource(b.source) } : { ...b });
 
 export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const state = {
@@ -115,12 +140,13 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const [, open, , close] = tags(b.source ?? b.html);
       if (b.source) {
         b.source = open + op.inner + close;
-        b.html = renderCallout(b.source);
+        b.html = renderSource(b.source);
       } else b.html = open + op.inner + close;
     } else if (op.kind === "edit" && state.blocks[i].source) {
       state.blocks[i].source = op.html;
-      state.blocks[i].html = renderCallout(op.html);
+      state.blocks[i].html = renderSource(op.html);
     } else if (op.kind === "edit") state.blocks[i].html = op.html;
+    else if (op.kind === "cells") state.blocks[i].html = setCells(state.blocks[i].html, op.cells);
     else if (op.kind === "delete") state.blocks.splice(i, 1);
     else if (op.kind === "archive" || op.kind === "unarchive") {
       const html = state.blocks[i].html.replace(/ data-kapi-state="[^"]*"/, "");
@@ -136,7 +162,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks = prev;
     }
     state.rev++;
-    const target = op.kind === "edit" || op.kind === "archive" || op.kind === "unarchive" ? op.id : "";
+    const target = ["edit", "cells", "archive", "unarchive"].includes(op.kind) ? op.id : "";
     push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev } };
   }

@@ -216,7 +216,7 @@ test("plain Enter in the block and source editors is a new line, not a save", as
   await page.key("Escape");
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
 
-  await select("ffffffff");
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.eval(`(a => a.setSelectionRange(a.value.length, a.value.length))(document.activeElement)`);
@@ -224,10 +224,59 @@ test("plain Enter in the block and source editors is a new line, not a save", as
   await page.type("more");
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(requests("POST", "/ops").length, 0);
-  assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.\nmore");
+  assert.equal(await page.eval(`document.activeElement.value`), "if a &lt; b {\n\tswap()\n}\nmore");
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
-  assert.equal(requests("POST", "/ops")[0].body.op.inner, "Copy during the <em>quiet</em> window.\nmore");
+  assert.equal(requests("POST", "/ops")[0].body.op.inner, "if a &lt; b {\n\tswap()\n}\nmore");
+});
+
+test("edits a prose preset's rendered body in place and saves it as inner", async () => {
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
+  assert.equal(await page.eval(`document.activeElement.isContentEditable`), true);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"] .kapi-callout-label').isContentEditable`), false);
+  await page.type(" Then verify.");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "ffffffff", inner: "Copy during the <em>quiet</em> window. Then verify." } });
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(server.state.blocks.find((b) => b.id === "ffffffff").source, '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window. Then verify.</kapi-callout>');
+});
+
+test("a prose preset whose body does not round-trip to its source is edited as source", async () => {
+  const b = server.state.blocks.find((x) => x.id === "ffffffff");
+  b.html = b.html.replace("<em>quiet</em>", "<b>quiet</b>");
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector('[data-kapi-id="ffffffff"] b')`);
+  await select("ffffffff");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.");
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
+});
+
+test("edits table cells in place as text and sends only the changed cells", async () => {
+  await click('[data-kapi-id="gggggggg"] th');
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-selected")`);
+  await click('[data-kapi-id="gggggggg"] th');
+  const order = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody td:first-child')].map((td) => td.textContent).join(",")`);
+  assert.notEqual(await order(), "beta,Alpha,gamma");
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.querySelectorAll('[data-kapi-id="gggggggg"] [contenteditable="plaintext-only"]').length === 8`);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
+  await page.eval(`(() => {
+    const cell = [...document.querySelectorAll('[data-kapi-id="gggggggg"] td')].find((td) => td.textContent === "beta");
+    cell.focus();
+    getSelection().selectAllChildren(cell);
+  })()`);
+  await page.type("b<e>ta & co");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "cells", id: "gggggggg", cells: [{ row: 1, col: 0, text: "b<e>ta & co" }] } });
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] td').textContent`)) === "b<e>ta & co");
 });
 
 test("edits a block in place and posts its new outer HTML", async () => {
@@ -390,7 +439,7 @@ test("a save sends the rev from when the edit started, and a stale save keeps th
 });
 
 test("a stale source save keeps the source text", async () => {
-  await select("ffffffff");
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   const mine = "Mine.";
@@ -432,26 +481,26 @@ test("server error text renders as text in the notice", async () => {
   assert.equal(await page.eval(`window.pwned`), undefined);
 });
 
-test("edits a preset block as source in a textarea", async () => {
-  await select("ffffffff");
+test("edits a code block as its inner source in a textarea", async () => {
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
-  assert.deepEqual(requests("GET", "/source/ffffffff").map((r) => r.search), ["?part=inner"]);
-  assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.");
+  assert.deepEqual(requests("GET", "/source/jjjjjjjj").map((r) => r.search), ["?part=inner"]);
+  assert.equal(await page.eval(`document.activeElement.value`), "if a &lt; b {\n\tswap()\n}");
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
   assert.equal(await page.eval(`getComputedStyle(document.activeElement).fontFamily.includes("mono")`), true);
 
-  await page.eval(`document.activeElement.value = "Copy at night."`);
+  await page.eval(`document.activeElement.value = "swap()"`);
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
-  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "ffffffff", inner: "Copy at night." } });
-  await until(async () => (await text("ffffffff")) === "Copy at night.");
-  assert.equal(server.state.blocks.find((b) => b.id === "ffffffff").source, '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy at night.</kapi-callout>');
+  assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "edit", id: "jjjjjjjj", inner: "swap()" } });
+  await until(async () => (await text("jjjjjjjj")) === "swap()");
+  assert.equal(server.state.blocks.find((b) => b.id === "jjjjjjjj").source, '<kapi-code data-kapi-id="jjjjjjjj" lang="go">swap()</kapi-code>');
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
 });
 
 test("saving a source edit with no change just closes the editor", async () => {
-  await select("ffffffff");
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.key("Enter", { ctrl: true });
@@ -460,13 +509,13 @@ test("saving a source edit with no change just closes the editor", async () => {
 });
 
 test("Escape cancels a source edit and shows the block again", async () => {
-  await select("ffffffff");
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.type("junk");
   await page.key("Escape");
   await page.waitFor(`!document.querySelector(".kapi-source")`);
-  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').checkVisibility()`), true);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').checkVisibility()`), true);
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
@@ -603,7 +652,7 @@ test("the block toolbar never covers page content", async () => {
   await select("bbbbbbbb");
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
-  await select("ffffffff");
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
@@ -652,16 +701,16 @@ test("on phones Send sits to the right of the composer on the same row", async (
 });
 
 test("the source editor is labelled and takes the block's place", async () => {
-  await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').style.margin = "20px 0"`);
-  const before = await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').getBoundingClientRect().top + scrollY`);
-  await select("ffffffff");
+  await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').style.margin = "20px 0"`);
+  const before = await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').getBoundingClientRect().top + scrollY`);
+  await select("jjjjjjjj");
   await click('.kapi-bar [data-action="edit"]');
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   const [label, top] = await page.eval(`(() => {
     const box = document.querySelector(".kapi-source").closest(".kapi-source-box");
     return [box.querySelector(".kapi-source-label").textContent, box.getBoundingClientRect().top + scrollY];
   })()`);
-  assert.equal(label, "Editing source of: callout");
+  assert.equal(label, "Editing source of: code");
   assert.ok(Math.abs(top - before) <= 1, `editor at ${top}, block was at ${before}`);
 });
 
