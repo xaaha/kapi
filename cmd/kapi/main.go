@@ -61,7 +61,8 @@ func newRoot(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Run:    func([]string) error { return homeView(c, out) },
 		SubCommands: []*cli.Command{
 			watchCmd(c, out, sleep),
-			messageCmd(c, out, "say", "", "Reply on a page as the agent"),
+			messageCmd(c, out, "say", "", "Reply on a page as the agent, which marks every event you were shown as seen"),
+			seenCmd(c, out),
 			messageCmd(c, out, "send", "human", "Send a message on a page as the human"),
 			pendingCmd(c, out),
 			statusCmd(c, out),
@@ -81,7 +82,9 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 	return &cli.Command{
 		Name:  "watch",
 		Short: "Stream a page's events, one line each",
-		Long:  "Stream every unread event on a page, one line each, and keep streaming.\nReconnects if the daemon restarts. Each line is acknowledged after it is printed.",
+		Long: "Stream every unseen event on a page, one line each, and keep streaming. Reconnects if the daemon restarts.\n" +
+			"A printed line shows as Queued on the page until you run kapi say, kapi pending or kapi seen, so a\n" +
+			"restarted watch prints every unseen event again.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -111,6 +114,32 @@ func watch(c api, page, reader string, out io.Writer, sleep func(time.Duration))
 		}
 		fmt.Fprintln(os.Stderr, "kapi: daemon connection lost, reconnecting")
 		sleep(500 * time.Millisecond)
+	}
+}
+
+func seenCmd(c api, out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("seen", flag.ContinueOnError)
+	reader := fs.String("reader", "agent", "Reader name")
+	return &cli.Command{
+		Name:  "seen",
+		Short: "Mark every event handed to you as seen, without replying",
+		Flags: fs,
+		Args:  []cli.ArgDef{pageArg},
+		Run: func(args []string) error {
+			page, err := pagePath(args, 1, "seen")
+			if err != nil {
+				return err
+			}
+			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
+			resp, err := c.Do(&daemon.Request{Op: "seen", Page: page, Reader: *reader})
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(out, "seen through #%d\n", resp.Event.Seq)
+			return err
+		},
 	}
 }
 
@@ -156,7 +185,7 @@ func pendingCmd(c api, out io.Writer) *cli.Command {
 	reader := fs.String("reader", "agent", "Reader name")
 	return &cli.Command{
 		Name:  "pending",
-		Short: "List unread events without consuming them",
+		Short: "List unseen events and mark them seen",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Run: func(args []string) error {
@@ -379,8 +408,9 @@ func homeView(c api, out io.Writer) error {
 	}
 	b.WriteString(`next:
   kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
-  kapi say <page> <text>  reply on a page
-  kapi pending <page>     list unread events without consuming them
+  kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
+  kapi seen <page>        show the human you read what was printed, without replying
+  kapi pending <page>     list unseen events and mark them seen
   kapi --help             every command
 `)
 	_, err = io.WriteString(out, b.String())

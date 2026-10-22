@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -229,7 +231,7 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w.event(t); got != "human message on #cutover: second note" {
 		t.Fatalf("second event = %q", got)
 	}
-	waitFor(t, "acks for #1 and #2", func() bool { return e.kapi("pending", e.page) == "" })
+	e.seen()
 
 	w.kill9(t)
 	e.kapi("send", e.page, "sent while the watcher is dead")
@@ -241,6 +243,7 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	if got := w2.event(t); got != "human message: sent while the watcher is dead" {
 		t.Fatalf("after restart, first event = %q, want only the message sent while it was dead", got)
 	}
+	e.seen()
 
 	e.killDaemon()
 	e.kapi("send", e.page, "after the daemon restarted")
@@ -340,4 +343,91 @@ func TestTheAgentsWatchSeesFileEdits(t *testing.T) {
 			t.Errorf("kapi %v: %v\n%s; want a reserved reader error", args, err, out)
 		}
 	}
+}
+
+func (e *e2e) seen() {
+	e.t.Helper()
+	waitFor(e.t, "every printed event to be seen", func() bool {
+		e.kapi("seen", e.page)
+		return strings.Contains(e.kapi("status", e.page), ", 0 unread")
+	})
+}
+
+func (e *e2e) post(url, text string) uint64 {
+	e.t.Helper()
+	body, err := json.Marshal(map[string]string{"kind": "message", "text": text})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	req, err := http.NewRequest("POST", url+"messages", bytes.NewReader(body))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://"+req.URL.Host)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct{ Seq uint64 }
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || resp.StatusCode != http.StatusOK {
+		e.t.Fatalf("POST messages: %s %v", resp.Status, err)
+	}
+	return out.Seq
+}
+
+func receipts(t *testing.T, url string) (read, queued uint64) {
+	t.Helper()
+	c := &http.Client{Timeout: 300 * time.Millisecond}
+	resp, err := c.Get(url + "events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		var r struct {
+			Kind, Reader string
+			Seq          uint64
+		}
+		data, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok || json.Unmarshal([]byte(data), &r) != nil || r.Reader != "agent" {
+			continue
+		}
+		switch r.Kind {
+		case "read":
+			read = r.Seq
+		case "queued":
+			queued = r.Seq
+		}
+	}
+	return read, queued
+}
+
+func TestAPrintedMessageIsQueuedAndSeenOnlyWhenTheAgentActs(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	w := e.watch()
+	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	seq := e.post(url, "are you there?")
+	if got := w.event(t); got != "human message: are you there?" {
+		t.Fatalf("watch printed %q", got)
+	}
+	waitFor(t, "the message to be queued", func() bool { _, q := receipts(t, url); return q >= seq })
+	if read, _ := receipts(t, url); read >= seq {
+		t.Fatalf("read position %d covers #%d although the agent only had it printed", read, seq)
+	}
+
+	w.kill9(t)
+	again := e.watch()
+	if got := again.event(t); got != "human message: are you there?" {
+		t.Fatalf("a new watch printed %q, want the unseen message again", got)
+	}
+
+	e.kapi("say", e.page, "yes")
+	waitFor(t, "the reply to mark it seen", func() bool { read, _ := receipts(t, url); return read >= seq })
 }

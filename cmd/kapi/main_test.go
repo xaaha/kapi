@@ -218,8 +218,9 @@ pages[2]:
   /w/notes.html: agent 0 unread
 next:
   kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
-  kapi say <page> <text>  reply on a page
-  kapi pending <page>     list unread events without consuming them
+  kapi say <page> <text>  reply on a page; the page then shows the human you read what was printed
+  kapi seen <page>        show the human you read what was printed, without replying
+  kapi pending <page>     list unseen events and mark them seen
   kapi --help             every command
 `
 	if out != want {
@@ -318,5 +319,16 @@ func TestEventLinesCarryNoTerminalControls(t *testing.T) {
 	e := &eventlog.Event{Seq: 4, Author: "human\x1b[31m", Kind: "revision", Target: "a\x1b[2J", Text: "edited \"\x1b]0;owned\x07\x1b[2J\u202ex\""}
 	if got, want := eventLine(e), `#4 human[31m revision on #a[2J: edited "]0;owned[2Jx"`; got != want {
 		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
+func TestSeenReportsHowFarItMarked(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 9}}}
+	out, err := run(t, f, "seen", "plan.html")
+	if err != nil || out != "seen through #9\n" {
+		t.Fatalf("seen = %q, %v", out, err)
+	}
+	if f.requests[0].Op != "seen" || f.requests[0].Reader != "agent" {
+		t.Errorf("request = %+v", f.requests[0])
 	}
 }

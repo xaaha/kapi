@@ -94,7 +94,7 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 	return resp, nil
 }
 
-// Watch streams events to fn and acknowledges each one after fn returns nil.
+// Watch streams events to fn and marks each one queued after fn returns nil.
 func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error {
 	conn, err := c.dial("")
 	if err != nil {
@@ -117,7 +117,7 @@ func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error
 		if err := fn(resp); err != nil {
 			return err
 		}
-		if err := enc.Encode(daemon.Request{Op: "ack", Seq: resp.Event.Seq}); err != nil {
+		if err := enc.Encode(daemon.Request{Op: "queue", Seq: resp.Event.Seq}); err != nil {
 			return err
 		}
 	}

@@ -353,12 +353,6 @@ func (s *Server) PagePath(id string) (string, error) {
 	return strings.TrimSuffix(string(b), "\n"), err
 }
 
-func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {
-	s.presenceMu.Lock()
-	defer s.presenceMu.Unlock()
-	s.setPresenceLocked(path, reader, state, l)
-}
-
 func (s *Server) attach(path, reader string, l *eventlog.Log) {
 	s.presenceMu.Lock()
 	defer s.presenceMu.Unlock()
@@ -427,7 +421,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "ack", "watch":
+	case "pending", "ack", "queue", "seen", "watch":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -440,18 +434,31 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		if e.Kind == "message" && s.presenceOf(req.Page, e.Author) == "busy" {
-			s.setPresence(req.Page, e.Author, "watching", l)
+		if e.Author != "" && eventlog.CheckReader(e.Author) == nil {
+			if err := l.Ack(e.Author, l.Queued(e.Author)); err != nil {
+				reply(enc, &Response{Error: err.Error()})
+				return
+			}
 		}
 		reply(enc, &Response{Event: &e})
 	case "pending":
-		reply(enc, &Response{Events: l.Pending(req.Reader)})
-	case "ack":
-		if err := l.Ack(req.Reader, req.Seq); err != nil {
+		events, through, _ := l.Unseen(req.Reader)
+		if err := l.Ack(req.Reader, through); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, &Response{})
+		reply(enc, &Response{Events: events})
+	case "seen":
+		seq := l.Queued(req.Reader)
+		if err := l.Ack(req.Reader, seq); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Event: &eventlog.Event{Seq: seq}})
+	case "ack":
+		reply(enc, ackReply(l.Ack(req.Reader, req.Seq)))
+	case "queue":
+		reply(enc, ackReply(l.Queue(req.Reader, req.Seq)))
 	case "status":
 		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
@@ -476,12 +483,6 @@ func (s *Server) open(enc *json.Encoder, path string) {
 	reply(enc, resp)
 }
 
-func (s *Server) presenceOf(path, reader string) string {
-	s.presenceMu.Lock()
-	defer s.presenceMu.Unlock()
-	return s.presence[path][reader]
-}
-
 func reply(enc *json.Encoder, resp *Response) {
 	if err := enc.Encode(resp); err != nil {
 		log.Printf("reply: %v", err)
@@ -497,8 +498,8 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	defer s.detach(req.Page, req.Reader, l)
 
 	ack := func(seq uint64) {
-		if err := l.Ack(req.Reader, seq); err != nil {
-			log.Printf("ack %s %d: %v", req.Reader, seq, err)
+		if err := l.Queue(req.Reader, seq); err != nil {
+			log.Printf("queue %s %d: %v", req.Reader, seq, err)
 		}
 	}
 	var mu sync.Mutex
@@ -549,9 +550,6 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			if err := enc.Encode(Response{Event: &e}); err != nil {
 				return
 			}
-			if e.Author == "human" && (e.Kind == "message" || e.Kind == "answer") {
-				s.setPresence(req.Page, req.Reader, "busy", l)
-			}
 		}
 		select {
 		case <-changed:
@@ -559,6 +557,13 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			return
 		}
 	}
+}
+
+func ackReply(err error) *Response {
+	if err != nil {
+		return &Response{Error: err.Error()}
+	}
+	return &Response{}
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {

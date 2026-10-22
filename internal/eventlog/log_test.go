@@ -83,6 +83,41 @@ func TestAckIsMonotonic(t *testing.T) {
 	}
 }
 
+func TestQueuedSurvivesReopenAndNeverTrailsSeen(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"a", "b", "c"} {
+		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := l.Queue("agent", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Queue("agent", 4); err == nil {
+		t.Error("queue past the end should fail")
+	}
+	l.Close()
+	if l, err = Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	if q, c := l.Queued("agent"), l.Cursor("agent"); q != 2 || c != 0 {
+		t.Fatalf("after reopen queued = %d, seen = %d; want 2 and 0", q, c)
+	}
+	if len(l.Pending("agent")) != 3 {
+		t.Errorf("pending = %+v, want every queued event still unseen", l.Pending("agent"))
+	}
+	if err := l.Ack("agent", 3); err != nil {
+		t.Fatal(err)
+	}
+	if q := l.Queued("agent"); q != 3 {
+		t.Errorf("queued = %d after seeing #3, want 3", q)
+	}
+}
+
 func TestCorruptCursorsFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {

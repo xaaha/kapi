@@ -752,6 +752,38 @@ func TestTheStreamSendsReadPositionsWithoutAnID(t *testing.T) {
 	}
 }
 
+func TestTheStreamSendsTheQueuedPositionApartFromTheReadOne(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"one"}`)
+	s.post("/messages", `{"kind":"message","text":"two"}`)
+	_, l, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	live := s.stream(ctx, "2")
+	if err := l.Queue("agent", 2); err != nil {
+		t.Fatal(err)
+	}
+	if id, data := live.raw(); id != "" || data != `{"kind":"queued","reader":"agent","seq":2}` {
+		t.Fatalf("after a queue: id %q data %s, want a queued message with no id", id, data)
+	}
+	if err := l.Ack("agent", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, data := live.raw(); data != `{"kind":"read","reader":"agent","seq":1}` {
+		t.Fatalf("after an ack: data %s, want the read position alone", data)
+	}
+
+	again := s.stream(ctx, "2")
+	for _, want := range []string{`{"kind":"queued","reader":"agent","seq":2}`, `{"kind":"read","reader":"agent","seq":1}`} {
+		if _, data := again.raw(); data != want {
+			t.Fatalf("a reconnect sent %s, want %s", data, want)
+		}
+	}
+}
+
 func TestReservedReadersSendNoReadPosition(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	s.post("/messages", `{"kind":"message","text":"one"}`)
