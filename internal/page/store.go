@@ -69,7 +69,7 @@ type Store struct {
 type state struct {
 	Rev  uint64   `json:"rev"`
 	Undo []uint64 `json:"undo"`
-	Prev *state   `json:"prev,omitempty"`
+	Next *state   `json:"next,omitempty"`
 }
 
 // ID is the 16-hex directory name under $KAPI_HOME/pages for an absolute page path.
@@ -101,8 +101,7 @@ func Open(home, path string) (*Store, error) {
 		if err := json.Unmarshal(b, &st); err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Join(s.dir, "state.json"), err)
 		}
-		s.rev, s.undo = st.Rev, st.Undo
-		if err := s.load(st.Prev); err != nil {
+		if err := s.load(&st); err != nil {
 			return nil, err
 		}
 	}
@@ -130,24 +129,24 @@ func Open(home, path string) (*Store, error) {
 	}
 }
 
-func (s *Store) load(prev *state) error {
-	if s.rev == 0 {
-		return nil
+func (s *Store) load(st *state) error {
+	s.rev, s.undo = st.Rev, st.Undo
+	if s.rev > 0 {
+		src, err := os.ReadFile(s.revPath(s.rev))
+		if err != nil {
+			return err
+		}
+		s.src = src
 	}
-	src, err := os.ReadFile(s.revPath(s.rev))
-	if err != nil {
-		return err
-	}
-	s.src = src
-	if prev == nil || prev.Rev == 0 {
+	if st.Next == nil {
 		return nil
 	}
 	raw, err := os.ReadFile(s.path)
-	if err != nil || bytes.Equal(raw, src) {
+	if err != nil {
 		return err
 	}
-	if before, err := os.ReadFile(s.revPath(prev.Rev)); err == nil && bytes.Equal(raw, before) {
-		s.src, s.rev, s.undo = before, prev.Rev, prev.Undo
+	if after, err := os.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
+		s.src, s.rev, s.undo = after, st.Next.Rev, st.Next.Undo
 	}
 	return nil
 }
@@ -380,17 +379,18 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	if err := writeAtomic(s.revPath(rev), src); err != nil {
 		return err
 	}
-	now := state{Rev: s.rev, Undo: s.undo}
-	if err := s.saveState(state{Rev: rev, Undo: undo, Prev: &now}); err != nil {
-		return err
-	}
+	next := state{Rev: rev, Undo: undo}
 	if !bytes.Equal(src, base) {
+		now := state{Rev: s.rev, Undo: s.undo}
+		if err := s.saveState(state{Rev: s.rev, Undo: s.undo, Next: &next}); err != nil {
+			return err
+		}
 		if err := replaceFile(s.path, src, base); err != nil {
 			return errors.Join(err, s.saveState(now))
 		}
 	}
 	s.src, s.rev, s.undo = src, rev, undo
-	return nil
+	return s.saveState(next)
 }
 
 func (s *Store) saveState(st state) error {

@@ -231,6 +231,36 @@ func TestEveryWriteIsSyncedBeforeItsRenameAndItsDirectoryAfter(t *testing.T) {
 	}
 }
 
+const (
+	oneBlock    = "<p data-kapi-id=\"aaaaaaaa\">one</p>\n"
+	oneBlockUno = "<p data-kapi-id=\"aaaaaaaa\">uno</p>\n"
+)
+
+func TestARevisionNeverGoesBackwardAfterARestart(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	_, rev := s.Source()
+	externalWrite(t, path, oneBlock)
+	if _, got := open(t, home, path).Source(); got <= rev {
+		t.Fatalf("after the file went back to revision 1 while kapi was down, rev = %d, want above %d", got, rev)
+	}
+}
+
+func TestUndoKeepsAFileEditMadeWhileKapiWasDown(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
+	mustApply(t, s, &Op{Kind: "undo"})
+	externalWrite(t, path, oneBlockUno)
+	s = open(t, home, path)
+	_, rev := s.Source()
+	_, _, err := s.Apply(rev, &Op{Kind: "undo"})
+	if got := onDisk(t, path); err == nil || got != oneBlockUno {
+		t.Fatalf("undo after a file edit made while kapi was down: err = %v, file %q; want the edit kept", err, got)
+	}
+}
+
 func TestOpenRemovesOnlyItsOwnTempFiles(t *testing.T) {
 	home, path := newPage(t, crashStart)
 	dir := filepath.Dir(path)
