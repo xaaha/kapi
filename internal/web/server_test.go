@@ -39,6 +39,10 @@ type fakePages struct {
 	pages map[string]*page.Store
 }
 
+func (f *fakePages) Viewing(string) func() { return func() {} }
+
+func (f *fakePages) Reopened(string) bool { return false }
+
 func (f *fakePages) PagePath(id string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

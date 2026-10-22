@@ -186,23 +186,24 @@
   let stream = null;
   let restarted = false;
 
-  function showRestart(reopen) {
+  function showRestart(reopen, reopened) {
     restarted = true;
     stream?.close();
     setStatus("disconnected");
     statusText.textContent = "Kapi restarted";
+    restartBox.hidden = false;
+    if (reopened) return restartBox.replaceChildren(h("p", { text: "Kapi restarted and reopened this page in a new tab. You can close this one." }));
     const copy = h("button", { type: "button", class: "kapi-copy", text: "Copy" });
     copy.addEventListener("click", () =>
       navigator.clipboard.writeText(reopen).then(() => (copy.textContent = "Copied"), () => (copy.textContent = "Copy failed")));
     restartBox.replaceChildren(h("p", {}, "Kapi restarted. Run ", h("code", { text: reopen }), " to continue."), copy);
-    restartBox.hidden = false;
   }
 
   async function restartedReply(res) {
     if (res.status !== 403) return false;
     const data = await res.clone().json().catch(() => ({}));
     if (typeof data.reopen !== "string") return false;
-    showRestart(data.reopen);
+    showRestart(data.reopen, data.reopened === true);
     return true;
   }
 
