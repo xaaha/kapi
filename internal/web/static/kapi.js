@@ -341,7 +341,7 @@
     }
   }
 
-  const BLOCK = '[data-kapi-id]:not([data-kapi-preset="badge"])';
+  const BLOCK = '[data-kapi-id]:not([data-kapi-id] [data-kapi-preset="badge"])';
   const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
   const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
 

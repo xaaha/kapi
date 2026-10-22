@@ -1177,6 +1177,15 @@ test("clicking a badge selects the block around it, never the badge", async () =
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`), false);
 });
 
+test("a top-level badge is a block of its own and selects on click", async () => {
+  await reopenWith([
+    { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' },
+    { id: "bbbbbbbb", html: '<span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb">merged</span>' },
+  ]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`);
+});
+
 test("a box ticked while another op is in flight sends nothing and stays as it was", async () => {
   await reopenWith([...CHECKLIST, { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
   server.state.opDelay = 400;
