@@ -37,7 +37,14 @@ type Op struct {
 	ID     string  `json:"id"`
 	HTML   string  `json:"html,omitempty"`
 	Inner  *string `json:"inner,omitempty"`
+	Cells  []Cell  `json:"cells,omitempty"`
 	Before string  `json:"before,omitempty"`
+}
+
+type Cell struct {
+	Row  int    `json:"row"`
+	Col  int    `json:"col"`
+	Text string `json:"text"`
 }
 
 type Summary struct {
@@ -311,7 +318,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op Op) bool {
 	switch op.Kind {
-	case "edit", "archive", "unarchive", "delete":
+	case "edit", "cells", "archive", "unarchive", "delete":
 	default:
 		return false
 	}
@@ -473,6 +480,16 @@ func apply(src []byte, op Op) ([]byte, Summary, error) {
 			return nil, Summary{}, err
 		}
 		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
+	case "cells":
+		with, err := setCells(src, els, e, op.Cells)
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		out, err := edit(src, els, e, with, false)
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		return out, Summary{Text: "edited cells of " + describeID(out, op.ID), IDs: one}, nil
 	case "delete":
 		for i := range els {
 			l := &els[i]
@@ -709,4 +726,59 @@ func excerpt(outer []byte) string {
 		}
 	}
 	return strings.TrimRight(cut, " ") + "\u2026"
+}
+
+func setCells(src []byte, els []element, e *element, cells []Cell) (string, error) {
+	if e.name != "kapi-table" {
+		return "", fmt.Errorf("a cells op needs a kapi-table, not <%s>", e.name)
+	}
+	if len(cells) == 0 {
+		return "", errors.New("a cells op needs at least one cell")
+	}
+	table := -1
+	var rows [][]*element
+	for i := range els {
+		c := &els[i]
+		switch {
+		case !e.contains(c):
+		case c.name == "table" && table < 0:
+			table = i
+		case c.name == "tr" && table >= 0 && nearest(els, i, "table") == table:
+			rows = append(rows, nil)
+		case (c.name == "td" || c.name == "th") && len(rows) > 0 && c.parent >= 0 && els[c.parent].name == "tr" && nearest(els, c.parent, "table") == table:
+			rows[len(rows)-1] = append(rows[len(rows)-1], c)
+		}
+	}
+	type change struct {
+		from, to int
+		text     string
+	}
+	var changes []change
+	seen := map[[2]int]bool{}
+	for _, c := range cells {
+		if c.Row < 0 || c.Row >= len(rows) || c.Col < 0 || c.Col >= len(rows[c.Row]) {
+			return "", fmt.Errorf("the table has no cell at row %d, column %d", c.Row, c.Col)
+		}
+		if seen[[2]int{c.Row, c.Col}] {
+			return "", fmt.Errorf("the cell at row %d, column %d is set twice", c.Row, c.Col)
+		}
+		seen[[2]int{c.Row, c.Col}] = true
+		cell := rows[c.Row][c.Col]
+		changes = append(changes, change{cell.tagEnd, cell.closeStart, html.EscapeString(c.Text)})
+	}
+	slices.SortFunc(changes, func(a, b change) int { return b.from - a.from })
+	outer := src[e.start:e.end]
+	for _, c := range changes {
+		outer = splice(outer, c.from-e.start, c.to-e.start, c.text)
+	}
+	return string(outer), nil
+}
+
+func nearest(els []element, i int, name string) int {
+	for p := els[i].parent; p >= 0; p = els[p].parent {
+		if els[p].name == name {
+			return p
+		}
+	}
+	return -1
 }

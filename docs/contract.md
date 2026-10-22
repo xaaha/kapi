@@ -50,13 +50,29 @@ rendered preset. Prose elements render to the same HTML as their source.
 
 ### Editing
 
-Prose elements (no `data-kapi-preset`) are edited in place and saved as an
-`edit` op with the element's outer HTML. Preset elements, and prose that holds
-a preset, are edited as source: the browser fetches
-`GET /p/{id}/source/{block}?part=inner`, shows only the element's body in a
-textarea, and saves the textarea as the `edit` op's `Inner`. The element's
-opening tag, its attributes and its closing tag are never shown and never
-change. Rendered preset HTML is never sent back.
+Readers edit what they see, never markup:
+
+| Block | Edited as | Saved as |
+|---|---|---|
+| prose (no `data-kapi-preset`) | the element itself, in place | `edit` with the element's outer HTML |
+| `kapi-table` | each rendered `th` and `td`, in place, as plain text | `cells` with only the changed cells |
+| `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question` | the rendered body, in place | `edit` with `inner` set to the body |
+| `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-form`, and any other block that holds presets | a textarea with `GET /p/{id}/source/{block}?part=inner` | `edit` with `inner` set to the textarea |
+
+A prose preset is edited in place only when its rendered body round-trips to
+its source inner (the browser parses the source inner and compares it with
+the body's HTML); otherwise it falls back to the textarea. In every mode the
+element's opening tag, its attributes and its closing tag are never shown and
+never change, and rendered chrome (labels, marks, headings) is not editable.
+
+A `cells` op is `{"kind":"cells","id":"<table id>","cells":[{"row":r,"col":c,"text":"..."}]}`.
+`row` counts the `tr` elements of the source table in source order, header
+rows included; `col` counts the `th` and `td` children of that row. The store
+sets each cell's text, HTML-escaped, between its existing tags, so the cell's
+tag and attributes stay as they were. A cell outside the table, a cell given
+twice, an empty `cells` list or a target that is not a `kapi-table` is 422.
+Adding or removing rows and columns is out of scope. A `cells` op follows the
+same staleness, dangling-link and no-change rules as `edit`.
 
 ## Go interfaces
 
@@ -74,10 +90,11 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, delete, archive, unarchive, move, undo
+    Kind string // edit, cells, delete, archive, unarchive, move, undo
     ID   string
     HTML string // edit: new outer HTML of the element
     Inner *string // edit, instead of HTML: new source between the element's start and end tags
+    Cells []Cell  // cells: {Row, Col, Text} for each changed table cell
     Before string // move: id to insert before, "" means end
 }
 type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
@@ -105,7 +122,7 @@ saves the previous source as `revs/<rev>.html` so `undo` restores it.
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `archive`, `unarchive` and `delete` only. `move` and `undo`
+This applies to `edit`, `cells`, `archive`, `unarchive` and `delete` only. `move` and `undo`
 depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is

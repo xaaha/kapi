@@ -1190,3 +1190,60 @@ func TestAnOpThatChangesNothingMakesNoRevision(t *testing.T) {
 		t.Errorf("undo after no-op edits: err = %v, want ErrNothingToUndo", err)
 	}
 }
+
+const tablePage = "<kapi-table data-kapi-id=\"aaaaaaaa\" sort=\"on\">\n  <table class=t>\n    <thead><tr><th scope=\"col\">Shard</th><th>Rows</th></tr></thead>\n" +
+	"    <tbody><tr><td class=\"name\">beta</td><td>10</td></tr><tr><td>alpha<td>9</tr></tbody>\n  </table>\n</kapi-table>\n" +
+	"<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+
+func TestACellsOpSetsCellTextAndKeepsTheMarkup(t *testing.T) {
+	home, path := newPage(t, tablePage)
+	s := open(t, home, path)
+	sum := mustApply(t, s, Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{
+		{Row: 0, Col: 1, Text: "Row count"},
+		{Row: 1, Col: 0, Text: `b<eta> & "co"`},
+		{Row: 2, Col: 1, Text: "nine"},
+	}})
+	want := strings.NewReplacer(
+		"<th>Rows</th>", "<th>Row count</th>",
+		`<td class="name">beta</td>`, `<td class="name">b&lt;eta&gt; &amp; &#34;co&#34;</td>`,
+		"<td>9</tr>", "<td>nine</tr>",
+	).Replace(tablePage)
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file after cells op:\n%s\nwant:\n%s", got, want)
+	}
+	if !strings.HasPrefix(sum.Text, `edited cells of table "Shard Row count`) || strings.Join(sum.IDs, ",") != "aaaaaaaa" {
+		t.Errorf("summary = %+v", sum)
+	}
+}
+
+func TestACellsOpRefusesBadCellsAndOtherElements(t *testing.T) {
+	for _, op := range []Op{
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 3, Col: 0, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 2, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: -1, Col: 0, Text: "x"}}},
+		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}, {Row: 0, Col: 0, Text: "y"}}},
+		{Kind: "cells", ID: "aaaaaaaa"},
+		{Kind: "cells", ID: "bbbbbbbb", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}}},
+	} {
+		home, path := newPage(t, tablePage)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, op); err == nil {
+			t.Errorf("%+v succeeded, want an error", op)
+		}
+		if got := onDisk(t, path); got != tablePage {
+			t.Errorf("refused op changed the file:\n%s", got)
+		}
+	}
+}
+
+func TestACellsOpOnATableThatChangedIsStale(t *testing.T) {
+	home, path := newPage(t, tablePage)
+	s := open(t, home, path)
+	mustApply(t, s, Op{Kind: "archive", ID: "bbbbbbbb"})
+	if _, _, err := s.Apply(1, Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "11"}}}); err != nil {
+		t.Fatalf("cells op at an old rev with the table unchanged: %v", err)
+	}
+	if _, _, err := s.Apply(2, Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "12"}}}); !errors.Is(err, ErrStale) {
+		t.Errorf("cells op at a rev before the table changed: err = %v, want ErrStale", err)
+	}
+}
