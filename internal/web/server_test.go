@@ -37,7 +37,7 @@ type fakePages struct {
 	pages map[string]*page.Store
 }
 
-func (f *fakePages) Viewed(string) {}
+func (f *fakePages) Viewing(string) func() { return func() {} }
 
 func (f *fakePages) Reopened(string) bool { return false }
 

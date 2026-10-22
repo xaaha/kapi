@@ -33,11 +33,9 @@ var static embed.FS
 type Pages interface {
 	Page(id string) (*page.Store, *eventlog.Log, error)
 	PagePath(id string) (string, error)
-	Viewed(id string)
+	Viewing(id string) (done func())
 	Reopened(id string) bool
 }
-
-const viewedEvery = time.Minute
 
 type Server struct {
 	pages    Pages
@@ -289,11 +287,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
-	id := r.PathValue("id")
-	s.pages.Viewed(id)
-	defer s.pages.Viewed(id)
-	viewing := time.NewTicker(viewedEvery)
-	defer viewing.Stop()
+	defer s.pages.Viewing(r.PathValue("id"))()
 	for {
 		events, changed := l.After(after)
 		for _, e := range events {
@@ -311,8 +305,6 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		}
 		select {
 		case <-changed:
-		case <-viewing.C:
-			s.pages.Viewed(id)
 		case <-r.Context().Done():
 			return
 		}

@@ -85,12 +85,25 @@ func knownPage(t *testing.T, home, name string) string {
 	return path
 }
 
-func viewedAgo(t *testing.T, home, path string, ago time.Duration) {
+func viewingFile(home, path string) string {
+	return filepath.Join(home, "pages", page.ID(path), "viewing")
+}
+
+func markViewing(t *testing.T, home, path string, age time.Duration) {
 	t.Helper()
-	stamp := time.Now().Add(-ago).UTC().Format(time.RFC3339Nano) + "\n"
-	if err := os.WriteFile(filepath.Join(home, "pages", page.ID(path), "viewed"), []byte(stamp), 0o600); err != nil {
+	f := viewingFile(home, path)
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	at := time.Now().Add(-age)
+	if err := os.Chtimes(f, at, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func waitUntil(t *testing.T, what string, cond func() bool) {
@@ -104,14 +117,13 @@ func waitUntil(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func startAndCollect(t *testing.T, home string, want int) []string {
+func startAndCollect(t *testing.T, home string, want int) (o *opener, stop func()) {
 	t.Helper()
-	o := &opener{}
-	_, stop := servingWith(t, home, o.open)
-	t.Cleanup(stop)
+	o = &opener{}
+	_, stop = servingWith(t, home, o.open)
 	waitUntil(t, fmt.Sprintf("%d reopens", want), func() bool { return len(o.opened()) >= want })
 	time.Sleep(100 * time.Millisecond)
-	return o.opened()
+	return o, stop
 }
 
 func pageURLs(t *testing.T, home string, paths []string) []string {
@@ -124,29 +136,33 @@ func pageURLs(t *testing.T, home string, paths []string) []string {
 	return out
 }
 
-func TestStartReopensRecentlyViewedPagesWhoseFileStillExists(t *testing.T) {
+func TestStartReopensPagesThatHadAViewerWhenTheDaemonStopped(t *testing.T) {
 	home := shortHome(t)
 	logs := captureLog(t)
-	var recent []string
+	var watched []string
 	for i := range 3 {
-		p := knownPage(t, home, fmt.Sprintf("recent%d.html", i))
-		viewedAgo(t, home, p, time.Duration(i+1)*time.Hour-time.Minute)
-		recent = append(recent, p)
+		p := knownPage(t, home, fmt.Sprintf("watched%d.html", i))
+		markViewing(t, home, p, time.Duration(i+1)*24*time.Hour)
+		watched = append(watched, p)
 	}
-	stale := knownPage(t, home, "stale.html")
-	viewedAgo(t, home, stale, 3*time.Hour+time.Minute)
 	gone := knownPage(t, home, "gone.html")
-	viewedAgo(t, home, gone, 30*time.Second)
+	markViewing(t, home, gone, 0)
 	if err := os.Remove(gone); err != nil {
 		t.Fatal(err)
 	}
-	knownPage(t, home, "never.html")
+	closed := knownPage(t, home, "closed.html")
 
-	got := startAndCollect(t, home, 3)
-	if want := pageURLs(t, home, recent); !slices.Equal(got, want) {
-		t.Errorf("reopened\n%v\nwant the pages viewed in the last 3 hours whose file exists, newest first\n%v", got, want)
+	o, stop := startAndCollect(t, home, 3)
+	defer stop()
+	if got, want := o.opened(), pageURLs(t, home, watched); !slices.Equal(got, want) {
+		t.Errorf("reopened\n%v\nwant the pages with a viewer when the daemon stopped, newest first\n%v", got, want)
 	}
-	for _, p := range recent {
+	for _, p := range append(watched, gone, closed) {
+		if exists(viewingFile(home, p)) {
+			t.Errorf("%s still has a viewing file after the start", p)
+		}
+	}
+	for _, p := range watched {
 		if !strings.Contains(logs.String(), "reopened "+p+" in the browser") {
 			t.Errorf("daemon log does not record the reopen of %s:\n%s", p, logs)
 		}
@@ -156,34 +172,54 @@ func TestStartReopensRecentlyViewedPagesWhoseFileStillExists(t *testing.T) {
 	}
 }
 
+func TestARestartLoopWithNoTabReconnectingReopensEachPageOnce(t *testing.T) {
+	home := shortHome(t)
+	captureLog(t)
+	p := knownPage(t, home, "plan.html")
+	markViewing(t, home, p, 0)
+	o := &opener{}
+	for range 3 {
+		_, stop := servingWith(t, home, o.open)
+		time.Sleep(100 * time.Millisecond)
+		stop()
+	}
+	if got := o.opened(); len(got) != 1 {
+		t.Errorf("three starts opened %v, want the page once", got)
+	}
+}
+
 func TestStartReopensAtMostTheFiveNewestPages(t *testing.T) {
 	home := shortHome(t)
 	captureLog(t)
-	var recent []string
+	var watched []string
 	for i := range 7 {
-		p := knownPage(t, home, fmt.Sprintf("recent%d.html", i))
-		viewedAgo(t, home, p, time.Duration(i+1)*time.Minute)
-		recent = append(recent, p)
+		p := knownPage(t, home, fmt.Sprintf("watched%d.html", i))
+		markViewing(t, home, p, time.Duration(i+1)*time.Minute)
+		watched = append(watched, p)
 	}
-	got := startAndCollect(t, home, 5)
-	if want := pageURLs(t, home, recent[:5]); !slices.Equal(got, want) {
+	o, stop := startAndCollect(t, home, 5)
+	defer stop()
+	if got, want := o.opened(), pageURLs(t, home, watched[:5]); !slices.Equal(got, want) {
 		t.Errorf("reopened\n%v\nwant the five newest\n%v", got, want)
 	}
 }
 
-func TestStartReopensNothingWithoutAnOpener(t *testing.T) {
+func TestStartWithoutAnOpenerReopensNothingAndForgetsOldViewers(t *testing.T) {
 	home := shortHome(t)
 	logs := captureLog(t)
 	p := knownPage(t, home, "plan.html")
 	_, stop := servingAt(t, home)
 	oldURL := call(t, home, &Request{Op: "open", Page: p}).URL
 	stop()
-	viewedAgo(t, home, p, time.Minute)
+	markViewing(t, home, p, 0)
 	_, stop = servingWith(t, home, nil)
 	defer stop()
 	time.Sleep(100 * time.Millisecond)
 	if strings.Contains(logs.String(), "reopen") {
 		t.Errorf("a daemon with no opener logged a reopen:\n%s", logs)
+	}
+	if exists(viewingFile(home, p)) {
+		t.Errorf("the viewing file outlived a start, so a later start would reopen a dead tab")
 	}
 	if body := reopenBody(t, oldURL); body["reopened"] != nil || body["reopen"] != "kapi open "+p {
 		t.Errorf("403 body %v, want the reopen command and no reopened", body)
@@ -209,20 +245,16 @@ func TestTheRestartNoticeSaysReopenedOnlyForPagesReopenedAtThisStart(t *testing.
 	captureLog(t)
 	shown := knownPage(t, home, "shown.html")
 	failed := knownPage(t, home, "failed.html")
-	old := knownPage(t, home, "old.html")
-	for _, p := range []string{shown, failed} {
-		viewedAgo(t, home, p, time.Minute)
-	}
-	viewedAgo(t, home, old, 4*time.Hour)
+	closed := knownPage(t, home, "closed.html")
 
 	_, stop := servingAt(t, home)
 	var oldURLs []string
-	for _, p := range []string{shown, failed, old} {
+	for _, p := range []string{shown, failed, closed} {
 		oldURLs = append(oldURLs, call(t, home, &Request{Op: "open", Page: p}).URL)
 	}
 	stop()
 	for _, p := range []string{shown, failed} {
-		viewedAgo(t, home, p, time.Minute)
+		markViewing(t, home, p, 0)
 	}
 
 	o := &opener{fail: map[string]bool{page.ID(failed): true}}
@@ -282,39 +314,68 @@ func TestAnOldTabsPostsGetTheRestartNotice(t *testing.T) {
 	}
 }
 
-func TestTheEventsStreamRecordsWhenAViewerWasLastConnected(t *testing.T) {
+type viewer struct {
+	resp *http.Response
+}
+
+func connectViewer(t *testing.T, pageURL string) *viewer {
+	t.Helper()
+	resp, err := http.Get(pageURL + "events") //nolint:gosec // the daemon under test gave this URL
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	if _, err := bufio.NewReader(resp.Body).ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
+	return &viewer{resp: resp}
+}
+
+func (v *viewer) close() { v.resp.Body.Close() }
+
+func TestTheViewingFileListsAPageWhileAnyViewerIsConnected(t *testing.T) {
 	home := shortHome(t)
 	path := writePage(t, "<p>x</p>\n")
 	_, stop := servingAt(t, home)
 	defer stop()
 	pageURL := call(t, home, &Request{Op: "open", Page: path}).URL
-	viewed := filepath.Join(home, "pages", page.ID(path), "viewed")
-	if _, err := os.Stat(viewed); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("viewed exists before any viewer: %v", err)
+	viewing := viewingFile(home, path)
+	if exists(viewing) {
+		t.Fatal("viewing exists before any viewer")
 	}
-	before := time.Now().Add(-time.Second)
-	resp, err := http.Get(pageURL + "events") //nolint:gosec // the daemon under test gave this URL
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if _, err := bufio.NewReader(resp.Body).ReadString('\n'); err != nil {
-		t.Fatal(err)
-	}
-	waitUntil(t, "the viewed file while the viewer is connected", func() bool { _, err := os.Stat(viewed); return err == nil })
-	fi, err := os.Stat(viewed)
+	first := connectViewer(t, pageURL)
+	waitUntil(t, "the viewing file once a viewer connects", func() bool { return exists(viewing) })
+	fi, err := os.Stat(viewing)
 	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("viewed: %v, %v; want mode 0600", fi, err)
+		t.Fatalf("viewing: %v, %v; want mode 0600", fi, err)
 	}
-	b, err := os.ReadFile(viewed)
+	b, err := os.ReadFile(viewing)
 	if err != nil {
 		t.Fatal(err)
-	}
-	at, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(string(b)))
-	if err != nil || at.Before(before) || at.After(time.Now()) {
-		t.Errorf("viewed = %q (%v), want the time of the connection", b, err)
 	}
 	if tok := strings.Split(pageURL, "/")[3]; strings.Contains(string(b), tok) {
-		t.Errorf("viewed holds the token: %q", b)
+		t.Errorf("viewing holds the token: %q", b)
+	}
+	second := connectViewer(t, pageURL)
+	first.close()
+	time.Sleep(100 * time.Millisecond)
+	if !exists(viewing) {
+		t.Fatal("viewing went away while a second viewer is still connected")
+	}
+	second.close()
+	waitUntil(t, "the viewing file to go once the last viewer leaves", func() bool { return !exists(viewing) })
+}
+
+func TestTheViewingFileSurvivesTheDaemonStopping(t *testing.T) {
+	home := shortHome(t)
+	path := writePage(t, "<p>x</p>\n")
+	_, stop := servingAt(t, home)
+	pageURL := call(t, home, &Request{Op: "open", Page: path}).URL
+	connectViewer(t, pageURL)
+	waitUntil(t, "the viewing file", func() bool { return exists(viewingFile(home, path)) })
+	stop()
+	time.Sleep(100 * time.Millisecond)
+	if !exists(viewingFile(home, path)) {
+		t.Error("stopping the daemon removed the viewing file of a page whose tab was open")
 	}
 }

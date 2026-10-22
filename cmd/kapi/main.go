@@ -197,13 +197,13 @@ func statusCmd(c api, out io.Writer) *cli.Command {
 
 func daemonCmd() *cli.Command {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
-	reopen := fs.Bool("reopen", false, "Reopen pages viewed in the last 3 hours in the browser; kapi sets this when it starts the daemon on demand")
+	reopen := fs.Bool("reopen", false, "Reopen pages whose tab was open when the daemon last stopped; kapi sets this when it starts the daemon on demand")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
 		Flags: fs,
 		Long: "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.\n" +
-			"With --reopen, up to 5 pages that had a browser tab open in the last 3 hours open again in the browser,\n" +
+			"With --reopen, up to 5 pages whose browser tab was open when the daemon last stopped open again,\n" +
 			"unless KAPI_NO_BROWSER is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
 		Run: func([]string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

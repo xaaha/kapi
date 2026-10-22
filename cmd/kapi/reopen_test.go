@@ -47,19 +47,20 @@ func TestTheDaemonGetsABrowserOnlyWhenStartedOnDemandWithADisplay(t *testing.T) 
 	}
 }
 
-func (e *e2e) view(url string) {
+func (e *e2e) view(url string) (closeTab func()) {
 	e.t.Helper()
 	resp, err := http.Get(url + "events") //nolint:gosec // the URL kapi open printed
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	e.t.Cleanup(func() { resp.Body.Close() })
 	if _, err := bufio.NewReader(resp.Body).ReadString('\n'); err != nil {
 		e.t.Fatal(err)
 	}
+	return func() { resp.Body.Close() }
 }
 
-func TestADaemonStartedOnDemandReopensARecentlyViewedPage(t *testing.T) {
+func TestADaemonStartedOnDemandReopensAPageWhoseTabWasOpen(t *testing.T) {
 	e := newE2E(t)
 	e.env = append(e.env, "DISPLAY=:99")
 	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
@@ -107,5 +108,22 @@ func TestADaemonStartedOnDemandWithKapiNoBrowserReopensNothing(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	if b, err := os.ReadFile(e.opened); err == nil {
 		t.Errorf("KAPI_NO_BROWSER still reopened %q", b)
+	}
+}
+
+func TestADaemonStartedOnDemandLeavesAClosedTabClosed(t *testing.T) {
+	e := newE2E(t)
+	e.env = append(e.env, "DISPLAY=:99")
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	closeTab := e.view(strings.TrimSpace(e.kapi("open", "--print", e.page)))
+	closeTab()
+	time.Sleep(200 * time.Millisecond)
+	e.killDaemon()
+	e.kapi("send", e.page, "wakes the daemon")
+	time.Sleep(500 * time.Millisecond)
+	if b, err := os.ReadFile(e.opened); err == nil {
+		t.Errorf("a tab closed before the restart was reopened: %q", b)
 	}
 }

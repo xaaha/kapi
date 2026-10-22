@@ -76,8 +76,10 @@ type Server struct {
 	attached map[string]map[string]time.Time
 	baseURL  string
 	reopened map[string]bool
+	stopping <-chan struct{}
 
-	viewedMu sync.Mutex
+	viewingMu sync.Mutex
+	viewers   map[string]int
 
 	presenceMu sync.Mutex
 	presence   map[string]map[string]string
@@ -91,6 +93,7 @@ func New(home string) *Server {
 		stores:   map[string]*page.Store{},
 		attached: map[string]map[string]time.Time{},
 		reopened: map[string]bool{},
+		viewers:  map[string]int{},
 		presence: map[string]map[string]string{},
 		watchers: map[string]map[string]int{},
 	}
@@ -128,15 +131,16 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		return err
 	}
-	var recent []recentPage
-	if s.Browser != nil {
-		recent = s.recentPages(time.Now())
-		s.mu.Lock()
-		for _, p := range recent {
-			s.reopened[p.id] = true
-		}
-		s.mu.Unlock()
+	s.stopping = ctx.Done()
+	recent := s.takeViewedPages()
+	if s.Browser == nil {
+		recent = nil
 	}
+	s.mu.Lock()
+	for _, p := range recent {
+		s.reopened[p.id] = true
+	}
+	s.mu.Unlock()
 	stopHTTP, err := s.serveHTTP(ctx)
 	if err != nil {
 		return err

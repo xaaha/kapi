@@ -1,31 +1,49 @@
 package daemon
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 )
 
 const (
-	reopenWithin = 3 * time.Hour
 	reopenAtMost = 5
-	viewedName   = "viewed"
+	viewingName  = "viewing"
 )
 
-type recentPage struct {
+type viewedPage struct {
 	id, path string
-	viewed   time.Time
+	since    time.Time
 }
 
-func (s *Server) Viewed(id string) {
-	s.viewedMu.Lock()
-	defer s.viewedMu.Unlock()
-	stamp := time.Now().UTC().Format(time.RFC3339Nano) + "\n"
-	if err := writeFile(filepath.Join(s.home, "pages", id, viewedName), stamp); err != nil {
-		log.Printf("viewed %s: %v", id, err)
+func (s *Server) Viewing(id string) (done func()) {
+	file := filepath.Join(s.home, "pages", id, viewingName)
+	s.viewingMu.Lock()
+	defer s.viewingMu.Unlock()
+	s.viewers[id]++
+	if s.viewers[id] == 1 {
+		if err := writeFile(file, ""); err != nil {
+			log.Printf("viewing %s: %v", id, err)
+		}
+	}
+	return func() {
+		s.viewingMu.Lock()
+		defer s.viewingMu.Unlock()
+		if s.viewers[id]--; s.viewers[id] > 0 {
+			return
+		}
+		delete(s.viewers, id)
+		select {
+		case <-s.stopping:
+			return
+		default:
+		}
+		if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("viewing %s: %v", id, err)
+		}
 	}
 }
 
@@ -35,36 +53,36 @@ func (s *Server) Reopened(id string) bool {
 	return s.reopened[id]
 }
 
-func (s *Server) recentPages(now time.Time) []recentPage {
+func (s *Server) takeViewedPages() []viewedPage {
 	root := filepath.Join(s.home, "pages")
 	dirs, err := os.ReadDir(root)
 	if err != nil {
 		return nil
 	}
-	var out []recentPage
+	var out []viewedPage
 	for _, d := range dirs {
-		b, err := os.ReadFile(filepath.Join(root, d.Name(), viewedName))
+		file := filepath.Join(root, d.Name(), viewingName)
+		fi, err := os.Stat(file)
 		if err != nil {
 			continue
 		}
-		viewed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(string(b)))
-		if err != nil || now.Sub(viewed) > reopenWithin {
-			continue
+		if err := os.Remove(file); err != nil {
+			log.Printf("viewing %s: %v", d.Name(), err)
 		}
 		path, err := s.PagePath(d.Name())
 		if err != nil {
 			continue
 		}
-		if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+		if pfi, err := os.Stat(path); err != nil || !pfi.Mode().IsRegular() {
 			continue
 		}
-		out = append(out, recentPage{id: d.Name(), path: path, viewed: viewed})
+		out = append(out, viewedPage{id: d.Name(), path: path, since: fi.ModTime()})
 	}
-	slices.SortFunc(out, func(a, b recentPage) int { return b.viewed.Compare(a.viewed) })
+	slices.SortFunc(out, func(a, b viewedPage) int { return b.since.Compare(a.since) })
 	return out[:min(len(out), reopenAtMost)]
 }
 
-func (s *Server) reopen(pages []recentPage) {
+func (s *Server) reopen(pages []viewedPage) {
 	s.mu.Lock()
 	base := s.baseURL
 	s.mu.Unlock()
