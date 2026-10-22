@@ -19,6 +19,8 @@ var (
 	ErrNotRunning     = errors.New("daemon not running")
 )
 
+const noStartDeadline = time.Second
+
 type Client struct {
 	Home    string
 	NoStart bool
@@ -88,6 +90,11 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 		return daemon.Response{}, err
 	}
 	defer conn.Close()
+	if c.NoStart {
+		if err := conn.SetDeadline(time.Now().Add(noStartDeadline)); err != nil {
+			return daemon.Response{}, err
+		}
+	}
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return daemon.Response{}, err
 	}

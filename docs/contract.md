@@ -314,8 +314,9 @@ show them. Events reach the agent three ways:
   later `Stop` blocks only on events it can show whole and has not shown, so
   it never loops. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.
-  `kapi hook-messages` never starts the daemon and always exits 0; with no
-  daemon running it prints nothing.
+  `kapi hook-messages` never starts the daemon, gives each daemon call 1
+  second, and always exits 0; with no daemon running or answering it prints
+  nothing.
 
 The seen position moves only to what provably reached the model: a hook as
 above, `kapi pending`, which prints every unseen event and marks it seen, or
