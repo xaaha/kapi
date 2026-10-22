@@ -38,6 +38,8 @@ const (
 	cursorsFile = "cursors.json"
 )
 
+var syncFile = (*os.File).Sync
+
 func Open(dir string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -55,6 +57,10 @@ func Open(dir string) (*Log, error) {
 		return nil, err
 	}
 	if err := f.Truncate(whole); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := syncDir(dir); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -102,7 +108,7 @@ func (l *Log) Append(in *Event) (Event, error) {
 	if _, err := l.file.Write(append(line, '\n')); err != nil {
 		return Event{}, err
 	}
-	if err := l.file.Sync(); err != nil {
+	if err := syncFile(l.file); err != nil {
 		return Event{}, err
 	}
 	l.events = append(l.events, e)
@@ -202,10 +208,34 @@ func writeCursors(path string, cursors map[string]uint64) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := syncFile(f); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return syncFile(d)
 }
 
 // Printable drops control and bidi characters a terminal would act on, turning newlines and tabs into spaces.

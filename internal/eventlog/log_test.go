@@ -3,6 +3,7 @@ package eventlog
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -116,6 +117,43 @@ func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 	}
 	if events, _ := l.After(0); len(events) != 2 || events[1].Text != "two" {
 		t.Errorf("events = %+v, want one and two", events)
+	}
+}
+
+func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
+	dir := t.TempDir()
+	type syncAt struct {
+		name, cursors string
+		events        bool
+	}
+	var syncs []syncAt
+	orig := syncFile
+	syncFile = func(f *os.File) error {
+		b, _ := os.ReadFile(filepath.Join(dir, cursorsFile))
+		_, err := os.Stat(filepath.Join(dir, eventsFile))
+		syncs = append(syncs, syncAt{f.Name(), string(b), err == nil})
+		return orig(f)
+	}
+	defer func() { syncFile = orig }()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if !slices.Contains(syncs, syncAt{name: dir, events: true}) {
+		t.Errorf("Open did not sync %s after creating %s: %+v", dir, eventsFile, syncs)
+	}
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
+		t.Fatal(err)
+	}
+	syncs = nil
+	if err := l.Ack("agent", 1); err != nil {
+		t.Fatal(err)
+	}
+	tmp := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name != dir && s.cursors == "" })
+	after := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name == dir && s.cursors == `{"agent":1}` })
+	if tmp < 0 || after < tmp {
+		t.Errorf("Ack must sync the new cursors file before its rename and %s after it, synced %+v", dir, syncs)
 	}
 }
 
