@@ -20,6 +20,7 @@ var parents = map[string]string{
 	"kapi-choice":   "kapi-form",
 	"kapi-text":     "kapi-form",
 	"kapi-opt":      "kapi-choice",
+	"kapi-item":     "kapi-kv",
 }
 
 func init() {
@@ -40,6 +41,8 @@ func init() {
 		"kapi-opt":      renderOpt,
 		"kapi-text":     renderTextField,
 		"kapi-badge":    renderBadge,
+		"kapi-kv":       renderKV,
+		"kapi-item":     renderKVItem,
 	}
 }
 
@@ -308,5 +311,47 @@ func renderBadge(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
 	renderChildren(b, n)
 	writeEnd(b, "span")
+	return nil
+}
+
+func onlyChildren(n *html.Node, tag string) error {
+	count := 0
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		switch {
+		case c.Type == html.TextNode && strings.TrimSpace(c.Data) != "":
+			return fmt.Errorf("holds only <%s> children; move the text %q into one", tag, strings.TrimSpace(c.Data))
+		case c.Type == html.ElementNode && c.Data != tag:
+			return fmt.Errorf("holds only <%s> children, not <%s>", tag, c.Data)
+		case c.Type == html.ElementNode:
+			count++
+		}
+	}
+	if count == 0 {
+		return fmt.Errorf("needs at least one <%s>", tag)
+	}
+	return nil
+}
+
+func renderKV(b *bytes.Buffer, n *html.Node) error {
+	if err := onlyChildren(n, "kapi-item"); err != nil {
+		return err
+	}
+	writeStart(b, "dl", outerAttrs(n, "kapi-kv"))
+	renderChildren(b, n)
+	writeEnd(b, "dl")
+	return nil
+}
+
+func renderKVItem(b *bytes.Buffer, n *html.Node) error {
+	key, err := requireAttr(n, "key")
+	if err != nil {
+		return err
+	}
+	writeStart(b, "div", outerAttrs(n, "kapi-kv-item"))
+	b.WriteString("<dt>")
+	writeText(b, key)
+	b.WriteString("</dt><dd>")
+	renderChildren(b, n)
+	b.WriteString("</dd></div>")
 	return nil
 }

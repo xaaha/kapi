@@ -76,6 +76,8 @@ var containers = []string{
 	`<kapi-nosuch>%s</kapi-nosuch>`,
 	`<p>a <kapi-badge tone="info">%s</kapi-badge></p>`,
 	`<kapi-badge tone="%s">x</kapi-badge>`,
+	`<kapi-kv><kapi-item key="k">%s</kapi-item></kapi-kv>`,
+	`<kapi-kv><kapi-item key="%s">v</kapi-item>%s</kapi-kv>`,
 }
 
 var presetAttrs = map[string][]string{
@@ -108,6 +110,7 @@ func TestSanitizerAttributePayloads(t *testing.T) {
 		}
 		srcs = append(srcs,
 			`<kapi-compare><kapi-option title="`+q+`">x</kapi-option></kapi-compare>`,
+			`<kapi-kv data-kapi-id="`+q+`"><kapi-item key="`+q+`" data-kapi-id="`+q+`">x</kapi-item></kapi-kv>`,
 			`<kapi-form name="`+q+`"><kapi-choice name="`+q+`"><kapi-opt value="`+q+`">x</kapi-opt></kapi-choice><kapi-text name="`+q+`">x</kapi-text></kapi-form>`,
 			`<a href="`+q+`" title="`+q+`" class="`+q+`" data-x="`+q+`">x</a>`,
 			`<img src="`+q+`" alt="`+q+`">`,

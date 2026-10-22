@@ -42,6 +42,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
 | `<kapi-diagram>` | `type` = `flow` or `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence) |
 | `<kapi-badge>` | optional `tone` = `neutral` (default), `info`, `success`, `warning`, `danger`, `accent` | short inline text; allowed inside prose and table cells |
+| `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-form>` | `name` | `<kapi-choice name="..." multiple?>` with `<kapi-opt value="...">label</kapi-opt>`, and `<kapi-text name="...">label</kapi-text>` |
 
 Unknown `kapi-*` elements render as a visible error box, never silently.

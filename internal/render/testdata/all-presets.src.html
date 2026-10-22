@@ -1,6 +1,12 @@
 <h1 data-kapi-id="a1b2c3d4">Page store cutover plan</h1>
 <p data-kapi-id="e5f6g7h2">This page walks through moving page state into the Go daemon. It uses every kapi preset, so it doubles as the visual reference for the design system. See <a href="#k3f9a2bq">the risky step</a> before you start, and <a href="https://github.com/xaaha/kapi">the repo</a> for context.</p>
 
+<kapi-kv data-kapi-id="kvaaaaaa">
+  <kapi-item key="Owner" data-kapi-id="kvitemaa">Track A, the server</kapi-item>
+  <kapi-item key="Status" data-kapi-id="kvitembb"><kapi-badge tone="warning" data-kapi-id="badgebbb">in review</kapi-badge></kapi-item>
+  <kapi-item key="Rollback" data-kapi-id="kvitemcc">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
+</kapi-kv>
+
 <kapi-callout kind="note" data-kapi-id="n0teaaaa"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></kapi-callout>
 <kapi-callout kind="warning" data-kapi-id="warnaaaa"><p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p></kapi-callout>
 <kapi-callout kind="key" data-kapi-id="keyaaaaa"><p>Go owns all state. The browser keeps nothing and refetches after any reconnect.</p></kapi-callout>

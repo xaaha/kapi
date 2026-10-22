@@ -46,3 +46,24 @@ func TestBadgeStaysInlineAndPushesBlocksOut(t *testing.T) {
 		t.Errorf("a callout inside a badge should move out of it: %s", out)
 	}
 }
+
+func TestKVRendersADefinitionList(t *testing.T) {
+	out := render(t, `<kapi-kv><kapi-item key="Owner">Pratik &amp; co</kapi-item><kapi-item key="Due">Friday</kapi-item></kapi-kv>`)
+	want := `<dl class="kapi-kv" data-kapi-preset="kv">` +
+		`<div class="kapi-kv-item" data-kapi-preset="item"><dt>Owner</dt><dd>Pratik &amp; co</dd></div>` +
+		`<div class="kapi-kv-item" data-kapi-preset="item"><dt>Due</dt><dd>Friday</dd></div></dl>`
+	if out != want {
+		t.Errorf("got  %s\nwant %s", out, want)
+	}
+	for _, src := range []string{
+		`<kapi-kv>text <kapi-item key="a">b</kapi-item></kapi-kv>`,
+		`<kapi-kv><p>x</p><kapi-item key="a">b</kapi-item></kapi-kv>`,
+		`<kapi-kv><kapi-item>b</kapi-item></kapi-kv>`,
+		`<kapi-kv></kapi-kv>`,
+		`<kapi-item key="a">b</kapi-item>`,
+	} {
+		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+			t.Errorf("Render(%q) = %s, want an error box", src, out)
+		}
+	}
+}

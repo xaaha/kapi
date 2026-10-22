@@ -1,0 +1,10 @@
+<dl class="kapi-kv" data-kapi-preset="kv" data-kapi-id="k0000001">
+  <!-- who and when -->
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="k0000002"><dt>Owner</dt><dd>Pratik</dd></div>
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="k0000003"><dt>Status</dt><dd><span class="kapi-badge kapi-tone-warning" data-kapi-preset="badge">in review</span></dd></div>
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="k0000004"><dt>Rollback</dt><dd><p>Flip the flag back.</p><p>Then restart the daemon.</p></dd></div>
+</dl>
+<div class="kapi-error" data-kapi-preset="kv" role="alert" data-kapi-id="k0000005"><span class="kapi-error-tag">&lt;kapi-kv&gt;</span> holds only &lt;kapi-item&gt; children; move the text "loose text" into one</div>
+<dl class="kapi-kv" data-kapi-preset="kv" data-kapi-id="k0000006"><div class="kapi-error" data-kapi-preset="item" role="alert" data-kapi-id="k0000007"><span class="kapi-error-tag">&lt;kapi-item&gt;</span> needs a key attribute</div></dl>
+<div class="kapi-error" data-kapi-preset="kv" role="alert" data-kapi-id="k0000008"><span class="kapi-error-tag">&lt;kapi-kv&gt;</span> needs at least one &lt;kapi-item&gt;</div>
+<div class="kapi-error" data-kapi-preset="item" role="alert" data-kapi-id="k0000009"><span class="kapi-error-tag">&lt;kapi-item&gt;</span> must be a direct child of &lt;kapi-kv&gt;</div>

@@ -131,4 +131,14 @@ func (s *Store) Source() ([]byte, uint64) {
      Use it inline: inside a <p>, an <li> or a table cell. -->
 <p>PR #19 is <kapi-badge tone="success">merged</kapi-badge>, #18 is <kapi-badge tone="warning">in review</kapi-badge>.</p>`,
 	},
+	{
+		Name:    "kapi-kv",
+		Summary: "Key and value pairs, like owner, status and due date, as a definition list",
+		Example: `<!-- Children: <kapi-item key="..."> each holding prose. Keep keys to a word or two. -->
+<kapi-kv>
+  <kapi-item key="Owner">Pratik</kapi-item>
+  <kapi-item key="Status"><kapi-badge tone="warning">in review</kapi-badge></kapi-item>
+  <kapi-item key="Rollback">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
+</kapi-kv>`,
+	},
 }

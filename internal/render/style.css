@@ -179,6 +179,29 @@ body {
   white-space: nowrap;
 }
 
+.kapi-kv {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr);
+  margin: 1.25rem 0;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+.kapi-kv-item {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: 1.25rem;
+  padding: 0.6rem 1rem;
+}
+.kapi-kv-item + .kapi-kv-item { border-top: 1px solid var(--kapi-border); }
+#kapi-page .kapi-kv dt,
+.kapi-kv dt { margin: 0; color: var(--kapi-muted); font-size: 0.875rem; font-weight: 600; line-height: 1.65rem; }
+#kapi-page .kapi-kv dd,
+.kapi-kv dd { min-width: 0; margin: 0; }
+.kapi-kv dd > :first-child { margin-top: 0; }
+.kapi-kv dd > :last-child { margin-bottom: 0; }
+
 .kapi-code,
 .kapi-diff {
   margin: 1.25rem 0;
@@ -440,5 +463,7 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
   .kapi-ln { padding: 0 0.6rem 0 0.5rem; }
   .kapi-plan-item { gap: 0.6rem; padding: 0.6rem 0.7rem; }
   .kapi-diagram { padding: 0.6rem; }
+  .kapi-kv { grid-template-columns: minmax(0, 1fr); }
+  .kapi-kv-item { row-gap: 0.1rem; padding: 0.55rem 0.8rem; }
   .kapi-diagram svg { max-width: none; }
 }

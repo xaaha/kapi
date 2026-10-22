@@ -231,6 +231,11 @@ func TestCSSCoversEveryPreset(t *testing.T) {
 			t.Errorf("CSS has no rule for %s", sel)
 		}
 	}
+	for _, p := range Presets() {
+		if !regexp.MustCompile(`(?m)^\.` + p.Name + `[ ,]`).MatchString(css) {
+			t.Errorf("CSS has no rule for .%s", p.Name)
+		}
+	}
 	if strings.Contains(css, "url(") || strings.Contains(css, "@import") {
 		t.Error("CSS must not load anything")
 	}
