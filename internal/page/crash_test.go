@@ -332,8 +332,9 @@ func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
 	if got := onDisk(t, path); !strings.Contains(got, "agent wrote this") {
 		t.Errorf("after reopening, the page file is %q; the agent's write is lost", got)
 	}
+	tick(t, s, heldTicks)
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.kapi-*")); len(left) > 0 {
-		t.Errorf("temp files left %v", left)
+		t.Errorf("temp files left after %d refreshes: %v", heldTicks, left)
 	}
 }
 

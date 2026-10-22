@@ -66,6 +66,7 @@ type Store struct {
 	undo []uint64
 
 	conversion string
+	held       *held
 }
 
 type state struct {
@@ -73,7 +74,25 @@ type state struct {
 	Undo []uint64 `json:"undo"`
 	Next *state   `json:"next,omitempty"`
 	Temp string   `json:"temp,omitempty"`
+	Held *held    `json:"held,omitempty"`
 }
+
+type held struct {
+	Name   string    `json:"name"`
+	Seen   fileStamp `json:"seen"`
+	Placed fileStamp `json:"placed"`
+	quiet  int
+}
+
+type fileStamp struct {
+	Ino   uint64 `json:"ino"`
+	Size  int64  `json:"size"`
+	Mtime int64  `json:"mtime"`
+	Ctime int64  `json:"ctime"`
+	Sum   string `json:"sum"`
+}
+
+const heldTicks = 3
 
 // ID is the 16-hex directory name under $KAPI_HOME/pages for an absolute page path.
 func ID(path string) string {
@@ -113,6 +132,15 @@ func Open(home, path string) (*Store, error) {
 	}
 	if err := s.load(&st); err != nil {
 		return nil, err
+	}
+	s.held = st.Held
+	if err := s.checkHeld(); err != nil {
+		return nil, err
+	}
+	if s.held != nil {
+		if err := s.dropHeld(); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.restoreDisplaced(&st); err != nil {
 		return nil, err
@@ -196,7 +224,7 @@ func (s *Store) restoreDisplaced(st *state) error {
 		switch {
 		case bytes.Equal(theirs, before) || (st.Next != nil && bytes.Equal(theirs, after)):
 		case named && bytes.Equal(page, after):
-			err = swapIn(tmp, s.path, theirs, page)
+			_, err = swapIn(tmp, s.path, theirs, page)
 			if errors.Is(err, errFileChanged) {
 				err = keep(tmp)
 			}
@@ -336,6 +364,9 @@ func (s *Store) Source() ([]byte, uint64) {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkHeld(); err != nil {
+		return Summary{}, false, err
+	}
 	for attempt := 0; attempt < 10; attempt++ {
 		raw, err := os.ReadFile(s.path)
 		if err != nil || bytes.Equal(raw, s.src) {
@@ -369,6 +400,9 @@ func (s *Store) Refresh() (Summary, bool, error) {
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkHeld(); err != nil {
+		return s.rev, Summary{}, err
+	}
 	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
 		return s.rev, Summary{}, ErrStale
 	}
@@ -479,6 +513,9 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 	}
 	next := state{Rev: rev, Undo: undo}
 	if !bytes.Equal(src, base) {
+		if err := s.dropHeld(); err != nil {
+			return err
+		}
 		now := state{Rev: s.rev, Undo: s.undo}
 		var n [4]byte
 		if _, err := rand.Read(n[:]); err != nil {
@@ -488,7 +525,9 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 		if err := s.saveState(state{Rev: s.rev, Undo: s.undo, Next: &intent}); err != nil {
 			return err
 		}
-		if err := replaceFileVia(filepath.Join(filepath.Dir(s.path), intent.Temp), s.path, src, base); err != nil {
+		h, err := replaceFileVia(filepath.Join(filepath.Dir(s.path), intent.Temp), s.path, src, base)
+		s.held = h
+		if err != nil {
 			return errors.Join(err, s.saveState(now))
 		}
 	}
@@ -497,6 +536,7 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 }
 
 func (s *Store) saveState(st state) error {
+	st.Held = s.held
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
@@ -533,10 +573,11 @@ func writeAtomic(path string, b []byte) error {
 }
 
 func replaceFile(path string, b, expect []byte) error {
-	return replaceFileVia("", path, b, expect)
+	_, err := replaceFileVia("", path, b, expect)
+	return err
 }
 
-func replaceFileVia(tmp, path string, b, expect []byte) error {
+func replaceFileVia(tmp, path string, b, expect []byte) (*held, error) {
 	mode := os.FileMode(0o600)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
@@ -549,33 +590,38 @@ func replaceFileVia(tmp, path string, b, expect []byte) error {
 		f, err = os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer os.Remove(f.Name())
+	var h *held
+	defer func() {
+		if h == nil {
+			os.Remove(f.Name())
+		}
+	}()
 	if _, err := writeTemp(f, b); err != nil {
 		f.Close()
-		return err
+		return nil, err
 	}
 	if err := f.Chmod(mode); err != nil {
 		f.Close()
-		return err
+		return nil, err
 	}
 	if err := syncFile(f); err != nil {
 		f.Close()
-		return err
+		return nil, err
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return nil, err
 	}
 	if expect == nil {
 		err = renameFile(f.Name(), path)
 	} else {
-		err = swapIn(f.Name(), path, b, expect)
+		h, err = swapIn(f.Name(), path, b, expect)
 	}
 	if err != nil {
-		return err
+		return h, err
 	}
-	return syncDir(filepath.Dir(path))
+	return h, syncDir(filepath.Dir(path))
 }
 
 func syncDir(dir string) error {
@@ -587,10 +633,10 @@ func syncDir(dir string) error {
 	return syncFile(d)
 }
 
-func swapIn(tmp, path string, ours, expect []byte) error {
+func swapIn(tmp, path string, ours, expect []byte) (*held, error) {
 	mine, err := os.Stat(tmp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if replaceHook != nil {
 		replaceHook("swap")
@@ -599,64 +645,140 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 	if errors.Is(err, errNoSwap) {
 		cur, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !bytes.Equal(cur, expect) {
-			return errFileChanged
+			return nil, errFileChanged
 		}
-		return renameFile(tmp, path)
+		return nil, renameFile(tmp, path)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	displaced, err := capture(tmp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if bytes.Equal(displaced.b, expect) {
-		if kept, err := settled(tmp, displaced); err != nil || kept {
-			return err
-		}
+		return holding(tmp, path, displaced)
 	}
-	prev, placed := placement{b: expect}, placement{mine, ours}
+	prev, placed := placement{b: expect}, placement{fi: mine, b: ours}
 	for range 1 << 16 {
 		seen, err := capture(tmp)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		atPath, err := stamp(path, mine, ours)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		atTmp, err := stamp(tmp, mine, ours)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		newer := atTmp.After(atPath)
 		if atTmp.Equal(atPath) {
 			if newer, err = tiedTmpIsNewer(tmp, path, prev, placed); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		if !newer {
-			kept, err := settled(tmp, seen)
+			h, err := holding(tmp, path, seen)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if kept {
-				return errFileChanged
-			}
-			continue
+			return h, errFileChanged
 		}
 		if replaceHook != nil {
 			replaceHook("restore")
 		}
 		if err := swapFiles(tmp, path); err != nil {
-			return err
+			return nil, err
 		}
 		prev, placed = placed, seen
 	}
-	return errFileChanged
+	return nil, errFileChanged
+}
+
+func holding(tmp, path string, seen placement) (*held, error) {
+	at, err := capture(path)
+	if err != nil {
+		return nil, err
+	}
+	return &held{Name: filepath.Base(tmp), Seen: seen.stamp(), Placed: at.stamp()}, nil
+}
+
+func (p placement) stamp() fileStamp {
+	ino, ctime := inodeAndCtime(p.fi)
+	sum := sha256.Sum256(p.b)
+	return fileStamp{Ino: ino, Size: p.fi.Size(), Mtime: p.fi.ModTime().UnixNano(), Ctime: ctime, Sum: hex.EncodeToString(sum[:])}
+}
+
+func (f fileStamp) sameContent(o fileStamp) bool {
+	f.Ctime, o.Ctime = 0, 0
+	return f == o
+}
+
+func (s *Store) heldPath() string { return filepath.Join(filepath.Dir(s.path), s.held.Name) }
+
+func (s *Store) checkHeld() error {
+	if s.held == nil {
+		return nil
+	}
+	now, err := capture(s.heldPath())
+	if errors.Is(err, os.ErrNotExist) {
+		s.held = nil
+		return s.saveState(state{Rev: s.rev, Undo: s.undo})
+	}
+	if err != nil {
+		return err
+	}
+	if now.stamp() == s.held.Seen {
+		if s.held.quiet++; s.held.quiet < heldTicks {
+			return nil
+		}
+		return s.dropHeld()
+	}
+	page, err := capture(s.path)
+	if err != nil {
+		return err
+	}
+	if page.stamp() != s.held.Placed {
+		return s.dropHeld()
+	}
+	if err := swapFiles(s.heldPath(), s.path); err != nil {
+		return err
+	}
+	back, err := capture(s.heldPath())
+	if err != nil {
+		return err
+	}
+	if !back.stamp().sameContent(s.held.Placed) {
+		if err := swapFiles(s.heldPath(), s.path); err != nil {
+			return err
+		}
+		if back, err = capture(s.heldPath()); err != nil {
+			return err
+		}
+	}
+	if s.held, err = holding(s.heldPath(), s.path, back); err != nil {
+		return err
+	}
+	if err := syncDir(filepath.Dir(s.path)); err != nil {
+		return err
+	}
+	return s.saveState(state{Rev: s.rev, Undo: s.undo})
+}
+
+func (s *Store) dropHeld() error {
+	if s.held == nil {
+		return nil
+	}
+	if err := os.Remove(s.heldPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	s.held = nil
+	return s.saveState(state{Rev: s.rev, Undo: s.undo})
 }
 
 var settle = func() { time.Sleep(2 * time.Millisecond) }

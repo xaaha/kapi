@@ -162,7 +162,13 @@ assigns missing ids, and bumps the revision as if an `edit` happened.
 The agent's write always wins over a kapi write, whether the agent
 renames a file into place or writes into the file. Before kapi writes
 the file back, it rereads it 2ms later and starts over if the bytes
-changed. A write that lands in a file kapi moved aside is swapped back.
+changed. kapi does not delete the file its swap moved aside. It records
+the file under `held` in `state.json`, with the inode, size, mtime, ctime
+and a hash of the moved-aside file and of the file kapi left in place. Each
+refresh and each op checks the moved-aside file. If it changed, and the page
+did not, a write landed in it after the swap, so kapi swaps it back. It is
+deleted once it has stayed unchanged for 3 checks, at the next kapi write,
+or when the page next opens.
 When two writes carry the same mtime, the order comes from what kapi
 last put in place, not from the clock.
 
