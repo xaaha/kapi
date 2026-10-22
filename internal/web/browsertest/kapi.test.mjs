@@ -352,6 +352,36 @@ test("in a table cell plain Enter runs the default action, and Tab moves to the 
   assert.equal(requests("POST", "/ops")[0].body.op.kind, "cells");
 });
 
+test("while a block is being edited the composer keys belong to the composer", async () => {
+  await click('[data-kapi-id="gggggggg"] th');
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
+  await page.type("!");
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("about this table");
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 1);
+  await page.type("and again");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/messages").length === 2);
+  await page.key("Escape");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 8);
+  assert.equal(await page.eval(`!!document.querySelector('.kapi-bar [data-action="save"]')`), true);
+});
+
+test("Shift+Enter in a table cell inserts nothing", async () => {
+  await click('[data-kapi-id="gggggggg"] th');
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
+  await page.key("Enter", { shift: true });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').textContent`), "Shard");
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 8);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
 test("edits a block in place and posts its new outer HTML", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="edit"]');

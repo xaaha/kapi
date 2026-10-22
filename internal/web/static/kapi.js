@@ -710,22 +710,25 @@
 
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
-    if (editing && (e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
     send();
   });
 
   document.addEventListener("keydown", (e) => {
+    const focus = document.activeElement;
+    const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
+    const inEditor = inContent || (!!editing && bar.contains(focus));
     if (e.key === "Escape") {
-      if (editing) cancelEdit();
-      else if (panel.contains(document.activeElement)) document.activeElement.blur();
+      if (inEditor) cancelEdit();
+      else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
-      else select(null);
+      else if (!editing) select(null);
       return;
     }
-    if (!editing || e.isComposing || e.keyCode === 229) return;
-    const inContent = !bar.contains(document.activeElement);
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (editing.singleLine && inContent && !e.shiftKey))) {
+    if (!inEditor || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && editing.singleLine && inContent && e.shiftKey) {
+      e.preventDefault();
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (editing.singleLine && inContent))) {
       e.preventDefault();
       defaultAction();
     } else if (e.key === "Tab" && !e.shiftKey && inContent) {
