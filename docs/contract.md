@@ -259,7 +259,10 @@ The event log is `pages/<id>/events.ndjson`, one JSON event per line, and
 each append is fsynced before it is reported. A final line without its
 newline is a torn write: opening the log drops it and truncates the file to
 the last whole line. `positions.json` is replaced through a fsynced temp
-file and a rename, followed by an fsync of the folder.
+file and a rename, followed by an fsync of the folder. An empty or
+unreadable `positions.json` or `cursors.json` counts as missing, so the log
+still opens. Events past the last readable position are then delivered
+again rather than lost.
 
 Each line of the event log is one SSE message with `id: <seq>`. The browser
 reconnects with `Last-Event-ID` and gets everything after it. Event `data` is

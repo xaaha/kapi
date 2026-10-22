@@ -253,23 +253,32 @@ func readEvents(path string) ([]Event, int64, error) {
 }
 
 func readPositions(dir string) (positions, error) {
-	p := positions{Seen: map[string]uint64{}, Queued: map[string]uint64{}, Hooked: map[string]uint64{}, Cut: map[string][]uint64{}}
-	path := filepath.Join(dir, positionsFile)
+	p, err := readJSON(filepath.Join(dir, positionsFile), func(b []byte, p *positions) error { return json.Unmarshal(b, p) })
+	if err != nil || p != nil {
+		return filled(p), err
+	}
+	p, err = readJSON(filepath.Join(dir, cursorsFile), func(b []byte, p *positions) error { return json.Unmarshal(b, &p.Seen) })
+	return filled(p), err
+}
+
+func readJSON(path string, decode func([]byte, *positions) error) (*positions, error) {
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		path = filepath.Join(dir, cursorsFile)
-		b, err = os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			return p, nil
-		}
-		if err == nil {
-			err = json.Unmarshal(b, &p.Seen)
-		}
-	} else if err == nil {
-		err = json.Unmarshal(b, &p)
+		return nil, nil
 	}
 	if err != nil {
-		return positions{}, fmt.Errorf("%s: %w", path, err)
+		return nil, err
+	}
+	var p positions
+	if decode(b, &p) != nil {
+		return nil, nil
+	}
+	return &p, nil
+}
+
+func filled(p *positions) positions {
+	if p == nil {
+		p = &positions{}
 	}
 	for _, m := range []*map[string]uint64{&p.Seen, &p.Queued, &p.Hooked} {
 		if *m == nil {
@@ -279,7 +288,7 @@ func readPositions(dir string) (positions, error) {
 	if p.Cut == nil {
 		p.Cut = map[string][]uint64{}
 	}
-	return p, nil
+	return *p
 }
 
 func writePositions(dir string, p *positions) error {

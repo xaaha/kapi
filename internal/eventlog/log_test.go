@@ -172,13 +172,42 @@ func TestPositionsFromAnOlderCursorsFileAreKept(t *testing.T) {
 	}
 }
 
-func TestCorruptCursorsFileIsAnError(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Open(dir); err == nil {
-		t.Error("Open accepted a corrupt cursors file, which would replay every event")
+func TestAnUnreadablePositionsFileFallsBackInsteadOfFailingToOpen(t *testing.T) {
+	whole := `{"seq":1,"time":"2026-01-02T03:04:05Z","author":"human","kind":"message","text":"one"}` + "\n" +
+		`{"seq":2,"time":"2026-01-02T03:04:06Z","author":"human","kind":"message","text":"two"}` + "\n"
+	for _, c := range []struct {
+		name    string
+		files   map[string]string
+		seen    uint64
+		pending int
+	}{
+		{"empty positions", map[string]string{positionsFile: ""}, 0, 2},
+		{"torn positions", map[string]string{positionsFile: `{"seen":{"agent":2},"que`}, 0, 2},
+		{"torn positions over old cursors", map[string]string{positionsFile: `{"seen":{"age`, cursorsFile: `{"agent":1}`}, 1, 1},
+		{"corrupt old cursors", map[string]string{cursorsFile: "{not json"}, 0, 2},
+	} {
+		dir := t.TempDir()
+		c.files[eventsFile] = whole
+		for name, body := range c.files {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, pending, err := Summary(dir); err != nil || pending("agent") != c.pending {
+			t.Errorf("%s: Summary err = %v", c.name, err)
+		}
+		l, err := Open(dir)
+		if err != nil {
+			t.Errorf("%s: Open = %v, want the log open with every unseen event pending", c.name, err)
+			continue
+		}
+		if got := l.Cursor("agent"); got != c.seen {
+			t.Errorf("%s: seen = %d, want %d", c.name, got, c.seen)
+		}
+		if err := l.Ack("agent", 2); err != nil {
+			t.Errorf("%s: Ack after a fallback: %v", c.name, err)
+		}
+		l.Close()
 	}
 }
 
