@@ -136,7 +136,7 @@ func TestSanitizerKeepsSafeContent(t *testing.T) {
 		`<a href="mailto:a@b.c">x</a>`:              `href="mailto:a@b.c"`,
 		`<a href="docs/a:b">x</a>`:                  `href="docs/a:b"`,
 		`<img src="data:image/png;base64,AAAA">`:    `src="data:image/png;base64,AAAA"`,
-		`<p data-kapi-state="done">x</p>`:           `data-kapi-state="done"`,
+		`<p data-kapi-state="archived">x</p>`:       `data-kapi-state="archived"`,
 		`<p aria-label="label">x</p>`:               `aria-label="label"`,
 		`<kapi-code><b></kapi-code>`:                `&lt;b&gt;`,
 	}

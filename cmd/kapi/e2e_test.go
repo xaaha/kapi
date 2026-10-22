@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -97,7 +98,12 @@ type watcher struct {
 
 func (e *e2e) watch() *watcher {
 	e.t.Helper()
-	cmd := exec.Command(e.bin, "watch", e.page) //nolint:gosec // runs the kapi binary this test just built
+	return e.watchAs("agent")
+}
+
+func (e *e2e) watchAs(reader string) *watcher {
+	e.t.Helper()
+	cmd := exec.Command(e.bin, "watch", "--reader", reader, e.page) //nolint:gosec // runs the kapi binary this test just built
 	cmd.Env = e.env
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -247,6 +253,91 @@ func TestD10EndToEndChannelLosesNothing(t *testing.T) {
 	for _, want := range []string{"human message: fifth", "human message: sixth"} {
 		if got := w2.event(t); got != want {
 			t.Fatalf("live event = %q, want %q (each event exactly once)", got, want)
+		}
+	}
+}
+
+func TestWatchDoesNotEchoTheAgentsOwnMessages(t *testing.T) {
+	e := newE2E(t)
+	w := e.watch()
+	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	e.kapi("say", e.page, "my own reply")
+	e.kapi("send", e.page, "the human answers")
+	if got := w.event(t); got != "human message: the human answers" {
+		t.Fatalf("watch printed %q, want the human's message and not the agent's own reply", got)
+	}
+	waitFor(t, "the ack", func() bool { return e.kapi("pending", e.page) == "" })
+	if got := e.kapi(); !strings.Contains(got, "agent 0 unread (watching)") {
+		t.Errorf("home view = %q, want the agent's own reply left out of its unread count", got)
+	}
+	if got := e.kapi("pending", "--reader", "codex", e.page); !strings.Contains(got, "agent message: my own reply") || !strings.Contains(got, "human message: the human answers") {
+		t.Errorf("codex pending = %q, want the agent's reply and the human's message", got)
+	}
+}
+
+func TestTwoAgentsWithDifferentReadersSeeEachOther(t *testing.T) {
+	e := newE2E(t)
+	agent, codex := e.watchAs("agent"), e.watchAs("codex")
+	waitFor(t, "both watchers to attach", func() bool {
+		st := e.kapi("status", e.page)
+		return strings.Contains(st, "agent: attached") && strings.Contains(st, "codex: attached")
+	})
+	e.kapi("say", "--reader", "codex", e.page, "codex here")
+	e.kapi("say", e.page, "agent here")
+	if got := agent.event(t); got != "codex message: codex here" {
+		t.Errorf("agent saw %q, want codex's message and not its own", got)
+	}
+	if got := codex.event(t); got != "agent message: agent here" {
+		t.Errorf("codex saw %q, want the agent's message and not its own", got)
+	}
+}
+
+func TestReservedReaderNamesAreRefused(t *testing.T) {
+	e := newE2E(t)
+	e.kapi("send", e.page, "hello")
+	for _, args := range [][]string{
+		{"watch", "--reader", "human", e.page},
+		{"pending", "--reader", "kapi", e.page},
+		{"say", "--reader", "human", e.page, "pretending"},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd := exec.CommandContext(ctx, e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
+		cmd.Env = e.env
+		out, err := cmd.CombinedOutput()
+		cancel()
+		if err == nil || !strings.Contains(string(out), "is reserved") {
+			t.Errorf("kapi %v: %v\n%s; want a reserved reader error", args, err, out)
+		}
+	}
+	if got := e.kapi("pending", "--reader", "codex", e.page); !strings.Contains(got, "human message: hello") {
+		t.Errorf("pending = %q", got)
+	}
+}
+
+func TestTheAgentsWatchSeesFileEdits(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">a</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	resp, err := http.Get(url) //nolint:gosec // the local URL kapi just printed
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	w := e.watch()
+	waitFor(t, "the watcher to attach", func() bool { return strings.Contains(e.kapi("status", e.page), "agent: attached") })
+	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">edited by hand</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.event(t); got != `file revision on #aaaaaaaa: edited in the file: "edited by hand"` {
+		t.Errorf("watch printed %q, want the file edit", got)
+	}
+	for _, args := range [][]string{{"pending", "--reader", "file", e.page}} {
+		cmd := exec.Command(e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
+		cmd.Env = e.env
+		if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "is reserved") {
+			t.Errorf("kapi %v: %v\n%s; want a reserved reader error", args, err, out)
 		}
 	}
 }

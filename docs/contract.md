@@ -55,13 +55,33 @@ direction it was drawn in. Prose elements render to the same HTML as their sourc
 
 ### Editing
 
-Prose elements (no `data-kapi-preset`) are edited in place and saved as an
-`edit` op with the element's outer HTML. Preset elements are edited as source:
-the browser fetches `GET /p/{id}/source/{block}`, shows it in a textarea, and
-saves the textarea as the `edit` op's `HTML`. Rendered preset HTML is never
-sent back. The `HTML` of a prose element may hold `<kapi-badge>`
-elements, since a badge stays inline; any other `kapi-*` element or a
-`data-kapi-preset` attribute in it is refused with 422.
+Readers edit what they see, never markup:
+
+| Block | Edited as | Saved as |
+|---|---|---|
+| prose (no `data-kapi-preset`) | the element itself, in place | `edit` with the element's outer HTML |
+| `kapi-table` | each rendered `th` and `td`, in place, as plain text | `cells` with only the changed cells |
+| `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question` | the rendered body, in place | `edit` with `inner` set to the body |
+| `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-form`, and any other block that holds presets | a textarea with `GET /p/{id}/source/{block}?part=inner` | `edit` with `inner` set to the textarea |
+
+A prose preset is edited in place only when its rendered body round-trips to
+its source inner (the browser parses the source inner and compares it with
+the body's HTML); otherwise it falls back to the textarea. In every mode the
+element's opening tag, its attributes and its closing tag are never shown and
+never change, and rendered chrome (labels, marks, headings) is not editable.
+
+A `cells` op is `{"kind":"cells","id":"<table id>","cells":[{"row":r,"col":c,"text":"..."}]}`.
+`row` counts the `tr` elements of the source table in source order, header
+rows included; `col` counts the `th` and `td` children of that row. The store
+sets each cell's text, HTML-escaped, between its existing tags, so the cell's
+tag and attributes stay as they were. A cell outside the table, a cell given
+twice, an empty `cells` list or a target that is not a `kapi-table` is 422.
+Adding or removing rows and columns is out of scope. A `cells` op follows the
+same staleness, dangling-link and no-change rules as `edit`.
+
+A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
+a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
+or a `data-kapi-preset` attribute in it is refused with 422.
 
 ## Go interfaces
 
@@ -79,14 +99,16 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, delete, done, archive, move, undo, check, orient
+    Kind string // edit, cells, delete, archive, unarchive, move, undo, check, orient
     ID   string
     HTML string // edit: new outer HTML of the element
+    Inner *string // edit, instead of HTML: new source between the element's start and end tags
+    Cells []Cell  // cells: {Row, Col, Text} for each changed table cell
     Before string // move: id to insert before, "" means end
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
 }
-type Summary struct{ Text string; IDs []string } // "edited #k3f9a2bq" etc., goes into the event log
+type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
 var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
@@ -94,21 +116,33 @@ var ErrStale, ErrNotFound, ErrInboundLinks error
 `edit` follows the same rule: it fails with `ErrDanglingLinks` (422, naming
 the ids) when it adds a link to a missing id or removes an element that other
 elements link to.
-`done` and `archive` set `data-kapi-state` on the element. `check`, sent as
-`{"kind":"check","id":"<task id>","done":true}`, adds or removes the `done`
-attribute on a `<kapi-task>` and is refused with 422 for any other element;
-its summary is `checked` or `unchecked`. `orient`, sent as
+An `edit` with `inner` keeps the element's start tag and end tag byte for byte
+and replaces only the source between them. It follows every rule an `edit`
+with `html` does, and it fails with `ErrInnerEscapes` (422) when the new body
+would close the element or leave it unclosed. An op with both `html` and
+`inner` is 422.
+An op whose result is byte for byte the current source changes nothing: it
+returns 200 with the current `rev`, writes no `revs/` file, adds no undo step
+and logs no event (`Apply` returns an empty `Summary`).
+`archive` sets `data-kapi-state="archived"` on the element and `unarchive`
+removes `data-kapi-state`. An archived block renders dimmed and collapsed to
+one line: a small "archived" label and a text excerpt. Its toolbar offers
+Unarchive in place of Edit and Archive.
+`check`, sent as `{"kind":"check","id":"<task id>","done":true}`, adds or
+removes the `done` attribute on a `<kapi-task>` and is refused with 422 for
+any other element; its summary is `checked` or `unchecked`. `orient`, sent as
 `{"kind":"orient","id":"<diagram id>","dir":"lr"}`, sets `dir` on a flow or
 architecture `<kapi-diagram>`; a sequence diagram, any other element, or a
 `dir` other than `tb` or `lr` is refused with 422. The browser shows a Flip
-action for diagrams that carry `data-kapi-dir`. Every applied op
-saves the previous source as `revs/<rev>.html` so `undo` restores it.
+action for diagrams that carry `data-kapi-dir`, except an archived one.
+Every applied op saves the previous source as `revs/<rev>.html` so `undo`
+restores it.
 
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `done`, `archive`, `delete`, `check` and `orient` only. `move` and `undo`
-depend on the whole page, so they need the exact current `rev`. `ErrStale`
+This applies to `edit`, `cells`, `archive`, `unarchive`, `delete`, `check` and
+`orient` only. `move` and `undo` depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
 422.
@@ -184,7 +218,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 |---|---|---|
 | `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
-| `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev` |
+| `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |
@@ -207,13 +241,40 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `revision` | page changed; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty |
 | `presence` | `text` is `watching`, `busy` or `none` | set the status dot |
 
+Read receipts are not in the event log. When a reader's cursor advances (for
+example `kapi watch` acknowledging a line after printing it), and once right
+after a stream connects, the stream sends a message with no `id:` line, so
+`Last-Event-ID` resume is unaffected, and `data`
+`{"kind":"read","reader":"agent","seq":N}` with that reader's highest
+acknowledged seq. The browser shows 👀 on every human message or answer with
+`seq <= N` for any reader.
+
 The browser keeps nothing: after any reconnect it refetches the page.
 
 ## Agent side
 
 Ops reach the agent through the existing event log, so `kapi watch` shows
-`#12 human revision on #k3f9a2bq: deleted` with no new command. Agent-side
+`#12 human revision on #k3f9a2bq: deleted "Move the session store to the new…"`
+with no new command. A revision's `text` quotes the block: its text with
+whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
+the preset name without `kapi-` for a preset (`archived callout "Freeze
+writes."`). An edit quotes the new text. A file edit that changed several
+blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",
+"b", callout "c", and 1 more`). `target` still lists the ids. Agent-side
 `kapi op` and `kapi get` are phase 3.
+
+`kapi say` writes its message with the reader name as author (`--reader
+codex` writes author `codex`; the default is `agent`), so agents watching
+under different reader names see each other's messages, while sessions that
+share one reader name skip each other's. Edits made to the file itself are
+logged with author `file`. `human`, `kapi` and `file` are reserved:
+`watch`, `pending`, `ack` and `say` refuse them, and the events stream sends
+no read position for them.
+
+A reader never gets its own events back: `kapi watch` skips events whose
+author is the reader and acknowledges them once everything before them is
+acknowledged, and `kapi pending` and the home view's unread counts leave them
+out.
 
 ## Out of scope for phase 2
 

@@ -14,7 +14,10 @@ import (
 	"github.com/xaaha/kapi/internal/render"
 )
 
-const idAttr = "data-kapi-id"
+const (
+	idAttr    = "data-kapi-id"
+	stateAttr = "data-kapi-state"
+)
 
 type element struct {
 	name        string
@@ -53,7 +56,18 @@ var closesParagraph = map[string]bool{
 	"p": true, "pre": true, "section": true, "table": true, "ul": true,
 }
 
-var closesSelf = map[string]bool{"li": true, "dt": true, "dd": true, "tr": true, "td": true, "th": true, "option": true}
+var impliedEnd = map[string]map[string]bool{
+	"li":     {"li": true},
+	"dt":     {"dt": true, "dd": true},
+	"dd":     {"dt": true, "dd": true},
+	"option": {"option": true},
+	"td":     {"td": true, "th": true},
+	"th":     {"td": true, "th": true},
+	"tr":     {"td": true, "th": true, "tr": true},
+	"tbody":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+	"thead":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+	"tfoot":  {"td": true, "th": true, "tr": true, "tbody": true, "thead": true, "tfoot": true},
+}
 
 func parse(src []byte) []element {
 	var els []element
@@ -73,12 +87,13 @@ func parse(src []byte) []element {
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
 			tok := z.Token()
-			if n := len(open); n > 0 {
+			for n := len(open); n > 0; n = len(open) {
 				top := els[open[n-1]].name
-				if (top == "p" && closesParagraph[tok.Data]) || (top == tok.Data && closesSelf[top]) {
-					closeAt(open[n-1], start, start)
-					open = open[:n-1]
+				if closes := (top == "p" && closesParagraph[tok.Data]) || impliedEnd[tok.Data][top]; !closes {
+					break
 				}
+				closeAt(open[n-1], start, start)
+				open = open[:n-1]
 			}
 			e := element{name: tok.Data, attrs: tok.Attr, selfClosing: tt == html.SelfClosingTagToken, start: start, tagEnd: off, parent: -1}
 			if n := len(open); n > 0 {
@@ -131,6 +146,14 @@ func Outer(src []byte, id string) ([]byte, error) {
 		return nil, err
 	}
 	return src[e.start:e.end], nil
+}
+
+func Inner(src []byte, id string) ([]byte, error) {
+	e, err := find(parse(src), id)
+	if err != nil {
+		return nil, err
+	}
+	return src[e.tagEnd:e.closeStart], nil
 }
 
 // FormID returns the data-kapi-id of the kapi-form named name.
@@ -270,7 +293,7 @@ func alignIDs(els []element, prev []byte) map[string]int {
 
 func setAttr(src []byte, e *element, key, val string) []byte {
 	quoted := `"` + html.EscapeString(val) + `"`
-	if from, to, ok := attrValue(src[e.start:e.tagEnd], key); ok {
+	if _, from, to, ok := attrValue(src[e.start:e.tagEnd], key); ok {
 		if from == to {
 			quoted = "=" + quoted
 		}
@@ -284,7 +307,7 @@ func setAttr(src []byte, e *element, key, val string) []byte {
 }
 
 func setFlag(src []byte, e *element, key string) []byte {
-	if _, _, ok := attrValue(src[e.start:e.tagEnd], key); ok {
+	if _, _, _, ok := attrValue(src[e.start:e.tagEnd], key); ok {
 		return src
 	}
 	at := e.start + 1 + len(e.name)
@@ -292,27 +315,17 @@ func setFlag(src []byte, e *element, key string) []byte {
 }
 
 func removeAttr(src []byte, e *element, key string) []byte {
-	tag := src[e.start:e.tagEnd]
-	from, to, ok := attrValue(tag, key)
+	from, _, to, ok := attrValue(src[e.start:e.tagEnd], key)
 	if !ok {
 		return src
 	}
-	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
-	start := from
-	if from != to {
-		start = bytes.LastIndexByte(tag[:from], '=')
-		for isSpace(tag[start-1]) {
-			start--
-		}
+	for from > 0 && strings.ContainsRune(" \t\n\r\f", rune(src[e.start+from-1])) {
+		from--
 	}
-	start -= len(key)
-	for isSpace(tag[start-1]) {
-		start--
-	}
-	return splice(src, e.start+start, e.start+to, "")
+	return splice(src, e.start+from, e.start+to, "")
 }
 
-func attrValue(tag []byte, key string) (int, int, bool) {
+func attrValue(tag []byte, key string) (int, int, int, bool) {
 	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
 	i := 1
 	for i < len(tag) && !isSpace(tag[i]) && tag[i] != '/' && tag[i] != '>' {
@@ -323,7 +336,7 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 			i++
 		}
 		if i >= len(tag) || tag[i] == '>' {
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		nameStart := i
 		for i < len(tag) && !isSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
@@ -335,7 +348,7 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 		}
 		if i >= len(tag) || tag[i] != '=' {
 			if name == key {
-				return nameEnd, nameEnd, true
+				return nameStart, nameEnd, nameEnd, true
 			}
 			continue
 		}
@@ -359,10 +372,10 @@ func attrValue(tag []byte, key string) (int, int, bool) {
 			}
 		}
 		if name == key {
-			return valStart, i, true
+			return nameStart, valStart, i, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
 func splice(src []byte, from, to int, with string) []byte {

@@ -11,11 +11,13 @@ import (
 	"html"
 	"io/fs"
 	"log"
+	"maps"
 	"mime"
 	"net/http"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -208,7 +210,7 @@ func refresh(st *page.Store, l *eventlog.Log) error {
 	if err != nil || !changed {
 		return err
 	}
-	return appendRevision(l, "agent", sum)
+	return appendRevision(l, "file", sum)
 }
 
 func appendRevision(l *eventlog.Log, author string, sum page.Summary) error {
@@ -259,8 +261,17 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 }
 
 func (s *Server) handleSource(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
+	part := page.Outer
+	switch r.URL.Query().Get("part") {
+	case "":
+	case "inner":
+		part = page.Inner
+	default:
+		http.Error(w, `part must be "inner" or left out`, http.StatusBadRequest)
+		return
+	}
 	src, rev := st.Source()
-	out, err := page.Outer(src, r.PathValue("block"))
+	out, err := part(src, r.PathValue("block"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -289,6 +300,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
+	read := map[string]uint64{}
 	defer s.pages.Viewing(r.PathValue("id"))()
 	for {
 		events, changed := l.After(after)
@@ -302,15 +314,35 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 			}
 			after = e.Seq
 		}
+		cursors, acked := l.Cursors()
+		for _, reader := range slices.Sorted(maps.Keys(cursors)) {
+			if seq := cursors[reader]; seq != read[reader] && eventlog.CheckReader(reader) == nil {
+				read[reader] = seq
+				data, err := json.Marshal(readReceipt{Kind: "read", Reader: reader, Seq: seq})
+				if err != nil {
+					return
+				}
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					return
+				}
+			}
+		}
 		if err := rc.Flush(); err != nil {
 			return
 		}
 		select {
 		case <-changed:
+		case <-acked:
 		case <-r.Context().Done():
 			return
 		}
 	}
+}
+
+type readReceipt struct {
+	Kind   string `json:"kind"`
+	Reader string `json:"reader"`
+	Seq    uint64 `json:"seq"`
 }
 
 func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
@@ -349,6 +381,10 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 	}
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if sum.Text == "" {
+		writeJSON(w, http.StatusOK, map[string]uint64{"rev": rev})
 		return
 	}
 	if err := appendRevision(l, "human", sum); err != nil {

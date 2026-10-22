@@ -25,7 +25,9 @@ func TestCheckTicksAndUnticksATask(t *testing.T) {
 	if sum.Text != "unchecked" {
 		t.Errorf("summary = %+v", sum)
 	}
-	mustApply(t, s, &Op{Kind: "check", ID: "aaaaaaaa", Done: true})
+	if rev, sum, err := s.Apply(4, &Op{Kind: "check", ID: "aaaaaaaa", Done: true}); err != nil || rev != 4 || sum.Text != "" {
+		t.Errorf("check of a ticked task: rev %d, %+v, %v; want no change", rev, sum, err)
+	}
 	want := "<kapi-checklist data-kapi-id=\"llllllll\">\n" +
 		"  <kapi-task done data-kapi-id=\"aaaaaaaa\">Copy</kapi-task>\n" +
 		"  <kapi-task data-kapi-id=\"bbbbbbbb\">Flip</kapi-task>\n" +

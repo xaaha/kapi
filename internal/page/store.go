@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/html"
+
+	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -27,15 +30,24 @@ var (
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
+	ErrInnerEscapes  = errors.New("the new source closes the element early or leaves an element inside it open; edit only what goes between its tags")
 )
 
 type Op struct {
-	Kind   string `json:"kind"`
-	ID     string `json:"id"`
-	HTML   string `json:"html,omitempty"`
-	Before string `json:"before,omitempty"`
-	Done   bool   `json:"done,omitempty"`
-	Dir    string `json:"dir,omitempty"`
+	Kind   string  `json:"kind"`
+	ID     string  `json:"id"`
+	HTML   string  `json:"html,omitempty"`
+	Inner  *string `json:"inner,omitempty"`
+	Cells  []Cell  `json:"cells,omitempty"`
+	Before string  `json:"before,omitempty"`
+	Done   bool    `json:"done,omitempty"`
+	Dir    string  `json:"dir,omitempty"`
+}
+
+type Cell struct {
+	Row  int    `json:"row"`
+	Col  int    `json:"col"`
+	Text string `json:"text"`
 }
 
 type Summary struct {
@@ -221,10 +233,6 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		summary := "edited in the file"
-		if text != "" {
-			summary += "; " + text
-		}
 		err = s.commit(src, raw, s.rev+1, s.undo)
 		if errors.Is(err, errFileChanged) {
 			continue
@@ -232,7 +240,15 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		return Summary{Text: summary, IDs: changedBlocks(old, s.src)}, true, nil
+		ids := changedBlocks(old, s.src)
+		summary := "edited in the file"
+		if len(ids) > 0 {
+			summary += ": " + describeIDs(s.src, ids)
+		}
+		if text != "" {
+			summary += "; " + text
+		}
+		return Summary{Text: summary, IDs: ids}, true, nil
 	}
 	return Summary{}, false, nil
 }
@@ -287,6 +303,9 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
+	if bytes.Equal(src, s.src) {
+		return s.rev, Summary{}, nil
+	}
 	if err := s.commit(src, raw, s.rev+1, append(s.undo, s.rev)); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}
@@ -302,7 +321,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
-	case "edit", "done", "archive", "delete", "check", "orient":
+	case "edit", "cells", "archive", "unarchive", "delete", "check", "orient":
 	default:
 		return false
 	}
@@ -449,10 +468,31 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		return nil, Summary{}, err
 	}
 	one := []string{op.ID}
+	about := func(verb string) string { return verb + " " + describe(src, e) }
 	switch op.Kind {
 	case "edit":
-		out, err := edit(src, els, e, op.HTML)
-		return out, Summary{Text: "edited", IDs: one}, err
+		with := op.HTML
+		if op.Inner != nil {
+			if op.HTML != "" {
+				return nil, Summary{}, errors.New("an edit takes html or inner, not both")
+			}
+			with = string(src[e.start:e.tagEnd]) + *op.Inner + string(src[e.closeStart:e.end])
+		}
+		out, err := edit(src, els, e, with, op.Inner != nil)
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
+	case "cells":
+		with, err := setCells(src, els, e, op.Cells)
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		out, err := edit(src, els, e, with, false)
+		if err != nil {
+			return nil, Summary{}, err
+		}
+		return out, Summary{Text: "edited cells of " + describeID(out, op.ID), IDs: one}, nil
 	case "delete":
 		for i := range els {
 			l := &els[i]
@@ -464,11 +504,11 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 				return nil, Summary{}, fmt.Errorf("%w: a link to #%s", ErrInboundLinks, t.id)
 			}
 		}
-		return cut(src, e), Summary{Text: "deleted", IDs: one}, nil
-	case "done":
-		return setAttr(src, e, "data-kapi-state", "done"), Summary{Text: "marked done", IDs: one}, nil
+		return cut(src, e), Summary{Text: about("deleted"), IDs: one}, nil
 	case "archive":
-		return setAttr(src, e, "data-kapi-state", "archived"), Summary{Text: "archived", IDs: one}, nil
+		return setAttr(src, e, stateAttr, "archived"), Summary{Text: about("archived"), IDs: one}, nil
+	case "unarchive":
+		return removeAttr(src, e, stateAttr), Summary{Text: about("unarchived"), IDs: one}, nil
 	case "check":
 		if e.name != "kapi-task" {
 			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)
@@ -489,19 +529,33 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
 	case "move":
 		out, err := move(src, els, e, op.Before)
-		text := "moved #" + op.ID + " to the end"
+		text := about("moved #"+op.ID) + " to the end"
 		if op.Before != "" {
-			text = "moved #" + op.ID + " before #" + op.Before
+			text = about("moved #"+op.ID) + " before #" + op.Before
 		}
 		return out, Summary{Text: text}, err
 	}
 	return nil, Summary{}, fmt.Errorf("unknown op kind %q", op.Kind)
 }
 
-func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
+func edit(src []byte, els []element, e *element, with string, inner bool) ([]byte, error) {
 	frag, root, err := fragment(with)
+	if err != nil && inner {
+		return nil, ErrInnerEscapes
+	}
 	if err != nil {
 		return nil, err
+	}
+	if inner && root.closeStart != len(frag)-(e.end-e.closeStart) {
+		return nil, ErrInnerEscapes
+	}
+	if root.closeStart < root.end {
+		fels := parse(frag)
+		for i := 1; i < len(fels); i++ {
+			if f := &fels[i]; !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && !closedByHTML(fels, i) {
+				return nil, ErrInnerEscapes
+			}
+		}
 	}
 	if !strings.HasPrefix(root.name, "kapi-") {
 		for _, f := range parse(frag) {
@@ -528,6 +582,9 @@ func edit(src []byte, els []element, e *element, with string) ([]byte, error) {
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
 	out := splice(src, e.start, e.end, string(frag))
+	if !sameTopLevel(src, out, e.id) {
+		return nil, ErrInnerEscapes
+	}
 	before := dangling(src)
 	var added []string
 	for id := range dangling(out) {
@@ -627,4 +684,188 @@ func changedBlocks(old, cur []byte) []string {
 		}
 	}
 	return changed
+}
+
+const (
+	excerptLen   = 60
+	listedIDs    = 3
+	presetPrefix = "kapi-"
+)
+
+var inline = map[string]bool{
+	"a": true, "abbr": true, "b": true, "cite": true, "code": true, "em": true, "i": true, "kbd": true,
+	"mark": true, "q": true, "s": true, "small": true, "span": true, "strong": true, "sub": true, "sup": true, "u": true,
+}
+
+func describeIDs(src []byte, ids []string) string {
+	parts := make([]string, 0, listedIDs+1)
+	for _, id := range ids[:min(len(ids), listedIDs)] {
+		parts = append(parts, describeID(src, id))
+	}
+	if extra := len(ids) - listedIDs; extra > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", extra))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func describeID(src []byte, id string) string {
+	e, err := find(parse(src), id)
+	if err != nil {
+		return "#" + id
+	}
+	return describe(src, e)
+}
+
+func describe(src []byte, e *element) string {
+	var parts []string
+	if name, ok := strings.CutPrefix(e.name, presetPrefix); ok {
+		parts = append(parts, name)
+	}
+	if text := excerpt(src[e.start:e.end]); text != "" || len(parts) == 0 {
+		parts = append(parts, `"`+text+`"`)
+	}
+	return strings.Join(parts, " ")
+}
+
+func excerpt(outer []byte) string {
+	var b strings.Builder
+	z := html.NewTokenizer(bytes.NewReader(render.MaskRawBodies(outer)))
+	off := 0
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		start := off
+		off += len(z.Raw())
+		switch tt {
+		case html.TextToken:
+			b.WriteString(html.UnescapeString(string(outer[start:off])))
+		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
+			if name, _ := z.TagName(); !inline[string(name)] {
+				b.WriteByte(' ')
+			}
+		}
+	}
+	text := []rune(strings.Join(strings.Fields(eventlog.Printable(b.String())), " "))
+	if len(text) <= excerptLen {
+		return string(text)
+	}
+	cut := string(text[:excerptLen])
+	if text[excerptLen] != ' ' {
+		if i := strings.LastIndexByte(cut, ' '); i > 0 {
+			cut = cut[:i]
+		}
+	}
+	return strings.TrimRight(cut, " ") + "\u2026"
+}
+
+func setCells(src []byte, els []element, e *element, cells []Cell) (string, error) {
+	if e.name != "kapi-table" {
+		return "", fmt.Errorf("a cells op needs a kapi-table, not <%s>", e.name)
+	}
+	if len(cells) == 0 {
+		return "", errors.New("a cells op needs at least one cell")
+	}
+	table := -1
+	var rows [][]*element
+	for i := range els {
+		c := &els[i]
+		switch {
+		case !e.contains(c):
+		case c.name == "table" && table < 0:
+			table = i
+		case c.name == "tr" && table >= 0 && nearest(els, i, "table") == table:
+			rows = append(rows, nil)
+		case (c.name == "td" || c.name == "th") && len(rows) > 0 && c.parent >= 0 && els[c.parent].name == "tr" && nearest(els, c.parent, "table") == table:
+			rows[len(rows)-1] = append(rows[len(rows)-1], c)
+		}
+	}
+	var changes []cellChange
+	seen := map[[2]int]bool{}
+	for _, c := range cells {
+		if c.Row < 0 || c.Row >= len(rows) || c.Col < 0 || c.Col >= len(rows[c.Row]) {
+			return "", fmt.Errorf("the table has no cell at row %d, column %d", c.Row, c.Col)
+		}
+		if seen[[2]int{c.Row, c.Col}] {
+			return "", fmt.Errorf("the cell at row %d, column %d is set twice", c.Row, c.Col)
+		}
+		seen[[2]int{c.Row, c.Col}] = true
+		cell := rows[c.Row][c.Col]
+		changes = append(changes, cellChange{cell.tagEnd, cell.closeStart, html.EscapeString(c.Text)})
+	}
+	outer, err := spliceCells(src[e.start:e.end], e.start, changes)
+	return string(outer), err
+}
+
+type cellChange struct {
+	from, to int
+	text     string
+}
+
+func spliceCells(outer []byte, base int, changes []cellChange) ([]byte, error) {
+	slices.SortFunc(changes, func(a, b cellChange) int { return b.from - a.from })
+	for i := 1; i < len(changes); i++ {
+		if changes[i].to > changes[i-1].from {
+			return nil, errors.New("two cells of the op overlap in the source")
+		}
+	}
+	for _, c := range changes {
+		outer = splice(outer, c.from-base, c.to-base, c.text)
+	}
+	return outer, nil
+}
+
+func nearest(els []element, i int, name string) int {
+	for p := els[i].parent; p >= 0; p = els[p].parent {
+		if els[p].name == name {
+			return p
+		}
+	}
+	return -1
+}
+
+func sameTopLevel(src, out []byte, id string) bool {
+	was, wasN := topLevel(src)
+	is, isN := topLevel(out)
+	if slices.Equal(was, is) && isN >= wasN {
+		return true
+	}
+	lost := slices.DeleteFunc(slices.Clone(was), func(v string) bool { return v == id })
+	return slices.Equal(lost, is) && isN >= wasN-1
+}
+
+func topLevel(src []byte) ([]string, int) {
+	canon, err := render.Canonical(src)
+	if err != nil {
+		return nil, 0
+	}
+	var ids []string
+	n := 0
+	for _, e := range parse(canon) {
+		if e.parent < 0 {
+			n++
+			if e.id != "" {
+				ids = append(ids, e.id)
+			}
+		}
+	}
+	return ids, n
+}
+
+var optionalEnd = map[string]bool{
+	"li": true, "dt": true, "dd": true, "p": true, "td": true, "th": true, "tr": true,
+	"option": true, "thead": true, "tbody": true, "tfoot": true,
+}
+
+func closedByHTML(els []element, i int) bool {
+	f := &els[i]
+	if !optionalEnd[f.name] {
+		return false
+	}
+	a := f.parent
+	for a >= 0 && els[a].closeStart == els[a].end {
+		a = els[a].parent
+	}
+	return a < 0 || f.end < els[a].closeStart || !strings.HasPrefix(els[a].name, "kapi-")
 }

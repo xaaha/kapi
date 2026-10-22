@@ -17,6 +17,8 @@
   let editing = null;
   let presence = "none";
   let lastSeq = 0;
+  let readUpTo = 0;
+  let readBy = "";
   let opened = false;
   let busy = false;
   let pending = null;
@@ -83,26 +85,60 @@
   const composer = h("form", { class: "kapi-composer" },
     targetChip, input,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
-      h("span", { class: "kapi-hint", text: "Ctrl+Enter to send" }), sendButton));
+      h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), dot, statusText, ...themeToggle(),
+    h("header", { class: "kapi-panel-head" }, h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), ...themeToggle(),
       button("Undo", "undo", "Undo the last change")),
-    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), bar, composer);
+    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log,
+      h("div", { class: "kapi-presence", role: "status" }, dot, statusText)), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, ring, panel);
+  const roomStyle = h("style");
+  const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
+  const phone = matchMedia("(max-width: 760px)");
+  const BAR_GAP = 8;
+  const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
+  let room = null;
   document.body.append(root);
-
-  if (/Mac|iPhone|iPad/.test(navigator.platform)) composer.querySelector(".kapi-hint").textContent = "⌘ Enter to send";
 
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
   const peers = (el) => [...el.parentElement.children].filter((c) => c.hasAttribute("data-kapi-id"));
 
+  const INLINE = /^(A|ABBR|B|CITE|CODE|EM|I|KBD|MARK|Q|S|SMALL|SPAN|STRONG|SUB|SUP|U)$/;
+  const CHROME_TEXT = ".kapi-callout-label, .kapi-plan-mark, .kapi-code-lang, .kapi-diff-stat";
+
+  function textOf(el) {
+    let out = "";
+    const walk = (node) => {
+      for (const c of node.childNodes) {
+        if (c.nodeType === Node.TEXT_NODE) out += c.data;
+        else if (c.nodeType === Node.ELEMENT_NODE && !c.matches(CHROME_TEXT)) {
+          const gap = INLINE.test(c.tagName) ? "" : " ";
+          out += gap;
+          walk(c);
+          out += gap;
+        }
+      }
+    };
+    walk(el);
+    return out.replace(/\s+/g, " ").trim();
+  }
+
+  function labelArchived(scope) {
+    const els = [...scope.querySelectorAll('[data-kapi-state="archived"]')];
+    if (scope.matches?.('[data-kapi-state="archived"]')) els.push(scope);
+    for (const el of els) {
+      const text = textOf(el);
+      const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
+      el.setAttribute("data-kapi-excerpt", preset && text ? `${preset}: ${text}` : preset || text);
+    }
+  }
+
   function describe(id) {
     const el = find(id);
     if (!el) return "a block no longer on the page";
-    const text = (el.innerText || el.textContent).replace(/\s+/g, " ").trim();
+    const text = textOf(el);
     const short = text.length > 40 ? `${text.slice(0, 39).trimEnd()}\u2026` : text;
     const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
     if (!preset) return short || "an empty block";
@@ -151,20 +187,22 @@
       return placeRing();
     }
     if (editing) {
-      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }),
-        button("Save", "save", "Save (Ctrl+Enter)"), button("Cancel", "cancel", "Cancel (Escape)"));
+      const changed = !!editing.op();
+      const primary = changed ? button("Save", "save", `Save (${SHORTCUT})`) : button("Cancel", "cancel", `Cancel (${SHORTCUT} or Escape)`);
+      primary.classList.add("kapi-primary");
+      primary.append(h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
+      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }), primary,
+        ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
     } else {
       const list = peers(selected);
       const i = list.indexOf(selected);
-      const state = selected.getAttribute("data-kapi-state");
-      bar.replaceChildren(button("Edit", "edit"), button("Done", "done", "Mark done"), button("Archive", "archive"),
+      const archived = selected.getAttribute("data-kapi-state") === "archived";
+      bar.replaceChildren(...(archived ? [button("Unarchive", "unarchive")] : [button("Edit", "edit"), button("Archive", "archive")]),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"));
-      if (selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]')) {
+      if (!archived && selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]')) {
         bar.querySelector('[data-action="edit"]').after(button("Flip", "flip", "Flip between top to bottom and left to right"));
       }
-      bar.querySelector('[data-action="done"]').disabled = state === "done";
-      bar.querySelector('[data-action="archive"]').disabled = state === "archived";
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
       bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
     }
@@ -173,7 +211,55 @@
     placeRing();
   }
 
+  function setRoom(el, px) {
+    if (room?.el === el && room.px === px) return;
+    if (room && room.el !== el) room.el.removeAttribute("data-kapi-bar-room");
+    if (!el) {
+      room = null;
+      roomStyle.textContent = "";
+      return;
+    }
+    const base = room?.el === el ? room.base : parseFloat(getComputedStyle(el).paddingTop) || 0;
+    room = { el, px, base };
+    el.setAttribute("data-kapi-bar-room", "");
+    roomStyle.textContent = `#kapi-page [data-kapi-bar-room] { padding-top: ${base + px}px !important; }`;
+  }
+
+  function dockBar(floating) {
+    if (floating && bar.parentElement !== root) root.append(bar);
+    if (!floating && bar.parentElement !== panel) panel.insertBefore(bar, composer);
+    if (!floating) bar.removeAttribute("data-place");
+  }
+
+  function placeBar() {
+    const target = editing?.box || selected;
+    if (phone.matches || bar.hidden || !target?.isConnected) {
+      dockBar(false);
+      return setRoom(null);
+    }
+    dockBar(true);
+    bar.dataset.place = "outside";
+    const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    let r = target.getBoundingClientRect();
+    let { width, height } = bar.getBoundingClientRect();
+    if (r.right + BAR_GAP + width <= areaRight - 4) {
+      setRoom(null);
+      r = target.getBoundingClientRect();
+      bar.style.left = `${r.right + BAR_GAP}px`;
+      bar.style.top = `${Math.max(r.top, Math.min(8, r.bottom - height))}px`;
+      return;
+    }
+    bar.dataset.place = "inside";
+    ({ width, height } = bar.getBoundingClientRect());
+    setRoom(target, Math.ceil(height) + 8);
+    r = target.getBoundingClientRect();
+    if (r.top + 4 < 0) return dockBar(false);
+    bar.style.left = `${r.right - width - 4}px`;
+    bar.style.top = `${r.top + 4}px`;
+  }
+
   function placeRing() {
+    placeBar();
     ring.hidden = bar.hidden || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
@@ -255,22 +341,64 @@
     }
   }
 
+  const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
+  const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
+
+  function editInPlace(el, hosts, rev, op, singleLine = false) {
+    editing = { el, rev, hosts: hosts.map((host) => ({ host, original: host.innerHTML })), op, singleLine };
+    for (const { host } of editing.hosts) host.contentEditable = host.matches("th, td") ? "plaintext-only" : "true";
+    const first = hosts[0];
+    first.focus();
+    getSelection().selectAllChildren(first);
+    getSelection().collapseToEnd();
+    renderBar();
+  }
+
+  function editProse(el) {
+    const initial = outerHTMLOf(el);
+    editInPlace(el, [el], Number(main.dataset.rev), () => {
+      const html = outerHTMLOf(el);
+      return html === initial ? null : { kind: "edit", html };
+    });
+  }
+
+  function rowsOf(table) {
+    return [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
+  }
+
+  function numberRows(scope) {
+    for (const table of scope.querySelectorAll('[data-kapi-preset$="table"] table')) {
+      rowsOf(table).forEach((tr, i) => tr.setAttribute("data-kapi-row", i));
+    }
+  }
+
+  function editCells(el, table) {
+    const cells = rowsOf(table).flatMap((tr) =>
+      [...tr.cells].map((cell, col) => ({ cell, row: Number(tr.dataset.kapiRow), col, text: cell.textContent })));
+    editInPlace(el, cells.map((c) => c.cell), Number(main.dataset.rev), () => {
+      const changed = cells.filter((c) => c.cell.textContent !== c.text).map(({ row, col, cell }) => ({ row, col, text: cell.textContent }));
+      return changed.length ? { kind: "cells", cells: changed } : null;
+    }, true);
+  }
+
+  function roundTrips(src, body) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = src;
+    return tpl.innerHTML.trim() === body.innerHTML.trim();
+  }
+
   async function startEdit() {
     if (!selected || editing || busy) return;
     const el = selected;
     notice.hidden = true;
-    if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) {
-      editing = { el, rev: Number(main.dataset.rev), original: el.innerHTML, initial: outerHTMLOf(el), read: () => outerHTMLOf(el) };
-      el.contentEditable = "true";
-      el.focus();
-      getSelection().selectAllChildren(el);
-      getSelection().collapseToEnd();
-      return renderBar();
-    }
+    if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) return editProse(el);
+    const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
+    const table = preset === "table" && el.querySelector("table");
+    if (table && !table.querySelector("[data-kapi-preset]")) return editCells(el, table);
     busy = true;
     renderBar();
     let rev = Number(main.dataset.rev);
-    const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}`)
+    const src = await fetch(`${base}/source/${encodeURIComponent(idOf(el))}?part=inner`)
       .then((res) => {
         if (!res.ok) return null;
         rev = Number(res.headers.get("Kapi-Rev") || rev);
@@ -279,29 +407,34 @@
     busy = false;
     if (src === null) say("Could not load the source of this block.", "error");
     if (src === null || selected !== el || editing) return renderBar();
-    const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "") || "this section";
+    const body = PROSE_PRESETS.has(preset) && el.querySelector(PROSE_BODY);
+    if (body && roundTrips(src, body)) {
+      const initial = body.innerHTML;
+      return editInPlace(el, [body], rev, () => (body.innerHTML === initial ? null : { kind: "edit", inner: body.innerHTML }));
+    }
     const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of ${describe(idOf(el))}` });
     area.value = src;
     area.rows = Math.min(24, src.split("\n").length + 2);
-    const box = h("div", { class: "kapi-source-box" }, h("div", { class: "kapi-source-label", text: `Editing source of: ${preset}` }), area);
+    const box = h("div", { class: "kapi-source-box" }, h("div", { class: "kapi-source-label", text: `Editing source of: ${preset || "this section"}` }), area);
     const style = getComputedStyle(el);
     box.style.marginTop = style.marginTop;
     box.style.marginBottom = style.marginBottom;
     el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
-    editing = { el, area, box, rev, initial: src, read: () => area.value };
+    editing = { el, area, box, rev, op: () => (area.value === src ? null : { kind: "edit", inner: area.value }) };
     area.focus();
     renderBar();
   }
 
   function endEdit(restore) {
-    const { el, area, box, original } = editing;
+    const { el, area, box, hosts } = editing;
     if (area) {
       box.remove();
       el.removeAttribute("data-kapi-editing-source");
-    } else {
-      if (restore) el.innerHTML = original;
-      el.removeAttribute("contenteditable");
+    }
+    for (const { host, original } of hosts || []) {
+      if (restore) host.innerHTML = original;
+      host.removeAttribute("contenteditable");
     }
     editing = null;
     renderBar();
@@ -312,6 +445,8 @@
     const copy = el.cloneNode(true);
     copy.removeAttribute("contenteditable");
     copy.removeAttribute("data-kapi-selected");
+    copy.removeAttribute("data-kapi-excerpt");
+    copy.removeAttribute("data-kapi-bar-room");
     return copy.outerHTML;
   }
 
@@ -322,10 +457,11 @@
   async function saveEdit() {
     if (!editing || busy) return;
     const session = editing;
-    const html = session.read();
-    if (html === session.initial) return endEdit(false);
+    const change = session.op();
+    if (!change) return endEdit(false);
     const id = idOf(session.el);
-    const res = await op("edit", { id, html }, { rev: session.rev, stale: STALE_EDIT });
+    const { kind, ...fields } = change;
+    const res = await op(kind, { id, ...fields }, { rev: session.rev, stale: STALE_EDIT });
     if (editing !== session) return;
     if (res?.ok) {
       endEdit(false);
@@ -342,7 +478,7 @@
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
-    if (name === "done" || name === "archive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "archive" || name === "unarchive") return (await op(name, { id }))?.ok && refresh([id]);
     if (name === "flip") {
       const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
       return (await op("orient", { id, dir }))?.ok && refresh([id]);
@@ -392,6 +528,8 @@
     selected = null;
     main.replaceChildren(...fresh.childNodes);
     main.dataset.rev = fresh.dataset.rev;
+    labelArchived(main);
+    numberRows(main);
     select(keep ? find(keep) : null);
   }
 
@@ -410,6 +548,8 @@
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
       el.replaceWith(next);
+      labelArchived(next);
+      numberRows(next);
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
       if (selected === el) {
@@ -435,13 +575,29 @@
     if (near) log.parentElement.scrollTop = log.parentElement.scrollHeight;
   }
 
+  function markRead() {
+    for (const li of log.querySelectorAll('.kapi-msg[data-author="human"]:not([data-read])')) {
+      if (Number(li.dataset.seq) > readUpTo) continue;
+      li.setAttribute("data-read", "");
+      li.querySelector(".kapi-msg-meta").append(h("span", { class: "kapi-read", title: `Seen by ${readBy}`, "aria-label": `Seen by ${readBy}`, text: "\u{1F440}" }));
+    }
+  }
+
   function onEvent(ev) {
+    if (ev.kind === "read") {
+      if (typeof ev.seq === "number" && ev.seq > readUpTo) {
+        readUpTo = ev.seq;
+        readBy = ev.reader || "the agent";
+      }
+      return markRead();
+    }
     if (typeof ev.seq === "number") {
       if (ev.seq <= lastSeq) return;
       lastSeq = ev.seq;
     }
     if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
+    if (ev.kind === "message" || ev.kind === "answer") markRead();
     else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
     else if (ev.kind === "presence") {
       presence = STATUS[ev.text] ? ev.text : "none";
@@ -570,28 +726,43 @@
     send();
   });
 
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    send();
+  });
+
   document.addEventListener("keydown", (e) => {
+    const focus = document.activeElement;
+    const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
+    const inEditor = inContent || (!!editing && bar.contains(focus));
     if (e.key === "Escape") {
-      if (editing) cancelEdit();
-      else if (panel.contains(document.activeElement)) document.activeElement.blur();
+      if (inEditor) cancelEdit();
+      else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
-      else select(null);
+      else if (!editing) select(null);
       return;
     }
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      if (editing) {
-        e.preventDefault();
-        saveEdit();
-      } else if (document.activeElement === input) {
-        e.preventDefault();
-        send();
-      }
+    if (!inEditor || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && editing.singleLine && inContent && e.shiftKey) {
+      e.preventDefault();
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (editing.singleLine && inContent))) {
+      e.preventDefault();
+      defaultAction();
+    } else if (e.key === "Tab" && !e.shiftKey && inContent) {
+      e.preventDefault();
+      bar.querySelector(".kapi-primary")?.focus();
     }
   });
 
+  function defaultAction() {
+    if (editing?.op()) saveEdit();
+    else cancelEdit();
+  }
+
   addEventListener("scroll", placeRing, { passive: true });
   addEventListener("resize", placeRing);
-  document.addEventListener("input", placeRing);
+  document.addEventListener("input", () => (editing ? renderBar() : placeRing()));
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
@@ -604,5 +775,7 @@
     if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
   });
 
+  labelArchived(main);
+  numberRows(main);
   connect();
 })();
