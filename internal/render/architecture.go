@@ -86,7 +86,7 @@ func parseArchitecture(src string) (*archGraph, error) {
 		}
 		id := strings.TrimSpace(head)
 		if !archID.MatchString(id) {
-			return nil, fmt.Errorf("line %d: node id %q may hold only letters, digits, - _ and .", i+1, id)
+			return nil, fmt.Errorf("line %d: node id %q may hold only letters, digits, dots, dashes and underscores", i+1, id)
 		}
 		if _, dup := index[id]; dup {
 			return nil, fmt.Errorf("line %d: node %q is declared twice", i+1, id)
@@ -168,7 +168,7 @@ func writeLegend(b *bytes.Buffer, states []string) {
 	b.WriteString("</figcaption>")
 }
 
-func (n archNode) size() (w, h float64) {
+func (n *archNode) size() (w, h float64) {
 	for _, l := range n.title {
 		w = math.Max(w, float64(len([]rune(l)))*archTitleCharW)
 	}
@@ -184,8 +184,8 @@ func (n archNode) size() (w, h float64) {
 
 func layoutArchitecture(g *archGraph, s *svgWriter) {
 	sizes := make([][2]float64, len(g.nodes))
-	for i, n := range g.nodes {
-		w, h := n.size()
+	for i := range g.nodes {
+		w, h := g.nodes[i].size()
 		sizes[i] = [2]float64{w, h}
 	}
 	opts := layeredOpts{nodeGap: archGapTB, flatTwoWay: true, labelLines: func(t string) []string { return wrapAtWidth(t, labelWrapAt) }}
@@ -193,11 +193,11 @@ func layoutArchitecture(g *archGraph, s *svgWriter) {
 		opts.nodeGap = archGapLR
 	}
 	for i, at := range layoutLayered(s, sizes, g.edges, opts) {
-		s.archBox(g.nodes[i], at)
+		s.archBox(&g.nodes[i], at)
 	}
 }
 
-func (s *svgWriter) archBox(n archNode, at rect) {
+func (s *svgWriter) archBox(n *archNode, at rect) {
 	r := s.real(at)
 	s.extend(r)
 	class := "kd-node kd-arch kapi-tone-" + n.tone

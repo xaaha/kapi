@@ -3,4 +3,4 @@
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="r0000003"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 2: no node "ghost"; declare it on its own line as `ghost: Title`</div>
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="r0000004"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 2: node "a" is declared twice</div>
 <div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="r0000005"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 1: expected `id: Title | subtitle | state` or `a -&gt; b: label`, got "just a line"</div>
-<div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="r0000006"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 1: node id "bad id!" may hold only letters, digits, - _ and .</div>
+<div class="kapi-error" data-kapi-preset="diagram" role="alert" data-kapi-id="r0000006"><span class="kapi-error-tag">&lt;kapi-diagram&gt;</span> line 1: node id "bad id!" may hold only letters, digits, dots, dashes and underscores</div>
