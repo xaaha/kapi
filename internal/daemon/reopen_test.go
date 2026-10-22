@@ -379,3 +379,33 @@ func TestTheViewingFileSurvivesTheDaemonStopping(t *testing.T) {
 		t.Error("stopping the daemon removed the viewing file of a page whose tab was open")
 	}
 }
+
+func TestStartSkipsThePageTheStartingOpenAskedFor(t *testing.T) {
+	home := shortHome(t)
+	captureLog(t)
+	asked := knownPage(t, home, "asked.html")
+	other := knownPage(t, home, "other.html")
+	_, stop := servingAt(t, home)
+	askedURL := call(t, home, &Request{Op: "open", Page: asked}).URL
+	stop()
+	markViewing(t, home, asked, 0)
+	markViewing(t, home, other, time.Minute)
+
+	o := &opener{}
+	s := New(home)
+	s.Browser = o.open
+	s.ReopenExcept = page.ID(asked)
+	stop = serveServer(t, home, s)
+	defer stop()
+	waitUntil(t, "one reopen", func() bool { return len(o.opened()) >= 1 })
+	time.Sleep(100 * time.Millisecond)
+	if got, want := o.opened(), pageURLs(t, home, []string{other}); !slices.Equal(got, want) {
+		t.Errorf("reopened %v, want only %v", got, want)
+	}
+	if exists(viewingFile(home, asked)) {
+		t.Error("the skipped page kept its viewing file")
+	}
+	if body := reopenBody(t, askedURL); body["reopened"] != nil {
+		t.Errorf("the skipped page's old tab is told it was reopened: %v", body)
+	}
+}

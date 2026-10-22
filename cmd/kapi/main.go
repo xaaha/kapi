@@ -198,6 +198,7 @@ func statusCmd(c api, out io.Writer) *cli.Command {
 func daemonCmd() *cli.Command {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	reopen := fs.Bool("reopen", false, "Reopen pages whose tab was open when the daemon last stopped; kapi sets this when it starts the daemon on demand")
+	except := fs.String("reopen-except", "", "Page id not to reopen, because the kapi open that starts the daemon opens it itself")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
@@ -210,6 +211,7 @@ func daemonCmd() *cli.Command {
 			defer stop()
 			s := daemon.New(home())
 			s.Browser = daemonBrowser(*reopen, os.Getenv, runtime.GOOS)
+			s.ReopenExcept = *except
 			return s.Serve(ctx)
 		},
 	}

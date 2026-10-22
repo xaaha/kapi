@@ -144,6 +144,8 @@ each reopen to `$KAPI_HOME/daemon.log` by page path. It reopens nothing when
 `KAPI_NO_BROWSER` is set, on Linux when neither `DISPLAY` nor
 `WAYLAND_DISPLAY` is set, or when run as plain `kapi daemon` in the
 foreground. A page whose opener fails is not reported as `reopened`.
+When `kapi open <page>` is what starts the daemon, the client adds
+`--reopen-except <page id>`, so that page opens once, from the CLI.
 
 The old tab shows "Kapi restarted and reopened this page in a new tab. You
 can close this one." when the 403 says `reopened`, and "Kapi restarted. Run

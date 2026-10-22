@@ -127,3 +127,22 @@ func TestADaemonStartedOnDemandLeavesAClosedTabClosed(t *testing.T) {
 		t.Errorf("a tab closed before the restart was reopened: %q", b)
 	}
 }
+
+func TestOpenAfterARestartOpensThePageOnce(t *testing.T) {
+	e := newE2E(t)
+	e.env = append(e.env, "DISPLAY=:99")
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.view(strings.TrimSpace(e.kapi("open", "--print", e.page)))
+	e.killDaemon()
+	e.kapi("open", e.page)
+	time.Sleep(500 * time.Millisecond)
+	b, err := os.ReadFile(e.opened)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 1 {
+		t.Errorf("kapi open after a restart opened %d tabs: %q", len(lines), lines)
+	}
+}

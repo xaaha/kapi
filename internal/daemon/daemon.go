@@ -68,7 +68,8 @@ type ReaderStatus struct {
 type Server struct {
 	home string
 
-	Browser func(url string) error
+	Browser      func(url string) error
+	ReopenExcept string
 
 	mu       sync.Mutex
 	pages    map[string]*eventlog.Log

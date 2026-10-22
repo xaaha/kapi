@@ -69,6 +69,9 @@ func (s *Server) takeViewedPages() []viewedPage {
 		if err := os.Remove(file); err != nil {
 			log.Printf("viewing %s: %v", d.Name(), err)
 		}
+		if d.Name() == s.ReopenExcept {
+			continue
+		}
 		path, err := s.PagePath(d.Name())
 		if err != nil {
 			continue
