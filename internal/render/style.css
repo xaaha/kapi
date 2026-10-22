@@ -166,6 +166,19 @@ body {
 .kapi-option-body > :last-child,
 .kapi-plan-body > :last-child { margin-bottom: 0; }
 
+.kapi-badge {
+  display: inline-block;
+  padding: 0 0.6em;
+  border: 1px solid var(--kapi-tone-border);
+  border-radius: 999px;
+  background: var(--kapi-tone-fill);
+  color: var(--kapi-tone-text);
+  font-size: 0.8em;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
 .kapi-code,
 .kapi-diff {
   margin: 1.25rem 0;

@@ -39,6 +39,7 @@ func init() {
 		"kapi-choice":   renderChoice,
 		"kapi-opt":      renderOpt,
 		"kapi-text":     renderTextField,
+		"kapi-badge":    renderBadge,
 	}
 }
 
@@ -69,7 +70,7 @@ func presetRenders(n *html.Node) bool {
 
 var phrasing = set("p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "a", "em", "strong", "b", "i", "u", "s",
 	"small", "code", "mark", "sub", "sup", "q", "cite", "abbr", "kbd", "samp", "var", "del", "ins", "time",
-	"dfn", "summary", "caption", "kapi-opt", "kapi-text", "kapi-choice")
+	"dfn", "summary", "caption", "kapi-opt", "kapi-text", "kapi-choice", "kapi-badge")
 
 func renderedParent(n *html.Node) *html.Node {
 	p := n.Parent
@@ -285,5 +286,27 @@ func renderTextField(b *bytes.Buffer, n *html.Node) error {
 	b.WriteString("</span>")
 	writeStart(b, "textarea", kv("name", name, "rows", "3"))
 	b.WriteString("</textarea></label>")
+	return nil
+}
+
+func toneAttr(n *html.Node) (string, error) {
+	tone := attrVal(n, "tone")
+	if tone == "" {
+		return "neutral", nil
+	}
+	if !isTone(tone) {
+		return "", fmt.Errorf("tone must be %s, not %q", toneList, tone)
+	}
+	return tone, nil
+}
+
+func renderBadge(b *bytes.Buffer, n *html.Node) error {
+	tone, err := toneAttr(n)
+	if err != nil {
+		return err
+	}
+	writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
+	renderChildren(b, n)
+	writeEnd(b, "span")
 	return nil
 }

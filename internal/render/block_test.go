@@ -209,8 +209,18 @@ func TestPresetExamplesRenderCleanly(t *testing.T) {
 			t.Errorf("%s renders but is missing from Presets()", name)
 		}
 	}
-	if len(names) != 8 {
-		t.Errorf("Presets() has %d entries, the contract lists 8", len(names))
+	contract, err := os.ReadFile("../../docs/contract.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := regexp.MustCompile("(?m)^\\| `<(kapi-[a-z]+)>`").FindAllStringSubmatch(string(contract), -1)
+	for _, m := range listed {
+		if !names[m[1]] {
+			t.Errorf("the contract lists %s, but Presets() does not", m[1])
+		}
+	}
+	if len(names) != len(listed) {
+		t.Errorf("Presets() has %d entries, the contract lists %d", len(names), len(listed))
 	}
 }
 

@@ -124,4 +124,11 @@ func (s *Store) Source() ([]byte, uint64) {
   <kapi-text name="notes">Anything else?</kapi-text>
 </kapi-form>`,
 	},
+	{
+		Name:    "kapi-badge",
+		Summary: "A small coloured pill for a status, inside prose or a table cell",
+		Example: `<!-- tone: neutral (default), info, success, warning, danger or accent. Body: a word or two.
+     Use it inline: inside a <p>, an <li> or a table cell. -->
+<p>PR #19 is <kapi-badge tone="success">merged</kapi-badge>, #18 is <kapi-badge tone="warning">in review</kapi-badge>.</p>`,
+	},
 }
