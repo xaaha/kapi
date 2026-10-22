@@ -602,7 +602,7 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 	}()
 	for {
 		_, changed := l.After(^uint64(0))
-		events, _, queued := l.Unseen(req.Reader)
+		events, queued := unseenForAgent(l, req.Reader)
 		if len(events) > 0 && events[len(events)-1].Seq > queued {
 			reply(enc, &Response{Events: events})
 			return
@@ -615,6 +615,11 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 			return
 		}
 	}
+}
+
+func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, queued uint64) {
+	events, _, queued = l.Unseen(reader)
+	return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Author == "file" || e.Author == "kapi" }), queued
 }
 
 func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
@@ -631,7 +636,7 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		events, _, _ := l.Unseen(reader)
+		events, _ := unseenForAgent(l, reader)
 		if len(events) == 0 {
 			continue
 		}

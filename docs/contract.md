@@ -289,7 +289,9 @@ and `kapi pending` and the home view's unread counts leave them out.
 ### Delivery and seen
 
 A harness may hold or drop a line it was handed, so printing an event never
-marks it seen. Events reach the agent three ways:
+marks it seen. `kapi wait` and the hooks below leave out the agent's own
+page edits (authors `file` and `kapi`); `kapi watch` and `kapi pending` still
+show them. Events reach the agent three ways:
 
 - `kapi wait <page>` blocks until the page has an unseen event that is not
   queued yet, prints every unseen event, queues them and exits. The agent runs
