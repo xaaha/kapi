@@ -447,13 +447,18 @@ func (s *Server) handle(conn net.Conn) {
 	}
 	switch req.Op {
 	case "append":
+		marks := req.Seq > 0 && req.Author != "" && eventlog.CheckReader(req.Author) == nil
+		if queued := l.Queued(req.Author); marks && req.Seq > queued {
+			reply(enc, &Response{Error: fmt.Sprintf("--seen #%d was never handed to %s; the last event handed over is #%d, so nothing was sent", req.Seq, req.Author, queued)})
+			return
+		}
 		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		if req.Seq > 0 && e.Author != "" && eventlog.CheckReader(e.Author) == nil {
-			if err := l.Ack(e.Author, min(req.Seq, e.Seq)); err != nil {
+		if marks {
+			if err := l.Ack(e.Author, req.Seq); err != nil {
 				reply(enc, &Response{Error: err.Error()})
 				return
 			}
