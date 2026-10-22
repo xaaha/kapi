@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ type fakeAPI struct {
 	resp     daemon.Response
 	watches  []func(fn func(daemon.Response) error) error
 	watched  []string
+	stdin    string
 }
 
 func (f *fakeAPI) Do(req *daemon.Request) (daemon.Response, error) {
@@ -38,7 +40,7 @@ func (f *fakeAPI) Watch(page, reader string, fn func(daemon.Response) error) err
 func run(t *testing.T, f *fakeAPI, args ...string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
-	err := newRoot(f, &out, func(time.Duration) {}).Execute(args)
+	err := newRoot(f, strings.NewReader(f.stdin), &out, func(time.Duration) {}).Execute(args)
 	return out.String(), err
 }
 
@@ -72,7 +74,7 @@ func TestD10SendAndSayBuildMessages(t *testing.T) {
 				t.Errorf("output = %q", out)
 			}
 			want := daemon.Request{Op: "append", Page: abs(t, "plan.html"), Author: tc.wantAuthor, Kind: "message", Target: tc.wantTarget, Text: "is this true?"}
-			if len(f.requests) != 1 || f.requests[0] != want {
+			if len(f.requests) != 1 || !reflect.DeepEqual(f.requests[0], want) {
 				t.Errorf("requests = %+v, want %+v", f.requests, want)
 			}
 		})
@@ -161,11 +163,33 @@ func TestD10HelpAndCompletion(t *testing.T) {
 
 func TestReviewF1MessageWordsStartingWithADashAreText(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 1}}}
-	if _, err := run(t, f, "say", "--on", "cutover", "plan.html", "-", "item", "-5", "--on", "x"); err != nil {
+	if _, err := run(t, f, "say", "--on", "cutover", "plan.html", "-on", "the", "other", "hand", "-", "item", "-5", "--x"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.requests[0]; got.Text != "- item -5 --on x" || got.Target != "cutover" {
+	if got := f.requests[0]; got.Text != "-on the other hand - item -5 --x" || got.Target != "cutover" {
 		t.Errorf("request = %+v", got)
+	}
+}
+
+func TestACommandFlagAnywhereAfterThePageIsRefusedInsteadOfSentAsText(t *testing.T) {
+	for _, args := range [][]string{
+		{"say", "plan.html", "--seen", "3", "x"},
+		{"say", "plan.html", "hello", "--seen", "1"},
+		{"say", "plan.html", "x", "--on=cutover"},
+		{"send", "plan.html", "--on", "cutover", "is this true?"},
+	} {
+		f := &fakeAPI{}
+		_, err := run(t, f, args...)
+		if err == nil || !strings.Contains(err.Error(), "put flags before the page") {
+			t.Errorf("%v: error = %v", args, err)
+		}
+		if len(f.requests) != 0 {
+			t.Errorf("%v: sent %+v", args, f.requests)
+		}
+	}
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 1}}}
+	if _, err := run(t, f, "send", "plan.html", "--verbose", "is", "text"); err != nil || f.requests[0].Text != "--verbose is text" {
+		t.Errorf("a word that is not a flag of send = %+v, %v; want it sent as text", f.requests, err)
 	}
 }
 
@@ -217,10 +241,11 @@ pages[2]:
   /w/plan.html: agent 2 unread (watching), codex 0 unread
   /w/notes.html: agent 0 unread
 next:
-  kapi watch <page>       stream a page's events, one line each; run it where each line wakes you
-  kapi say <page> <text>  reply on a page
-  kapi pending <page>     list unread events without consuming them
-  kapi --help             every command
+  kapi wait <page>                   wait for the next event, print every unseen one and exit; run it in the background, again after each exit
+  kapi say --seen <n> <page> <text>  reply; n is the number of the last event you read, so the page shows you read it
+  kapi seen <page> <n>               show you read every event through #n, without replying
+  kapi pending <page>                list unseen events and mark them seen
+  kapi --help                        every command
 `
 	if out != want {
 		t.Errorf("home view:\n%s\nwant:\n%s", out, want)
@@ -235,7 +260,7 @@ func TestHomeViewWithNoPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "pages: none yet\n") || !strings.Contains(out, "kapi watch <page>") {
+	if !strings.Contains(out, "pages: none yet\n") || !strings.Contains(out, "kapi wait <page>") {
 		t.Errorf("home view:\n%s", out)
 	}
 }
@@ -318,5 +343,92 @@ func TestEventLinesCarryNoTerminalControls(t *testing.T) {
 	e := &eventlog.Event{Seq: 4, Author: "human\x1b[31m", Kind: "revision", Target: "a\x1b[2J", Text: "edited \"\x1b]0;owned\x07\x1b[2J\u202ex\""}
 	if got, want := eventLine(e), `#4 human[31m revision on #a[2J: edited "]0;owned[2Jx"`; got != want {
 		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
+func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{{Seq: 2, Author: "human", Kind: "message", Text: "one"}, {Seq: 5, Author: "human", Kind: "answer", Text: "two"}}}}
+	out, err := run(t, f, "wait", "--reader", "codex", "plan.html")
+	if err != nil || out != "#2 human message: one\n#5 human answer: two\n" {
+		t.Fatalf("wait = %q, %v", out, err)
+	}
+	page := abs(t, "plan.html")
+	want := []daemon.Request{{Op: "wait", Page: page, Reader: "codex"}, {Op: "queue", Page: page, Reader: "codex", Seq: 5}}
+	if !reflect.DeepEqual(f.requests, want) {
+		t.Errorf("requests = %+v, want %+v", f.requests, want)
+	}
+}
+
+func TestSeenReportsHowFarItMarked(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 9}}}
+	out, err := run(t, f, "seen", "plan.html", "#9")
+	if err != nil || out != "seen through #9\n" {
+		t.Fatalf("seen = %q, %v", out, err)
+	}
+	if f.requests[0].Op != "seen" || f.requests[0].Reader != "agent" || f.requests[0].Seq != 9 {
+		t.Errorf("request = %+v", f.requests[0])
+	}
+}
+
+func TestSayWithSeenNamesTheLastEventRead(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 7}}}
+	if _, err := run(t, f, "say", "--seen", "#5", "plan.html", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if f.requests[0].Seq != 5 || f.requests[0].Author != "agent" {
+		t.Errorf("request = %+v, want seen #5", f.requests[0])
+	}
+	for _, bad := range []string{"0", "x", "#"} {
+		if _, err := run(t, &fakeAPI{}, "say", "--seen", bad, "plan.html", "ok"); err == nil {
+			t.Errorf("--seen %q accepted", bad)
+		}
+	}
+	if _, err := run(t, &fakeAPI{}, "send", "--seen", "3", "plan.html", "hi"); err == nil {
+		t.Error("send accepted --seen, which only a reader can give")
+	}
+}
+
+func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
+	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: "<ship it>"}}}}}
+	cases := []struct {
+		stdin string
+		want  string
+	}{
+		{`{"hook_event_name":"Stop","cwd":"/w"}`, `{"decision":"block","reason":"kapi: `},
+		{`{"hook_event_name":"PostToolUse","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+	}
+	for _, tc := range cases {
+		f := &fakeAPI{resp: inbox, stdin: tc.stdin}
+		out, err := run(t, f, "hook-messages")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.stdin, err)
+		}
+		if !strings.HasPrefix(out, tc.want) || !strings.Contains(out, `/w/plan.html:\n  #4 human message: <ship it>`) || !strings.Contains(out, "kapi say <page> <text>") {
+			t.Errorf("%s: output = %s", tc.stdin, out)
+		}
+		want := []daemon.Request{
+			{Op: "inbox", Page: "/w", Reader: "agent"},
+			{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+		}
+		if !reflect.DeepEqual(f.requests, want) {
+			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
+		}
+	}
+	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":"/w"}`, `{"hook_event_name":"Stop","cwd":"rel"}`, `{"hook_event_name":"PostToolUse","cwd":"/w","agent_id":"a1","agent_type":"Explore"}`} {
+		f := &fakeAPI{resp: inbox, stdin: stdin}
+		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 0 {
+			t.Errorf("%s: %q, %v, %d requests; want nothing", stdin, out, err, len(f.requests))
+		}
+	}
+	f := &fakeAPI{stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+		t.Errorf("nothing unseen: %q, %v; want no output so the agent may stop", out, err)
+	}
+	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "positions.json: bad"}}}
+	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}} {
+		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
+		}
 	}
 }

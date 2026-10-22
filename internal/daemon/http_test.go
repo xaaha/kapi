@@ -197,15 +197,24 @@ func TestWatchingReportsPresenceAndNeverDeliversIt(t *testing.T) {
 	if got.Event == nil || got.Event.Kind != "message" || got.Event.Text != "go" {
 		t.Fatalf("watch delivered %+v, want the message and no presence", got.Event)
 	}
-	if err := json.NewEncoder(conn).Encode(Request{Op: "ack", Seq: got.Event.Seq}); err != nil {
+	if err := json.NewEncoder(conn).Encode(Request{Op: "queue", Seq: got.Event.Seq}); err != nil {
 		t.Fatal(err)
 	}
-	waitPresence(t, l, "agent watching", "agent busy")
-
+	waitFor(t, "the message to be queued", func() bool { return l.Queued("agent") >= got.Event.Seq })
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "done"})
-	waitPresence(t, l, "agent watching", "agent busy", "agent watching")
 	conn.Close()
-	waitPresence(t, l, "agent watching", "agent busy", "agent watching", "agent none")
+	waitPresence(t, l, "agent watching", "agent none")
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestWatchSkipsAndAcknowledgesTheReadersOwnEvents(t *testing.T) {
@@ -225,19 +234,19 @@ func TestWatchSkipsAndAcknowledgesTheReadersOwnEvents(t *testing.T) {
 	if err := dec.Decode(&got); err != nil || got.Event.Text != "theirs" {
 		t.Fatalf("watch delivered %+v, %v; want the human's message and not the agent's own", got.Event, err)
 	}
-	if err := enc.Encode(Request{Op: "ack", Seq: got.Event.Seq}); err != nil {
+	if err := enc.Encode(Request{Op: "queue", Seq: got.Event.Seq}); err != nil {
 		t.Fatal(err)
 	}
 	mine := call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "mine again"}).Event.Seq
 	deadline := time.Now().Add(2 * time.Second)
-	for l.Cursor("agent") < mine {
+	for l.Queued("agent") < mine {
 		if time.Now().After(deadline) {
-			t.Fatalf("cursor = %d, want the agent's own message #%d acknowledged", l.Cursor("agent"), mine)
+			t.Fatalf("queued = %d, want the agent's own message #%d queued", l.Queued("agent"), mine)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 0 {
-		t.Errorf("pending = %+v, want nothing", p.Events)
+	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "theirs" {
+		t.Errorf("pending = %+v, want only the human's message and none of the agent's own", p.Events)
 	}
 }
 
@@ -263,25 +272,26 @@ func TestAnOwnEventIsNotAcknowledgedPastAnUnacknowledgedOne(t *testing.T) {
 	if err := dec.Decode(&got); err != nil || got.Event.Text != "sync" {
 		t.Fatalf("watch delivered %+v, %v", got.Event, err)
 	}
-	if c := l.Cursor("agent"); c >= human {
-		t.Fatalf("cursor = %d before any ack, passed the unacknowledged #%d", c, human)
+	if c := l.Queued("agent"); c >= human {
+		t.Fatalf("queued = %d before any ack, passed the unacknowledged #%d", c, human)
 	}
-	if err := enc.Encode(Request{Op: "ack", Seq: human}); err != nil {
+	if err := enc.Encode(Request{Op: "queue", Seq: human}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for l.Cursor("agent") < human {
+	for l.Queued("agent") < human {
 		if time.Now().After(deadline) {
-			t.Fatalf("cursor = %d, want #%d acknowledged", l.Cursor("agent"), human)
+			t.Fatalf("queued = %d, want #%d queued", l.Queued("agent"), human)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if c := l.Cursor("agent"); c != human {
-		t.Fatalf("cursor = %d, passed the unacknowledged #%d", c, got.Event.Seq)
+	if c := l.Queued("agent"); c != human {
+		t.Fatalf("queued = %d, passed the unacknowledged #%d", c, got.Event.Seq)
 	}
 	conn.Close()
+	call(t, home, &Request{Op: "seen", Page: path, Reader: "agent", Seq: human})
 	if p := call(t, home, &Request{Op: "pending", Page: path, Reader: "agent"}); len(p.Events) != 1 || p.Events[0].Text != "sync" {
-		t.Errorf("pending = %+v, want the unacknowledged sync event", p.Events)
+		t.Errorf("pending = %+v, want the unqueued sync event", p.Events)
 	}
 }
 
@@ -353,12 +363,13 @@ func TestConcurrentPresenceLandsInTheLogInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
-	for i := range 16 {
+	for range 16 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := range 20 {
-				s.setPresence(path, "agent", []string{"watching", "busy"}[(i+j)%2], l)
+			for range 20 {
+				s.attach(path, "agent", l)
+				s.detach(path, "agent", l)
 			}
 		}()
 	}
@@ -369,8 +380,8 @@ func TestConcurrentPresenceLandsInTheLogInOrder(t *testing.T) {
 			t.Fatalf("presence %d and %d are both %q: updates landed out of order", i-1, i, got[i])
 		}
 	}
-	if want := "agent " + s.presenceOf(path, "agent"); got[len(got)-1] != want {
-		t.Errorf("last presence in the log = %q, daemon thinks %q", got[len(got)-1], want)
+	if got[len(got)-1] != "agent none" {
+		t.Errorf("last presence in the log = %q, want agent none once every watcher left", got[len(got)-1])
 	}
 }
 
@@ -438,7 +449,7 @@ func TestOpenReportsASplit(t *testing.T) {
 func TestTheDaemonRefusesReservedReaders(t *testing.T) {
 	home, _, _ := serving(t)
 	path := writePage(t, "<p>x</p>")
-	for _, req := range []Request{{Op: "pending", Reader: "human"}, {Op: "ack", Reader: "kapi", Seq: 1}} {
+	for _, req := range []Request{{Op: "pending", Reader: "human"}, {Op: "seen", Reader: "kapi", Seq: 1}, {Op: "wait", Reader: "file"}} {
 		req.Page = path
 		if resp := call(t, home, &req); !strings.Contains(resp.Error, "is reserved") {
 			t.Errorf("%s as %s: %+v, want a reserved reader error", req.Op, req.Reader, resp)

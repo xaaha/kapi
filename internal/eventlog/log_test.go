@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -84,6 +85,93 @@ func TestAckIsMonotonic(t *testing.T) {
 	}
 }
 
+func TestQueuedSurvivesReopenAndNeverTrailsSeen(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"a", "b", "c"} {
+		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := l.Queue("agent", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Queue("agent", 4); err == nil {
+		t.Error("queue past the end should fail")
+	}
+	l.Close()
+	if l, err = Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	if q, c := l.Queued("agent"), l.Cursor("agent"); q != 2 || c != 0 {
+		t.Fatalf("after reopen queued = %d, seen = %d; want 2 and 0", q, c)
+	}
+	if len(l.Pending("agent")) != 3 {
+		t.Errorf("pending = %+v, want every queued event still unseen", l.Pending("agent"))
+	}
+	if err := l.Ack("agent", 3); err != nil {
+		t.Fatal(err)
+	}
+	if q := l.Queued("agent"); q != 3 {
+		t.Errorf("queued = %d after seeing #3, want 3", q)
+	}
+}
+
+func TestAHandoverSetsEveryPositionInOneWriteAndSeenStopsBeforeACutEvent(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "m"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := l.Queue("agent", 5); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Handover("agent", 4, []uint64{3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Handover("agent", 9, nil); err == nil {
+		t.Error("a handover past the last event was accepted")
+	}
+	l.Close()
+	if l, err = Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	if s, h, q, c := l.Cursor("agent"), l.Hooked("agent"), l.Queued("agent"), l.Cut("agent"); s != 2 || h != 4 || q != 5 || !slices.Equal(c, []uint64{3}) {
+		t.Fatalf("after reopen seen %d, hooked %d, queued %d, cut %v; want 2, 4, 5, [3]", s, h, q, c)
+	}
+	if err := l.Ack("agent", 4); err != nil {
+		t.Fatal(err)
+	}
+	if c := l.Cut("agent"); len(c) != 0 {
+		t.Errorf("cut = %v after the agent read through #4, want none", c)
+	}
+	if _, err := os.Stat(filepath.Join(dir, cursorsFile)); !os.IsNotExist(err) {
+		t.Errorf("a separate cursors file was written: %v", err)
+	}
+}
+
+func TestPositionsFromAnOlderCursorsFileAreKept(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte(`{"agent":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := l.Cursor("agent"); c != 1 {
+		t.Errorf("seen = %d from an older kapi's cursors.json, want 1", c)
+	}
+}
+
 func TestCorruptCursorsFileIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {
@@ -123,13 +211,13 @@ func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
 	dir := t.TempDir()
 	type syncAt struct {
-		name, cursors string
+		name, positions string
 		events        bool
 	}
 	var syncs []syncAt
 	orig := syncFile
 	syncFile = func(f *os.File) error {
-		b, _ := os.ReadFile(filepath.Join(dir, cursorsFile))
+		b, _ := os.ReadFile(filepath.Join(dir, positionsFile))
 		_, err := os.Stat(filepath.Join(dir, eventsFile))
 		syncs = append(syncs, syncAt{f.Name(), string(b), err == nil})
 		return orig(f)
@@ -150,10 +238,10 @@ func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
 	if err := l.Ack("agent", 1); err != nil {
 		t.Fatal(err)
 	}
-	tmp := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name != dir && s.cursors == "" })
-	after := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name == dir && s.cursors == `{"agent":1}` })
+	tmp := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name != dir && s.positions == "" })
+	after := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name == dir && strings.Contains(s.positions, `"seen":{"agent":1}`) })
 	if tmp < 0 || after < tmp {
-		t.Errorf("Ack must sync the new cursors file before its rename and %s after it, synced %+v", dir, syncs)
+		t.Errorf("Ack must sync the new positions file before its rename and %s after it, synced %+v", dir, syncs)
 	}
 }
 

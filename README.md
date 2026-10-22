@@ -13,7 +13,7 @@ Shared HTML pages that you and your coding agent both write to.
 A long session with an agent buries decisions in chat. kapi gives the two of
 you one page instead: the agent writes findings, plans, code and diagrams to an
 HTML file, you edit, archive, reorder or ask about any block in the browser,
-and every change reaches the agent as one line from `kapi watch`. It works with
+and every change reaches the agent as one line from `kapi wait`. It works with
 any agent that can run a command, and nothing is lost if either side restarts.
 
 ## Install
@@ -52,16 +52,21 @@ streams it to the agent and survives restarts without losing or replaying
 events. The browser editor comes next.
 
 ```sh
-kapi send plan.html --on cutover "is this still true?"   # as the human
-kapi watch plan.html                                       # as the agent: one line per event
-kapi say plan.html "yes, confirmed at 14:20"               # reply as the agent
+kapi send --on cutover plan.html "is this still true?"   # as the human
+kapi wait plan.html                                        # as the agent: print what is unseen and exit
+kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
+kapi seen plan.html 4                                      # or say you read #4 without replying
 kapi status plan.html
 kapi version
 kapi --help
 ```
 
-In Claude Code, run `kapi watch <page>` under the Monitor tool so each event
-arrives as a notification while the agent keeps working.
+In Claude Code, run `kapi wait <page>` as a background command and start it
+again each time it exits; its exit wakes the agent within seconds. The page
+shows a message as Queued once kapi has handed it over, and 👀 only once the
+agent names it with `--seen` or `kapi seen`, runs `kapi pending`, or a kapi
+hook puts it in the agent's context. `kapi watch <page>`
+still streams one line per event for harnesses that deliver every line.
 
 ## Agent harnesses
 
@@ -74,8 +79,11 @@ kapi setup hooks --remove # take it out again
 ```
 
 This adds a SessionStart hook that runs `kapi` (Copilot CLI uses
-`kapi hook-context`, which prints the same view as JSON). Re-running repairs it.
-Restart your agent sessions afterwards.
+`kapi hook-context`, which prints the same view as JSON). In Claude Code it
+also adds UserPromptSubmit, PostToolUse and Stop hooks: a busy agent sees a
+new message on its next tool call, and it cannot stop while a message on a
+page under its directory is unseen. Re-running repairs them. Restart your
+agent sessions afterwards.
 
 ## Skill
 

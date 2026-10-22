@@ -300,7 +300,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	if _, err := fmt.Fprint(w, "retry: 1000\n\n"); err != nil {
 		return
 	}
-	read := map[string]uint64{}
+	sent := map[[2]string]uint64{}
 	defer s.pages.Viewing(r.PathValue("id"))()
 	for {
 		events, changed := l.After(after)
@@ -314,11 +314,18 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 			}
 			after = e.Seq
 		}
-		cursors, acked := l.Cursors()
-		for _, reader := range slices.Sorted(maps.Keys(cursors)) {
-			if seq := cursors[reader]; seq != read[reader] && eventlog.CheckReader(reader) == nil {
-				read[reader] = seq
-				data, err := json.Marshal(readReceipt{Kind: "read", Reader: reader, Seq: seq})
+		seen, queued, acked := l.Cursors()
+		for _, positions := range []struct {
+			kind string
+			seqs map[string]uint64
+		}{{"queued", queued}, {"read", seen}} {
+			for _, reader := range slices.Sorted(maps.Keys(positions.seqs)) {
+				rr := readReceipt{Kind: positions.kind, Reader: reader, Seq: positions.seqs[reader]}
+				if sent[[2]string{rr.Kind, reader}] == rr.Seq || eventlog.CheckReader(reader) != nil {
+					continue
+				}
+				sent[[2]string{rr.Kind, reader}] = rr.Seq
+				data, err := json.Marshal(rr)
 				if err != nil {
 					return
 				}

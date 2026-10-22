@@ -19,10 +19,16 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 )
 
-var ErrConnectionLost = errors.New("daemon connection lost")
+var (
+	ErrConnectionLost = errors.New("daemon connection lost")
+	ErrNotRunning     = errors.New("daemon not running")
+)
+
+const noStartDeadline = time.Second
 
 type Client struct {
-	Home string
+	Home    string
+	NoStart bool
 }
 
 func (c Client) dial(openPage string) (net.Conn, error) {
@@ -32,6 +38,9 @@ func (c Client) dial(openPage string) (net.Conn, error) {
 	sock := daemon.SocketPath(c.Home)
 	if conn, err := net.Dial("unix", sock); err == nil {
 		return conn, nil
+	}
+	if c.NoStart {
+		return nil, ErrNotRunning
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), startWait)
 	defer cancel()
@@ -131,12 +140,17 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 		return daemon.Response{}, err
 	}
 	defer conn.Close()
+	if c.NoStart {
+		if err := conn.SetDeadline(time.Now().Add(noStartDeadline)); err != nil {
+			return daemon.Response{}, err
+		}
+	}
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return daemon.Response{}, err
 	}
 	var resp daemon.Response
 	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
-		return daemon.Response{}, err
+		return daemon.Response{}, fmt.Errorf("%w: %v", ErrConnectionLost, err)
 	}
 	if resp.Error != "" {
 		return resp, fmt.Errorf("%s", resp.Error)
@@ -144,7 +158,7 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 	return resp, nil
 }
 
-// Watch streams events to fn and acknowledges each one after fn returns nil.
+// Watch streams events to fn and marks each one queued after fn returns nil.
 func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error {
 	conn, err := c.dial("")
 	if err != nil {
@@ -167,7 +181,7 @@ func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error
 		if err := fn(resp); err != nil {
 			return err
 		}
-		if err := enc.Encode(daemon.Request{Op: "ack", Seq: resp.Event.Seq}); err != nil {
+		if err := enc.Encode(daemon.Request{Op: "queue", Seq: resp.Event.Seq}); err != nil {
 			return err
 		}
 	}
