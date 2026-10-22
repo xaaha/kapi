@@ -29,7 +29,7 @@ var (
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements or data-kapi-preset; edit the preset's source instead")
-	ErrInnerEscapes  = errors.New("the inner source closes the element early; edit only what goes between its tags")
+	ErrInnerEscapes  = errors.New("the new source closes the element early or leaves an element inside it open; edit only what goes between its tags")
 )
 
 type Op struct {
@@ -528,6 +528,13 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 	if inner && root.closeStart != len(frag)-(e.end-e.closeStart) {
 		return nil, ErrInnerEscapes
 	}
+	if root.closeStart < root.end {
+		for _, f := range parse(frag)[1:] {
+			if !voidElements[f.name] && !f.selfClosing && f.closeStart == f.end && f.end == root.closeStart {
+				return nil, ErrInnerEscapes
+			}
+		}
+	}
 	if !strings.HasPrefix(root.name, "kapi-") {
 		for _, f := range parse(frag) {
 			if _, ok := f.attr("data-kapi-preset"); ok || strings.HasPrefix(f.name, "kapi-") {
@@ -553,6 +560,10 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 		frag = setAttr(frag, root, idAttr, e.id)
 	}
 	out := splice(src, e.start, e.end, string(frag))
+	was, is := topIDs(src), topIDs(out)
+	if lost := slices.DeleteFunc(slices.Clone(was), func(id string) bool { return id == e.id }); !slices.Equal(was, is) && !slices.Equal(lost, is) {
+		return nil, ErrInnerEscapes
+	}
 	before := dangling(src)
 	var added []string
 	for id := range dangling(out) {
@@ -781,4 +792,18 @@ func nearest(els []element, i int, name string) int {
 		}
 	}
 	return -1
+}
+
+func topIDs(src []byte) []string {
+	canon, err := render.Canonical(src)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, e := range parse(canon) {
+		if e.parent < 0 && e.id != "" {
+			ids = append(ids, e.id)
+		}
+	}
+	return ids
 }

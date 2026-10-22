@@ -1247,3 +1247,47 @@ func TestACellsOpOnATableThatChangedIsStale(t *testing.T) {
 		t.Errorf("cells op at a rev before the table changed: err = %v, want ErrStale", err)
 	}
 }
+
+func TestAnInnerEditCannotLeaveAChildOpen(t *testing.T) {
+	const src = "<kapi-plan data-kapi-id=\"aaaaaaaa\"><kapi-step data-kapi-id=\"bbbbbbbb\">one</kapi-step></kapi-plan>\n" +
+		"<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\"><p>x</p></kapi-callout>\n<p data-kapi-id=\"dddddddd\">next</p>\n"
+	for _, op := range []Op{
+		{Kind: "edit", ID: "aaaaaaaa", Inner: ptr(`<kapi-step data-kapi-id="bbbbbbbb">one</kapi-step><div>`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<div><p>x`)},
+		{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x`)},
+		{Kind: "edit", ID: "cccccccc", HTML: `<kapi-callout kind="note"><div>x</kapi-callout>`},
+	} {
+		home, path := newPage(t, src)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, &op); !errors.Is(err, ErrInnerEscapes) {
+			t.Errorf("%+v: err = %v, want ErrInnerEscapes", op, err)
+		}
+		if got := onDisk(t, path); got != src {
+			t.Errorf("refused edit changed the file:\n%s", got)
+		}
+	}
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<p>x<br></p><ul><li>a</li></ul>`)})
+}
+
+func TestAnInnerEditOfTheLastBlockCannotLeaveAChildOpen(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<div>x`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes", err)
+	}
+}
+
+func TestAnEditThatPullsInTheNextBlockIsRefused(t *testing.T) {
+	const src = "<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\">x</kapi-callout>\n<p data-kapi-id=\"dddddddd\">next</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "cccccccc", Inner: ptr(`<span><div>x</span>`)}); !errors.Is(err, ErrInnerEscapes) {
+		t.Errorf("err = %v, want ErrInnerEscapes", err)
+	}
+	if got := onDisk(t, path); got != src {
+		t.Errorf("refused edit changed the file:\n%s", got)
+	}
+}
