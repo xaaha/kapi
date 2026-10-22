@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"syscall"
 	"testing"
@@ -127,6 +128,11 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 				t.Fatalf("event log after a kill at write %d: %v", at, err)
 			}
 			l.Close()
+			for _, dir := range []string{filepath.Dir(path), s.dir, filepath.Join(s.dir, "revs")} {
+				if left, _ := filepath.Glob(filepath.Join(dir, ".*.kapi-*")); len(left) > 0 {
+					t.Errorf("reopen after a kill at write %d left temp files %v", at, left)
+				}
+			}
 			src, _ := s.Source()
 			got := crashMark{src: string(src), undo: len(s.undo)}
 			before, after := marks[step-1], marks[step]
@@ -176,5 +182,28 @@ func checkWhole(t *testing.T, home, path string, whole map[string]bool) {
 		if err != nil || !whole[string(b)] {
 			t.Fatalf("revs/%d.html named by state %d is %q, %v", r, st.Rev, b, err)
 		}
+	}
+}
+
+func TestOpenRemovesOnlyItsOwnTempFiles(t *testing.T) {
+	home, path := newPage(t, crashStart)
+	dir := filepath.Dir(path)
+	for _, name := range []string{".plan.html.kapi-123", ".other.html.kapi-123", ".plan.html.kapi-notes", "plan.html.kapi-123"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open(t, home, path)
+	left, err := filepath.Glob(filepath.Join(dir, "*kapi-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".other.html.kapi-123", ".plan.html.kapi-notes", "plan.html.kapi-123"}
+	var got []string
+	for _, p := range left {
+		got = append(got, filepath.Base(p))
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("files left %v, want %v", got, want)
 	}
 }

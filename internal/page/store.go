@@ -86,6 +86,11 @@ func Open(home, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(s.dir, "revs"), 0o700); err != nil {
 		return nil, err
 	}
+	for dir, base := range map[string]string{filepath.Dir(path): filepath.Base(path), s.dir: "", filepath.Join(s.dir, "revs"): "", filepath.Join(s.dir, "raw"): ""} {
+		if err := removeTemps(dir, base); err != nil {
+			return nil, err
+		}
+	}
 	b, err := os.ReadFile(filepath.Join(s.dir, "state.json"))
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -396,6 +401,32 @@ func (s *Store) saveState(st state) error {
 	return writeAtomic(filepath.Join(s.dir, "state.json"), b)
 }
 
+const tempMark = ".kapi-"
+
+func removeTemps(dir, base string) error {
+	ents, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		name, ok := strings.CutPrefix(e.Name(), ".")
+		i := strings.LastIndex(name, tempMark)
+		if !ok || i < 1 || (base != "" && name[:i] != base) {
+			continue
+		}
+		if _, err := strconv.ParseUint(name[i+len(tempMark):], 10, 64); err != nil {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 func writeAtomic(path string, b []byte) error {
 	return replaceFile(path, b, nil)
 }
@@ -405,7 +436,7 @@ func replaceFile(path string, b, expect []byte) error {
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".kapi-*")
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+tempMark+"*")
 	if err != nil {
 		return err
 	}
