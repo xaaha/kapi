@@ -84,3 +84,25 @@ func TestDetailsIsClosedUnlessOpen(t *testing.T) {
 		t.Errorf("Canonical = %s", got)
 	}
 }
+
+func TestChecklistRendersTickableTasks(t *testing.T) {
+	out := render(t, `<kapi-checklist><kapi-task done data-kapi-id="aaaaaaaa">Copy &amp; check</kapi-task><kapi-task data-kapi-id="bbbbbbbb">Flip</kapi-task></kapi-checklist>`)
+	want := `<ul class="kapi-checklist" data-kapi-preset="checklist">` +
+		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="aaaaaaaa"><label><input type="checkbox" checked=""><span class="kapi-task-body">Copy &amp; check</span></label></li>` +
+		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="bbbbbbbb"><label><input type="checkbox"><span class="kapi-task-body">Flip</span></label></li></ul>`
+	if out != want {
+		t.Errorf("got  %s\nwant %s", out, want)
+	}
+	for _, src := range []string{
+		`<kapi-checklist>loose <kapi-task>a</kapi-task></kapi-checklist>`,
+		`<kapi-checklist></kapi-checklist>`,
+		`<kapi-task>a</kapi-task>`,
+	} {
+		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+			t.Errorf("Render(%q) = %s, want an error box", src, out)
+		}
+	}
+	if got := canonical(t, `<kapi-checklist><kapi-task done onclick="x">a</kapi-task></kapi-checklist>`); got != `<kapi-checklist><kapi-task done="">a</kapi-task></kapi-checklist>` {
+		t.Errorf("Canonical = %s", got)
+	}
+}

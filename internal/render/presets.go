@@ -21,29 +21,32 @@ var parents = map[string]string{
 	"kapi-text":     "kapi-form",
 	"kapi-opt":      "kapi-choice",
 	"kapi-item":     "kapi-kv",
+	"kapi-task":     "kapi-checklist",
 }
 
 func init() {
 	presets = map[string]presetFunc{
-		"kapi-callout":  renderCallout,
-		"kapi-code":     renderCode,
-		"kapi-diff":     renderDiff,
-		"kapi-table":    renderTable,
-		"kapi-compare":  renderCompare,
-		"kapi-option":   renderOption,
-		"kapi-plan":     renderPlan,
-		"kapi-step":     planItem("kapi-step", "", "accent"),
-		"kapi-risk":     planItem("kapi-risk", "Risk", "warning"),
-		"kapi-question": planItem("kapi-question", "Question", "info"),
-		"kapi-diagram":  renderDiagram,
-		"kapi-form":     renderForm,
-		"kapi-choice":   renderChoice,
-		"kapi-opt":      renderOpt,
-		"kapi-text":     renderTextField,
-		"kapi-badge":    renderBadge,
-		"kapi-kv":       renderKV,
-		"kapi-item":     renderKVItem,
-		"kapi-details":  renderDetails,
+		"kapi-callout":   renderCallout,
+		"kapi-code":      renderCode,
+		"kapi-diff":      renderDiff,
+		"kapi-table":     renderTable,
+		"kapi-compare":   renderCompare,
+		"kapi-option":    renderOption,
+		"kapi-plan":      renderPlan,
+		"kapi-step":      planItem("kapi-step", "", "accent"),
+		"kapi-risk":      planItem("kapi-risk", "Risk", "warning"),
+		"kapi-question":  planItem("kapi-question", "Question", "info"),
+		"kapi-diagram":   renderDiagram,
+		"kapi-form":      renderForm,
+		"kapi-choice":    renderChoice,
+		"kapi-opt":       renderOpt,
+		"kapi-text":      renderTextField,
+		"kapi-badge":     renderBadge,
+		"kapi-kv":        renderKV,
+		"kapi-item":      renderKVItem,
+		"kapi-details":   renderDetails,
+		"kapi-checklist": renderChecklist,
+		"kapi-task":      renderTask,
 	}
 }
 
@@ -372,5 +375,29 @@ func renderDetails(b *bytes.Buffer, n *html.Node) error {
 	b.WriteString(`</summary><div class="kapi-details-body">`)
 	renderChildren(b, n)
 	b.WriteString("</div></details>")
+	return nil
+}
+
+func renderChecklist(b *bytes.Buffer, n *html.Node) error {
+	if err := onlyChildren(n, "kapi-task"); err != nil {
+		return err
+	}
+	writeStart(b, "ul", outerAttrs(n, "kapi-checklist"))
+	renderChildren(b, n)
+	writeEnd(b, "ul")
+	return nil
+}
+
+func renderTask(b *bytes.Buffer, n *html.Node) error {
+	writeStart(b, "li", outerAttrs(n, "kapi-task"))
+	b.WriteString("<label>")
+	box := kv("type", "checkbox")
+	if _, done := attr(n, "done"); done {
+		box = append(box, kv("checked", "")...)
+	}
+	writeStart(b, "input", box)
+	b.WriteString(`<span class="kapi-task-body">`)
+	renderChildren(b, n)
+	b.WriteString("</span></label></li>")
 	return nil
 }

@@ -149,4 +149,15 @@ func (s *Store) Source() ([]byte, uint64) {
   <p>Copying first lets us compare row counts before any reads move, so a bad copy never serves traffic.</p>
 </kapi-details>`,
 	},
+	{
+		Name:    "kapi-checklist",
+		Summary: "Tasks with tick boxes; ticking one in the browser writes done back to the file",
+		Example: `<!-- Children: <kapi-task> each holding prose. Add done to a task that is finished.
+     When the reader ticks or unticks a box, kapi adds or removes done in the file and kapi watch reports it. -->
+<kapi-checklist>
+  <kapi-task done>Copy the session store to the new cluster</kapi-task>
+  <kapi-task>Compare row counts</kapi-task>
+  <kapi-task>Flip reads</kapi-task>
+</kapi-checklist>`,
+	},
 }

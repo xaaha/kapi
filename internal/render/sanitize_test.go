@@ -79,6 +79,7 @@ var containers = []string{
 	`<kapi-kv><kapi-item key="k">%s</kapi-item></kapi-kv>`,
 	`<kapi-kv><kapi-item key="%s">v</kapi-item>%s</kapi-kv>`,
 	`<kapi-details summary="s">%s</kapi-details>`,
+	`<kapi-checklist><kapi-task>%s</kapi-task><kapi-task done>%s</kapi-task></kapi-checklist>`,
 }
 
 var presetAttrs = map[string][]string{
@@ -112,6 +113,7 @@ func TestSanitizerAttributePayloads(t *testing.T) {
 		}
 		srcs = append(srcs,
 			`<kapi-compare><kapi-option title="`+q+`">x</kapi-option></kapi-compare>`,
+			`<kapi-checklist data-kapi-id="`+q+`"><kapi-task done="`+q+`" data-kapi-id="`+q+`">x</kapi-task></kapi-checklist>`,
 			`<kapi-kv data-kapi-id="`+q+`"><kapi-item key="`+q+`" data-kapi-id="`+q+`">x</kapi-item></kapi-kv>`,
 			`<kapi-form name="`+q+`"><kapi-choice name="`+q+`"><kapi-opt value="`+q+`">x</kapi-opt></kapi-choice><kapi-text name="`+q+`">x</kapi-text></kapi-form>`,
 			`<a href="`+q+`" title="`+q+`" class="`+q+`" data-x="`+q+`">x</a>`,
@@ -201,7 +203,7 @@ func assertSafe(t *testing.T, src, out string) {
 					t.Errorf("source %q rendered an <svg> outside a diagram:\n%s", src, out)
 				}
 			case "input", "button", "textarea":
-				if !insideClass(n, "kapi-form") {
+				if !insideClass(n, "kapi-form") && (n.Data != "input" || attrVal(n, "type") != "checkbox" || !insideClass(n, "kapi-task")) {
 					t.Errorf("source %q rendered a <%s> outside a kapi-form:\n%s", src, n.Data, out)
 				}
 			}

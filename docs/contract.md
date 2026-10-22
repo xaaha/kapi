@@ -44,6 +44,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-badge>` | optional `tone` = `neutral` (default), `info`, `success`, `warning`, `danger`, `accent` | short inline text; allowed inside prose and table cells |
 | `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
+| `<kapi-checklist>` | none | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Ticking a box in the browser sends a `check` op |
 | `<kapi-form>` | `name` | `<kapi-choice name="..." multiple?>` with `<kapi-opt value="...">label</kapi-opt>`, and `<kapi-text name="...">label</kapi-text>` |
 
 Unknown `kapi-*` elements render as a visible error box, never silently.

@@ -304,6 +304,44 @@ body {
 .kapi-details-body > :first-child { margin-top: 0; }
 .kapi-details-body > :last-child { margin-bottom: 0; }
 
+#kapi-page .kapi-checklist,
+.kapi-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+#kapi-page .kapi-task,
+.kapi-task { margin: 0; }
+.kapi-task > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--kapi-radius-sm);
+  cursor: pointer;
+}
+.kapi-task > label:hover { background: var(--kapi-subtle); }
+.kapi-task input {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0.25rem 0 0;
+  accent-color: var(--kapi-accent-solid);
+  cursor: pointer;
+}
+.kapi-task input:focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
+.kapi-task-body { min-width: 0; }
+.kapi-task-body > :first-child { margin-top: 0; }
+.kapi-task-body > :last-child { margin-bottom: 0; }
+.kapi-task:has(> label > input:checked) .kapi-task-body {
+  color: var(--kapi-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--kapi-faint);
+}
+
 .kapi-code,
 .kapi-diff {
   margin: 1.25rem 0;
@@ -729,6 +767,11 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
   <div class="kapi-plan-item kapi-step kapi-tone-accent" data-kapi-preset="step" data-kapi-id="stepcccc"><span class="kapi-plan-mark"></span><div class="kapi-plan-body">Delete the old static page handler.</div></div>
   <div class="kapi-plan-item kapi-question kapi-tone-info" data-kapi-preset="question" data-kapi-id="quesaaaa"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body">Should <em>undo</em> cross an agent edit, or stop at it?</div></div>
 </div>
+
+<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="checkaaa">
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskaaaa"><label><input type="checkbox" checked=""><span class="kapi-task-body">Write the page store tests</span></label></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="taskbbbb"><label><input type="checkbox"><span class="kapi-task-body">Run the cutover on staging</span></label></li>
+</ul>
 
 <h2 data-kapi-id="h2ffffff">Your call</h2>
 <form class="kapi-form" data-kapi-preset="form" name="cutover" data-kapi-form="cutover" data-kapi-id="formaaaa">
