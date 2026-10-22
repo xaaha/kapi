@@ -1,7 +1,7 @@
 package eventlog
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,11 +46,16 @@ const (
 	cursorsFile   = "cursors.json"
 )
 
+var (
+	syncFile   = (*os.File).Sync
+	renameFile = os.Rename
+)
+
 func Open(dir string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	events, err := readEvents(filepath.Join(dir, eventsFile))
+	events, whole, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +67,20 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := f.Truncate(whole); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := syncDir(dir); err != nil {
+		f.Close()
+		return nil, err
+	}
 	return &Log{dir: dir, file: f, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
 func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
-	events, err := readEvents(filepath.Join(dir, eventsFile))
+	events, _, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -106,7 +119,7 @@ func (l *Log) Append(in *Event) (Event, error) {
 	if _, err := l.file.Write(append(line, '\n')); err != nil {
 		return Event{}, err
 	}
-	if err := l.file.Sync(); err != nil {
+	if err := syncFile(l.file); err != nil {
 		return Event{}, err
 	}
 	l.events = append(l.events, e)
@@ -219,46 +232,53 @@ func unread(events []Event, reader string) []Event {
 	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
 }
 
-func readEvents(path string) ([]Event, error) {
-	f, err := os.Open(path)
+func readEvents(path string) ([]Event, int64, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, 0, nil
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	whole := bytes.LastIndexByte(b, '\n') + 1
+	var events []Event
+	for line := range bytes.Lines(b[:whole]) {
+		var e Event
+		if err := json.Unmarshal(line, &e); err != nil {
+			return nil, 0, fmt.Errorf("%s line %d: %w", path, len(events)+1, err)
+		}
+		events = append(events, e)
+	}
+	return events, int64(whole), nil
+}
+
+func readPositions(dir string) (positions, error) {
+	p, err := readJSON(filepath.Join(dir, positionsFile), func(b []byte, p *positions) error { return json.Unmarshal(b, p) })
+	if err != nil || p != nil {
+		return filled(p), err
+	}
+	p, err = readJSON(filepath.Join(dir, cursorsFile), func(b []byte, p *positions) error { return json.Unmarshal(b, &p.Seen) })
+	return filled(p), err
+}
+
+func readJSON(path string, decode func([]byte, *positions) error) (*positions, error) {
+	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	var events []Event
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for sc.Scan() {
-		var e Event
-		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
-			return nil, fmt.Errorf("%s line %d: %w", path, len(events)+1, err)
-		}
-		events = append(events, e)
+	var p positions
+	if decode(b, &p) != nil {
+		return nil, nil
 	}
-	return events, sc.Err()
+	return &p, nil
 }
 
-func readPositions(dir string) (positions, error) {
-	p := positions{Seen: map[string]uint64{}, Queued: map[string]uint64{}, Hooked: map[string]uint64{}, Cut: map[string][]uint64{}}
-	path := filepath.Join(dir, positionsFile)
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		path = filepath.Join(dir, cursorsFile)
-		b, err = os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			return p, nil
-		}
-		if err == nil {
-			err = json.Unmarshal(b, &p.Seen)
-		}
-	} else if err == nil {
-		err = json.Unmarshal(b, &p)
-	}
-	if err != nil {
-		return positions{}, fmt.Errorf("%s: %w", path, err)
+func filled(p *positions) positions {
+	if p == nil {
+		p = &positions{}
 	}
 	for _, m := range []*map[string]uint64{&p.Seen, &p.Queued, &p.Hooked} {
 		if *m == nil {
@@ -268,7 +288,7 @@ func readPositions(dir string) (positions, error) {
 	if p.Cut == nil {
 		p.Cut = map[string][]uint64{}
 	}
-	return p, nil
+	return *p
 }
 
 func writePositions(dir string, p *positions) error {
@@ -278,10 +298,34 @@ func writePositions(dir string, p *positions) error {
 	}
 	path := filepath.Join(dir, positionsFile)
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := syncFile(f); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := renameFile(tmp, path); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return syncFile(d)
 }
 
 // Printable drops control and bidi characters a terminal would act on, turning newlines and tabs into spaces.

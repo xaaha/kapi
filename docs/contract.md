@@ -166,6 +166,26 @@ changed. A write that lands in a file kapi moved aside is swapped back.
 When two writes carry the same mtime, the order comes from what kapi
 last put in place, not from the clock.
 
+A kill or power cut at any point leaves the page file, `revs/` and
+`pages/<id>/state.json` whole. Every write goes to a temp file named
+`.<name>.kapi-<digits>` in the same folder, which is fsynced, renamed or
+swapped into place, and followed by an fsync of the folder. `state.json`
+holds `{"rev":N,"undo":[...]}`. Before swapping the page, the store writes
+`revs/<N+1>.html` and adds `"next":{"rev":N+1,"undo":[...],"temp":"<name>"}`
+to `state.json`. `temp` names the temp file the swap will use, which the
+store creates only after recording it. Once the swap lands, it rewrites
+`state.json` without `next`. On open, the store moves to `next` only when
+the page file holds exactly `revs/<next rev>.html`. Otherwise it keeps `rev`,
+so a revision never goes back. Once open has handled the temp files, it rewrites
+`state.json` without `next`. Open also deletes its own temp files under
+`pages/<id>/`. A temp file next to the page whose bytes equal `rev` or `next`
+is deleted. Only the temp file that `next` names can go back into the page,
+and only when the page holds exactly `next`, which means the swap landed and
+the temp file holds a displaced agent write. When the page still holds `rev`,
+the named temp file is kapi's unfinished write, so it is deleted. Any other
+temp file is never swapped in. It is renamed to `.<name>.kapi-kept-<digits>`,
+so its bytes are not lost and open does not consider it again.
+
 ## HTTP
 
 The daemon also listens on `127.0.0.1` and writes
@@ -245,6 +265,15 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 `pages/<id>/`.
 
 ### Events stream
+
+The event log is `pages/<id>/events.ndjson`, one JSON event per line, and
+each append is fsynced before it is reported. A final line without its
+newline is a torn write: opening the log drops it and truncates the file to
+the last whole line. `positions.json` is replaced through a fsynced temp
+file and a rename, followed by an fsync of the folder. An empty or
+unreadable `positions.json` or `cursors.json` counts as missing, so the log
+still opens. Events past the last readable position are then delivered
+again rather than lost.
 
 Each line of the event log is one SSE message with `id: <seq>`. The browser
 reconnects with `Last-Event-ID` and gets everything after it. Event `data` is

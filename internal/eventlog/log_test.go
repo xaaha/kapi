@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -171,13 +172,105 @@ func TestPositionsFromAnOlderCursorsFileAreKept(t *testing.T) {
 	}
 }
 
-func TestCorruptCursorsFileIsAnError(t *testing.T) {
+func TestAnUnreadablePositionsFileFallsBackInsteadOfFailingToOpen(t *testing.T) {
+	whole := `{"seq":1,"time":"2026-01-02T03:04:05Z","author":"human","kind":"message","text":"one"}` + "\n" +
+		`{"seq":2,"time":"2026-01-02T03:04:06Z","author":"human","kind":"message","text":"two"}` + "\n"
+	for _, c := range []struct {
+		name    string
+		files   map[string]string
+		seen    uint64
+		pending int
+	}{
+		{"empty positions", map[string]string{positionsFile: ""}, 0, 2},
+		{"torn positions", map[string]string{positionsFile: `{"seen":{"agent":2},"que`}, 0, 2},
+		{"torn positions over old cursors", map[string]string{positionsFile: `{"seen":{"age`, cursorsFile: `{"agent":1}`}, 1, 1},
+		{"corrupt old cursors", map[string]string{cursorsFile: "{not json"}, 0, 2},
+	} {
+		dir := t.TempDir()
+		c.files[eventsFile] = whole
+		for name, body := range c.files {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, pending, err := Summary(dir); err != nil || pending("agent") != c.pending {
+			t.Errorf("%s: Summary err = %v", c.name, err)
+		}
+		l, err := Open(dir)
+		if err != nil {
+			t.Errorf("%s: Open = %v, want the log open with every unseen event pending", c.name, err)
+			continue
+		}
+		if got := l.Cursor("agent"); got != c.seen {
+			t.Errorf("%s: seen = %d, want %d", c.name, got, c.seen)
+		}
+		if err := l.Ack("agent", 2); err != nil {
+			t.Errorf("%s: Ack after a fallback: %v", c.name, err)
+		}
+		l.Close()
+	}
+}
+
+func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, cursorsFile), []byte("{not json"), 0o600); err != nil {
+	whole := `{"seq":1,"time":"2026-01-02T03:04:05Z","author":"human","kind":"message","text":"one"}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, eventsFile), []byte(whole+`{"seq":2,"time":"2026-01`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(dir); err == nil {
-		t.Error("Open accepted a corrupt cursors file, which would replay every event")
+	if _, pending, err := Summary(dir); err != nil || pending("agent") != 1 {
+		t.Fatalf("Summary of a log with a torn last line: err = %v", err)
+	}
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open of a log with a torn last line: %v", err)
+	}
+	if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "two"}); err != nil || e.Seq != 2 {
+		t.Fatalf("Append after a torn line = %+v, %v", e, err)
+	}
+	l.Close()
+	l, err = Open(dir)
+	if err != nil {
+		t.Fatalf("reopen after appending past a torn line: %v", err)
+	}
+	if events, _ := l.After(0); len(events) != 2 || events[1].Text != "two" {
+		t.Errorf("events = %+v, want one and two", events)
+	}
+}
+
+func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
+	dir := t.TempDir()
+	type syncAt struct {
+		name, positions string
+		events          bool
+	}
+	var syncs []syncAt
+	orig := syncFile
+	syncFile = func(f *os.File) error {
+		b, _ := os.ReadFile(filepath.Join(dir, positionsFile))
+		_, err := os.Stat(filepath.Join(dir, eventsFile))
+		syncs = append(syncs, syncAt{f.Name(), string(b), err == nil})
+		return orig(f)
+	}
+	defer func() { syncFile = orig }()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if !slices.Contains(syncs, syncAt{name: dir, events: true}) {
+		t.Errorf("Open did not sync %s after creating %s: %+v", dir, eventsFile, syncs)
+	}
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
+		t.Fatal(err)
+	}
+	syncs = nil
+	if err := l.Ack("agent", 1); err != nil {
+		t.Fatal(err)
+	}
+	tmp := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name != dir && s.positions == "" })
+	after := slices.IndexFunc(syncs, func(s syncAt) bool { return s.name == dir && strings.Contains(s.positions, `"seen":{"agent":1}`) })
+	if tmp < 0 || after < tmp {
+		t.Errorf("Ack must sync the new positions file before its rename and %s after it, synced %+v", dir, syncs)
 	}
 }
 

@@ -2,7 +2,9 @@ package page
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -69,6 +71,8 @@ type Store struct {
 type state struct {
 	Rev  uint64   `json:"rev"`
 	Undo []uint64 `json:"undo"`
+	Next *state   `json:"next,omitempty"`
+	Temp string   `json:"temp,omitempty"`
 }
 
 // ID is the 16-hex directory name under $KAPI_HOME/pages for an absolute page path.
@@ -85,20 +89,36 @@ func Open(home, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(s.dir, "revs"), 0o700); err != nil {
 		return nil, err
 	}
+	for _, dir := range []string{s.dir, filepath.Join(s.dir, "revs"), filepath.Join(s.dir, "raw")} {
+		temps, err := findTemps(dir, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, tmp := range temps {
+			if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+		}
+	}
+	var st state
 	b, err := os.ReadFile(filepath.Join(s.dir, "state.json"))
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
 		return nil, err
 	default:
-		var st state
 		if err := json.Unmarshal(b, &st); err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Join(s.dir, "state.json"), err)
 		}
-		s.rev, s.undo = st.Rev, st.Undo
 	}
-	if s.rev > 0 {
-		if s.src, err = os.ReadFile(s.revPath(s.rev)); err != nil {
+	if err := s.load(&st); err != nil {
+		return nil, err
+	}
+	if err := s.restoreDisplaced(&st); err != nil {
+		return nil, err
+	}
+	if st.Next != nil {
+		if err := s.saveState(state{Rev: s.rev, Undo: s.undo}); err != nil {
 			return nil, err
 		}
 	}
@@ -124,6 +144,99 @@ func Open(home, path string) (*Store, error) {
 		s.conversion = text
 		return s, nil
 	}
+}
+
+func (s *Store) load(st *state) error {
+	s.rev, s.undo = st.Rev, st.Undo
+	if s.rev > 0 {
+		src, err := os.ReadFile(s.revPath(s.rev))
+		if err != nil {
+			return err
+		}
+		s.src = src
+	}
+	if st.Next == nil {
+		return nil
+	}
+	raw, err := os.ReadFile(s.path)
+	if err != nil {
+		return err
+	}
+	if after, err := os.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
+		s.src, s.rev, s.undo = after, st.Next.Rev, st.Next.Undo
+	}
+	return nil
+}
+
+func (s *Store) restoreDisplaced(st *state) error {
+	temps, err := findTemps(filepath.Dir(s.path), filepath.Base(s.path))
+	if err != nil || len(temps) == 0 {
+		return err
+	}
+	before, err := s.readRev(st.Rev)
+	if err != nil {
+		return err
+	}
+	var after []byte
+	if st.Next != nil {
+		if after, err = s.readRev(st.Next.Rev); err != nil {
+			return err
+		}
+	}
+	page, err := os.ReadFile(s.path)
+	if err != nil {
+		return err
+	}
+	for _, tmp := range temps {
+		theirs, err := os.ReadFile(tmp)
+		if err != nil {
+			return err
+		}
+		named := st.Next != nil && filepath.Base(tmp) == st.Next.Temp
+		switch {
+		case bytes.Equal(theirs, before) || (st.Next != nil && bytes.Equal(theirs, after)):
+		case named && bytes.Equal(page, after):
+			err = swapIn(tmp, s.path, theirs, page)
+			if errors.Is(err, errFileChanged) {
+				err = keep(tmp)
+			}
+			if err != nil {
+				return err
+			}
+			if err := syncDir(filepath.Dir(s.path)); err != nil {
+				return err
+			}
+		case named && bytes.Equal(page, before):
+		default:
+			if err := keep(tmp); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func keep(tmp string) error {
+	dir, name := filepath.Split(tmp)
+	i := strings.LastIndex(name, tempMark) + len(tempMark)
+	kept := filepath.Join(dir, name[:i]+"kept-"+name[i:])
+	for n := 2; ; n++ {
+		if _, err := os.Lstat(kept); errors.Is(err, os.ErrNotExist) {
+			return os.Rename(tmp, kept)
+		}
+		kept = filepath.Join(dir, name[:i]+"kept-"+name[i:]+"-"+strconv.Itoa(n))
+	}
+}
+
+func (s *Store) readRev(rev uint64) ([]byte, error) {
+	if rev == 0 {
+		return nil, nil
+	}
+	return os.ReadFile(s.revPath(rev))
 }
 
 func (s *Store) Path() string { return s.path }
@@ -345,6 +458,10 @@ var (
 	errFileChanged = errors.New("the file changed while kapi was writing it")
 	errNoSwap      = errors.New("this file system cannot swap files atomically")
 	replaceHook    func(stage string)
+	syncFile       = (*os.File).Sync
+	renameFile     = os.Rename
+	swapFiles      = exchangeFiles
+	writeTemp      = (*os.File).Write
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
@@ -356,22 +473,59 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 		if !quiet {
 			return errFileChanged
 		}
-		if err := replaceFile(s.path, src, base); err != nil {
-			return err
-		}
 	}
 	if err := writeAtomic(s.revPath(rev), src); err != nil {
 		return err
 	}
-	b, err := json.Marshal(state{Rev: rev, Undo: undo})
+	next := state{Rev: rev, Undo: undo}
+	if !bytes.Equal(src, base) {
+		now := state{Rev: s.rev, Undo: s.undo}
+		var n [4]byte
+		if _, err := rand.Read(n[:]); err != nil {
+			return err
+		}
+		intent := state{Rev: rev, Undo: undo, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
+		if err := s.saveState(state{Rev: s.rev, Undo: s.undo, Next: &intent}); err != nil {
+			return err
+		}
+		if err := replaceFileVia(filepath.Join(filepath.Dir(s.path), intent.Temp), s.path, src, base); err != nil {
+			return errors.Join(err, s.saveState(now))
+		}
+	}
+	s.src, s.rev, s.undo = src, rev, undo
+	return s.saveState(next)
+}
+
+func (s *Store) saveState(st state) error {
+	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
-	if err := writeAtomic(filepath.Join(s.dir, "state.json"), b); err != nil {
-		return err
+	return writeAtomic(filepath.Join(s.dir, "state.json"), b)
+}
+
+const tempMark = ".kapi-"
+
+func findTemps(dir, base string) ([]string, error) {
+	ents, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
 	}
-	s.src, s.rev, s.undo = src, rev, undo
-	return nil
+	if err != nil {
+		return nil, err
+	}
+	var temps []string
+	for _, e := range ents {
+		name, ok := strings.CutPrefix(e.Name(), ".")
+		i := strings.LastIndex(name, tempMark)
+		if !ok || i < 1 || (base != "" && name[:i] != base) {
+			continue
+		}
+		if _, err := strconv.ParseUint(name[i+len(tempMark):], 10, 64); err == nil {
+			temps = append(temps, filepath.Join(dir, e.Name()))
+		}
+	}
+	return temps, nil
 }
 
 func writeAtomic(path string, b []byte) error {
@@ -379,16 +533,26 @@ func writeAtomic(path string, b []byte) error {
 }
 
 func replaceFile(path string, b, expect []byte) error {
+	return replaceFileVia("", path, b, expect)
+}
+
+func replaceFileVia(tmp, path string, b, expect []byte) error {
 	mode := os.FileMode(0o600)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".kapi-*")
+	var f *os.File
+	var err error
+	if tmp == "" {
+		f, err = os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+tempMark+"*")
+	} else {
+		f, err = os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	}
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if _, err := f.Write(b); err != nil {
+	if _, err := writeTemp(f, b); err != nil {
 		f.Close()
 		return err
 	}
@@ -396,7 +560,7 @@ func replaceFile(path string, b, expect []byte) error {
 		f.Close()
 		return err
 	}
-	if err := f.Sync(); err != nil {
+	if err := syncFile(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -404,9 +568,23 @@ func replaceFile(path string, b, expect []byte) error {
 		return err
 	}
 	if expect == nil {
-		return os.Rename(f.Name(), path)
+		err = renameFile(f.Name(), path)
+	} else {
+		err = swapIn(f.Name(), path, b, expect)
 	}
-	return swapIn(f.Name(), path, b, expect)
+	if err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return syncFile(d)
 }
 
 func swapIn(tmp, path string, ours, expect []byte) error {
@@ -426,7 +604,7 @@ func swapIn(tmp, path string, ours, expect []byte) error {
 		if !bytes.Equal(cur, expect) {
 			return errFileChanged
 		}
-		return os.Rename(tmp, path)
+		return renameFile(tmp, path)
 	}
 	if err != nil {
 		return err
