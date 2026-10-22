@@ -60,10 +60,19 @@ func Install(o Options) []Result {
 	claude, codexHooks, codexConfig, openCode, copilot := o.paths()
 	return []Result{
 		rewriteFile("Claude Code", claude, func(b []byte) ([]byte, bool, error) {
-			return sessionStartUpdate(b, o.Command, o.timeout())
+			out, changed, err := eventUpdate(b, "SessionStart", o.Command, o.timeout())
+			for _, event := range messageEvents {
+				if err != nil {
+					break
+				}
+				var c bool
+				out, c, err = eventUpdate(out, event, o.Command+" hook-messages", o.timeout())
+				changed = changed || c
+			}
+			return out, changed, err
 		}),
 		rewriteFile("Codex", codexHooks, func(b []byte) ([]byte, bool, error) {
-			return sessionStartUpdate(b, o.Command, o.timeout())
+			return eventUpdate(b, "SessionStart", o.Command, o.timeout())
 		}),
 		rewriteFile("Codex features", codexConfig, func(b []byte) ([]byte, bool, error) {
 			s, changed, err := codexConfigUpdate(string(b))
@@ -87,8 +96,8 @@ func Install(o Options) []Result {
 func Remove(o Options) []Result {
 	claude, codexHooks, _, openCode, copilot := o.paths()
 	results := []Result{
-		removeFromFile("Claude Code", claude, sessionStartRemoval),
-		removeFromFile("Codex", codexHooks, sessionStartRemoval),
+		removeFromFile("Claude Code", claude, hooksRemoval),
+		removeFromFile("Codex", codexHooks, hooksRemoval),
 		removeFromFile("Copilot CLI", copilot, copilotRemoval),
 	}
 	r := Result{Harness: "OpenCode", Path: openCode}
@@ -226,9 +235,12 @@ func isManaged(raw json.RawMessage, keys ...string) bool {
 }
 
 func isKapiCommand(s string) bool {
-	s = strings.TrimSuffix(strings.TrimSpace(s), " hook-context")
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(strings.TrimSuffix(s, " hook-context"), " hook-messages")
 	return filepath.Base(s) == Marker
 }
+
+var messageEvents = []string{"UserPromptSubmit", "PostToolUse", "Stop"}
 
 func withoutManaged(items []json.RawMessage, keys ...string) []json.RawMessage {
 	out := make([]json.RawMessage, 0, len(items))
@@ -240,7 +252,7 @@ func withoutManaged(items []json.RawMessage, keys ...string) []json.RawMessage {
 	return out
 }
 
-func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bool, error) {
+func eventUpdate(content []byte, event, command string, timeout int) ([]byte, bool, error) {
 	root, err := loadObject(content)
 	if err != nil {
 		return nil, false, err
@@ -254,7 +266,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 	if err != nil {
 		return nil, false, err
 	}
-	if hadLegacy {
+	if hadLegacy && event == "SessionStart" {
 		kept := withoutManaged(legacy, "command")
 		if len(kept) != len(legacy) {
 			changed = true
@@ -265,7 +277,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 			}
 		}
 	}
-	groups, hadGroups, err := array(hooks, "SessionStart")
+	groups, hadGroups, err := array(hooks, event)
 	if err != nil {
 		return nil, false, err
 	}
@@ -343,7 +355,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 		}
 		groups = append(groups, gb)
 	}
-	if err := hooks.setValue("SessionStart", groups); err != nil {
+	if err := hooks.setValue(event, groups); err != nil {
 		return nil, false, err
 	}
 	if err := root.setValue("hooks", hooks); err != nil {
@@ -353,7 +365,7 @@ func sessionStartUpdate(content []byte, command string, timeout int) ([]byte, bo
 	return out, true, err
 }
 
-func sessionStartRemoval(content []byte) ([]byte, bool, error) {
+func hooksRemoval(content []byte) ([]byte, bool, error) {
 	root, err := loadObject(content)
 	if err != nil {
 		return nil, false, err
@@ -376,9 +388,14 @@ func sessionStartRemoval(content []byte) ([]byte, bool, error) {
 			}
 		}
 	}
-	if groups, ok, err := array(hooks, "SessionStart"); err != nil {
-		return nil, false, err
-	} else if ok {
+	for _, event := range append([]string{"SessionStart"}, messageEvents...) {
+		groups, ok, err := array(hooks, event)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			continue
+		}
 		var keptGroups []json.RawMessage
 		for _, g := range groups {
 			gobj, err := parseObject(g)
@@ -410,8 +427,8 @@ func sessionStartRemoval(content []byte) ([]byte, bool, error) {
 			keptGroups = append(keptGroups, gb)
 		}
 		if len(keptGroups) == 0 {
-			hooks.del("SessionStart")
-		} else if err := hooks.setValue("SessionStart", keptGroups); err != nil {
+			hooks.del(event)
+		} else if err := hooks.setValue(event, keptGroups); err != nil {
 			return nil, false, err
 		}
 	}

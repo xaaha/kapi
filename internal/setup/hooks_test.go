@@ -53,27 +53,29 @@ func TestInstallWritesEveryHarnessAndIsIdempotent(t *testing.T) {
 		}
 	}
 	claude, codexHooks, codexConfig, openCode, copilot := o.paths()
-	wantHook := `{
-  "hooks": {
-    "SessionStart": [
+	group := func(event, command string) string {
+		return `    "` + event + `": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "kapi",
+            "command": "` + command + `",
             "timeout": 10
           }
         ]
       }
-    ]
-  }
-}
-`
-	for _, p := range []string{claude, codexHooks} {
-		if got := read(t, p); got != wantHook {
-			t.Errorf("%s:\n%s", p, got)
-		}
+    ]`
+	}
+	settings := func(groups ...string) string {
+		return "{\n  \"hooks\": {\n" + strings.Join(groups, ",\n") + "\n  }\n}\n"
+	}
+	if got, want := read(t, claude), settings(group("SessionStart", "kapi"), group("UserPromptSubmit", "kapi hook-messages"),
+		group("PostToolUse", "kapi hook-messages"), group("Stop", "kapi hook-messages")); got != want {
+		t.Errorf("claude:\n%s\nwant:\n%s", got, want)
+	}
+	if got, want := read(t, codexHooks), settings(group("SessionStart", "kapi")); got != want {
+		t.Errorf("codex:\n%s\nwant:\n%s", got, want)
 	}
 	if got := read(t, codexConfig); got != "[features]\nhooks = true\n" {
 		t.Errorf("codex config:\n%s", got)
@@ -135,7 +137,7 @@ func TestInstallKeepsOtherSettingsAndRepairsItsOwnHook(t *testing.T) {
 			t.Errorf("stale %s kept:\n%s", gone, got)
 		}
 	}
-	if strings.Count(got, `"command": "kapi"`) != 1 {
+	if strings.Count(got, `"command": "kapi"`) != 1 || strings.Count(got, `"command": "kapi hook-messages"`) != 3 {
 		t.Errorf("kapi hook duplicated:\n%s", got)
 	}
 }
@@ -343,6 +345,21 @@ func TestReviewH8RemoveKeepsUserHooksSharingAGroupWithKapi(t *testing.T) {
 	write(t, claude, `{"hooks": {"SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "mine"}, {"type": "command", "command": "kapi"}]}]}}`)
 	Remove(o)
 	if got := read(t, claude); !strings.Contains(got, `"mine"`) || strings.Contains(got, `"kapi"`) {
+		t.Errorf("after remove:\n%s", got)
+	}
+}
+
+func TestInstallRepairsAMessageHookAndRemoveKeepsTheUsersStopHook(t *testing.T) {
+	o := opts(t)
+	claude, _, _, _, _ := o.paths()
+	write(t, claude, `{"hooks": {"Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "say done"}, {"type": "command", "command": "/old/kapi hook-messages", "timeout": 3}]}]}}`)
+	Install(o)
+	got := read(t, claude)
+	if strings.Contains(got, "/old/kapi") || strings.Count(got, `"command": "kapi hook-messages"`) != 3 || !strings.Contains(got, `"say done"`) {
+		t.Errorf("after install:\n%s", got)
+	}
+	Remove(o)
+	if got := read(t, claude); strings.Contains(got, "kapi") || !strings.Contains(got, `"say done"`) || strings.Contains(got, "PostToolUse") {
 		t.Errorf("after remove:\n%s", got)
 	}
 }

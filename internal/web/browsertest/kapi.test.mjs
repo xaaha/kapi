@@ -78,10 +78,36 @@ test("shows disconnected when the stream fails and recovers without duplicating 
 });
 
 test("sets the status dot from presence events", async () => {
-  server.push({ kind: "presence", text: "busy" });
-  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "busy"`);
   server.push({ kind: "presence", text: "watching" });
   await page.waitFor(`document.querySelector(".kapi-status").textContent === "Agent is watching"`);
+  server.push({ kind: "presence", text: "busy" });
+  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+});
+
+test("says Queued until the agent reads a message, then working until it replies", async () => {
+  const status = () => page.eval(`document.querySelector(".kapi-status").textContent`);
+  const marks = () => page.eval(`[...document.querySelectorAll(".kapi-msg")].map((m) => m.querySelector(".kapi-queued, .kapi-read")?.textContent || "")`);
+  server.push({ kind: "presence", text: "watching" });
+  server.push({ author: "human", kind: "message", text: "please look" });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 1`);
+  assert.equal(await status(), "Agent is watching");
+  assert.deepEqual(await marks(), [""]);
+
+  server.queue("agent", 2);
+  await until(async () => (await status()) === "Queued for the agent");
+  assert.deepEqual(await marks(), ["Queued"]);
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel .kapi-dot").dataset.state`), "queued");
+
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-msg .kapi-queued")`);
+  assert.equal(await status(), "Queued for the agent");
+
+  server.ack("agent", 2);
+  await until(async () => (await status()) === "Agent is working");
+  assert.deepEqual(await marks(), ["\u{1F440}"]);
+
+  server.push({ author: "agent", kind: "message", text: "on it" });
+  await until(async () => (await status()) === "Agent is watching");
 });
 
 test("refetches only the changed block, or the whole page when the target is empty", async () => {
@@ -369,6 +395,17 @@ test("while a block is being edited the composer keys belong to the composer", a
   assert.equal(requests("POST", "/ops").length, 0);
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 8);
   assert.equal(await page.eval(`!!document.querySelector('.kapi-bar [data-action="save"]')`), true);
+});
+
+test("text typed while a message is still sending stays in the composer", async () => {
+  server.state.messageDelay = 300;
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("first");
+  await page.key("Enter");
+  await page.type("second");
+  await until(() => server.state.events.some((e) => e.text === "first"));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "second");
 });
 
 test("Shift+Enter in a table cell inserts nothing", async () => {

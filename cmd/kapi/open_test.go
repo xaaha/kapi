@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/xaaha/kapi/internal/daemon"
@@ -30,7 +31,7 @@ func TestOpenPrintsTheURLAndOpensIt(t *testing.T) {
 	if out != url+"\n" {
 		t.Errorf("output = %q", out)
 	}
-	if want := (daemon.Request{Op: "open", Page: abs(t, "plan.html")}); len(f.requests) != 1 || f.requests[0] != want {
+	if want := (daemon.Request{Op: "open", Page: abs(t, "plan.html")}); len(f.requests) != 1 || !reflect.DeepEqual(f.requests[0], want) {
 		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
 	if len(*opened) != 1 || (*opened)[0] != url {

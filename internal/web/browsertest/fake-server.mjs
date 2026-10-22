@@ -115,6 +115,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     reopened: false,
     refused: 0,
     read: {},
+    queued: {},
   };
 
   const pageHTML = () =>
@@ -243,12 +244,14 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       res.write("retry: 100\n\n");
       const after = Number(req.headers["last-event-id"] || 0);
       for (const ev of state.events.filter((e) => e.seq > after)) res.write(`id: ${ev.seq}\ndata: ${JSON.stringify(ev)}\n\n`);
+      for (const [reader, seq] of Object.entries(state.queued)) res.write(`data: ${JSON.stringify({ kind: "queued", reader, seq })}\n\n`);
       for (const [reader, seq] of Object.entries(state.read)) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
       state.streams.add(res);
       req.on("close", () => state.streams.delete(res));
       return;
     }
     if (req.method === "POST" && rest === "messages") {
+      if (state.messageDelay) await new Promise((r) => setTimeout(r, state.messageDelay));
       const ev = push({ author: "human", kind: "message", target: parsed.target, text: parsed.text });
       return json(res, 200, { seq: ev.seq });
     }
@@ -279,6 +282,10 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     ack(reader, seq) {
       state.read[reader] = seq;
       for (const res of state.streams) res.write(`data: ${JSON.stringify({ kind: "read", reader, seq })}\n\n`);
+    },
+    queue(reader, seq) {
+      state.queued[reader] = seq;
+      for (const res of state.streams) res.write(`data: ${JSON.stringify({ kind: "queued", reader, seq })}\n\n`);
     },
     dropStreams() {
       for (const res of state.streams) res.destroy();

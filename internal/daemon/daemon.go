@@ -31,14 +31,15 @@ import (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Request struct {
-	Op     string `json:"op"`
-	Page   string `json:"page"`
-	Reader string `json:"reader,omitempty"`
-	Author string `json:"author,omitempty"`
-	Kind   string `json:"kind,omitempty"`
-	Target string `json:"target,omitempty"`
-	Text   string `json:"text,omitempty"`
-	Seq    uint64 `json:"seq,omitempty"`
+	Op     string   `json:"op"`
+	Page   string   `json:"page"`
+	Reader string   `json:"reader,omitempty"`
+	Author string   `json:"author,omitempty"`
+	Kind   string   `json:"kind,omitempty"`
+	Target string   `json:"target,omitempty"`
+	Text   string   `json:"text,omitempty"`
+	Seq    uint64   `json:"seq,omitempty"`
+	Cut    []uint64 `json:"cut,omitempty"`
 }
 
 type Response struct {
@@ -52,9 +53,13 @@ type Response struct {
 }
 
 type PageStatus struct {
-	Path    string         `json:"path"`
-	Readers []ReaderStatus `json:"readers,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	Path    string           `json:"path"`
+	Readers []ReaderStatus   `json:"readers,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Events  []eventlog.Event `json:"events,omitempty"`
+	Queued  uint64           `json:"queued,omitempty"`
+	Hooked  uint64           `json:"hooked,omitempty"`
+	Cut     []uint64         `json:"cut,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -353,12 +358,6 @@ func (s *Server) PagePath(id string) (string, error) {
 	return strings.TrimSuffix(string(b), "\n"), err
 }
 
-func (s *Server) setPresence(path, reader, state string, l *eventlog.Log) {
-	s.presenceMu.Lock()
-	defer s.presenceMu.Unlock()
-	s.setPresenceLocked(path, reader, state, l)
-}
-
 func (s *Server) attach(path, reader string, l *eventlog.Log) {
 	s.presenceMu.Lock()
 	defer s.presenceMu.Unlock()
@@ -412,6 +411,23 @@ func (s *Server) handle(conn net.Conn) {
 		s.open(enc, req.Page)
 		return
 	}
+	if req.Op == "inbox" {
+		if !filepath.IsAbs(req.Page) {
+			reply(enc, &Response{Error: fmt.Sprintf("inbox directory must be absolute: %q", req.Page)})
+			return
+		}
+		if err := eventlog.CheckReader(req.Reader); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		pages, err := s.inbox(req.Page, req.Reader)
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Pages: pages})
+		return
+	}
 	if req.Op == "pages" {
 		pages, err := s.listPages()
 		if err != nil {
@@ -427,7 +443,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "ack", "watch":
+	case "pending", "queue", "handover", "seen", "watch", "wait":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -435,27 +451,50 @@ func (s *Server) handle(conn net.Conn) {
 	}
 	switch req.Op {
 	case "append":
+		marks := req.Seq > 0 && req.Author != "" && eventlog.CheckReader(req.Author) == nil
+		if queued := l.Queued(req.Author); marks && req.Seq > queued {
+			reply(enc, &Response{Error: fmt.Sprintf("--seen #%d was never handed to %s; the last event handed over is #%d, so nothing was sent", req.Seq, req.Author, queued)})
+			return
+		}
 		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		if e.Kind == "message" && s.presenceOf(req.Page, e.Author) == "busy" {
-			s.setPresence(req.Page, e.Author, "watching", l)
+		if marks {
+			if err := l.Ack(e.Author, req.Seq); err != nil {
+				reply(enc, &Response{Error: err.Error()})
+				return
+			}
 		}
 		reply(enc, &Response{Event: &e})
 	case "pending":
-		reply(enc, &Response{Events: l.Pending(req.Reader)})
-	case "ack":
-		if err := l.Ack(req.Reader, req.Seq); err != nil {
+		events, through, _ := l.Unseen(req.Reader)
+		if err := l.Ack(req.Reader, through); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		reply(enc, &Response{})
+		reply(enc, &Response{Events: events})
+	case "seen":
+		if req.Seq == 0 {
+			reply(enc, &Response{Error: "seen needs the number of the last event you read"})
+			return
+		}
+		if err := ackHanded(l, req.Reader, req.Seq); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Event: &eventlog.Event{Seq: l.Cursor(req.Reader)}})
+	case "queue":
+		reply(enc, ackReply(l.Queue(req.Reader, req.Seq)))
+	case "handover":
+		reply(enc, ackReply(l.Handover(req.Reader, req.Seq, req.Cut)))
 	case "status":
 		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
 		s.watch(dec, enc, &req, l)
+	case "wait":
+		s.wait(dec, enc, &req, l)
 	default:
 		reply(enc, &Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
 	}
@@ -476,12 +515,6 @@ func (s *Server) open(enc *json.Encoder, path string) {
 	reply(enc, resp)
 }
 
-func (s *Server) presenceOf(path, reader string) string {
-	s.presenceMu.Lock()
-	defer s.presenceMu.Unlock()
-	return s.presence[path][reader]
-}
-
 func reply(enc *json.Encoder, resp *Response) {
 	if err := enc.Encode(resp); err != nil {
 		log.Printf("reply: %v", err)
@@ -497,8 +530,8 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	defer s.detach(req.Page, req.Reader, l)
 
 	ack := func(seq uint64) {
-		if err := l.Ack(req.Reader, seq); err != nil {
-			log.Printf("ack %s %d: %v", req.Reader, seq, err)
+		if err := l.Queue(req.Reader, seq); err != nil {
+			log.Printf("queue %s %d: %v", req.Reader, seq, err)
 		}
 	}
 	var mu sync.Mutex
@@ -549,9 +582,6 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			if err := enc.Encode(Response{Event: &e}); err != nil {
 				return
 			}
-			if e.Author == "human" && (e.Kind == "message" || e.Kind == "answer") {
-				s.setPresence(req.Page, req.Reader, "busy", l)
-			}
 		}
 		select {
 		case <-changed:
@@ -559,6 +589,91 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			return
 		}
 	}
+}
+
+func ackHanded(l *eventlog.Log, reader string, seq uint64) error {
+	if queued := l.Queued(reader); seq > queued {
+		return fmt.Errorf("#%d was never handed to %s; the last event handed over is #%d", seq, reader, queued)
+	}
+	return l.Ack(reader, seq)
+}
+
+func ackReply(err error) *Response {
+	if err != nil {
+		return &Response{Error: err.Error()}
+	}
+	return &Response{}
+}
+
+func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eventlog.Log) {
+	s.attach(req.Page, req.Reader, l)
+	defer s.detach(req.Page, req.Reader, l)
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		var discard json.RawMessage
+		for {
+			if dec.Decode(&discard) != nil {
+				return
+			}
+		}
+	}()
+	for {
+		_, changed := l.After(^uint64(0))
+		events, queued := unseenForAgent(l, req.Reader)
+		if len(events) > 0 && events[len(events)-1].Seq > queued {
+			reply(enc, &Response{Events: events})
+			return
+		}
+		select {
+		case <-changed:
+		case <-gone:
+			return
+		case <-s.stopping:
+			return
+		}
+	}
+}
+
+func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, queued uint64) {
+	events, _, queued = l.Unseen(reader)
+	return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Author == "file" || e.Author == "kapi" }), queued
+}
+
+func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
+	dirs, err := s.pageDirs()
+	if err != nil {
+		return nil, err
+	}
+	dir = resolved(dir)
+	var out []PageStatus
+	for _, d := range dirs {
+		if d.err != nil || !within(dir, d.path) {
+			continue
+		}
+		l, err := s.page(d.path)
+		if err != nil {
+			out = append(out, PageStatus{Path: d.path, Error: err.Error()})
+			continue
+		}
+		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader)})
+		}
+	}
+	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
+	return out, nil
+}
+
+func within(dir, path string) bool {
+	rel, err := filepath.Rel(dir, filepath.Join(resolved(filepath.Dir(path)), filepath.Base(path)))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func resolved(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	return path
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {
@@ -590,7 +705,12 @@ func (s *Server) status(page string, l *eventlog.Log) []ReaderStatus {
 	return out
 }
 
-func (s *Server) listPages() ([]PageStatus, error) {
+type pageDir struct {
+	path, dir string
+	err       error
+}
+
+func (s *Server) pageDirs() ([]pageDir, error) {
 	root := filepath.Join(s.home, "pages")
 	dirs, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -599,7 +719,7 @@ func (s *Server) listPages() ([]PageStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []PageStatus
+	var out []pageDir
 	for _, d := range dirs {
 		if !d.IsDir() {
 			continue
@@ -609,11 +729,23 @@ func (s *Server) listPages() ([]PageStatus, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		if err != nil {
-			out = append(out, PageStatus{Path: dir, Error: err.Error()})
+		out = append(out, pageDir{path: strings.TrimSuffix(string(b), "\n"), dir: dir, err: err})
+	}
+	return out, nil
+}
+
+func (s *Server) listPages() ([]PageStatus, error) {
+	dirs, err := s.pageDirs()
+	if err != nil {
+		return nil, err
+	}
+	var out []PageStatus
+	for _, d := range dirs {
+		if d.err != nil {
+			out = append(out, PageStatus{Path: d.dir, Error: d.err.Error()})
 			continue
 		}
-		out = append(out, s.pageStatus(strings.TrimSuffix(string(b), "\n"), dir))
+		out = append(out, s.pageStatus(d.path, d.dir))
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
 	return out, nil
