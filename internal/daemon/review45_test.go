@@ -11,9 +11,9 @@ import (
 
 func TestReview45InboxMatchesTheSameDirectoryThroughASymlink(t *testing.T) {
 	home, _, _ := serving(t)
-	real := t.TempDir()
+	target := t.TempDir()
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(real, link); err != nil {
+	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
 	resolved, err := filepath.EvalSymlinks(link)
