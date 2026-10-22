@@ -28,18 +28,22 @@ type Log struct {
 	dir     string
 	file    *os.File
 	events  []Event
-	cursors map[string]uint64
-	queued  map[string]uint64
-	hooked  map[string]uint64
+	pos     positions
 	changed chan struct{}
 	acked   chan struct{}
 }
 
+type positions struct {
+	Seen   map[string]uint64   `json:"seen"`
+	Queued map[string]uint64   `json:"queued"`
+	Hooked map[string]uint64   `json:"hooked"`
+	Cut    map[string][]uint64 `json:"cut,omitempty"`
+}
+
 const (
-	eventsFile  = "events.ndjson"
-	cursorsFile = "cursors.json"
-	queuedFile  = "queued.json"
-	hookedFile  = "hooked.json"
+	eventsFile    = "events.ndjson"
+	positionsFile = "positions.json"
+	cursorsFile   = "cursors.json"
 )
 
 func Open(dir string) (*Log, error) {
@@ -50,15 +54,7 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	cursors, err := readCursors(filepath.Join(dir, cursorsFile))
-	if err != nil {
-		return nil, err
-	}
-	queued, err := readCursors(filepath.Join(dir, queuedFile))
-	if err != nil {
-		return nil, err
-	}
-	hooked, err := readCursors(filepath.Join(dir, hookedFile))
+	pos, err := readPositions(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +62,7 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, cursors: cursors, queued: queued, hooked: hooked, changed: make(chan struct{}), acked: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -75,18 +71,18 @@ func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	cursors, err := readCursors(filepath.Join(dir, cursorsFile))
+	pos, err := readPositions(dir)
 	if err != nil {
 		return nil, nil, err
 	}
 	pending := func(reader string) int {
-		c := cursors[reader]
+		c := pos.Seen[reader]
 		if c >= uint64(len(events)) {
 			return 0
 		}
 		return len(unread(events[c:], reader))
 	}
-	return cursors, pending, nil
+	return pos.Seen, pending, nil
 }
 
 func (l *Log) Close() error {
@@ -132,53 +128,76 @@ func (l *Log) After(cursor uint64) ([]Event, <-chan struct{}) {
 func (l *Log) Cursor(reader string) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.cursors[reader]
-}
-
-func (l *Log) Ack(reader string, seq uint64) error {
-	return l.advance(l.cursors, cursorsFile, reader, seq)
-}
-
-func (l *Log) Queue(reader string, seq uint64) error {
-	return l.advance(l.queued, queuedFile, reader, seq)
+	return l.pos.Seen[reader]
 }
 
 func (l *Log) Queued(reader string) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return max(l.queued[reader], l.cursors[reader])
-}
-
-func (l *Log) Hook(reader string, seq uint64) error {
-	return l.advance(l.hooked, hookedFile, reader, seq)
+	return max(l.pos.Queued[reader], l.pos.Seen[reader])
 }
 
 func (l *Log) Hooked(reader string) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return max(l.hooked[reader], l.cursors[reader])
+	return max(l.pos.Hooked[reader], l.pos.Seen[reader])
 }
 
-func (l *Log) advance(positions map[string]uint64, file, reader string, seq uint64) error {
+func (l *Log) Cut(reader string) []uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.pos.Cut[reader])
+}
+
+func (l *Log) Ack(reader string, seq uint64) error {
+	return l.update(reader, seq, func(p *positions) { p.Seen[reader] = max(p.Seen[reader], seq) })
+}
+
+func (l *Log) Queue(reader string, seq uint64) error {
+	return l.update(reader, seq, func(p *positions) { p.Queued[reader] = max(p.Queued[reader], seq) })
+}
+
+func (l *Log) Handover(reader string, seq uint64, cut []uint64) error {
+	return l.update(reader, seq, func(p *positions) {
+		p.Queued[reader] = max(p.Queued[reader], seq)
+		p.Hooked[reader] = max(p.Hooked[reader], seq)
+		cuts := slices.Concat(p.Cut[reader], slices.DeleteFunc(slices.Clone(cut), func(c uint64) bool { return c > seq }))
+		slices.Sort(cuts)
+		p.Cut[reader] = slices.Compact(cuts)
+		through := seq
+		if first := slices.IndexFunc(p.Cut[reader], func(c uint64) bool { return c > p.Seen[reader] }); first >= 0 {
+			through = min(through, p.Cut[reader][first]-1)
+		}
+		p.Seen[reader] = max(p.Seen[reader], through)
+	})
+}
+
+func (l *Log) update(reader string, seq uint64, change func(*positions)) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if seq > uint64(len(l.events)) {
 		return fmt.Errorf("position %d beyond last event %d", seq, len(l.events))
 	}
-	if seq <= positions[reader] {
-		return nil
+	next := positions{Seen: maps.Clone(l.pos.Seen), Queued: maps.Clone(l.pos.Queued), Hooked: maps.Clone(l.pos.Hooked), Cut: maps.Clone(l.pos.Cut)}
+	change(&next)
+	next.Cut[reader] = slices.DeleteFunc(slices.Clone(next.Cut[reader]), func(c uint64) bool { return c <= next.Seen[reader] })
+	if len(next.Cut[reader]) == 0 {
+		delete(next.Cut, reader)
 	}
-	positions[reader] = seq
+	if err := writePositions(l.dir, &next); err != nil {
+		return err
+	}
+	l.pos = next
 	close(l.acked)
 	l.acked = make(chan struct{})
-	return writeCursors(filepath.Join(l.dir, file), positions)
+	return nil
 }
 
 // Cursors returns every reader's seen and queued positions and a channel closed when the next one advances.
 func (l *Log) Cursors() (seen, queued map[string]uint64, advanced <-chan struct{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return maps.Clone(l.cursors), maps.Clone(l.queued), l.acked
+	return maps.Clone(l.pos.Seen), maps.Clone(l.pos.Queued), l.acked
 }
 
 // Pending returns the events a reader has not acknowledged, leaving out presence events and the reader's own.
@@ -191,7 +210,7 @@ func (l *Log) Unseen(reader string) (events []Event, through, queued uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	through = uint64(len(l.events))
-	return unread(l.events[min(l.cursors[reader], through):], reader), through, max(l.queued[reader], l.cursors[reader])
+	return unread(l.events[min(l.pos.Seen[reader], through):], reader), through, max(l.pos.Queued[reader], l.pos.Seen[reader])
 }
 
 const KindPresence = "presence"
@@ -222,26 +241,42 @@ func readEvents(path string) ([]Event, error) {
 	return events, sc.Err()
 }
 
-func readCursors(path string) (map[string]uint64, error) {
+func readPositions(dir string) (positions, error) {
+	p := positions{Seen: map[string]uint64{}, Queued: map[string]uint64{}, Hooked: map[string]uint64{}, Cut: map[string][]uint64{}}
+	path := filepath.Join(dir, positionsFile)
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]uint64{}, nil
+		path = filepath.Join(dir, cursorsFile)
+		b, err = os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return p, nil
+		}
+		if err == nil {
+			err = json.Unmarshal(b, &p.Seen)
+		}
+	} else if err == nil {
+		err = json.Unmarshal(b, &p)
 	}
 	if err != nil {
-		return nil, err
+		return positions{}, fmt.Errorf("%s: %w", path, err)
 	}
-	cursors := map[string]uint64{}
-	if err := json.Unmarshal(b, &cursors); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+	for _, m := range []*map[string]uint64{&p.Seen, &p.Queued, &p.Hooked} {
+		if *m == nil {
+			*m = map[string]uint64{}
+		}
 	}
-	return cursors, nil
+	if p.Cut == nil {
+		p.Cut = map[string][]uint64{}
+	}
+	return p, nil
 }
 
-func writeCursors(path string, cursors map[string]uint64) error {
-	b, err := json.Marshal(cursors)
+func writePositions(dir string, p *positions) error {
+	b, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(dir, positionsFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err

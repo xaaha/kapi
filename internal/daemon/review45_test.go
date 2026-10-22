@@ -39,7 +39,7 @@ func TestReview45OneBrokenPageDoesNotHideMessagesOnTheOthersInTheInbox(t *testin
 	call(t, home, &Request{Op: "append", Page: bad, Author: "human", Kind: "message", Text: "x"})
 	call(t, home, &Request{Op: "append", Page: good, Author: "human", Kind: "message", Text: "hello"})
 	stop()
-	broken := filepath.Join(home, "pages", page.ID(bad), "queued.json")
+	broken := filepath.Join(home, "pages", page.ID(bad), "positions.json")
 	if err := os.WriteFile(broken, []byte("{bad"), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -624,16 +624,8 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		return err
 	}
 	for _, h := range handed {
-		for _, op := range []struct {
-			name string
-			seq  uint64
-		}{{"queue", h.Hooked}, {"hooked", h.Hooked}, {"seen", h.Seen}} {
-			if op.seq == 0 {
-				continue
-			}
-			if _, err := c.Do(&daemon.Request{Op: op.name, Page: h.Path, Reader: "agent", Seq: op.seq}); err != nil {
-				return err
-			}
+		if _, err := c.Do(&daemon.Request{Op: "handover", Page: h.Path, Reader: "agent", Seq: h.Through, Cut: h.Cut}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -646,9 +638,9 @@ const (
 )
 
 type hookHanded struct {
-	Path   string
-	Hooked uint64
-	Seen   uint64
+	Path    string
+	Through uint64
+	Cut     []uint64
 }
 
 func hookText(pages []daemon.PageStatus, remind bool) (string, []hookHanded) {
@@ -664,9 +656,10 @@ func hookText(pages []daemon.PageStatus, remind bool) (string, []hookHanded) {
 		var page strings.Builder
 		page.WriteString(p.Path + ":\n")
 		h := hookHanded{Path: p.Path}
-		whole := p.Events[0].Seq > p.Hooked
-		if !whole && remind {
-			fmt.Fprintf(&page, "  #%d is still unread; run %s\n", p.Events[0].Seq, pending)
+		if remind {
+			for _, c := range p.Cut {
+				fmt.Fprintf(&page, "  #%d is still unread; run %s\n", c, pending)
+			}
 		}
 		for i := range p.Events {
 			e := &p.Events[i]
@@ -674,24 +667,24 @@ func hookText(pages []daemon.PageStatus, remind bool) (string, []hookHanded) {
 				continue
 			}
 			line := "  " + eventLine(e) + "\n"
-			if len(line) > tooLongLine {
+			isCut := len(line) > tooLongLine
+			if isCut {
 				line = cut(line, shownOfCut) + fmt.Sprintf("… (too long to show here; run %s to read #%d)\n", pending, e.Seq)
-				whole = false
 			}
 			if len(line) > room(&page) {
 				fmt.Fprintf(&page, "  more unseen events here; run %s to read them\n", pending)
 				break
 			}
 			page.WriteString(line)
-			h.Hooked = e.Seq
-			if whole {
-				h.Seen = e.Seq
+			h.Through = e.Seq
+			if isCut {
+				h.Cut = append(h.Cut, e.Seq)
 			}
 		}
 		if page.Len() > len(p.Path)+2 {
 			b.WriteString(page.String())
 		}
-		if h.Hooked > 0 {
+		if h.Through > 0 {
 			handed = append(handed, h)
 		}
 	}

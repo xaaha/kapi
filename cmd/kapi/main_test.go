@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +74,7 @@ func TestD10SendAndSayBuildMessages(t *testing.T) {
 				t.Errorf("output = %q", out)
 			}
 			want := daemon.Request{Op: "append", Page: abs(t, "plan.html"), Author: tc.wantAuthor, Kind: "message", Target: tc.wantTarget, Text: "is this true?"}
-			if len(f.requests) != 1 || f.requests[0] != want {
+			if len(f.requests) != 1 || !reflect.DeepEqual(f.requests[0], want) {
 				t.Errorf("requests = %+v, want %+v", f.requests, want)
 			}
 		})
@@ -354,7 +354,7 @@ func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
 	}
 	page := abs(t, "plan.html")
 	want := []daemon.Request{{Op: "wait", Page: page, Reader: "codex"}, {Op: "queue", Page: page, Reader: "codex", Seq: 5}}
-	if len(f.requests) != 2 || f.requests[0] != want[0] || f.requests[1] != want[1] {
+	if !reflect.DeepEqual(f.requests, want) {
 		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
 }
@@ -409,11 +409,9 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		}
 		want := []daemon.Request{
 			{Op: "inbox", Page: "/w", Reader: "agent"},
-			{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 4},
-			{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 4},
-			{Op: "seen", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+			{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 4},
 		}
-		if !slices.Equal(f.requests, want) {
+		if !reflect.DeepEqual(f.requests, want) {
 			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
 		}
 	}
@@ -427,7 +425,7 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 		t.Errorf("nothing unseen: %q, %v; want no output so the agent may stop", out, err)
 	}
-	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "queued.json: bad"}}}
+	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "positions.json: bad"}}}
 	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}} {
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)

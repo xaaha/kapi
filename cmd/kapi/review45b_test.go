@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -60,17 +61,15 @@ func TestHookMarksSeenOnlyThroughTheLastEventItShowedWhole(t *testing.T) {
 	}
 	want := []daemon.Request{
 		{Op: "inbox", Page: "/w", Reader: "agent"},
-		{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 5},
-		{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 5},
-		{Op: "seen", Page: "/w/plan.html", Reader: "agent", Seq: 2},
+		{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 5, Cut: []uint64{3}},
 	}
-	if !slices.Equal(f.requests, want) {
+	if !reflect.DeepEqual(f.requests, want) {
 		t.Errorf("requests = %+v, want everything handed through #5 and seen only through #2, before the cut #3", f.requests)
 	}
 }
 
 func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing.T) {
-	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 5, Events: []eventlog.Event{
+	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 5, Cut: []uint64{3}, Events: []eventlog.Event{
 		{Seq: 3, Author: "human", Kind: "message", Text: strings.Repeat("y", 9500)},
 		{Seq: 5, Author: "human", Kind: "message", Text: "after"},
 	}}}}

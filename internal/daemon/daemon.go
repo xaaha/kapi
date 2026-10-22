@@ -31,14 +31,15 @@ import (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Request struct {
-	Op     string `json:"op"`
-	Page   string `json:"page"`
-	Reader string `json:"reader,omitempty"`
-	Author string `json:"author,omitempty"`
-	Kind   string `json:"kind,omitempty"`
-	Target string `json:"target,omitempty"`
-	Text   string `json:"text,omitempty"`
-	Seq    uint64 `json:"seq,omitempty"`
+	Op     string   `json:"op"`
+	Page   string   `json:"page"`
+	Reader string   `json:"reader,omitempty"`
+	Author string   `json:"author,omitempty"`
+	Kind   string   `json:"kind,omitempty"`
+	Target string   `json:"target,omitempty"`
+	Text   string   `json:"text,omitempty"`
+	Seq    uint64   `json:"seq,omitempty"`
+	Cut    []uint64 `json:"cut,omitempty"`
 }
 
 type Response struct {
@@ -58,6 +59,7 @@ type PageStatus struct {
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Queued  uint64           `json:"queued,omitempty"`
 	Hooked  uint64           `json:"hooked,omitempty"`
+	Cut     []uint64         `json:"cut,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -441,7 +443,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	switch req.Op {
-	case "pending", "queue", "hooked", "seen", "watch", "wait":
+	case "pending", "queue", "handover", "seen", "watch", "wait":
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -485,8 +487,8 @@ func (s *Server) handle(conn net.Conn) {
 		reply(enc, &Response{Event: &eventlog.Event{Seq: l.Cursor(req.Reader)}})
 	case "queue":
 		reply(enc, ackReply(l.Queue(req.Reader, req.Seq)))
-	case "hooked":
-		reply(enc, ackReply(l.Hook(req.Reader, req.Seq)))
+	case "handover":
+		reply(enc, ackReply(l.Handover(req.Reader, req.Seq, req.Cut)))
 	case "status":
 		reply(enc, &Response{Readers: s.status(req.Page, l)})
 	case "watch":
@@ -655,7 +657,7 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			continue
 		}
 		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader)})
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader)})
 		}
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })

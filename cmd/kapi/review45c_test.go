@@ -1,7 +1,7 @@
 package main
 
 import (
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -17,7 +17,7 @@ func TestReview45cATruncatedEventIsHandedOverSoTheAgentCanNameItAndItIsNotReinje
 		t.Fatalf("hook = %q, %v", out, err)
 	}
 	for _, r := range f.requests[1:] {
-		if r.Op == "queue" && r.Seq == 4 {
+		if r.Op == "handover" && r.Seq == 4 {
 			return
 		}
 	}
@@ -34,10 +34,9 @@ func TestEveryHookShowsANewCutEventOnceHandsItOverAndLeavesItUnseen(t *testing.T
 		}
 		want := []daemon.Request{
 			{Op: "inbox", Page: "/w", Reader: "agent"},
-			{Op: "queue", Page: "/w/plan.html", Reader: "agent", Seq: 4},
-			{Op: "hooked", Page: "/w/plan.html", Reader: "agent", Seq: 4},
+			{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 4, Cut: []uint64{4}},
 		}
-		if !slices.Equal(f.requests, want) {
+		if !reflect.DeepEqual(f.requests, want) {
 			t.Errorf("%s requests = %+v, want #4 handed over and not seen", event, f.requests)
 		}
 	}

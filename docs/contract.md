@@ -312,8 +312,10 @@ show them. Events reach the agent three ways:
   hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
   so the agent does not go idle on them. The rule, in two lines:
-  each hook shows, in order, only events past the reader's hook position, a too-long one as a short prefix with its `#n` and `kapi pending <page>`; it then moves the hook position and queued past all it showed.
-  the hook writes its text first, then marks seen only the events it showed whole with no cut event before them; `Stop` blocks only when something passed the hook position.
+  each hook shows, in order, only events past the reader's hook position, a too-long one as a short prefix with its `#n` and `kapi pending <page>`, recorded as cut.
+  after writing its text the hook sends one `handover` that, in a single write, moves queued and the hook position through what it showed, records the cut events, and moves seen up to the first unread cut event; `Stop` blocks only when something passed the hook position.
+  Every reader position (seen, queued, hook position, cut events) lives in
+  `pages/<id>/positions.json`; an older `cursors.json` is read as seen.
   The hook position is separate from the queued position, so a message
   `kapi watch` printed still reaches the model. A cut event is never shown
   again; `UserPromptSubmit` adds a one-line reminder while it is unread. The
