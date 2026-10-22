@@ -297,7 +297,7 @@ body {
   transform: rotate(-45deg);
   transition: transform 0.15s ease;
 }
-.kapi-details[open] > summary::before { transform: rotate(45deg); }
+.kapi-details[open] > summary::before { transform: translateY(-0.15rem) rotate(45deg); }
 .kapi-details > summary:hover { background: var(--kapi-subtle); }
 .kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-accent-text); outline-offset: 2px; }
 .kapi-details[open] > summary { border-bottom: 1px solid var(--kapi-border); border-radius: var(--kapi-radius) var(--kapi-radius) 0 0; }
