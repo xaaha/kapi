@@ -212,7 +212,8 @@ func Printable(s string) string {
 		switch {
 		case r == '\n' || r == '\t':
 			return ' '
-		case r < 0x20, r >= 0x7f && r <= 0x9f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+		case r < 0x20, r >= 0x7f && r <= 0x9f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069,
+			r == 0x200e, r == 0x200f, r == 0x061c, r == 0x2028, r == 0x2029:
 			return -1
 		}
 		return r

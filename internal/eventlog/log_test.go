@@ -125,3 +125,9 @@ func TestPrintableStripsTerminalControls(t *testing.T) {
 		t.Errorf("Printable = %q, want %q", got, want)
 	}
 }
+
+func TestPrintableStripsMarksAndSeparators(t *testing.T) {
+	if got := Printable("a‎b‏c؜d e f"); got != "abcdef" {
+		t.Errorf("Printable = %q", got)
+	}
+}
