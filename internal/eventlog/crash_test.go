@@ -13,6 +13,13 @@ import (
 
 var crashTexts = []string{"one", "two", "three", "four"}
 
+var positionWrites = [][]func(*Log, uint64) error{
+	nil,
+	{func(l *Log, seq uint64) error { return l.Ack("agent", seq) }},
+	{func(l *Log, seq uint64) error { return l.Queue("agent", seq) }},
+	{func(l *Log, seq uint64) error { return l.Handover("agent", seq, []uint64{seq}) }, func(l *Log, seq uint64) error { return l.Ack("agent", seq) }},
+}
+
 func traceWrites(on func(kind, name string)) (restore func()) {
 	sync0, rename0 := syncFile, renameFile
 	syncFile = func(f *os.File) error { on("sync", f.Name()); return sync0(f) }
@@ -31,8 +38,9 @@ func runCrashScenario(dir string, after func(*Log)) error {
 			return err
 		}
 		after(l)
-		if i%2 == 1 {
-			if err := l.Ack("agent", uint64(i+1)); err != nil {
+		seq := uint64(i + 1)
+		for _, write := range positionWrites[i] {
+			if err := write(l, seq); err != nil {
 				return err
 			}
 			after(l)
@@ -93,8 +101,10 @@ func TestAKilledLogRecoversAtEveryWritePoint(t *testing.T) {
 					t.Fatalf("after a kill at write %d, event %d is %+v", at, i, e)
 				}
 			}
-			if c := l.Cursor("agent"); c > uint64(len(events)) {
-				t.Errorf("after a kill at write %d, cursor %d is past the %d events", at, c, len(events))
+			for name, p := range map[string]uint64{"seen": l.Cursor("agent"), "queued": l.Queued("agent"), "hooked": l.Hooked("agent")} {
+				if p > uint64(len(events)) {
+					t.Errorf("after a kill at write %d, %s position %d is past the %d events", at, name, p, len(events))
+				}
 			}
 			if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "after"}); err != nil || e.Seq != uint64(len(events)+1) {
 				t.Errorf("append after a kill at write %d = %+v, %v", at, e, err)
