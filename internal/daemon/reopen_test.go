@@ -413,14 +413,14 @@ func TestStartSkipsThePageTheStartingOpenAskedFor(t *testing.T) {
 func TestStartIgnoresDirectoriesThatAreNotPageIDs(t *testing.T) {
 	home := shortHome(t)
 	captureLog(t)
-	real := knownPage(t, home, "real.html")
-	markViewing(t, home, real, 0)
+	valid := knownPage(t, home, "real.html")
+	markViewing(t, home, valid, 0)
 	for _, name := range []string{"ABCDEF0123456789", "0123456789abcdef0", "0123456789abcde", "notapageid", "0123456789abcdeg"} {
 		dir := filepath.Join(home, "pages", name)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "page.txt"), []byte(real+"\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "page.txt"), []byte(valid+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "viewing"), nil, 0o600); err != nil {
@@ -429,7 +429,7 @@ func TestStartIgnoresDirectoriesThatAreNotPageIDs(t *testing.T) {
 	}
 	o, stop := startAndCollect(t, home, 1)
 	defer stop()
-	if got, want := o.opened(), pageURLs(t, home, []string{real}); !slices.Equal(got, want) {
-		t.Errorf("reopened %v, want only the real page %v", got, want)
+	if got, want := o.opened(), pageURLs(t, home, []string{valid}); !slices.Equal(got, want) {
+		t.Errorf("reopened %v, want only the valid page %v", got, want)
 	}
 }
