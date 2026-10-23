@@ -797,10 +797,10 @@ test("the theme toggle switches light and dark and remembers the choice across a
   await prefer("light");
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
   await reload();
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   await click('.kapi-theme [data-theme-choice="system"]');
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
@@ -819,7 +819,7 @@ test("System follows the OS colour scheme live, and an explicit choice ignores i
   await prefer("light");
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await prefer("dark");
-  await expectTheme(["dark", "rgb(15, 17, 21)", "system"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "system"]);
   await click('.kapi-theme [data-theme-choice="light"]');
   await prefer("light");
   await prefer("dark");
@@ -834,12 +834,12 @@ test("the theme toggle still works when storage is blocked", async () => {
   await reload();
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
 });
 
 test("printing stays light when the dark theme is on", async () => {
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   await page.call("Emulation.setEmulatedMedia", { media: "print" });
   const bg = await page.eval(`getComputedStyle(document.body).backgroundColor`);
   await page.call("Emulation.setEmulatedMedia", { media: "" });
