@@ -12,7 +12,7 @@ import (
 
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
-var surfaceRoles = []string{"bg", "surface", "card", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
+var surfaceRoles = []string{"bg", "surface", "card", "panel", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
 
 var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "mono", "measure"}
 
@@ -106,7 +106,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 		check("muted on "+tone+"-fill", pair("muted"), pair(tone+"-fill"), 4.5)
 	}
 	for _, role := range []string{"fg", "muted", "faint"} {
-		for _, bg := range []string{"surface", "card", "subtle", "bg"} {
+		for _, bg := range []string{"surface", "card", "panel", "subtle", "bg"} {
 			check(role+" on "+bg, pair(role), pair(bg), 4.5)
 		}
 	}
@@ -223,5 +223,28 @@ func TestHighlightedPreDropsTheCardShadow(t *testing.T) {
 	m := regexp.MustCompile(`(?s)#kapi-page pre\.kapi-hl,\s*pre\.kapi-hl \{([^}]*)\}`).FindStringSubmatch(string(baseCSS))
 	if m == nil || !strings.Contains(m[1], "box-shadow: none;") {
 		t.Error("pre.kapi-hl inside a code card must set box-shadow: none, or it draws a second card shadow")
+	}
+}
+
+func TestChatPanelTintStandsApartFromPageAndCards(t *testing.T) {
+	tokens := themeTokens(t)
+	pl, pd := lightDark(t, "panel", tokens["panel"])
+	for _, other := range []struct {
+		name  string
+		least float64
+	}{{"bg", 1.08}, {"card", 1.05}} {
+		ol, od := lightDark(t, other.name, tokens[other.name])
+		if c := contrast(pl, ol); c < other.least {
+			t.Errorf("light panel %s against %s %s: %.3f, want at least %.2f", pl, other.name, ol, c, other.least)
+		}
+		if c := contrast(pd, od); c < other.least {
+			t.Errorf("dark panel %s against %s %s: %.3f, want at least %.2f", pd, other.name, od, c, other.least)
+		}
+	}
+	for _, tone := range []string{"blue-text", "red-text", "green-text"} {
+		l, d := lightDark(t, tone, tokens[tone])
+		if contrast(l, pl) < 4.5 || contrast(d, pd) < 4.5 {
+			t.Errorf("%s is not readable on the panel", tone)
+		}
 	}
 }

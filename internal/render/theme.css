@@ -3,6 +3,7 @@
   --kapi-bg: light-dark(#ffffff, #000000);
   --kapi-surface: light-dark(#ffffff, #0d0d0f);
   --kapi-card: light-dark(#f5f5f7, #1c1c1e);
+  --kapi-panel: light-dark(#e8ebf0, #141518);
   --kapi-subtle: light-dark(#ebebef, #2a2a2d);
   --kapi-fg: light-dark(#1d1d1f, #f2f2f4);
   --kapi-muted: light-dark(#515154, #aeaeb4);

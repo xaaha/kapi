@@ -1391,6 +1391,22 @@ test("the docked phone toolbar keeps each icon's label beside it", async () => {
   }
 });
 
+test("the chat panel sits on its own tinted surface, with agent bubbles on the page white", async () => {
+  const [panel, tint, bubble, surface] = await page.eval(`(() => {
+    const probe = (v) => { const e = document.createElement("span"); e.style.backgroundColor = v; document.body.append(e); const c = getComputedStyle(e).backgroundColor; e.remove(); return c; };
+    const msg = document.createElement("li");
+    msg.className = "kapi-msg";
+    msg.dataset.author = "agent";
+    document.querySelector(".kapi-log").append(msg);
+    const bubble = getComputedStyle(msg).backgroundColor;
+    msg.remove();
+    return [getComputedStyle(document.querySelector(".kapi-panel")).backgroundColor, probe("var(--kapi-panel)"), bubble, probe("var(--kapi-surface)")];
+  })()`);
+  assert.equal(panel, tint);
+  assert.notEqual(tint, await page.eval(`getComputedStyle(document.body).backgroundColor`));
+  assert.equal(bubble, surface);
+});
+
 test("the selection ring follows the rounded corners of the selected block", async () => {
   await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
   await select("gggggggg");
