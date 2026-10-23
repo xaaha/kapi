@@ -132,7 +132,6 @@
   position: fixed;
   z-index: 2147482999;
   pointer-events: none;
-  border-radius: 3px;
   box-shadow: 0 0 0 2px var(--kapi-blue-text);
 }
 

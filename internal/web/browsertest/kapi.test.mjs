@@ -1301,6 +1301,15 @@ test("the logo sits at the top left of the page as a site header, not in the cha
   assert.equal(inPanel, false);
 });
 
+test("the selection ring follows the rounded corners of the selected block", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
+  await select("gggggggg");
+  await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderTopLeftRadius`), "22px");
+  await select("bbbbbbbb");
+  await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderTopLeftRadius === "4px"`);
+});
+
 test("the selection ring, the human message and the Send button use the blue accent", async () => {
   await select("bbbbbbbb");
   await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);

@@ -289,6 +289,7 @@
       ring.style.top = `${r.top - 4}px`;
       ring.style.width = `${r.width + 8}px`;
       ring.style.height = `${r.height + 8}px`;
+      ring.style.borderRadius = `${(parseFloat(getComputedStyle(selected).borderTopLeftRadius) || 0) + 4}px`;
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }
