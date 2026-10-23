@@ -470,20 +470,21 @@ pre.kapi-hl {
   vertical-align: top;
 }
 .kapi-diagram text { fill: var(--kapi-fg); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
-.kapi-diagram .kd-node rect { fill: var(--kapi-purple-fill); stroke: var(--kapi-purple-text); stroke-opacity: 0.55; stroke-width: 1.2; }
+.kapi-diagram .kd-node > rect { fill: var(--kapi-raised); stroke: var(--kapi-border-strong); stroke-width: 1; filter: var(--kapi-lift); }
+.kapi-diagram .kd-stated > rect { stroke: var(--kapi-tone-text); stroke-width: 1.5; }
+.kapi-diagram .kd-icon { fill: var(--kapi-muted); }
+.kapi-diagram .kd-state { fill: var(--kapi-tone-text); }
 .kapi-diagram .kd-node text { font-weight: 600; }
-.kapi-diagram .kd-actor rect { fill: var(--kapi-yellow-fill); stroke: var(--kapi-yellow-text); }
 .kapi-diagram .kd-edge,
 .kapi-diagram .kd-msg { fill: none; stroke: var(--kapi-faint); stroke-width: 1.4; }
 .kapi-diagram .kd-dashed { stroke-dasharray: 5 4; }
 .kapi-diagram .kd-arrow { fill: var(--kapi-faint); }
 .kapi-diagram .kd-lifeline { fill: none; stroke: var(--kapi-border-strong); stroke-width: 1; stroke-dasharray: 3 4; }
-.kapi-diagram .kd-arch rect { fill: var(--kapi-tone-fill); stroke: var(--kapi-tone-text); stroke-opacity: 0.5; }
 .kapi-diagram .kd-arch text { text-anchor: start; }
 .kapi-diagram .kd-arch .kd-centred { text-anchor: middle; }
 .kapi-diagram .kd-arch .kd-title { fill: var(--kapi-fg); font-size: 13px; font-weight: 600; }
 .kapi-diagram .kd-arch .kd-sub { fill: var(--kapi-muted); font-size: 11.5px; font-weight: 400; }
-.kapi-diagram .kd-planned rect { fill: var(--kapi-card); stroke: var(--kapi-faint); stroke-opacity: 1; stroke-dasharray: 5 4; }
+.kapi-diagram .kd-planned > rect { fill: var(--kapi-card); stroke: var(--kapi-faint); stroke-dasharray: 5 4; filter: none; }
 .kapi-diagram-legend {
   display: flex;
   flex-wrap: wrap;

@@ -34,7 +34,93 @@ const (
 	seqSelfH    = 58.0
 	seqMinGap   = 40.0
 	seqBoxMinW  = 84.0
+	kindIconW   = 44.0
+	kindIconGap = 6.0
+	kindMinW    = 104.0
+	stateIconW  = 16.0
+	stateInset  = 7.0
 )
+
+type nodeLook struct {
+	kind   string
+	state  string
+	dashed bool
+}
+
+var ignoredTags = set("built", "review")
+
+func parseTags(s string) (nodeLook, bool) {
+	var look nodeLook
+	words := strings.Fields(s)
+	for _, w := range words {
+		switch {
+		case w == "planned":
+			look.dashed = true
+		case kindIcons[w] != "":
+			look.kind = w
+		case statusIcons[w].tone != "":
+			look.state = w
+		case ignoredTags[w], isTone(w):
+		default:
+			return nodeLook{}, false
+		}
+	}
+	return look, len(words) > 0
+}
+
+func lenientTags(s string) nodeLook {
+	var look nodeLook
+	for _, w := range strings.Fields(s) {
+		if one, ok := parseTags(w); ok {
+			look.dashed = look.dashed || one.dashed
+			if one.kind != "" {
+				look.kind = one.kind
+			}
+			if one.state != "" {
+				look.state = one.state
+			}
+		}
+	}
+	return look
+}
+
+func (l nodeLook) grow(w, h float64) (float64, float64) {
+	if l.kind != "" {
+		return math.Max(w, kindMinW), h + kindIconW + kindIconGap
+	}
+	if l.state != "" {
+		w += stateIconW + stateInset
+	}
+	return w, h
+}
+
+func (s *svgWriter) openNode(class string, r rect, l nodeLook) {
+	if l.dashed {
+		class += " kd-planned"
+	}
+	if l.state != "" {
+		class += " kd-stated kapi-tone-" + statusIcons[l.state].tone
+	}
+	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="10"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
+}
+
+func (s *svgWriter) nodeIcons(r rect, l nodeLook, padY float64) (textTop float64) {
+	textTop = r.y + padY
+	if l.kind != "" {
+		fmt.Fprintf(&s.body, `<svg class="kd-icon kd-kind-%s" x="%s" y="%s" width="%s" height="%s" viewBox="0 0 256 256">%s</svg>`,
+			l.kind, f(r.x+(r.w-kindIconW)/2), f(textTop), f(kindIconW), f(kindIconW), kindIcons[l.kind])
+		textTop += kindIconW + kindIconGap
+	}
+	if l.state != "" {
+		x, y := r.x+r.w-stateIconW-stateInset, r.y+stateInset
+		if l.kind == "" {
+			x, y = r.x+stateInset+2, r.y+(r.h-stateIconW)/2
+		}
+		fmt.Fprintf(&s.body, `<svg class="kd-state" x="%s" y="%s" width="%s" height="%s" viewBox="0 0 256 256" role="img" aria-label="%s">%s</svg>`,
+			f(x), f(y), f(stateIconW), f(stateIconW), statusIcons[l.state].label, statusIcons[l.state].paths)
+	}
+	return textTop
+}
 
 type edge struct {
 	from, to int
@@ -45,6 +131,7 @@ type edge struct {
 
 type graph struct {
 	names []string
+	looks []nodeLook
 	edges []edge
 }
 
@@ -57,6 +144,7 @@ func parseGraph(src string) (*graph, error) {
 		}
 		index[name] = len(g.names)
 		g.names = append(g.names, name)
+		g.looks = append(g.looks, nodeLook{})
 		return len(g.names) - 1
 	}
 	for i, raw := range strings.Split(src, "\n") {
@@ -72,8 +160,12 @@ func parseGraph(src string) (*graph, error) {
 			at = strings.Index(line, "->")
 		}
 		if at < 0 {
-			if strings.Contains(line, ":") {
-				return nil, fmt.Errorf("line %d: expected `a -> b: label`, got %q", i+1, line)
+			if name, tags, ok := strings.Cut(line, ":"); ok {
+				if name = strings.TrimSpace(name); name == "" {
+					return nil, fmt.Errorf("line %d: expected `a -> b: label` or `node: kind state`, got %q", i+1, line)
+				}
+				g.looks[node(name)] = lenientTags(tags)
+				continue
 			}
 			node(line)
 			continue
@@ -118,7 +210,7 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	h.Write([]byte(attrVal(n, "data-kapi-id") + "\x00" + kind + "\x00" + src))
 	svg := &svgWriter{marker: fmt.Sprintf("kapi-arrow-%08x", h.Sum32()), lr: dir == "lr"}
 	var names []string
-	var legend []string
+	var legend []nodeLook
 	if kind == "architecture" {
 		a, err := parseArchitecture(src)
 		if err != nil {
@@ -136,6 +228,7 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 		}
 		if kind == "flow" {
 			layoutFlow(g, svg)
+			legend = g.looks
 		} else {
 			layoutSequence(g, svg)
 		}
@@ -209,13 +302,21 @@ func (s *svgWriter) abstract(w, h float64) (cross, along float64) {
 	return w, h
 }
 
-func (s *svgWriter) box(class string, at rect, lines []string) {
+func (s *svgWriter) box(class string, at rect, lines []string, look nodeLook) {
 	r := s.real(at)
 	s.extend(r)
-	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="10"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
+	s.openNode(class, r, look)
+	textTop := s.nodeIcons(r, look, nodePadY)
+	cx := r.x + r.w/2
 	top := r.y + (r.h-lineH*float64(len(lines)))/2 + lineH/2
+	switch {
+	case look.kind != "":
+		top = textTop + lineH/2
+	case look.state != "":
+		cx += (stateIconW + stateInset) / 2
+	}
 	for i, l := range lines {
-		fmt.Fprintf(&s.body, `<text x="%s" y="%s">`, f(r.x+r.w/2), f(top+lineH*float64(i)))
+		fmt.Fprintf(&s.body, `<text x="%s" y="%s">`, f(cx), f(top+lineH*float64(i)))
 		writeText(&s.body, l)
 		s.body.WriteString("</text>")
 	}
@@ -384,7 +485,7 @@ func layoutSequence(g *graph, s *svgWriter) {
 		}
 	}
 	for i, name := range g.names {
-		s.box("kd-node kd-actor", rect{xs[i] - widths[i]/2, 0, widths[i], seqBoxH}, []string{name})
+		s.box("kd-node kd-actor", rect{xs[i] - widths[i]/2, 0, widths[i], seqBoxH}, []string{name}, nodeLook{})
 	}
 }
 

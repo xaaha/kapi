@@ -12,7 +12,7 @@ import (
 
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
-var surfaceRoles = []string{"bg", "surface", "card", "panel", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
+var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
 
 var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "mono", "measure"}
 
@@ -98,7 +98,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 	}
 	for _, tone := range tones {
 		text := pair(tone + "-text")
-		for _, bg := range []string{tone + "-fill", tone + "-tint", "surface", "card", "subtle", "bg"} {
+		for _, bg := range []string{tone + "-fill", tone + "-tint", "surface", "card", "raised", "subtle", "bg"} {
 			check(tone+"-text on "+bg, text, pair(bg), 4.5)
 		}
 		check("on-solid on "+tone+"-solid", [2]string{onSolid, onSolid}, pair(tone+"-solid"), 4.5)
@@ -106,7 +106,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 		check("muted on "+tone+"-fill", pair("muted"), pair(tone+"-fill"), 4.5)
 	}
 	for _, role := range []string{"fg", "muted", "faint"} {
-		for _, bg := range []string{"surface", "card", "panel", "subtle", "bg"} {
+		for _, bg := range []string{"surface", "card", "panel", "raised", "subtle", "bg"} {
 			check(role+" on "+bg, pair(role), pair(bg), 4.5)
 		}
 	}
@@ -148,7 +148,7 @@ func TestPurpleIsOnlyAToneAndADiagramColour(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{".kapi-tone-purple": true, ".kapi-diagram .kd-node rect": true}
+	allowed := map[string]bool{".kapi-tone-purple": true}
 	for name, css := range map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome)} {
 		for _, m := range regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`).FindAllStringSubmatch(css, -1) {
 			if !strings.Contains(m[2], "--kapi-purple-") {

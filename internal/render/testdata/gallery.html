@@ -18,29 +18,29 @@
 
 <h2>What exists and what is still a box on paper</h2>
 <kapi-diagram type="architecture">
-  agent: Agent (any harness) | kapi watch: one line per event | kapi say, pending, preset | writes plan.html directly | built
-  plan: plan.html | page source: prose + kapi-* presets | every block has a data-kapi-id | built
-  daemon: kapi daemon (Go, one per machine) | event log and cursors per page | page store: ids, revisions, undo | renders presets to HTML + SVG | review
-  disk: ~/.kapi on disk | pages/&lt;id&gt;/events.ndjson | cursors.json, revs/&lt;n&gt;.html | built
-  browser: Browser page | Select toggle, block toolbar | chat panel, status dot | review
-  hub: Private hub | R2 + Worker + Access | auto-save wiring next | planned
+  agent: Agent (any harness) | kapi watch: one line per event | writes plan.html directly | user
+  plan: plan.html | page source: prose + kapi-* presets | file done
+  daemon: kapi daemon | event log and cursors per page | renders presets to HTML + SVG | service progress
+  disk: ~/.kapi on disk | events, cursors, revisions | database done
+  browser: Browser page | block toolbar, chat panel | page
+  hub: Private hub | R2 + Worker + Access | external planned
   agent -> plan: edits file
-  plan <-> daemon: reads, writes ops, notices your edits
+  plan <-> daemon: reads, writes ops
   agent <-> daemon: socket
   browser <-> daemon: HTTP + SSE
   daemon -> disk: append
   daemon --> hub: publish
 </kapi-diagram>
 
-<p>The same kind of diagram flipped top to bottom, with nodes in each colour:</p>
+<p>The same kind of diagram flipped top to bottom. Colour appears only where a node has a state:</p>
 <kapi-diagram type="architecture" dir="tb">
-  cli: kapi CLI | grey
-  sock: Unix socket | blue
-  store: Page store | green
-  queue: Retry queue | yellow
-  backoff: Backoff timer | orange
-  dead: Dead letters | red
-  hub: Hub | purple
+  cli: kapi CLI | user
+  sock: Unix socket | service
+  store: Page store | database done
+  queue: Retry queue | queue progress
+  backoff: Backoff timer | timer waiting
+  dead: Dead letters | queue failed
+  hub: Hub | external
   cli <-> sock: requests
   sock -> store: ops
   store -> queue: on failure
@@ -57,7 +57,12 @@
   browser -> daemon: op
   daemon -> page file: applies
 </kapi-diagram>
+<p>The same flow left to right, with kinds on its nodes:</p>
 <kapi-diagram type="flow" dir="lr">
+  agent: user
+  page file: file
+  daemon: service done
+  browser: page
   agent -> page file: writes
   page file -> daemon: mtime change
   daemon -> browser: revision event

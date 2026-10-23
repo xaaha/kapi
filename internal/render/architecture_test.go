@@ -97,28 +97,22 @@ func TestArchitectureRunsLeftToRightByDefault(t *testing.T) {
 	}
 }
 
-func TestArchitectureNodesShowStateAndTone(t *testing.T) {
+func TestArchitectureNodesKeepTitlesAndSubtitles(t *testing.T) {
 	out := render(t, diagram("architecture", "a: Agent | one | two | built\nb: Daemon | review\nc: Hub | planned\nd: Disk | red\ne: Plain\n"+
 		"a <-> b: socket\nb --> c\nb -> d\nb -> e"))
 	for _, want := range []string{
-		`<g class="kd-node kd-arch kapi-tone-purple"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-yellow"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-grey kd-planned"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-red"><rect`,
-		`<g class="kd-node kd-arch kapi-tone-grey"><rect`,
 		`class="kd-title"`, `>Agent</text>`, `<text class="kd-title kd-centred"`, `class="kd-sub"`, `>one</text>`, `>two</text>`,
 		`marker-start="url(#`, `class="kd-edge kd-dashed"`,
-		`<figcaption class="kapi-diagram-legend"><span class="kapi-badge kapi-tone-purple">built</span> <span class="kapi-badge kapi-tone-yellow">in review</span> <span class="kapi-badge kapi-tone-grey kd-legend-planned">planned</span></figcaption>`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %s:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, ">built</text>") || strings.Contains(out, ">red</text>") {
-		t.Errorf("a state was drawn as a subtitle:\n%s", out)
+		t.Errorf("a tag was drawn as a subtitle:\n%s", out)
 	}
 	if plain := render(t, diagram("architecture", "a: A | red\nb: B\na -> b")); strings.Contains(plain, "figcaption") {
-		t.Errorf("tones alone need no legend: %s", plain)
+		t.Errorf("colour tags alone need no legend: %s", plain)
 	}
 }
 

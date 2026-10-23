@@ -24,21 +24,15 @@ const (
 )
 
 type archNode struct {
-	title  []string
-	subs   []string
-	state  string
-	tone   string
-	dashed bool
+	title []string
+	subs  []string
+	look  nodeLook
 }
 
 type archGraph struct {
 	nodes []archNode
 	edges []edge
 }
-
-var archStates = map[string]string{"built": "purple", "review": "yellow", "planned": "grey"}
-
-var legendStates = []struct{ state, label string }{{"built", "built"}, {"review", "in review"}, {"planned", "planned"}}
 
 var archID = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
@@ -100,16 +94,13 @@ func parseArchitecture(src string) (*archGraph, error) {
 		if len(parts) == 0 {
 			return nil, fmt.Errorf("line %d: node %q needs a title after the colon", i+1, id)
 		}
-		node := archNode{title: wrapAtWidth(parts[0], archTitleWrap), tone: "grey"}
+		node := archNode{title: wrapAtWidth(parts[0], archTitleWrap)}
 		subs := parts[1:]
 		if last := len(subs) - 1; last >= 0 {
-			if tone, ok := archStates[subs[last]]; ok {
-				node.state, node.tone, subs = subs[last], tone, subs[:last]
-			} else if isTone(subs[last]) {
-				node.tone, subs = subs[last], subs[:last]
+			if look, ok := parseTags(subs[last]); ok {
+				node.look, subs = look, subs[:last]
 			}
 		}
-		node.dashed = node.state == "planned"
 		for _, sub := range subs {
 			node.subs = append(node.subs, wrapAtWidth(sub, archSubWrap)...)
 		}
@@ -131,41 +122,36 @@ func parseArchitecture(src string) (*archGraph, error) {
 	return g, nil
 }
 
-func (g *archGraph) legend() []string {
-	used := map[string]bool{}
-	for _, n := range g.nodes {
-		used[n.state] = true
+func (g *archGraph) legend() []nodeLook {
+	looks := make([]nodeLook, len(g.nodes))
+	for i, n := range g.nodes {
+		looks[i] = n.look
 	}
-	var out []string
-	for _, s := range legendStates {
-		if used[s.state] {
-			out = append(out, s.state)
-		}
-	}
-	return out
+	return looks
 }
 
-func writeLegend(b *bytes.Buffer, states []string) {
-	if len(states) == 0 {
+func writeLegend(b *bytes.Buffer, looks []nodeLook) {
+	used := map[string]bool{}
+	for _, l := range looks {
+		used[l.state] = true
+		if l.dashed {
+			used["planned"] = true
+		}
+	}
+	var items []string
+	for _, st := range statusOrder {
+		if used[st] {
+			icon := statusIcons[st]
+			items = append(items, `<span class="kapi-badge kapi-tone-`+icon.tone+`">`+icon.svg()+icon.label+"</span>")
+		}
+	}
+	if used["planned"] {
+		items = append(items, `<span class="kapi-badge kapi-tone-grey kd-legend-planned">planned</span>`)
+	}
+	if len(items) == 0 {
 		return
 	}
-	b.WriteString(`<figcaption class="kapi-diagram-legend">`)
-	for i, st := range states {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		for _, s := range legendStates {
-			if s.state != st {
-				continue
-			}
-			class := "kapi-badge kapi-tone-" + archStates[st]
-			if st == "planned" {
-				class += " kd-legend-planned"
-			}
-			b.WriteString(`<span class="` + class + `">` + s.label + "</span>")
-		}
-	}
-	b.WriteString("</figcaption>")
+	b.WriteString(`<figcaption class="kapi-diagram-legend">` + strings.Join(items, " ") + "</figcaption>")
 }
 
 func (n *archNode) size() (w, h float64) {
@@ -179,7 +165,7 @@ func (n *archNode) size() (w, h float64) {
 	if len(n.subs) > 0 {
 		h += archSubGap + archSubH*float64(len(n.subs))
 	}
-	return math.Max(archMinW, w+2*archPadX), h
+	return n.look.grow(math.Max(archMinW, w+2*archPadX), h)
 }
 
 func layoutArchitecture(g *archGraph, s *svgWriter) {
@@ -200,15 +186,11 @@ func layoutArchitecture(g *archGraph, s *svgWriter) {
 func (s *svgWriter) archBox(n *archNode, at rect) {
 	r := s.real(at)
 	s.extend(r)
-	class := "kd-node kd-arch kapi-tone-" + n.tone
-	if n.dashed {
-		class += " kd-planned"
-	}
-	fmt.Fprintf(&s.body, `<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="10"></rect>`, class, f(r.x), f(r.y), f(r.w), f(r.h))
-	x, y := r.x+archPadX, r.y+archPadY
-	title := "kd-title"
-	if len(n.subs) == 0 {
-		x, title = r.x+r.w/2, "kd-title kd-centred"
+	s.openNode("kd-node kd-arch", r, n.look)
+	x, y := r.x+archPadX, s.nodeIcons(r, n.look, archPadY)
+	title, sub := "kd-title", "kd-sub"
+	if len(n.subs) == 0 || n.look.kind != "" {
+		x, title, sub = r.x+r.w/2, "kd-title kd-centred", "kd-sub kd-centred"
 	}
 	for _, l := range n.title {
 		fmt.Fprintf(&s.body, `<text class="%s" x="%s" y="%s">`, title, f(x), f(y+archTitleH/2))
@@ -218,7 +200,7 @@ func (s *svgWriter) archBox(n *archNode, at rect) {
 	}
 	y += archSubGap
 	for _, l := range n.subs {
-		fmt.Fprintf(&s.body, `<text class="kd-sub" x="%s" y="%s">`, f(x), f(y+archSubH/2))
+		fmt.Fprintf(&s.body, `<text class="%s" x="%s" y="%s">`, sub, f(x), f(y+archSubH/2))
 		writeText(&s.body, l)
 		s.body.WriteString("</text>")
 		y += archSubH

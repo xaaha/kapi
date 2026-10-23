@@ -194,7 +194,7 @@ func planItem(class, label, tone string) presetFunc {
 			b.WriteString(`<span class="kapi-plan-mark">` + label + `</span><div class="kapi-plan-body">`)
 		} else {
 			writeStart(b, "div", outerAttrs(n, "kapi-plan-item "+class+" kapi-tone-"+icon.tone))
-			b.WriteString(`<span class="kapi-plan-mark kapi-plan-state" role="img" aria-label="` + icon.label + `">` + icon.svg + `</span><div class="kapi-plan-body">`)
+			b.WriteString(`<span class="kapi-plan-mark kapi-plan-state" role="img" aria-label="` + icon.label + `">` + icon.svg() + `</span><div class="kapi-plan-body">`)
 		}
 		renderChildren(b, n)
 		b.WriteString("</div></div>")
@@ -325,10 +325,10 @@ func renderBadge(b *bytes.Buffer, n *html.Node) error {
 		writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
 	case hasContent(n):
 		writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
-		b.WriteString(icon.svg)
+		b.WriteString(icon.svg())
 	default:
 		writeStart(b, "span", outerAttrs(n, "kapi-badge-icon kapi-tone-"+tone, "role", "img", "aria-label", icon.label))
-		b.WriteString(icon.svg)
+		b.WriteString(icon.svg())
 	}
 	renderChildren(b, n)
 	writeEnd(b, "span")
