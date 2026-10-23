@@ -244,6 +244,19 @@ test("Enter does not send while an input method is composing", async () => {
   assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "nihon");
 });
 
+test("typing `text` in a block turns it into inline code and the caret keeps typing outside it", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  for (const ch of " the `new` cluster") await page.type(ch);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"] code')?.textContent`), "new");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  const html = requests("POST", "/ops")[0].body.op.html;
+  assert.match(html, /the <code>new<\/code> cluster<\/p>$/);
+  assert.ok(!html.includes("\u200b"), html);
+});
+
 test("plain Enter in the block and source editors is a new line, not a save", async () => {
   await select("bbbbbbbb");
   await editSelected();

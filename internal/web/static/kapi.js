@@ -460,7 +460,7 @@
     const body = PROSE_PRESETS.has(preset) && el.querySelector(PROSE_BODY);
     if (body && roundTrips(src, body)) {
       const initial = body.innerHTML;
-      return editInPlace(el, [body], rev, () => (body.innerHTML === initial ? null : { kind: "edit", inner: body.innerHTML }));
+      return editInPlace(el, [body], rev, () => (body.innerHTML.replaceAll(ZWSP, "") === initial ? null : { kind: "edit", inner: body.innerHTML.replaceAll(ZWSP, "") }));
     }
     const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of ${describe(idOf(el))}` });
     area.value = src;
@@ -497,7 +497,7 @@
     copy.removeAttribute("data-kapi-selected");
     copy.removeAttribute("data-kapi-excerpt");
     copy.removeAttribute("data-kapi-bar-room");
-    return copy.outerHTML;
+    return copy.outerHTML.replaceAll(ZWSP, "");
   }
 
   function cancelEdit() {
@@ -913,7 +913,28 @@
   addEventListener("scroll", placeRing, { passive: true });
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("resize", placeRing);
-  document.addEventListener("input", () => (editing ? renderBar() : placeRing()));
+  const ZWSP = "\u200b";
+
+  function backtickToCode(e) {
+    if (e.inputType !== "insertText" || !e.data?.endsWith("`")) return;
+    const sel = getSelection();
+    const node = sel.anchorNode;
+    if (!sel.isCollapsed || node?.nodeType !== Node.TEXT_NODE || node.parentElement.closest("code, pre, [contenteditable=plaintext-only]")) return;
+    const before = node.data.slice(0, sel.anchorOffset);
+    const open = before.lastIndexOf("`", before.length - 2);
+    const inner = before.slice(open + 1, -1);
+    if (open < 0 || !inner.trim()) return;
+    const code = h("code", { text: inner });
+    const rest = document.createTextNode(ZWSP + node.data.slice(sel.anchorOffset));
+    node.data = before.slice(0, open);
+    node.after(code, rest);
+    sel.collapse(rest, 1);
+  }
+
+  document.addEventListener("input", (e) => {
+    if (editing?.hosts?.some(({ host }) => host.isContentEditable && host.contains(e.target))) backtickToCode(e);
+    return editing ? renderBar() : placeRing();
+  });
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
