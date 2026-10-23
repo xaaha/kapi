@@ -535,23 +535,22 @@ test("a reconnecting page gets the read position at once", async () => {
   await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-msg .kapi-read")`);
 });
 
-test("presence sits after the newest message and scrolls with the list", async () => {
+test("presence stays pinned above the message box while the list scrolls", async () => {
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-panel-head .kapi-dot, .kapi-panel-head .kapi-status").length`), 0);
   server.push({ kind: "presence", text: "watching" });
   for (let i = 0; i < 30; i++) server.push({ author: i % 2 ? "agent" : "human", kind: "message", text: `message ${i}` });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 30`);
-  const [last, presence, scroll, text] = await page.eval(`(() => {
+  const top = () => page.eval(`document.querySelector(".kapi-presence").getBoundingClientRect().top`);
+  const [presence, scroll, composer, text] = await page.eval(`(() => {
     const box = (e) => (({ top, bottom }) => ({ top, bottom }))(e.getBoundingClientRect());
     const p = document.querySelector(".kapi-presence");
-    return [box([...document.querySelectorAll(".kapi-msg")].at(-1)), box(p), box(document.querySelector(".kapi-scroll")), p.textContent];
+    return [box(p), box(document.querySelector(".kapi-scroll")), box(document.querySelector(".kapi-composer")), p.textContent];
   })()`);
   assert.equal(text, "Agent is watching");
-  assert.equal(await page.eval(`document.querySelector(".kapi-scroll").lastElementChild.className`), "kapi-presence");
-  assert.ok(presence.top >= last.bottom, JSON.stringify({ last, presence }));
-  assert.ok(presence.bottom <= scroll.bottom + 1, `presence ${JSON.stringify(presence)} not pinned in view ${JSON.stringify(scroll)}`);
+  assert.ok(presence.top >= scroll.bottom - 1 && presence.bottom <= composer.top + 1, JSON.stringify({ presence, scroll, composer }));
+  const before = await top();
   await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
-  const moved = await page.eval(`document.querySelector(".kapi-presence").getBoundingClientRect().top`);
-  assert.ok(moved > scroll.bottom, `presence at ${moved} stayed put while the list scrolled`);
+  assert.equal(await top(), before);
 });
 
 test("renders markup from events as literal text", async () => {

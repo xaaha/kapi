@@ -93,8 +93,8 @@
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), ...themeToggle(),
       button("Undo", "undo", "Undo the last change")),
-    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log,
-      h("div", { class: "kapi-presence", role: "status" }, dot, statusText)), bar, composer);
+    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
+    h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const roomStyle = h("style");
   const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
