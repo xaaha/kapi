@@ -116,13 +116,13 @@ body {
 
 .kapi-table,
 .kapi-kv,
-.kapi-details,
 .kapi-code,
 .kapi-diff,
 .kapi-option,
-.kapi-plan-item,
+.kapi-plan,
+.kapi-form,
 .kapi-diagram,
-:where(#kapi-page) :where(pre, details) {
+:where(#kapi-page) pre {
   border: 0;
   border-radius: var(--kapi-radius-lg);
   background: var(--kapi-card);
@@ -225,6 +225,7 @@ body {
 
 .kapi-details {
   margin: 1.25rem 0;
+  border-bottom: 1px solid var(--kapi-border);
 }
 #kapi-page .kapi-details,
 .kapi-details { padding: 0; }
@@ -232,8 +233,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.75rem 1.1rem;
-  border-radius: var(--kapi-radius-lg);
+  padding: 0.6rem 0;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -251,10 +251,9 @@ body {
   transition: transform 0.15s ease;
 }
 .kapi-details[open] > summary::before { transform: translateY(-0.15rem) rotate(45deg); }
-.kapi-details > summary:hover { background: var(--kapi-subtle); }
+.kapi-details > summary:hover { color: var(--kapi-blue-text); }
 .kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-blue-text); outline-offset: 2px; }
-.kapi-details[open] > summary { border-bottom: 1px solid var(--kapi-border); border-radius: var(--kapi-radius-lg) var(--kapi-radius-lg) 0 0; }
-.kapi-details-body { padding: 0.75rem 1.1rem 0.95rem; }
+.kapi-details-body { padding: 0.1rem 0 0.9rem 1.15rem; }
 .kapi-details-body > :first-child { margin-top: 0; }
 .kapi-details-body > :last-child { margin-bottom: 0; }
 
@@ -406,7 +405,6 @@ pre.kapi-hl {
 .kapi-plan {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   margin: 1.25rem 0;
   counter-reset: kapi-step;
 }
@@ -417,8 +415,9 @@ pre.kapi-hl {
   align-items: start;
   padding: 0.8rem 1.1rem;
 }
+.kapi-plan-item + .kapi-plan-item { border-top: 1px solid var(--kapi-border); }
 .kapi-step { counter-increment: kapi-step; }
-:is(.kapi-risk, .kapi-question) { background: var(--kapi-tone-fill); box-shadow: none; }
+:is(.kapi-risk, .kapi-question) { background: none; }
 .kapi-plan-mark {
   display: flex;
   align-items: center;
@@ -502,21 +501,21 @@ pre.kapi-hl {
   flex-direction: column;
   gap: 1.1rem;
   margin: 1.25rem 0;
+  padding: 1.1rem 1.2rem 1.2rem;
 }
 .kapi-choice { min-width: 0; margin: 0; padding: 0; border: 0; }
 .kapi-choice > legend { margin-bottom: 0.5rem; padding: 0; font-weight: 600; }
-.kapi-choice-opts { display: flex; flex-direction: column; gap: 0.4rem; }
+.kapi-choice-opts { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--kapi-radius); background: var(--kapi-surface); }
 .kapi-opt {
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
-  padding: 0.65rem 0.9rem;
-  border-radius: var(--kapi-radius);
-  background: var(--kapi-card);
+  padding: 0.6rem 0.9rem;
   cursor: pointer;
 }
+.kapi-opt + .kapi-opt { border-top: 1px solid var(--kapi-border); }
 .kapi-opt:hover { background: var(--kapi-subtle); }
-.kapi-opt:has(input:checked) { background: var(--kapi-blue-fill); box-shadow: inset 0 0 0 1.5px var(--kapi-blue-text); }
+.kapi-opt:has(input:checked) { background: var(--kapi-blue-fill); }
 .kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-blue-text); }
 .kapi-text { display: flex; flex-direction: column; gap: 0.45rem; }
 .kapi-text-label { font-weight: 600; }
@@ -527,7 +526,7 @@ pre.kapi-hl {
   padding: 0.65rem 0.9rem;
   border: 1px solid transparent;
   border-radius: var(--kapi-radius);
-  background: var(--kapi-card);
+  background: var(--kapi-surface);
   color: var(--kapi-fg);
   font: inherit;
   font-size: 0.95rem;

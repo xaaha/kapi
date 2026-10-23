@@ -173,10 +173,33 @@ func TestContentBlocksAreBorderlessCards(t *testing.T) {
 	if m == nil {
 		t.Fatal("style.css has no rule giving cards the card shadow")
 	}
-	for _, sel := range []string{".kapi-table", ".kapi-kv", ".kapi-details", ".kapi-code", ".kapi-diff", ".kapi-option", ".kapi-plan-item", ".kapi-diagram", "pre", "details"} {
-		if !regexp.MustCompile(`(^|[\s,(])` + regexp.QuoteMeta(sel) + `([\s,)]|$)`).MatchString(m[1]) {
+	covers := func(sel string) bool {
+		return regexp.MustCompile(`(^|[\s,(])` + regexp.QuoteMeta(sel) + `([\s,)]|$)`).MatchString(m[1])
+	}
+	for _, sel := range []string{".kapi-kv", ".kapi-code", ".kapi-diff", ".kapi-option", ".kapi-plan", ".kapi-form", ".kapi-diagram", "pre"} {
+		if !covers(sel) {
 			t.Errorf("the cards rule does not cover %s", sel)
 		}
+	}
+	for _, sel := range []string{".kapi-plan-item", ".kapi-details", "details", ".kapi-opt"} {
+		if covers(sel) {
+			t.Errorf("%s should be a row or a plain line, not its own card", sel)
+		}
+	}
+	rule := func(sel string) string {
+		r := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(sel) + ` \{([^}]*)\}`).FindStringSubmatch(css)
+		if len(r) < 2 {
+			t.Fatalf("style.css has no %s rule", sel)
+		}
+		return r[1]
+	}
+	for _, sel := range []string{".kapi-plan-item + .kapi-plan-item", ".kapi-opt + .kapi-opt", ".kapi-details"} {
+		if !strings.Contains(rule(sel), "border-") || !strings.Contains(rule(sel), "1px solid var(--kapi-border)") {
+			t.Errorf("%s should be divided by a hairline", sel)
+		}
+	}
+	if strings.Contains(rule(":is(.kapi-risk, .kapi-question)"), "tone-fill") {
+		t.Error("risk and question rows should not be filled; their mark carries the meaning")
 	}
 	for _, decl := range []string{"border: 0;", "border-radius: var(--kapi-radius-lg);", "background: var(--kapi-card);", "box-shadow: var(--kapi-card-shadow);"} {
 		if !strings.Contains(m[2], decl) {
