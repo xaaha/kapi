@@ -1308,6 +1308,19 @@ test("on desktop a long table's header row sticks to the top of the window", asy
   });
 });
 
+test("on desktop a table sits on the page surface and tints the whole row under the pointer", async () => {
+  await page.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+  const look = () => page.eval(`(t => [getComputedStyle(t).backgroundColor, getComputedStyle(t).boxShadow, [...t.querySelectorAll("tbody tr")[1].cells].map((c) => getComputedStyle(c).backgroundColor)])(document.querySelector('[data-kapi-id="gggggggg"]'))`);
+  const [bg, shadow, before] = await look();
+  assert.deepEqual([bg, shadow], ["rgba(0, 0, 0, 0)", "none"]);
+  const [x, y] = await page.eval(`(r => [r.left + 20, r.top + r.height / 2])((el => (el.scrollIntoView({ block: "center" }), el.getBoundingClientRect()))(document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')[1]))`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  const [, , after] = await look();
+  assert.equal(new Set(after).size, 1, JSON.stringify(after));
+  assert.notEqual(after[0], before[0]);
+  assert.notEqual(after[0], "rgba(0, 0, 0, 0)");
+});
+
 test("tables turn into cards only when the window itself is phone width", async () => {
   await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
   await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));

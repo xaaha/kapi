@@ -181,7 +181,7 @@ func TestContentBlocksAreBorderlessCards(t *testing.T) {
 			t.Errorf("the cards rule does not cover %s", sel)
 		}
 	}
-	for _, sel := range []string{".kapi-plan-item", ".kapi-details", "details", ".kapi-opt"} {
+	for _, sel := range []string{".kapi-table", ".kapi-plan-item", ".kapi-details", "details", ".kapi-opt"} {
 		if covers(sel) {
 			t.Errorf("%s should be a row or a plain line, not its own card", sel)
 		}

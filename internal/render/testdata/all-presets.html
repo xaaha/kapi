@@ -196,7 +196,6 @@ body {
 }
 :where(#kapi-page) caption { caption-side: bottom; padding-top: 0.5rem; color: var(--kapi-muted); font-size: 0.875rem; text-align: left; }
 
-.kapi-table,
 .kapi-kv,
 .kapi-code,
 .kapi-diff,
@@ -215,12 +214,10 @@ body {
   margin: 1.25rem 0;
 }
 .kapi-table thead th { position: sticky; top: 0; z-index: 1; }
-.kapi-table thead tr:first-child > th:first-child { border-top-left-radius: var(--kapi-radius-lg); }
-.kapi-table thead tr:first-child > th:last-child { border-top-right-radius: var(--kapi-radius-lg); }
 .kapi-table table { margin: 0; }
 .kapi-table th { white-space: nowrap; }
 .kapi-table tbody tr:last-child > * { border-bottom: 0; }
-.kapi-table tbody tr:hover { background: var(--kapi-subtle); }
+.kapi-table tbody tr:hover > * { background: var(--kapi-subtle); }
 .kapi-table th { cursor: pointer; user-select: none; }
 .kapi-table th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
 .kapi-table th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-blue-text); }
@@ -654,7 +651,7 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
     background: var(--kapi-card);
     box-shadow: var(--kapi-card-shadow);
   }
-  .kapi-table tbody tr:hover { background: var(--kapi-card); }
+  .kapi-table tbody tr:hover > * { background: none; }
   .kapi-table :is(td, th) { position: relative; padding: 0.45rem 1rem 0.45rem calc(38% + 1rem); }
   .kapi-table tr > :last-child { border-bottom: 0; }
   .kapi-table tbody th {
