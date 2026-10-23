@@ -37,7 +37,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` (red), `success` (green) | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
-| `<kapi-table>` | optional `sort` = `on` | one plain `<table>` |
+| `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
 | `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built` (purple), `review` (yellow), `planned` (grey, dashed) or a colour, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |

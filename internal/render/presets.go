@@ -149,15 +149,7 @@ func renderTable(b *bytes.Buffer, n *html.Node) error {
 			return fmt.Errorf("body must be exactly one <table>; move the text %q into a <p> outside it", strings.TrimSpace(c.Data))
 		}
 	}
-	var extra []string
-	switch sort := attrVal(n, "sort"); sort {
-	case "":
-	case "on":
-		extra = []string{"data-kapi-sort", "on"}
-	default:
-		return fmt.Errorf("sort must be on or left out, not %q", sort)
-	}
-	writeStart(b, "div", outerAttrs(n, "kapi-table", extra...))
+	writeStart(b, "div", outerAttrs(n, "kapi-table"))
 	renderNode(b, kids[0])
 	writeEnd(b, "div")
 	return nil

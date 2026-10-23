@@ -48,9 +48,9 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-table",
-		Summary: "A styled plain table; sort=on marks it sortable by column",
-		Example: `<!-- sort: on, or leave it out. Body: exactly one plain <table> with a <thead>. -->
-<kapi-table sort="on">
+		Summary: "A styled plain table that readers can sort by clicking a column header",
+		Example: `<!-- Body: exactly one plain <table> with a <thead>. Every column header sorts in the browser; the file never changes. -->
+<kapi-table>
   <table>
     <thead><tr><th>Endpoint</th><th>p50 ms</th><th>p99 ms</th></tr></thead>
     <tbody>

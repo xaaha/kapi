@@ -856,7 +856,7 @@ test("every request carries the token prefix and every POST is JSON", async () =
   for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
 });
 
-test("sortable tables sort by a header click, numeric or by locale, without an op", async () => {
+test("every table sorts by a header click, numeric or by locale, without an op", async () => {
   const column = (i) => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[${i}].textContent)`);
   const sortState = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] th')].map((th) => th.getAttribute("aria-sort"))`);
   const header = (i) => click(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);

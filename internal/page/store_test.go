@@ -1396,7 +1396,7 @@ func TestAnOpThatChangesNothingMakesNoRevision(t *testing.T) {
 	}
 }
 
-const tablePage = "<kapi-table data-kapi-id=\"aaaaaaaa\" sort=\"on\">\n  <table class=t>\n    <thead><tr><th scope=\"col\">Shard</th><th>Rows</th></tr></thead>\n" +
+const tablePage = "<kapi-table data-kapi-id=\"aaaaaaaa\">\n  <table class=t>\n    <thead><tr><th scope=\"col\">Shard</th><th>Rows</th></tr></thead>\n" +
 	"    <tbody><tr><td class=\"name\">beta</td><td>10</td></tr><tr><td>alpha<td>9</tr></tbody>\n  </table>\n</kapi-table>\n" +
 	"<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
 

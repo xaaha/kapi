@@ -12,9 +12,9 @@ const PAGE_CSS = `
 body { margin: 0; font: 16px/1.6 Georgia, serif; color: var(--kapi-fg); background: var(--kapi-bg); }
 #kapi-page { max-width: 720px; margin: 0 auto; padding: 48px 32px; }
 h1 { font-size: 30px; line-height: 1.2; }
-[data-kapi-sort="on"] th { cursor: pointer; text-align: left; }
-[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: " \\2191"; }
-[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: " \\2193"; }
+.kapi-table th { cursor: pointer; text-align: left; }
+.kapi-table th[aria-sort="ascending"]::after { content: " \\2191"; }
+.kapi-table th[aria-sort="descending"]::after { content: " \\2193"; }
 .kapi-callout { display: block; padding: 12px 16px; border-left: 3px solid #8aa; background: #f3f6f6; }
 .kapi-callout-label { font: 600 12px sans-serif; text-transform: uppercase; }
 .kapi-code pre { margin: 0; padding: 12px; background: #f6f6f4; font: 13px monospace; }
@@ -40,7 +40,7 @@ export const SAMPLE = [
   {
     id: "gggggggg",
     html:
-      '<div class="kapi-table" data-kapi-preset="table" data-kapi-sort="on" data-kapi-id="gggggggg"><table>' +
+      '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table>' +
       "<thead><tr><th>Shard</th><th>Rows</th></tr></thead><tbody>" +
       "<tr><td>beta</td><td>10</td></tr><tr><td>Alpha</td><td>9</td></tr><tr><td>gamma</td><td>1,200</td></tr>" +
       "</tbody></table></div>",

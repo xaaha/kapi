@@ -88,7 +88,6 @@ var presetAttrs = map[string][]string{
 	"kapi-callout": {"kind"},
 	"kapi-code":    {"lang", "file", "lines"},
 	"kapi-diff":    {"lang", "file"},
-	"kapi-table":   {"sort"},
 	"kapi-diagram": {"type", "dir"},
 	"kapi-form":    {"name"},
 	"kapi-badge":   {"tone"},
