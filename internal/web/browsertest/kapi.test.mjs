@@ -1296,6 +1296,18 @@ async function withPageStyles(width, fn) {
 
 const cellDisplay = (p) => p.eval(`getComputedStyle(document.querySelector('[data-kapi-id="gggggggg"] td')).display`);
 
+test("on desktop a long table's header row sticks to the top of the window", async () => {
+  await withPageStyles(1280, async (p) => {
+    await p.eval(`(t => { for (let i = 0; i < 60; i++) t.tBodies[0].insertRow().append(...["row" + i, String(i)].map((v) => Object.assign(document.createElement("td"), { textContent: v }))); })(document.querySelector('[data-kapi-id="gggggggg"] table'))`);
+    await p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="gggggggg"]'))`);
+    const [top, band, bg] = await p.eval(`(th => [Math.round(th.getBoundingClientRect().top), getComputedStyle(th).backgroundColor, getComputedStyle(document.body).backgroundColor])(document.querySelector('[data-kapi-id="gggggggg"] thead th'))`);
+    assert.equal(top, 0);
+    assert.notEqual(band, bg);
+    assert.notEqual(band, "rgba(0, 0, 0, 0)");
+    assert.equal(await p.eval(`getComputedStyle(document.querySelector(".kapi-site-head")).position`), "static");
+  });
+});
+
 test("tables turn into cards only when the window itself is phone width", async () => {
   await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
   await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));
