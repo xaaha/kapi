@@ -407,6 +407,7 @@
         for (const cell of tr.cells) {
           skip();
           cell.setAttribute("data-kapi-label", labels[col] ?? "");
+          cell.setAttribute("data-kapi-col", col);
           for (let i = 0; i < cell.colSpan; i++) carry[col++] = Math.max(cell.rowSpan, 1) - 1;
         }
         skip();
@@ -754,9 +755,23 @@
     body.append(...rows);
   }
 
+  function labelTapped(e) {
+    const cell = closest(e.target, ".kapi-table td, .kapi-table th");
+    if (!cell?.hasAttribute("data-kapi-col") || getComputedStyle(cell).display !== "block") return null;
+    if (e.clientX - cell.getBoundingClientRect().left >= parseFloat(getComputedStyle(cell).paddingLeft)) return null;
+    const table = cell.closest("table");
+    const head = table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+    let col = 0;
+    for (const th of head?.cells ?? []) {
+      col += th.colSpan;
+      if (col > Number(cell.dataset.kapiCol)) return th;
+    }
+    return null;
+  }
+
   main.addEventListener("click", (e) => {
     if (editing) return;
-    const th = closest(e.target, ".kapi-table th");
+    const th = labelTapped(e) ?? closest(e.target, ".kapi-table th");
     if (th && main.contains(th)) sortTable(th);
     const el = closest(e.target, BLOCK);
     if (el && main.contains(el)) select(el);

@@ -2,6 +2,7 @@ import { after, before, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./chrome.mjs";
 import { startFakeServer } from "./fake-server.mjs";
+import { readFile } from "node:fs/promises";
 
 let browser;
 let server;
@@ -1280,6 +1281,49 @@ const DIAGRAMS = [
   { id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' },
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+
+const PAGE_STYLES = await readFile(new URL("../../render/style.css", import.meta.url), "utf8");
+
+async function withPageStyles(width, fn) {
+  const p = await browser.open(server.url, { width, height: 800 });
+  try {
+    await p.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+    await fn(p);
+  } finally {
+    await p.close();
+  }
+}
+
+const cellDisplay = (p) => p.eval(`getComputedStyle(document.querySelector('[data-kapi-id="gggggggg"] td')).display`);
+
+test("tables turn into cards only when the window itself is phone width", async () => {
+  await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
+  await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));
+});
+
+test("on a phone, tapping a cell's column label sorts the table by that column", async () => {
+  await withPageStyles(390, async (p) => {
+    const order = () => p.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[0].textContent).join(",")`);
+    const tap = async (row, col, where) => {
+      await p.eval(`(c => {
+        c.scrollIntoView({ block: "center" });
+        const r = c.getBoundingClientRect();
+        const x = ${where === "label" ? "r.left + 12" : "r.right - 12"};
+        const y = r.top + r.height / 2;
+        document.elementFromPoint(x, y).dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+      })(document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')[${row}].cells[${col}])`);
+    };
+    assert.equal(await order(), "beta,Alpha,gamma");
+    await tap(0, 1, "value");
+    assert.equal(await order(), "beta,Alpha,gamma");
+    await tap(0, 1, "label");
+    assert.equal(await order(), "Alpha,beta,gamma");
+    await tap(0, 1, "label");
+    assert.equal(await order(), "gamma,beta,Alpha");
+    await tap(1, 0, "label");
+    assert.equal(await order(), "Alpha,beta,gamma");
+  });
+});
 
 const SPANNED = {
   id: "rrrrrrrr",

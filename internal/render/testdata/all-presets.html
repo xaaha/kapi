@@ -637,7 +637,7 @@ pre.kapi-hl {
 span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }
 .kapi-error-tag { font-family: var(--kapi-mono); font-weight: 700; }
 
-@container (max-width: 640px) {
+@media (max-width: 640px) {
   .kapi-table { overflow: visible; border-radius: 0; background: none; box-shadow: none; }
   .kapi-table thead,
   .kapi-table tr:not(:has(> td)) { display: none; }
@@ -665,9 +665,6 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
     line-height: 1.65rem;
     text-transform: uppercase;
   }
-}
-
-@media (max-width: 640px) {
   body { font-size: 15.5px; }
   :where(#kapi-page) { padding: 1.25rem 0.9rem 4rem; }
   :where(#kapi-page) h1 { font-size: 1.6rem; }

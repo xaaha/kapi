@@ -194,9 +194,12 @@ func TestContentBlocksAreBorderlessCards(t *testing.T) {
 
 func TestNarrowTablesStackIntoLabelledCards(t *testing.T) {
 	css := string(baseCSS)
-	m := regexp.MustCompile(`(?s)@container \(max-width: 640px\) \{(.*?)\n\}`).FindStringSubmatch(css)
+	m := regexp.MustCompile(`(?s)@media \(max-width: 640px\) \{(.*?)\n\}`).FindStringSubmatch(css)
 	if m == nil {
-		t.Fatal("style.css has no @container (max-width: 640px) block")
+		t.Fatal("style.css has no @media (max-width: 640px) block")
+	}
+	if strings.Contains(css, "@container") {
+		t.Error("narrow layouts must follow the window width, not a container that the chat panel shrinks")
 	}
 	for _, want := range []string{
 		".kapi-table thead",
@@ -207,9 +210,6 @@ func TestNarrowTablesStackIntoLabelledCards(t *testing.T) {
 		if !strings.Contains(m[1], want) {
 			t.Errorf("the narrow table rules lack %q", want)
 		}
-	}
-	if !strings.Contains(css, "container-type: inline-size;") {
-		t.Error("body is not a size container, so the narrow table rules never apply")
 	}
 }
 
