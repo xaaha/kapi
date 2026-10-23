@@ -14,7 +14,7 @@ var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
 var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
 
-var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "mono", "measure"}
+var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
 
 func themeTokens(t *testing.T) map[string]string {
 	t.Helper()
@@ -268,6 +268,15 @@ func TestChatPanelTintStandsApartFromPageAndCards(t *testing.T) {
 		l, d := lightDark(t, tone, tokens[tone])
 		if contrast(l, pl) < 4.5 || contrast(d, pd) < 4.5 {
 			t.Errorf("%s is not readable on the panel", tone)
+		}
+	}
+}
+
+func TestRunningTextUsesTheSerifBodyFaceAndEverythingElseTheSans(t *testing.T) {
+	css := string(CSS())
+	for _, want := range []string{`--kapi-font: "Hanken Grotesk"`, `--kapi-font-body: "Source Serif 4"`, ":where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),\n.kapi-callout-body,\n.kapi-details > :not(summary) {\n  font-family: var(--kapi-font-body);", ".kapi-badge {\n  font-family: var(--kapi-font);"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("CSS lacks %q", want)
 		}
 	}
 }
