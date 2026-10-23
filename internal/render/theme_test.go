@@ -12,9 +12,9 @@ import (
 
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
-var surfaceRoles = []string{"bg", "surface", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "on-solid"}
+var surfaceRoles = []string{"bg", "surface", "card", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
 
-var shapeTokens = []string{"radius", "radius-sm", "font", "mono", "measure"}
+var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "mono", "measure"}
 
 func themeTokens(t *testing.T) map[string]string {
 	t.Helper()
@@ -98,7 +98,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 	}
 	for _, tone := range tones {
 		text := pair(tone + "-text")
-		for _, bg := range []string{tone + "-fill", tone + "-tint", "surface", "subtle", "bg"} {
+		for _, bg := range []string{tone + "-fill", tone + "-tint", "surface", "card", "subtle", "bg"} {
 			check(tone+"-text on "+bg, text, pair(bg), 4.5)
 		}
 		check("on-solid on "+tone+"-solid", [2]string{onSolid, onSolid}, pair(tone+"-solid"), 4.5)
@@ -106,7 +106,7 @@ func TestToneTextIsReadableInBothThemes(t *testing.T) {
 		check("muted on "+tone+"-fill", pair("muted"), pair(tone+"-fill"), 4.5)
 	}
 	for _, role := range []string{"fg", "muted", "faint"} {
-		for _, bg := range []string{"surface", "subtle", "bg"} {
+		for _, bg := range []string{"surface", "card", "subtle", "bg"} {
 			check(role+" on "+bg, pair(role), pair(bg), 4.5)
 		}
 	}
@@ -158,5 +158,36 @@ func TestPurpleIsOnlyAToneAndADiagramColour(t *testing.T) {
 				t.Errorf("%s: %s uses a purple token; accents are blue", name, sel)
 			}
 		}
+	}
+}
+
+func TestContentBlocksAreBorderlessCards(t *testing.T) {
+	css := string(baseCSS)
+	var m []string
+	for _, r := range regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`).FindAllStringSubmatch(css, -1) {
+		if strings.Contains(r[2], "box-shadow: var(--kapi-card-shadow);") {
+			m = r
+			break
+		}
+	}
+	if m == nil {
+		t.Fatal("style.css has no rule giving cards the card shadow")
+	}
+	for _, sel := range []string{".kapi-table", ".kapi-kv", ".kapi-details", ".kapi-code", ".kapi-diff", ".kapi-option", ".kapi-plan-item", ".kapi-diagram", "pre", "details"} {
+		if !regexp.MustCompile(`(^|[\s,(])` + regexp.QuoteMeta(sel) + `([\s,)]|$)`).MatchString(m[1]) {
+			t.Errorf("the cards rule does not cover %s", sel)
+		}
+	}
+	for _, decl := range []string{"border: 0;", "border-radius: var(--kapi-radius-lg);", "background: var(--kapi-card);", "box-shadow: var(--kapi-card-shadow);"} {
+		if !strings.Contains(m[2], decl) {
+			t.Errorf("the cards rule lacks %q", decl)
+		}
+	}
+	tokens := themeTokens(t)
+	if l, d := lightDark(t, "card", tokens["card"]); l != "#f5f5f7" || d != "#1c1c1e" {
+		t.Errorf("--kapi-card = %s, %s; want #f5f5f7 in light and #1c1c1e in dark", l, d)
+	}
+	if l, d := lightDark(t, "bg", tokens["bg"]); l != "#ffffff" || d != "#000000" {
+		t.Errorf("--kapi-bg = %s, %s; want white in light and black in dark", l, d)
 	}
 }
