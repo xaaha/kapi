@@ -1281,12 +1281,26 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+const SPANNED = {
+  id: "rrrrrrrr",
+  html:
+    '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="rrrrrrrr"><table>' +
+    "<thead><tr><th>Name</th><th>Key</th><th>Value</th></tr></thead><tbody>" +
+    '<tr><td rowspan="2">beta</td><td>x</td><td>1</td></tr><tr><td>y</td><td>2</td></tr>' +
+    '<tr><th scope="row">alpha</th><td>z</td><td>3</td></tr>' +
+    "</tbody></table></div>",
+};
+
 test("table body cells carry their column header as a label for the narrow card layout", async () => {
   const labels = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel ?? null))`);
   assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').hasAttribute("data-kapi-label")`), false);
   await click('[data-kapi-id="gggggggg"] th');
   assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
+
+  await reopenWith([SPANNED]);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll('[data-kapi-id="rrrrrrrr"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel))`),
+    [["Name", "Key", "Value"], ["Key", "Value"], ["Name", "Key", "Value"]]);
 });
 
 test("the logo sits at the top left of the page as a site header, not in the chat panel", async () => {
