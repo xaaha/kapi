@@ -926,8 +926,8 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1440`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1920`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
@@ -942,6 +942,8 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
 });
 
 test("on a tall block the toolbar stays in view while the block scrolls", async () => {
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1920`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
@@ -950,6 +952,20 @@ test("on a tall block the toolbar stays in view while the block scrolls", async 
   assert.deepEqual(await page.eval(OVERLAPS), []);
   await page.eval(`scrollTo(0, document.body.scrollHeight)`);
   await page.waitFor(`(b => b.bottom <= document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().bottom + 1)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+});
+
+test("the toolbar is one row and stays fully in view for a block at the bottom of the window", async () => {
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
+  await page.eval(`document.body.style.paddingBottom = "2000px"`);
+  await page.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().top + scrollY - innerHeight + 40)`);
+  await select("cccccccc");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  const tops = await page.eval(`[...new Set([...document.querySelectorAll(".kapi-bar button")].map((b) => Math.round(b.getBoundingClientRect().top)))]`);
+  assert.equal(tops.length, 1, JSON.stringify(tops));
+  const bar = await barBox();
+  assert.ok(bar.top >= 0 && bar.bottom <= 800, JSON.stringify(bar));
+  assert.deepEqual(await page.eval(OVERLAPS), []);
 });
 
 test("in a narrow window the toolbar goes inside the ring above the block's content", async () => {
