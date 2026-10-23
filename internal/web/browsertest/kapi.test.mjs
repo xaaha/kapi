@@ -486,6 +486,20 @@ test("moves blocks up and down and undoes", async () => {
   await until(async () => (await order()).startsWith("aaaaaaaa,cccccccc,bbbbbbbb"));
 });
 
+test("Undo shows only when there is something to undo, on the left so the theme toggle never moves", async () => {
+  const undoShown = () => page.eval(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  const themeLeft = () => page.eval(`document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`);
+  assert.equal(await undoShown(), false);
+  const before = await themeLeft();
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="archive"]');
+  await page.waitFor(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  assert.equal(await themeLeft(), before);
+  assert.ok(await page.eval(`document.querySelector('.kapi-panel [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`));
+  await click('.kapi-panel [data-action="undo"]');
+  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+});
+
 test("submits kapi-form answers", async () => {
   await click('input[name="when"][value="later"]');
   await click('input[name="envs"][value="staging"]');

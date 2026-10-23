@@ -249,7 +249,7 @@
   border-bottom: 1px solid var(--kapi-border);
 }
 
-#kapi-chrome .kapi-panel-head > :first-child {
+#kapi-chrome .kapi-panel-head .kapi-theme {
   margin-left: auto;
 }
 

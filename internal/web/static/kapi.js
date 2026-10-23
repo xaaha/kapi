@@ -104,9 +104,10 @@
     targetChip, input,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
+  const undoButton = button("Undo", "undo", "Undo the last change");
+  const showUndo = (can) => (undoButton.hidden = String(can) !== "true");
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, ...themeToggle(),
-      button("Undo", "undo", "Undo the last change")),
+    h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
@@ -119,6 +120,7 @@
   const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
   let room = null;
   document.body.append(root);
+  showUndo(main.dataset.undo);
   main.before(h("header", { class: "kapi-site-head" },
     h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
 
@@ -348,7 +350,10 @@
     try {
       const res = await request("/ops", { rev, op: { kind, ...fields } });
       if (!res || res.ok) {
-        if (res) main.dataset.rev = res.data.rev;
+        if (res) {
+          main.dataset.rev = res.data.rev;
+          showUndo(res.data.undo);
+        }
         return res;
       }
       if (res.status === 409) {
@@ -573,6 +578,7 @@
     selected = null;
     main.replaceChildren(...fresh.childNodes);
     main.dataset.rev = fresh.dataset.rev;
+    showUndo(fresh.dataset.undo);
     labelArchived(main);
     numberRows(main);
     select(keep ? find(keep) : null);
@@ -597,6 +603,7 @@
       numberRows(next);
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
+      if (res.headers.has("Kapi-Undo")) showUndo(res.headers.get("Kapi-Undo"));
       if (selected === el) {
         selected = null;
         select(next);

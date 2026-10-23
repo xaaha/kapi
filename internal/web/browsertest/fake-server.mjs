@@ -121,7 +121,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><title>Fake kapi</title>` +
     `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
-    `<main id="kapi-page" data-rev="${state.rev}">${state.blocks.map((b) => b.html).join("\n")}</main>` +
+    `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}">${state.blocks.map((b) => b.html).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
@@ -143,7 +143,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
         li.replace(/<input type="checkbox"( checked="")?/, `<input type="checkbox"${op.done ? ' checked=""' : ""}`));
       state.rev++;
       push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
-      return { status: 200, body: { rev: state.rev } };
+      return { status: 200, body: { rev: state.rev, undo: state.history.length > 0 } };
     }
     const i = state.blocks.findIndex((b) => b.id === op.id);
     if (op.kind !== "undo" && i < 0) return { status: 422, body: { error: `no block #${op.id}` } };
@@ -182,7 +182,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     state.rev++;
     const target = ["edit", "cells", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
     push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
-    return { status: 200, body: { rev: state.rev } };
+    return { status: 200, body: { rev: state.rev, undo: state.history.length > 0 } };
   }
 
   const json = (res, status, body) => {
@@ -225,7 +225,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const b = state.blocks.find((x) => x.id === id);
       const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];
       if (!b && !inner) return json(res, 404, { error: "no block" });
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev) });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) });
       return res.end(b ? b.html : inner);
     }
     if (req.method === "GET" && rest.startsWith("source/")) {
