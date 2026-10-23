@@ -1305,9 +1305,10 @@ test("the selection ring follows the rounded corners of the selected block", asy
   await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
   await select("gggggggg");
   await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
-  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderTopLeftRadius`), "22px");
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius`), "18px");
+  await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').style.borderRadius = "10% 4px"`);
   await select("bbbbbbbb");
-  await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderTopLeftRadius === "4px"`);
+  await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius === "10% 4px"`);
 });
 
 test("the selection ring, the human message and the Send button use the blue accent", async () => {
