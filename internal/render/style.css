@@ -334,6 +334,7 @@ pre.kapi-hl {
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
   color: var(--kapi-fg);
   font-family: var(--kapi-mono);
   font-size: 13px;
