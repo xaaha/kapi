@@ -140,6 +140,18 @@ func TestWideDiagramsAskForMoreRoom(t *testing.T) {
 	if !strings.Contains(wide, `class="kapi-diagram kapi-diagram-architecture kapi-diagram-wide"`) {
 		t.Errorf("a diagram wider than the text column should be marked wide: %.200s", wide)
 	}
+	longFlow := render(t, `<kapi-diagram type="flow" dir="lr">
+  agent: agent
+  page file: file
+  daemon: service done
+  browser: page
+  agent -> page file: writes
+  page file -> daemon: mtime change
+  daemon -> browser: revision event
+</kapi-diagram>`)
+	if strings.Contains(longFlow, "kapi-diagram-wide") {
+		t.Errorf("a flow stays in the text column and scales down instead of growing past it: %.200s", longFlow)
+	}
 	if narrow := render(t, diagram("flow", "a -> b")); strings.Contains(narrow, "kapi-diagram-wide") {
 		t.Errorf("a small diagram is not wide: %s", narrow)
 	}

@@ -239,7 +239,7 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 		extra = []string{"data-kapi-dir", dir}
 	}
 	class := "kapi-diagram kapi-diagram-" + kind
-	if svg.maxX-svg.minX+2*margin > wideAt {
+	if kind == "architecture" && svg.maxX-svg.minX+2*margin > wideAt {
 		class += " kapi-diagram-wide"
 	}
 	writeStart(b, "figure", outerAttrs(n, class, extra...))
