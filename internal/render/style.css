@@ -110,10 +110,13 @@ body {
   vertical-align: top;
 }
 :where(#kapi-page) th {
-  color: var(--kapi-muted);
-  font-size: 0.875rem;
+  color: var(--kapi-faint);
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
+:where(#kapi-page) tbody tr:nth-child(even) > td { background: var(--kapi-subtle); }
 :where(#kapi-page) caption { caption-side: bottom; padding-top: 0.5rem; color: var(--kapi-muted); font-size: 0.875rem; text-align: left; }
 
 .kapi-table {
