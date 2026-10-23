@@ -101,7 +101,7 @@ func diagramBoxes(t *testing.T, out string) []box {
 			}
 			var text bytes.Buffer
 			for s := n.NextSibling; s != nil; s = s.NextSibling {
-				if s.FirstChild != nil {
+				if s.Data == "text" && s.FirstChild != nil {
 					text.WriteString(s.FirstChild.Data + " ")
 				}
 			}
@@ -203,4 +203,106 @@ func TestSequenceKeepsDeclaredOrder(t *testing.T) {
 	if x["db"] >= x["client"] {
 		t.Errorf("participants not in declared order: %v", x)
 	}
+}
+
+func TestDiagramNodesAreNeutralUnlessTheyHaveAState(t *testing.T) {
+	arch := render(t, diagram("architecture", "a: Agent | built\nb: Daemon | review\nc: Hub | planned\nd: Disk | red\ne: Done | done\na -> b\nb -> c\nb -> d\nb -> e"))
+	flow := render(t, diagram("flow", "a -> b\nb: failed"))
+	seq := render(t, diagram("sequence", "a -> b: hi"))
+	for _, out := range []string{arch, flow, seq} {
+		if strings.Contains(out, "kapi-error") {
+			t.Fatalf("an old or new tag broke the diagram:\n%s", out)
+		}
+	}
+	for _, want := range []string{
+		`<g class="kd-node kd-arch"><rect`,
+		`<g class="kd-node kd-arch kd-planned"><rect`,
+		`<g class="kd-node kd-arch kd-stated kapi-tone-green"><rect`,
+		`<svg class="kd-state" `,
+	} {
+		if !strings.Contains(arch, want) {
+			t.Errorf("architecture lacks %s:\n%s", want, arch)
+		}
+	}
+	for _, gone := range []string{"kapi-tone-purple", "kapi-tone-yellow", "kapi-tone-red", ">built<", ">in review<", ">red</text>"} {
+		if strings.Contains(arch, gone) {
+			t.Errorf("architecture still shows %s:\n%s", gone, arch)
+		}
+	}
+	if !strings.Contains(arch, `<figcaption class="kapi-diagram-legend"><span class="kapi-badge kapi-tone-green"><svg class="kapi-icon"`) || !strings.Contains(arch, `kd-legend-planned">planned</span>`) {
+		t.Errorf("the legend should list the states in use with their icons, and planned:\n%s", arch)
+	}
+	if !strings.Contains(flow, `<g class="kd-node kd-stated kapi-tone-red"><rect`) || strings.Contains(flow, ">b: failed<") {
+		t.Errorf("a flow node declared with a state should be drawn in that state:\n%s", flow)
+	}
+	if strings.Contains(seq, "kapi-tone") {
+		t.Errorf("sequence actors should be neutral:\n%s", seq)
+	}
+	if out := render(t, diagram("flow", "a -> b\nb: wobble")); strings.Contains(out, "kapi-error") || strings.Contains(out, "kd-stated") {
+		t.Errorf("an unknown tag should render neutral:\n%s", out)
+	}
+}
+
+func TestDiagramKindsDrawTheirIconAboveTheLabel(t *testing.T) {
+	for _, kind := range []string{"agent", "database", "user", "service", "page", "file", "queue", "timer", "external"} {
+		out := render(t, diagram("architecture", "a: Store | rows | "+kind+"\nb: Plain\na -> b"))
+		if !strings.Contains(out, `<svg class="kd-icon kd-kind-`+kind+`" `) {
+			t.Errorf("%s: no kind icon:\n%s", kind, out)
+		}
+	}
+	for _, dir := range dirs {
+		out := render(t, diagramDir("architecture", dir, "db: Postgres | sessions | database done\napi: API | service\nweb: Web | page\napi -> db: reads\nweb -> api: calls"))
+		boxes := diagramBoxes(t, out)
+		assertNoOverlaps(t, dir+" kinds", boxes)
+		var db, web box
+		for _, b := range boxes {
+			switch b.text {
+			case "Postgres sessions":
+				db = b
+			case "Web":
+				web = b
+			}
+		}
+		if db.r.h < 90 || web.r.h < 70 {
+			t.Errorf("%s: kind nodes should be tall enough for a large icon over the label: db %v web %v", dir, db.r, web.r)
+		}
+		icon := iconRect(t, out, "kd-kind-database")
+		if icon.w < 40 || icon.w > 56 || icon.x < db.r.x || icon.x+icon.w > db.r.x+db.r.w || icon.y < db.r.y {
+			t.Errorf("%s: the database icon %v should be 40 to 56px and sit inside its node %v", dir, icon, db.r)
+		}
+		if !strings.Contains(out, `kd-stated kapi-tone-green`) {
+			t.Errorf("%s: database done lost its state:\n%s", dir, out)
+		}
+	}
+	plain := render(t, diagram("flow", "a -> b"))
+	if strings.Contains(plain, "kd-icon") {
+		t.Errorf("nodes without a kind have no icon:\n%s", plain)
+	}
+	flow := render(t, diagram("flow", "app -> store: writes\nstore: database"))
+	if !strings.Contains(flow, `kd-kind-database`) {
+		t.Errorf("a flow node can be declared with a kind:\n%s", flow)
+	}
+}
+
+func iconRect(t *testing.T, out, class string) rect {
+	t.Helper()
+	i := strings.Index(out, class+`"`)
+	if i < 0 {
+		t.Fatalf("no %s icon:\n%s", class, out)
+	}
+	tag := out[i : strings.Index(out[i:], ">")+i]
+	num := func(k string) float64 {
+		j := strings.Index(tag, " "+k+`="`)
+		if j < 0 {
+			t.Fatalf("%s icon has no %s: %s", class, k, tag)
+		}
+		v := tag[j+len(k)+3:]
+		v = v[:strings.IndexByte(v, '"')]
+		x, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	return rect{num("x"), num("y"), num("width"), num("height")}
 }

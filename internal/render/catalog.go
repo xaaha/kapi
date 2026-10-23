@@ -76,10 +76,11 @@ func (s *Store) Source() ([]byte, uint64) {
 	{
 		Name:    "kapi-plan",
 		Summary: "Numbered steps with risks and open questions in line",
-		Example: `<!-- Children: <kapi-step>, <kapi-risk> and <kapi-question>, each holding prose. Steps are numbered in order. -->
+		Example: `<!-- Children: <kapi-step>, <kapi-risk> and <kapi-question>, each holding prose. Steps are numbered in order.
+     state on a step (done, failed, blocked, progress, waiting or info) shows its status icon in place of the number. -->
 <kapi-plan>
-  <kapi-step>Add the page store with revisions under <code>revs/</code>.</kapi-step>
-  <kapi-step>Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step state="done">Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step state="progress">Serve the rendered page and block endpoints.</kapi-step>
   <kapi-risk>Agents editing the file mid-request can race a browser op.</kapi-risk>
   <kapi-question>Should undo cross an agent edit?</kapi-question>
 </kapi-plan>`,
@@ -90,8 +91,11 @@ func (s *Store) Source() ([]byte, uint64) {
 		Example: `<!-- type: flow (default) or sequence (lifelines, messages in order).
      dir: tb (top to bottom, the default for flow) or lr (left to right). Sequence diagrams ignore dir.
      Body: one edge per line, "a -> b: label". The label is optional. "a --> b" draws a dashed line.
-     A line with only a name declares a node (flow) or fixes participant order (sequence). Keep it under ~15 nodes. -->
+     A line with only a name declares a node (flow) or fixes participant order (sequence). Keep it under ~15 nodes.
+     In a flow, "name: tags" gives a node a kind and a state (see architecture below). -->
 <kapi-diagram type="flow">
+  page file: file
+  daemon: service
   agent -> page file: writes
   page file -> daemon: mtime change
   daemon -> browser: revision event
@@ -107,15 +111,18 @@ func (s *Store) Source() ([]byte, uint64) {
 </kapi-diagram>
 
 <!-- type: architecture (left to right by default; dir="tb" stacks it top to bottom).
-     Node lines: "id: Title | subtitle | subtitle | state". id is letters, digits, - _ or .
-     state is built, review, planned (dashed) or a colour: red, orange, yellow, green, blue, purple, grey.
-     Edges: "a -> b: label", "a <-> b: label" (both ways, may share a column), "a --> b: label" (dashed).
-     Every edge names declared ids. A legend for built, review and planned is added when they are used. -->
+     Node lines: "id: Title | subtitle | subtitle | tags". id is letters, digits, - _ or .
+     tags, space separated, all optional:
+       a kind, drawn as a large icon over the label: agent, database, user, service, page, file, queue, timer or external;
+       a state, the only thing drawn in colour (border and a small icon): done, failed, blocked, progress, waiting or info;
+       planned, drawn dashed.
+     Nodes are neutral otherwise. Edges: "a -> b: label", "a <-> b: label" (both ways), "a --> b: label" (dashed).
+     Every edge names declared ids. A legend for the states in use is added. -->
 <kapi-diagram type="architecture">
-  agent: Agent | kapi watch: one line per event | built
-  daemon: kapi daemon | event log, page store | review
-  disk: ~/.kapi | pages, cursors, revisions | built
-  hub: Private hub | R2 + Worker | planned
+  agent: Agent | kapi watch: one line per event | user
+  daemon: kapi daemon | event log, page store | service progress
+  disk: ~/.kapi | pages, cursors, revisions | database done
+  hub: Private hub | R2 + Worker | external planned
   agent <-> daemon: socket
   daemon -> disk: append
   daemon --> hub: publish
@@ -142,10 +149,13 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-badge",
-		Summary: "A small coloured label for a status, inside prose or a table cell",
+		Summary: "A small coloured label or status icon, inside prose or a table cell",
 		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default). Body: a word or two.
+     state: done (green check), failed or blocked (red x), progress (orange), waiting (grey clock) or info (blue).
+     It leads the label with its icon and sets the tone unless tone is given. With no body it is the icon alone.
      Use it inline: inside a <p>, an <li> or a table cell. -->
-<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>`,
+<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>
+<p>Copy <kapi-badge state="done"></kapi-badge> Compare <kapi-badge state="progress"></kapi-badge> Flip <kapi-badge state="waiting">next</kapi-badge></p>`,
 	},
 	{
 		Name:    "kapi-kv",

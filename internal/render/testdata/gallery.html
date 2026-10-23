@@ -1,5 +1,6 @@
 <h1>Kapi component gallery</h1>
 <p>Every preset and every colour on one page. Badges sit in prose: <kapi-badge tone="red">failing</kapi-badge> <kapi-badge tone="orange">stale</kapi-badge> <kapi-badge tone="yellow">in review</kapi-badge> <kapi-badge tone="green">merged</kapi-badge> <kapi-badge tone="blue">open</kapi-badge> <kapi-badge tone="purple">new</kapi-badge> <kapi-badge tone="grey">draft</kapi-badge>.</p>
+<p>Status icons carry state at a glance: <kapi-badge state="done"></kapi-badge> done, <kapi-badge state="failed"></kapi-badge> failed, <kapi-badge state="progress"></kapi-badge> in progress, <kapi-badge state="waiting"></kapi-badge> waiting and <kapi-badge state="info"></kapi-badge> info. A badge with a state leads with its icon: <kapi-badge state="done">merged</kapi-badge> <kapi-badge state="blocked">blocked</kapi-badge>.</p>
 
 <kapi-kv>
   <kapi-item key="Owner">Track C, presets</kapi-item>
@@ -17,29 +18,29 @@
 
 <h2>What exists and what is still a box on paper</h2>
 <kapi-diagram type="architecture">
-  agent: Agent (any harness) | kapi watch: one line per event | kapi say, pending, preset | writes plan.html directly | built
-  plan: plan.html | page source: prose + kapi-* presets | every block has a data-kapi-id | built
-  daemon: kapi daemon (Go, one per machine) | event log and cursors per page | page store: ids, revisions, undo | renders presets to HTML + SVG | review
-  disk: ~/.kapi on disk | pages/&lt;id&gt;/events.ndjson | cursors.json, revs/&lt;n&gt;.html | built
-  browser: Browser page | Select toggle, block toolbar | chat panel, status dot | review
-  hub: Private hub | R2 + Worker + Access | auto-save wiring next | planned
+  agent: Agent (any harness) | kapi watch: one line per event | writes plan.html directly | agent
+  plan: plan.html | page source: prose + kapi-* presets | file done
+  daemon: kapi daemon | event log and cursors per page | renders presets to HTML + SVG | service progress
+  disk: ~/.kapi on disk | events, cursors, revisions | database done
+  browser: Browser page | block toolbar, chat panel | page
+  hub: Private hub | R2 + Worker + Access | external planned
   agent -> plan: edits file
-  plan <-> daemon: reads, writes ops, notices your edits
+  plan <-> daemon: reads, writes ops
   agent <-> daemon: socket
   browser <-> daemon: HTTP + SSE
   daemon -> disk: append
   daemon --> hub: publish
 </kapi-diagram>
 
-<p>The same kind of diagram flipped top to bottom, with nodes in each colour:</p>
+<p>The same kind of diagram flipped top to bottom. Colour appears only where a node has a state:</p>
 <kapi-diagram type="architecture" dir="tb">
-  cli: kapi CLI | grey
-  sock: Unix socket | blue
-  store: Page store | green
-  queue: Retry queue | yellow
-  backoff: Backoff timer | orange
-  dead: Dead letters | red
-  hub: Hub | purple
+  cli: kapi CLI | user
+  sock: Unix socket | service
+  store: Page store | database done
+  queue: Retry queue | queue progress
+  backoff: Backoff timer | timer waiting
+  dead: Dead letters | queue failed
+  hub: Hub | external
   cli <-> sock: requests
   sock -> store: ops
   store -> queue: on failure
@@ -56,7 +57,12 @@
   browser -> daemon: op
   daemon -> page file: applies
 </kapi-diagram>
+<p>The same flow left to right, with kinds on its nodes:</p>
 <kapi-diagram type="flow" dir="lr">
+  agent: agent
+  page file: file
+  daemon: service done
+  browser: page
   agent -> page file: writes
   page file -> daemon: mtime change
   daemon -> browser: revision event
@@ -89,8 +95,9 @@
 
 <h2>Plan</h2>
 <kapi-plan>
-  <kapi-step>Add the page store with revisions under <code>revs/</code>.</kapi-step>
-  <kapi-step>Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step state="done">Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step state="progress">Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step>Ship the browser chrome.</kapi-step>
   <kapi-risk>Agents editing the file mid-request can race a browser op.</kapi-risk>
   <kapi-question>Should undo cross an agent edit?</kapi-question>
 </kapi-plan>

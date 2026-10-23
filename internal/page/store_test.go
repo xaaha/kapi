@@ -456,6 +456,30 @@ func TestUndoWalksBackThroughRevisions(t *testing.T) {
 	}
 }
 
+func TestCanUndoOnlyWhenTheLastBrowserOpIsStillOnTop(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	s := open(t, home, path)
+	if s.CanUndo() {
+		t.Fatal("a fresh page has nothing to undo")
+	}
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
+	if !s.CanUndo() {
+		t.Fatal("an archive can be undone")
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	if s.CanUndo() {
+		t.Fatal("undoing the only op leaves nothing to undo")
+	}
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\" data-kapi-state=\"archived\">b, by the agent</p>\n")
+	if _, changed, err := s.Refresh(); err != nil || !changed {
+		t.Fatalf("Refresh: changed=%v err=%v", changed, err)
+	}
+	if s.CanUndo() {
+		t.Error("an op buried under a file edit cannot be undone, so undo is not offered")
+	}
+}
+
 func TestRefreshPicksUpAnExternalEdit(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
 	s := open(t, home, path)

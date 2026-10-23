@@ -391,6 +391,17 @@ func (s *Store) Source() ([]byte, uint64) {
 	return slices.Clone(s.src), s.rev
 }
 
+func (s *Store) CanUndo() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.undo)
+	if n == 0 {
+		return false
+	}
+	after, err := os.ReadFile(s.revPath(s.undo[n-1] + 1))
+	return err == nil && bytes.Equal(after, s.src)
+}
+
 // Refresh picks up an edit made to the file since kapi last read or wrote it.
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()

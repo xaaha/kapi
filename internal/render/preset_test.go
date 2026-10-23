@@ -106,3 +106,36 @@ func TestChecklistRendersTickableTasks(t *testing.T) {
 		t.Errorf("Canonical = %s", got)
 	}
 }
+
+func TestBadgeStateAddsAStatusIconAndDefaultTone(t *testing.T) {
+	for state, tone := range map[string]string{"done": "green", "failed": "red", "blocked": "red", "progress": "orange", "waiting": "grey", "info": "blue"} {
+		out := render(t, `<p>x <kapi-badge state="`+state+`">label</kapi-badge></p>`)
+		if !strings.Contains(out, `<span class="kapi-badge kapi-tone-`+tone+`" data-kapi-preset="badge"><svg class="kapi-icon" viewBox="0 0 256 256" aria-hidden="true">`) || !strings.HasSuffix(out, `</svg>label</span></p>`) {
+			t.Errorf("state %s: want a %s badge led by an icon:\n%s", state, tone, out)
+		}
+		out = render(t, `<p>x <kapi-badge state="`+state+`"></kapi-badge></p>`)
+		if !strings.Contains(out, `<span class="kapi-badge-icon kapi-tone-`+tone+`" data-kapi-preset="badge" role="img" aria-label="`+statusIcons[state].label+`"><svg class="kapi-icon"`) {
+			t.Errorf("state %s with no body: want a bare labelled icon:\n%s", state, out)
+		}
+	}
+	if out := render(t, `<p><kapi-badge state="done" tone="blue">shipped</kapi-badge></p>`); !strings.Contains(out, "kapi-tone-blue") {
+		t.Errorf("an explicit tone should win over the state's tone: %s", out)
+	}
+	out := render(t, `<p><kapi-badge state="maybe">x</kapi-badge></p>`)
+	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "done, failed, blocked, progress, waiting or info") {
+		t.Errorf("an unknown state should be an error naming the states: %s", out)
+	}
+}
+
+func TestStepStateShowsItsIconInPlaceOfTheNumber(t *testing.T) {
+	out := render(t, `<kapi-plan><kapi-step state="done">a</kapi-step><kapi-step>b</kapi-step></kapi-plan>`)
+	if !strings.Contains(out, `<div class="kapi-plan-item kapi-step kapi-tone-green" data-kapi-preset="step"><span class="kapi-plan-mark kapi-plan-state" role="img" aria-label="Done"><svg class="kapi-icon"`) {
+		t.Errorf("a done step should show a green check mark:\n%s", out)
+	}
+	if !strings.Contains(out, `<div class="kapi-plan-item kapi-step kapi-tone-purple" data-kapi-preset="step"><span class="kapi-plan-mark"></span>`) {
+		t.Errorf("a step without state keeps its number:\n%s", out)
+	}
+	if out := render(t, `<kapi-plan><kapi-step state="soon">a</kapi-step></kapi-plan>`); !strings.Contains(out, "kapi-error") {
+		t.Errorf("an unknown step state should be an error: %s", out)
+	}
+}

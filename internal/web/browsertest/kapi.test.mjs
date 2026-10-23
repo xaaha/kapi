@@ -2,6 +2,7 @@ import { after, before, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./chrome.mjs";
 import { startFakeServer } from "./fake-server.mjs";
+import { readFile } from "node:fs/promises";
 
 let browser;
 let server;
@@ -241,6 +242,19 @@ test("Enter does not send while an input method is composing", async () => {
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(requests("POST", "/messages").length, 0);
   assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "nihon");
+});
+
+test("typing `text` in a block turns it into inline code and the caret keeps typing outside it", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  for (const ch of " the `new` cluster") await page.type(ch);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"] code')?.textContent`), "new");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  const html = requests("POST", "/ops")[0].body.op.html;
+  assert.match(html, /the <code>new<\/code> cluster<\/p>$/);
+  assert.ok(!html.includes("\u200b"), html);
 });
 
 test("plain Enter in the block and source editors is a new line, not a save", async () => {
@@ -483,6 +497,42 @@ test("moves blocks up and down and undoes", async () => {
   await until(() => requests("POST", "/ops").length === 3);
   assert.deepEqual(requests("POST", "/ops")[2].body, { rev: 3, op: { kind: "undo", id: "" } });
   await until(async () => (await order()).startsWith("aaaaaaaa,cccccccc,bbbbbbbb"));
+});
+
+test("Undo shows only when there is something to undo, on the left so the theme toggle never moves", async () => {
+  const undoShown = () => page.eval(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  const themeLeft = () => page.eval(`document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`);
+  assert.equal(await undoShown(), false);
+  const before = await themeLeft();
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="archive"]');
+  await page.waitFor(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  assert.equal(await themeLeft(), before);
+  assert.ok(await page.eval(`document.querySelector('.kapi-panel [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`));
+  await click('.kapi-panel [data-action="undo"]');
+  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+});
+
+test("the Kapi logo stays at the top left on wide desktops and scrolls away when there is no room", async () => {
+  const wide = await browser.open(server.url, { width: 1440, height: 700 });
+  try {
+    await wide.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
+    await wide.waitFor(`scrollY >= 1200`);
+    const [head, page] = await wide.eval(`[".kapi-site-head", "#kapi-page"].map((q) => (({ top, left, right, bottom }) => ({ top, left, right, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+    assert.ok(head.top >= 0 && head.bottom <= 80, JSON.stringify(head));
+    const textLeft = await wide.eval(`document.querySelector("#kapi-page").getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector("#kapi-page")).paddingLeft)`);
+    assert.ok(head.right <= textLeft, JSON.stringify({ head, page, textLeft }));
+  } finally {
+    await wide.close();
+  }
+  const narrow = await browser.open(server.url, { width: 1100, height: 700 });
+  try {
+    await narrow.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
+    await narrow.waitFor(`scrollY >= 1200`);
+    assert.ok(await narrow.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom < 0`));
+  } finally {
+    await narrow.close();
+  }
 });
 
 test("submits kapi-form answers", async () => {
@@ -797,10 +847,10 @@ test("the theme toggle switches light and dark and remembers the choice across a
   await prefer("light");
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
   await reload();
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   await click('.kapi-theme [data-theme-choice="system"]');
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
@@ -819,7 +869,7 @@ test("System follows the OS colour scheme live, and an explicit choice ignores i
   await prefer("light");
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await prefer("dark");
-  await expectTheme(["dark", "rgb(15, 17, 21)", "system"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "system"]);
   await click('.kapi-theme [data-theme-choice="light"]');
   await prefer("light");
   await prefer("dark");
@@ -834,12 +884,12 @@ test("the theme toggle still works when storage is blocked", async () => {
   await reload();
   await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
 });
 
 test("printing stays light when the dark theme is on", async () => {
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(15, 17, 21)", "dark"]);
+  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
   await page.call("Emulation.setEmulatedMedia", { media: "print" });
   const bg = await page.eval(`getComputedStyle(document.body).backgroundColor`);
   await page.call("Emulation.setEmulatedMedia", { media: "" });
@@ -926,8 +976,8 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1920`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
@@ -942,8 +992,8 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
 });
 
 test("on a tall block the toolbar stays in view while the block scrolls", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1920`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
@@ -1106,6 +1156,41 @@ test("after a daemon restart the stream stops and the reopen command is shown, k
   await page.key("Escape");
   await page.key("Escape");
   assert.notEqual(await restartText(), "");
+});
+
+test("clicking a code block's language pill copies its code", async () => {
+  await page.eval(`(() => {
+    const fig = document.querySelector('[data-kapi-id="jjjjjjjj"]');
+    const head = document.createElement("figcaption");
+    head.className = "kapi-code-head";
+    head.innerHTML = '<span class="kapi-code-lang">go</span>';
+    fig.prepend(head);
+  })()`);
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await click('[data-kapi-id="jjjjjjjj"] .kapi-code-lang');
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["if a < b {\n\tswap()\n}"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"] .kapi-code-lang').textContent`), "copied");
+  await page.waitFor(`document.querySelector('[data-kapi-id="jjjjjjjj"] .kapi-code-lang').textContent === "go"`, 3000);
+});
+
+test("hovering any code block shows a copy button that copies its code, skipping removed diff lines", async () => {
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"] pre').dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
+  await page.waitFor(`!document.querySelector(".kapi-copy-code").hidden`);
+  const [btn, pre] = await page.eval(`[".kapi-copy-code", '[data-kapi-id="jjjjjjjj"] pre'].map((q) => (({ top, right }) => ({ top, right }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(btn.top >= pre.top && btn.right <= pre.right, JSON.stringify({ btn, pre }));
+  await click(".kapi-copy-code");
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["if a < b {\n\tswap()\n}"]);
+
+  await page.eval(`(() => {
+    const pre = document.querySelector('[data-kapi-id="jjjjjjjj"] pre');
+    pre.innerHTML = '<code><span class="kapi-line kapi-diff-hunk">@@ -1 +1 @@</span><span class="kapi-line kapi-diff-del"><span class="kapi-diff-sign">-</span><span class="kapi-src">old()</span></span><span class="kapi-line kapi-diff-add"><span class="kapi-diff-sign">+</span><span class="kapi-src">new()</span></span><span class="kapi-line kapi-diff-ctx"><span class="kapi-diff-sign"> </span><span class="kapi-src">done()</span></span></code>';
+  })()`);
+  await click(".kapi-copy-code");
+  await until(async () => (await page.eval(`window.copied.length`)) === 2);
+  assert.equal(await page.eval(`window.copied[1]`), "new()\ndone()");
 });
 
 test("a POST refused after a restart shows the reopen command as text", async () => {
@@ -1281,15 +1366,225 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+const PAGE_STYLES = await readFile(new URL("../../render/style.css", import.meta.url), "utf8");
+
+async function withPageStyles(width, fn) {
+  const p = await browser.open(server.url, { width, height: 800 });
+  try {
+    await p.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+    await fn(p);
+  } finally {
+    await p.close();
+  }
+}
+
+const cellDisplay = (p) => p.eval(`getComputedStyle(document.querySelector('[data-kapi-id="gggggggg"] td')).display`);
+
+test("on desktop a long table's header row sticks to the top of the window", async () => {
+  await withPageStyles(1280, async (p) => {
+    await p.eval(`(t => { for (let i = 0; i < 60; i++) t.tBodies[0].insertRow().append(...["row" + i, String(i)].map((v) => Object.assign(document.createElement("td"), { textContent: v }))); })(document.querySelector('[data-kapi-id="gggggggg"] table'))`);
+    await p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="gggggggg"]'))`);
+    const [top, band, bg] = await p.eval(`(th => [Math.round(th.getBoundingClientRect().top), getComputedStyle(th).backgroundColor, getComputedStyle(document.body).backgroundColor])(document.querySelector('[data-kapi-id="gggggggg"] thead th'))`);
+    assert.equal(top, 0);
+    assert.notEqual(band, bg);
+    assert.notEqual(band, "rgba(0, 0, 0, 0)");
+    assert.equal(await p.eval(`getComputedStyle(document.querySelector(".kapi-site-head")).position`), "static");
+  });
+});
+
+test("on desktop a table sits on the page surface and tints the whole row under the pointer", async () => {
+  await page.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+  const look = () => page.eval(`(t => [getComputedStyle(t).backgroundColor, getComputedStyle(t).boxShadow, [...t.querySelectorAll("tbody tr")[1].cells].map((c) => getComputedStyle(c).backgroundColor)])(document.querySelector('[data-kapi-id="gggggggg"]'))`);
+  const [bg, shadow, before] = await look();
+  assert.deepEqual([bg, shadow], ["rgba(0, 0, 0, 0)", "none"]);
+  const [x, y] = await page.eval(`(r => [r.left + 20, r.top + r.height / 2])((el => (el.scrollIntoView({ block: "center" }), el.getBoundingClientRect()))(document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')[1]))`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  const [, , after] = await look();
+  assert.equal(new Set(after).size, 1, JSON.stringify(after));
+  assert.notEqual(after[0], before[0]);
+  assert.notEqual(after[0], "rgba(0, 0, 0, 0)");
+});
+
+test("tables turn into cards only when the window itself is phone width", async () => {
+  await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
+  await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));
+});
+
+test("on a phone, tapping a cell's column label sorts the table by that column", async () => {
+  await withPageStyles(390, async (p) => {
+    const order = () => p.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[0].textContent).join(",")`);
+    const tap = async (row, col, where) => {
+      await p.eval(`(c => {
+        c.scrollIntoView({ block: "center" });
+        const r = c.getBoundingClientRect();
+        const x = ${where === "label" ? "r.left + 12" : "r.right - 12"};
+        const y = r.top + r.height / 2;
+        document.elementFromPoint(x, y).dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+      })(document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')[${row}].cells[${col}])`);
+    };
+    assert.equal(await order(), "beta,Alpha,gamma");
+    await tap(0, 1, "value");
+    assert.equal(await order(), "beta,Alpha,gamma");
+    await tap(0, 1, "label");
+    assert.equal(await order(), "Alpha,beta,gamma");
+    await tap(0, 1, "label");
+    assert.equal(await order(), "gamma,beta,Alpha");
+    await tap(1, 0, "label");
+    assert.equal(await order(), "Alpha,beta,gamma");
+  });
+});
+
+const SPANNED = {
+  id: "rrrrrrrr",
+  html:
+    '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="rrrrrrrr"><table>' +
+    "<thead><tr><th>Name</th><th>Key</th><th>Value</th></tr></thead><tbody>" +
+    '<tr><td rowspan="2">beta</td><td>x</td><td>1</td></tr><tr><td>y</td><td>2</td></tr>' +
+    '<tr><th scope="row">alpha</th><td>z</td><td>3</td></tr>' +
+    "</tbody></table></div>",
+};
+
+test("on a phone a row header reads as bold cell text, not as a column header", async () => {
+  await reopenWith([SPANNED]);
+  await withPageStyles(390, async (p) => {
+    const [bg, transform, arrow, weight] = await p.eval(`(th => (s => [s.backgroundColor, s.textTransform, getComputedStyle(th, "::after").content, Number(s.fontWeight)])(getComputedStyle(th)))(document.querySelector('[data-kapi-id="rrrrrrrr"] tbody th'))`);
+    assert.deepEqual([bg, transform, arrow], ["rgba(0, 0, 0, 0)", "none", "none"]);
+    assert.ok(weight >= 600, String(weight));
+  });
+});
+
+test("table body cells carry their column header as a label for the narrow card layout", async () => {
+  const labels = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel ?? null))`);
+  assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').hasAttribute("data-kapi-label")`), false);
+  await click('[data-kapi-id="gggggggg"] th');
+  assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
+
+  await reopenWith([SPANNED]);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll('[data-kapi-id="rrrrrrrr"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel))`),
+    [["Name", "Key", "Value"], ["Key", "Value"], ["Name", "Key", "Value"]]);
+});
+
+test("the logo sits at the top left of the page as a site header, not in the chat panel", async () => {
+  const [head, page_, inPanel, label] = await page.eval(`(() => {
+    const box = (el) => (({ left, top, bottom }) => ({ left, top, bottom }))(el.getBoundingClientRect());
+    const head = document.querySelector("body > .kapi-site-head");
+    return [head && box(head), box(document.getElementById("kapi-page")), !!document.querySelector(".kapi-panel .kapi-logo"), head && [head.querySelector(".kapi-logo").getAttribute("aria-hidden"), head.querySelector(".kapi-logo").hasAttribute("role"), head.textContent]];
+  })()`);
+  assert.ok(head, "no site header");
+  assert.ok(head.left <= 24 && head.top <= 24 && head.bottom <= page_.top, JSON.stringify({ head, page_ }));
+  assert.deepEqual(label, ["true", false, "Kapi"]);
+  assert.equal(inPanel, false);
+});
+
+test("the docked phone toolbar keeps each icon's label beside it", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.deepEqual(await phone.eval(`[...document.querySelectorAll('.kapi-bar [data-action="archive"], .kapi-bar [data-action="delete"], .kapi-bar [data-action="edit"]')].map((b) => b.innerText.trim())`), ["Edit", "Archive", "Delete"]);
+  } finally {
+    await phone.close();
+  }
+});
+
+test("the chat panel sits on its own tinted surface, with agent bubbles on the page white", async () => {
+  const [panel, tint, bubble, surface] = await page.eval(`(() => {
+    const probe = (v) => { const e = document.createElement("span"); e.style.backgroundColor = v; document.body.append(e); const c = getComputedStyle(e).backgroundColor; e.remove(); return c; };
+    const msg = document.createElement("li");
+    msg.className = "kapi-msg";
+    msg.dataset.author = "agent";
+    document.querySelector(".kapi-log").append(msg);
+    const bubble = getComputedStyle(msg).backgroundColor;
+    msg.remove();
+    return [getComputedStyle(document.querySelector(".kapi-panel")).backgroundColor, probe("var(--kapi-panel)"), bubble, probe("var(--kapi-surface)")];
+  })()`);
+  assert.equal(panel, tint);
+  assert.notEqual(tint, await page.eval(`getComputedStyle(document.body).backgroundColor`));
+  assert.equal(bubble, surface);
+});
+
+test("the selection ring follows the rounded corners of the selected block", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
+  await select("gggggggg");
+  await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius`), "18px");
+  await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').style.borderRadius = "10% 4px"`);
+  await select("bbbbbbbb");
+  await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius === "10% 4px"`);
+});
+
+test("the selection ring, the human message and the Send button use the blue accent", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
+  const [blue, solid, ring, send, mine] = await page.eval(`(() => {
+    const probe = (v) => {
+      const s = document.createElement("span");
+      s.style.color = v;
+      document.getElementById("kapi-chrome").append(s);
+      const c = getComputedStyle(s).color;
+      s.remove();
+      return c;
+    };
+    const msg = document.createElement("li");
+    msg.className = "kapi-msg";
+    msg.dataset.author = "human";
+    document.querySelector(".kapi-log").append(msg);
+    const mine = getComputedStyle(msg).borderTopColor;
+    msg.remove();
+    return [probe("var(--kapi-blue-text)"), probe("var(--kapi-blue-solid)"),
+      getComputedStyle(document.querySelector(".kapi-ring")).boxShadow, getComputedStyle(document.querySelector(".kapi-composer .kapi-primary")).backgroundColor, mine];
+  })()`);
+  assert.ok(ring.startsWith(blue), ring);
+  assert.equal(send, solid);
+  assert.equal(mine, await page.eval(`(() => { const s = document.createElement("span"); s.style.color = "var(--kapi-blue-border)"; document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; })()`));
+});
+
+test("the floating toolbar shows icons only, each named by an instant tooltip, and Delete is drawn in the theme red", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
+  const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.getAttribute("aria-label"), b.hasAttribute("title"), !!b.querySelector("svg"),
+    [...b.childNodes].filter((n) => n.nodeType === 3 ? n.data.trim() : n.checkVisibility?.() && n.tagName !== "svg").length])`);
+  assert.deepEqual(tools, [
+    ["archive", "Archive", false, true, 0],
+    ["up", "Move up", false, true, 0],
+    ["down", "Move down", false, true, 0],
+    ["delete", "Delete", false, true, 0],
+  ]);
+  const tip = () => page.eval(`(b => getComputedStyle(b, "::after").content)(document.querySelector('.kapi-bar [data-action="delete"]'))`);
+  assert.equal(await tip(), "none");
+  const [x, y] = await page.eval(`(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.kapi-bar [data-action="delete"]').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  assert.equal(await tip(), '"Delete"');
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-bar [data-action="delete"]'), "::after").transitionDuration`), "0s");
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
+  await page.eval(`document.querySelector('.kapi-bar [data-action="archive"]').focus()`);
+  assert.equal(await page.eval(`(b => b.matches(":focus-visible") ? getComputedStyle(b, "::after").content : "not focus-visible")(document.querySelector('.kapi-bar [data-action="archive"]'))`), '"Archive"');
+  const [del, red, icon] = await page.eval(`(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--kapi-red-text)";
+    document.getElementById("kapi-chrome").append(probe);
+    const red = getComputedStyle(probe).color;
+    probe.remove();
+    const b = document.querySelector('.kapi-bar [data-action="delete"]');
+    return [getComputedStyle(b).color, red, getComputedStyle(b.querySelector("svg")).fill];
+  })()`);
+  assert.equal(del, red);
+  assert.equal(icon, red);
+});
+
 test("Flip on a diagram sends an orient op and refetches the diagram", async () => {
   await reopenWith(DIAGRAMS);
   await select("ffffffff");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+  const flip = () => page.eval(`(b => [b.textContent, b.getAttribute("aria-label"), b.dataset.tip, !!b.querySelector("svg")])(document.querySelector('.kapi-bar [data-action="flip"]'))`);
+  assert.deepEqual(await flip(), ["", "Flow left to right", "Flow left to right", true]);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 1);
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "orient", id: "ffffffff", dir: "lr" } });
   await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').dataset.kapiDir`)) === "lr");
   assert.equal(requests("GET", "/blocks/ffffffff").length, 1);
+  await page.waitFor(`document.querySelector('.kapi-bar [data-action="flip"]')?.getAttribute("aria-label") === "Flow top to bottom"`);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 2);
   assert.equal(requests("POST", "/ops")[1].body.op.dir, "tb");
@@ -1325,4 +1620,45 @@ test("clicking empty page space clears the selection, and clicking the chat keep
   assert.equal(await page.eval(`!!document.elementFromPoint(${x}, ${y}).closest("[data-kapi-id], #kapi-chrome")`), false);
   await mouseClickAt(x, y);
   await page.waitFor(`!document.querySelector("[data-kapi-selected]")`);
+});
+
+test("a heading folds everything under it until the next heading of the same or higher level, per viewer", async () => {
+  await reopenWith([
+    { id: "h1h1h1h1", html: '<h1 data-kapi-id="h1h1h1h1">Gallery</h1>' },
+    { id: "p1p1p1p1", html: '<p data-kapi-id="p1p1p1p1">Intro.</p>' },
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">Callouts</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
+  ]);
+  const shown = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"]').checkVisibility()`);
+  const toggle = async (id) => {
+    const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+    await mouseClickAt(x, y);
+  };
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+
+  await toggle("h2aaaaaa");
+  assert.equal(await shown("p2p2p2p2"), false);
+  assert.equal(await shown("h2bbbbbb"), true);
+  assert.equal(await shown("p3p3p3p3"), true);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-selected")`), false);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+
+  await toggle("h1h1h1h1");
+  for (const id of ["p1p1p1p1", "h2aaaaaa", "p2p2p2p2", "h2bbbbbb", "p3p3p3p3"]) assert.equal(await shown(id), false, id);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h1h1h1h1"]').dataset.kapiFolded`), "5 blocks");
+
+  await page.eval(`location.reload()`);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h1h1h1h1"][data-kapi-folded]')`);
+  assert.equal(await shown("p3p3p3p3"), false);
+
+  await toggle("h1h1h1h1");
+  assert.equal(await shown("h2bbbbbb"), true);
+  assert.equal(await shown("p2p2p2p2"), false);
+  await toggle("h2aaaaaa");
+  assert.equal(await shown("p2p2p2p2"), true);
+  assert.equal(requests("POST", "/ops").length, 0);
 });

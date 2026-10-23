@@ -233,7 +233,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
 	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
-	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\">\n%s\n</main>\n", rev, body)
+	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\">\n%s\n</main>\n", rev, st.CanUndo(), body)
 	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -255,6 +255,7 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Kapi-Rev", strconv.FormatUint(rev, 10))
+	w.Header().Set("Kapi-Undo", strconv.FormatBool(st.CanUndo()))
 	if _, err := w.Write(out); err != nil { //nolint:gosec // render output, which has no scripts
 		log.Printf("write block: %v", err)
 	}
@@ -373,6 +374,11 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
+type opResult struct {
+	Rev  uint64 `json:"rev"`
+	Undo bool   `json:"undo"`
+}
+
 func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
 	var in struct {
 		Rev uint64  `json:"rev"`
@@ -383,22 +389,20 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 	}
 	rev, sum, err := st.Apply(in.Rev, &in.Op)
 	if errors.Is(err, page.ErrStale) {
-		writeJSON(w, http.StatusConflict, map[string]uint64{"rev": rev})
+		writeJSON(w, http.StatusConflict, opResult{rev, st.CanUndo()})
 		return
 	}
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	if sum.Text == "" {
-		writeJSON(w, http.StatusOK, map[string]uint64{"rev": rev})
-		return
+	if sum.Text != "" {
+		if err := appendRevision(l, "human", sum); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
-	if err := appendRevision(l, "human", sum); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"rev": rev})
+	writeJSON(w, http.StatusOK, opResult{rev, st.CanUndo()})
 }
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {

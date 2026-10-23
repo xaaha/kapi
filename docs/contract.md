@@ -39,9 +39,9 @@ load and writes the file back. Ids never change after that.
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
-| `<kapi-plan>` | none | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| state`, where state is `built` (purple), `review` (yellow), `planned` (grey, dashed) or a colour, and edges `a -> b`, `a <-> b`, `a --> b` (dashed) |
-| `<kapi-badge>` | optional `tone` = `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default) | short inline text; allowed inside prose and table cells |
+| `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored |
+| `<kapi-badge>` | optional `tone` = `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default); optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
 | `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
 | `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
 | `<kapi-checklist>` | none | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Ticking a box in the browser sends a `check` op |
@@ -269,12 +269,12 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 
 | Method and path | Body | Response |
 |---|---|---|
-| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
-| `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
+| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N" data-undo="bool">`, `kapi.js` |
+| `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone) |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
-| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |
+| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool}`; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 

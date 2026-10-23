@@ -686,7 +686,8 @@ func layoutFlow(g *graph, s *svgWriter) {
 		for _, l := range lines[i] {
 			w = math.Max(w, textWidth(l))
 		}
-		sizes[i] = [2]float64{w + 2*nodePadX, lineH*float64(len(lines[i])) + 2*nodePadY}
+		w, h := g.looks[i].grow(w+2*nodePadX, lineH*float64(len(lines[i]))+2*nodePadY)
+		sizes[i] = [2]float64{w, h}
 	}
 	opts := layeredOpts{nodeGap: nodeGap, labelLines: func(t string) []string { return []string{t} }}
 	if s.lr {
@@ -694,6 +695,6 @@ func layoutFlow(g *graph, s *svgWriter) {
 		opts.labelLines = func(t string) []string { return wrapAtWidth(t, labelWrapAt) }
 	}
 	for i, r := range layoutLayered(s, sizes, g.edges, opts) {
-		s.box("kd-node", r, lines[i])
+		s.box("kd-node", r, lines[i], g.looks[i])
 	}
 }
