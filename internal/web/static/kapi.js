@@ -53,6 +53,7 @@
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
     system: "M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z",
     light: "M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z",
+    copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
     dark: "M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z",
   };
 
@@ -110,7 +111,8 @@
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const roomStyle = h("style");
-  const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
+  const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
+  const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle, copyButton);
   const phone = matchMedia("(max-width: 760px)");
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
@@ -769,8 +771,62 @@
     return null;
   }
 
+  function codeText(pre) {
+    const lines = [...pre.querySelectorAll(".kapi-line")];
+    if (!lines.length) return pre.textContent.replace(/\n$/, "");
+    return lines.filter((l) => l.querySelector(".kapi-src") && !l.classList.contains("kapi-diff-del"))
+      .map((l) => l.querySelector(".kapi-src").textContent).join("\n");
+  }
+
+  function copyCode(pre, show) {
+    navigator.clipboard.writeText(codeText(pre)).then(() => show("copied"), () => show("copy failed"));
+  }
+
+  function pillNotice(pill) {
+    const restore = (pill.dataset.kapiLabel ??= pill.textContent);
+    return (text) => {
+      pill.textContent = text;
+      setTimeout(() => (pill.textContent = restore), 1200);
+    };
+  }
+
+  let copyTarget = null;
+  function placeCopy() {
+    copyButton.hidden = !copyTarget?.isConnected || !!editing;
+    if (copyButton.hidden) return;
+    const r = copyTarget.getBoundingClientRect();
+    copyButton.style.top = `${r.top + 6}px`;
+    copyButton.style.left = `${r.right - copyButton.offsetWidth - 6}px`;
+  }
+  function showCopy(pre) {
+    copyTarget = pre;
+    placeCopy();
+  }
+
+  main.addEventListener("mouseover", (e) => {
+    const pre = closest(e.target, "pre");
+    if (pre && main.contains(pre)) showCopy(pre);
+  });
+  main.addEventListener("mouseleave", (e) => {
+    if (e.relatedTarget !== copyButton && !copyButton.contains(e.relatedTarget)) showCopy(null);
+  });
+  copyButton.addEventListener("click", () => {
+    if (!copyTarget?.isConnected) return;
+    copyCode(copyTarget, (text) => {
+      copyButton.dataset.tip = text[0].toUpperCase() + text.slice(1);
+      copyButton.toggleAttribute("data-kapi-copied", text === "copied");
+      setTimeout(() => {
+        copyButton.dataset.tip = "Copy";
+        copyButton.removeAttribute("data-kapi-copied");
+      }, 1200);
+    });
+  });
+
   main.addEventListener("click", (e) => {
     if (editing) return;
+    const pill = closest(e.target, ".kapi-code-lang");
+    const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
+    if (pillPre) return copyCode(pillPre, pillNotice(pill));
     const th = labelTapped(e) ?? closest(e.target, ".kapi-table th");
     if (th && main.contains(th)) sortTable(th);
     const el = closest(e.target, BLOCK);
@@ -848,6 +904,7 @@
   }
 
   addEventListener("scroll", placeRing, { passive: true });
+  addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("resize", placeRing);
   document.addEventListener("input", () => (editing ? renderBar() : placeRing()));
   new ResizeObserver(placeRing).observe(main);

@@ -1109,6 +1109,41 @@ test("after a daemon restart the stream stops and the reopen command is shown, k
   assert.notEqual(await restartText(), "");
 });
 
+test("clicking a code block's language pill copies its code", async () => {
+  await page.eval(`(() => {
+    const fig = document.querySelector('[data-kapi-id="jjjjjjjj"]');
+    const head = document.createElement("figcaption");
+    head.className = "kapi-code-head";
+    head.innerHTML = '<span class="kapi-code-lang">go</span>';
+    fig.prepend(head);
+  })()`);
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await click('[data-kapi-id="jjjjjjjj"] .kapi-code-lang');
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["if a < b {\n\tswap()\n}"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"] .kapi-code-lang').textContent`), "copied");
+  await page.waitFor(`document.querySelector('[data-kapi-id="jjjjjjjj"] .kapi-code-lang').textContent === "go"`, 3000);
+});
+
+test("hovering any code block shows a copy button that copies its code, skipping removed diff lines", async () => {
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"] pre').dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))`);
+  await page.waitFor(`!document.querySelector(".kapi-copy-code").hidden`);
+  const [btn, pre] = await page.eval(`[".kapi-copy-code", '[data-kapi-id="jjjjjjjj"] pre'].map((q) => (({ top, right }) => ({ top, right }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(btn.top >= pre.top && btn.right <= pre.right, JSON.stringify({ btn, pre }));
+  await click(".kapi-copy-code");
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["if a < b {\n\tswap()\n}"]);
+
+  await page.eval(`(() => {
+    const pre = document.querySelector('[data-kapi-id="jjjjjjjj"] pre');
+    pre.innerHTML = '<code><span class="kapi-line kapi-diff-hunk">@@ -1 +1 @@</span><span class="kapi-line kapi-diff-del"><span class="kapi-diff-sign">-</span><span class="kapi-src">old()</span></span><span class="kapi-line kapi-diff-add"><span class="kapi-diff-sign">+</span><span class="kapi-src">new()</span></span><span class="kapi-line kapi-diff-ctx"><span class="kapi-diff-sign"> </span><span class="kapi-src">done()</span></span></code>';
+  })()`);
+  await click(".kapi-copy-code");
+  await until(async () => (await page.eval(`window.copied.length`)) === 2);
+  assert.equal(await page.eval(`window.copied[1]`), "new()\ndone()");
+});
+
 test("a POST refused after a restart shows the reopen command as text", async () => {
   const evil = `<img src=x onerror="window.pwned=1">`;
   server.state.restarted = evil;
