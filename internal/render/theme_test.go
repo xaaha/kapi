@@ -212,3 +212,9 @@ func TestNarrowTablesStackIntoLabelledCards(t *testing.T) {
 		t.Error("body is not a size container, so the narrow table rules never apply")
 	}
 }
+
+func TestPageStylesLeaveTheChatStatusClassAlone(t *testing.T) {
+	if regexp.MustCompile(`\.kapi-status\b`).MatchString(string(baseCSS)) {
+		t.Error("style.css styles .kapi-status, which is the chat presence text")
+	}
+}

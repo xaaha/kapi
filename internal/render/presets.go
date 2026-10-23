@@ -327,7 +327,7 @@ func renderBadge(b *bytes.Buffer, n *html.Node) error {
 		writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
 		b.WriteString(icon.svg)
 	default:
-		writeStart(b, "span", outerAttrs(n, "kapi-status kapi-tone-"+tone, "role", "img", "aria-label", icon.label))
+		writeStart(b, "span", outerAttrs(n, "kapi-badge-icon kapi-tone-"+tone, "role", "img", "aria-label", icon.label))
 		b.WriteString(icon.svg)
 	}
 	renderChildren(b, n)

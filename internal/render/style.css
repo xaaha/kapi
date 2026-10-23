@@ -198,8 +198,8 @@ body {
   vertical-align: -0.22em;
 }
 .kapi-badge > .kapi-icon { margin: 0 0.25em 0 -0.15em; }
-.kapi-status { display: inline-block; line-height: 1; }
-.kapi-status > .kapi-icon { width: 1.3em; height: 1.3em; vertical-align: -0.28em; }
+.kapi-badge-icon { display: inline-block; line-height: 1; }
+.kapi-badge-icon > .kapi-icon { width: 1.3em; height: 1.3em; vertical-align: -0.28em; }
 
 .kapi-kv {
   display: grid;

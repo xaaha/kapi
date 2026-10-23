@@ -114,7 +114,7 @@ func TestBadgeStateAddsAStatusIconAndDefaultTone(t *testing.T) {
 			t.Errorf("state %s: want a %s badge led by an icon:\n%s", state, tone, out)
 		}
 		out = render(t, `<p>x <kapi-badge state="`+state+`"></kapi-badge></p>`)
-		if !strings.Contains(out, `<span class="kapi-status kapi-tone-`+tone+`" data-kapi-preset="badge" role="img" aria-label="`+statusIcons[state].label+`"><svg class="kapi-icon"`) {
+		if !strings.Contains(out, `<span class="kapi-badge-icon kapi-tone-`+tone+`" data-kapi-preset="badge" role="img" aria-label="`+statusIcons[state].label+`"><svg class="kapi-icon"`) {
 			t.Errorf("state %s with no body: want a bare labelled icon:\n%s", state, out)
 		}
 	}
