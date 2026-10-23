@@ -18,7 +18,7 @@
 
 <h2>What exists and what is still a box on paper</h2>
 <kapi-diagram type="architecture">
-  agent: Agent (any harness) | kapi watch: one line per event | writes plan.html directly | user
+  agent: Agent (any harness) | kapi watch: one line per event | writes plan.html directly | agent
   plan: plan.html | page source: prose + kapi-* presets | file done
   daemon: kapi daemon | event log and cursors per page | renders presets to HTML + SVG | service progress
   disk: ~/.kapi on disk | events, cursors, revisions | database done
@@ -59,7 +59,7 @@
 </kapi-diagram>
 <p>The same flow left to right, with kinds on its nodes:</p>
 <kapi-diagram type="flow" dir="lr">
-  agent: user
+  agent: agent
   page file: file
   daemon: service done
   browser: page

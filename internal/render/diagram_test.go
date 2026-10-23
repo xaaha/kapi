@@ -244,7 +244,7 @@ func TestDiagramNodesAreNeutralUnlessTheyHaveAState(t *testing.T) {
 }
 
 func TestDiagramKindsDrawTheirIconAboveTheLabel(t *testing.T) {
-	for _, kind := range []string{"database", "user", "service", "page", "file", "queue", "timer", "external"} {
+	for _, kind := range []string{"agent", "database", "user", "service", "page", "file", "queue", "timer", "external"} {
 		out := render(t, diagram("architecture", "a: Store | rows | "+kind+"\nb: Plain\na -> b"))
 		if !strings.Contains(out, `<svg class="kd-icon kd-kind-`+kind+`" `) {
 			t.Errorf("%s: no kind icon:\n%s", kind, out)

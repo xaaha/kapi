@@ -113,7 +113,7 @@ func (s *Store) Source() ([]byte, uint64) {
 <!-- type: architecture (left to right by default; dir="tb" stacks it top to bottom).
      Node lines: "id: Title | subtitle | subtitle | tags". id is letters, digits, - _ or .
      tags, space separated, all optional:
-       a kind, drawn as a large icon over the label: database, user, service, page, file, queue, timer or external;
+       a kind, drawn as a large icon over the label: agent, database, user, service, page, file, queue, timer or external;
        a state, the only thing drawn in colour (border and a small icon): done, failed, blocked, progress, waiting or info;
        planned, drawn dashed.
      Nodes are neutral otherwise. Edges: "a -> b: label", "a <-> b: label" (both ways), "a --> b: label" (dashed).
