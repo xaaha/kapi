@@ -1335,6 +1335,15 @@ const SPANNED = {
     "</tbody></table></div>",
 };
 
+test("on a phone a row header reads as bold cell text, not as a column header", async () => {
+  await reopenWith([SPANNED]);
+  await withPageStyles(390, async (p) => {
+    const [bg, transform, arrow, weight] = await p.eval(`(th => (s => [s.backgroundColor, s.textTransform, getComputedStyle(th, "::after").content, Number(s.fontWeight)])(getComputedStyle(th)))(document.querySelector('[data-kapi-id="rrrrrrrr"] tbody th'))`);
+    assert.deepEqual([bg, transform, arrow], ["rgba(0, 0, 0, 0)", "none", "none"]);
+    assert.ok(weight >= 600, String(weight));
+  });
+});
+
 test("table body cells carry their column header as a label for the narrow card layout", async () => {
   const labels = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel ?? null))`);
   assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);

@@ -652,6 +652,17 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
   .kapi-table tbody tr:hover { background: var(--kapi-card); }
   .kapi-table :is(td, th) { position: relative; padding: 0.45rem 1rem 0.45rem calc(38% + 1rem); }
   .kapi-table tr > :last-child { border-bottom: 0; }
+  .kapi-table tbody th {
+    background: none;
+    color: var(--kapi-fg);
+    font-size: inherit;
+    font-weight: 650;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: normal;
+    cursor: auto;
+  }
+  .kapi-table tbody th::after { content: none; }
   .kapi-table :is(td, th)::before {
     content: attr(data-kapi-label);
     position: absolute;
