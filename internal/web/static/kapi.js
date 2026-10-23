@@ -391,7 +391,19 @@
 
   function numberRows(scope) {
     for (const table of scope.querySelectorAll('[data-kapi-preset$="table"] table')) {
-      rowsOf(table).forEach((tr, i) => tr.setAttribute("data-kapi-row", i));
+      const rows = rowsOf(table);
+      rows.forEach((tr, i) => tr.setAttribute("data-kapi-row", i));
+      const head = table.tHead?.rows[0] ?? rows.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+      if (!head) continue;
+      const labels = [...head.cells].flatMap((c) => Array(c.colSpan).fill(c.textContent.trim()));
+      for (const tr of rows) {
+        if (tr === head || tr.parentElement === table.tHead) continue;
+        let col = 0;
+        for (const cell of tr.cells) {
+          cell.setAttribute("data-kapi-label", labels[col] ?? "");
+          col += cell.colSpan;
+        }
+      }
     }
   }
 

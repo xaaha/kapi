@@ -1281,6 +1281,14 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+test("table body cells carry their column header as a label for the narrow card layout", async () => {
+  const labels = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => [...r.cells].map((c) => c.dataset.kapiLabel ?? null))`);
+  assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] th').hasAttribute("data-kapi-label")`), false);
+  await click('[data-kapi-id="gggggggg"] th');
+  assert.deepEqual(await labels(), [["Shard", "Rows"], ["Shard", "Rows"], ["Shard", "Rows"]]);
+});
+
 test("the logo sits at the top left of the page as a site header, not in the chat panel", async () => {
   const [head, page_, inPanel, label] = await page.eval(`(() => {
     const box = (el) => (({ left, top, bottom }) => ({ left, top, bottom }))(el.getBoundingClientRect());

@@ -191,3 +191,24 @@ func TestContentBlocksAreBorderlessCards(t *testing.T) {
 		t.Errorf("--kapi-bg = %s, %s; want white in light and black in dark", l, d)
 	}
 }
+
+func TestNarrowTablesStackIntoLabelledCards(t *testing.T) {
+	css := string(baseCSS)
+	m := regexp.MustCompile(`(?s)@container \(max-width: 640px\) \{(.*?)\n\}`).FindStringSubmatch(css)
+	if m == nil {
+		t.Fatal("style.css has no @container (max-width: 640px) block")
+	}
+	for _, want := range []string{
+		".kapi-table thead",
+		".kapi-table :is(table, tbody, tr, td, th)",
+		"display: block;",
+		"content: attr(data-kapi-label);",
+	} {
+		if !strings.Contains(m[1], want) {
+			t.Errorf("the narrow table rules lack %q", want)
+		}
+	}
+	if !strings.Contains(css, "container-type: inline-size;") {
+		t.Error("body is not a size container, so the narrow table rules never apply")
+	}
+}

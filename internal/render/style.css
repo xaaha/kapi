@@ -557,6 +557,36 @@ pre.kapi-hl {
 span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }
 .kapi-error-tag { font-family: var(--kapi-mono); font-weight: 700; }
 
+@container (max-width: 640px) {
+  .kapi-table { overflow: visible; border-radius: 0; background: none; box-shadow: none; }
+  .kapi-table thead,
+  .kapi-table tr:not(:has(> td)) { display: none; }
+  .kapi-table :is(table, tbody, tr, td, th) { display: block; }
+  .kapi-table tr {
+    margin: 0 0 0.6rem;
+    padding: 0.3rem 0;
+    border-radius: var(--kapi-radius-lg);
+    background: var(--kapi-card);
+    box-shadow: var(--kapi-card-shadow);
+  }
+  .kapi-table tbody tr:hover { background: var(--kapi-card); }
+  .kapi-table :is(td, th) { position: relative; padding: 0.45rem 1rem 0.45rem calc(38% + 1rem); }
+  .kapi-table tr > :last-child { border-bottom: 0; }
+  .kapi-table :is(td, th)::before {
+    content: attr(data-kapi-label);
+    position: absolute;
+    left: 1rem;
+    width: calc(38% - 1rem);
+    overflow-wrap: anywhere;
+    color: var(--kapi-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.65rem;
+    text-transform: uppercase;
+  }
+}
+
 @media (max-width: 640px) {
   body { font-size: 15.5px; }
   :where(#kapi-page) { padding: 1.25rem 0.9rem 4rem; }
