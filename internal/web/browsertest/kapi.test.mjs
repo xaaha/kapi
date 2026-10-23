@@ -1281,15 +1281,41 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+test("the block toolbar shows icons with short labels, and Delete is drawn in the theme red", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.textContent, b.getAttribute("aria-label") || "", !!b.querySelector("svg")])`);
+  assert.deepEqual(tools, [
+    ["archive", "Archive", "", true],
+    ["up", "", "Move up", true],
+    ["down", "", "Move down", true],
+    ["delete", "Delete", "", true],
+  ]);
+  const [del, red, icon] = await page.eval(`(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--kapi-red-text)";
+    document.getElementById("kapi-chrome").append(probe);
+    const red = getComputedStyle(probe).color;
+    probe.remove();
+    const b = document.querySelector('.kapi-bar [data-action="delete"]');
+    return [getComputedStyle(b).color, red, getComputedStyle(b.querySelector("svg")).fill];
+  })()`);
+  assert.equal(del, red);
+  assert.equal(icon, red);
+});
+
 test("Flip on a diagram sends an orient op and refetches the diagram", async () => {
   await reopenWith(DIAGRAMS);
   await select("ffffffff");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+  const flip = () => page.eval(`(b => [b.textContent, b.getAttribute("aria-label"), b.title, !!b.querySelector("svg")])(document.querySelector('.kapi-bar [data-action="flip"]'))`);
+  assert.deepEqual(await flip(), ["", "Flow left to right", "Flow left to right", true]);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 1);
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "orient", id: "ffffffff", dir: "lr" } });
   await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').dataset.kapiDir`)) === "lr");
   assert.equal(requests("GET", "/blocks/ffffffff").length, 1);
+  await page.waitFor(`document.querySelector('.kapi-bar [data-action="flip"]')?.getAttribute("aria-label") === "Flow top to bottom"`);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 2);
   assert.equal(requests("POST", "/ops")[1].body.op.dir, "tb");

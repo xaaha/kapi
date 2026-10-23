@@ -176,6 +176,25 @@
   flex-wrap: nowrap;
 }
 
+#kapi-chrome .kapi-bar button {
+  height: 28px;
+}
+
+#kapi-chrome .kapi-bar svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+#kapi-chrome .kapi-bar [data-action="delete"] {
+  color: var(--kapi-red-text);
+}
+
+#kapi-chrome .kapi-bar [data-action="delete"]:hover:not(:disabled) {
+  background: var(--kapi-red-tint);
+}
+
 #kapi-chrome .kapi-key {
   font-size: 11px;
   font-weight: 400;
@@ -251,11 +270,7 @@
   display: block;
   width: 15px;
   height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  fill: currentColor;
 }
 
 #kapi-chrome .kapi-panel-head button:hover:not(:disabled) {
