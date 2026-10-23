@@ -83,11 +83,11 @@
   const button = (label, action, title = label) =>
     h("button", { type: "button", "data-action": action, title, text: label });
 
-  const tool = (glyph, label, action, title = label) =>
-    h("button", { type: "button", "data-action": action, title }, icon(glyph), label);
+  const tool = (glyph, label, action) =>
+    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": label }, icon(glyph), h("span", { class: "kapi-tool-label", text: label }));
 
   const iconTool = (glyph, label, action) =>
-    h("button", { type: "button", "data-action": action, title: label, "aria-label": label }, icon(glyph));
+    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": label }, icon(glyph));
 
   const dot = h("span", { class: "kapi-dot", "data-state": "connecting" });
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });

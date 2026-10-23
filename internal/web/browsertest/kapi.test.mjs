@@ -927,8 +927,8 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1920`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
@@ -943,8 +943,8 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
 });
 
 test("on a tall block the toolbar stays in view while the block scrolls", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1920`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1440`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
@@ -1368,6 +1368,17 @@ test("the logo sits at the top left of the page as a site header, not in the cha
   assert.equal(inPanel, false);
 });
 
+test("the docked phone toolbar keeps each icon's label beside it", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.deepEqual(await phone.eval(`[...document.querySelectorAll('.kapi-bar [data-action="archive"], .kapi-bar [data-action="delete"], .kapi-bar [data-action="edit"]')].map((b) => b.innerText.trim())`), ["Edit", "Archive", "Delete"]);
+  } finally {
+    await phone.close();
+  }
+});
+
 test("the selection ring follows the rounded corners of the selected block", async () => {
   await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
   await select("gggggggg");
@@ -1404,16 +1415,26 @@ test("the selection ring, the human message and the Send button use the blue acc
   assert.equal(mine, await page.eval(`(() => { const s = document.createElement("span"); s.style.color = "var(--kapi-blue-border)"; document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; })()`));
 });
 
-test("the block toolbar shows icons with short labels, and Delete is drawn in the theme red", async () => {
+test("the floating toolbar shows icons only, each named by an instant tooltip, and Delete is drawn in the theme red", async () => {
   await select("bbbbbbbb");
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.textContent, b.getAttribute("aria-label") || "", !!b.querySelector("svg")])`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
+  const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.getAttribute("aria-label"), b.hasAttribute("title"), !!b.querySelector("svg"),
+    [...b.childNodes].filter((n) => n.nodeType === 3 ? n.data.trim() : n.checkVisibility?.() && n.tagName !== "svg").length])`);
   assert.deepEqual(tools, [
-    ["archive", "Archive", "", true],
-    ["up", "", "Move up", true],
-    ["down", "", "Move down", true],
-    ["delete", "Delete", "", true],
+    ["archive", "Archive", false, true, 0],
+    ["up", "Move up", false, true, 0],
+    ["down", "Move down", false, true, 0],
+    ["delete", "Delete", false, true, 0],
   ]);
+  const tip = () => page.eval(`(b => getComputedStyle(b, "::after").content)(document.querySelector('.kapi-bar [data-action="delete"]'))`);
+  assert.equal(await tip(), "none");
+  const [x, y] = await page.eval(`(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.kapi-bar [data-action="delete"]').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  assert.equal(await tip(), '"Delete"');
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-bar [data-action="delete"]'), "::after").transitionDuration`), "0s");
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
+  await page.eval(`document.querySelector('.kapi-bar [data-action="archive"]').focus()`);
+  assert.equal(await page.eval(`(b => b.matches(":focus-visible") ? getComputedStyle(b, "::after").content : "not focus-visible")(document.querySelector('.kapi-bar [data-action="archive"]'))`), '"Archive"');
   const [del, red, icon] = await page.eval(`(() => {
     const probe = document.createElement("span");
     probe.style.color = "var(--kapi-red-text)";
@@ -1431,7 +1452,7 @@ test("Flip on a diagram sends an orient op and refetches the diagram", async () 
   await reopenWith(DIAGRAMS);
   await select("ffffffff");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
-  const flip = () => page.eval(`(b => [b.textContent, b.getAttribute("aria-label"), b.title, !!b.querySelector("svg")])(document.querySelector('.kapi-bar [data-action="flip"]'))`);
+  const flip = () => page.eval(`(b => [b.textContent, b.getAttribute("aria-label"), b.dataset.tip, !!b.querySelector("svg")])(document.querySelector('.kapi-bar [data-action="flip"]'))`);
   assert.deepEqual(await flip(), ["", "Flow left to right", "Flow left to right", true]);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 1);
