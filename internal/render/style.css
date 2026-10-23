@@ -1,5 +1,4 @@
 body {
-  container-type: inline-size;
   margin: 0;
   background: var(--kapi-bg);
   color: var(--kapi-fg);
@@ -459,12 +458,6 @@ pre.kapi-hl {
     radial-gradient(farthest-side at 100% 50%, var(--kapi-scroll-shade), transparent) right / 0.8rem 100% no-repeat scroll,
     var(--kapi-card);
   text-align: center;
-}
-.kapi-diagram-wide {
-  --kapi-wide: max(100%, min(72rem, 100cqw - 2.5rem));
-  box-sizing: border-box;
-  width: var(--kapi-wide);
-  margin-left: calc(50% - var(--kapi-wide) / 2);
 }
 .kapi-diagram svg {
   display: inline-block;

@@ -21,7 +21,6 @@ const (
 	nodeGap     = 60.0
 	nodeGapLR   = 36.0
 	labelWrapAt = 22
-	wideAt      = 720.0
 	layerGap    = 52.0
 	labelGap    = 84.0
 	margin      = 12.0
@@ -239,9 +238,6 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 		extra = []string{"data-kapi-dir", dir}
 	}
 	class := "kapi-diagram kapi-diagram-" + kind
-	if kind == "architecture" && svg.maxX-svg.minX+2*margin > wideAt {
-		class += " kapi-diagram-wide"
-	}
 	writeStart(b, "figure", outerAttrs(n, class, extra...))
 	svg.finish(b, kind+" diagram: "+strings.Join(names, ", "))
 	writeLegend(b, legend)
@@ -369,9 +365,7 @@ func (s *svgWriter) finish(b *bytes.Buffer, title string) {
 	w, h := s.maxX-s.minX+2*margin, s.maxY-s.minY+2*margin
 	fmt.Fprintf(b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="%s %s %s %s" width="%s" height="%s" role="img" aria-label="`, f(x), f(y), f(w), f(h), f(w), f(h))
 	b.WriteString(attrEscaper.Replace(title))
-	b.WriteString(`"><title>`)
-	writeText(b, title)
-	fmt.Fprintf(b, `</title><defs><marker id="%s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="kd-arrow" d="M0,0 L10,5 L0,10 z"></path></marker></defs>`, s.marker)
+	fmt.Fprintf(b, `"><defs><marker id="%s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="kd-arrow" d="M0,0 L10,5 L0,10 z"></path></marker></defs>`, s.marker)
 	b.Write(s.body.Bytes())
 	b.WriteString("</svg>")
 }
