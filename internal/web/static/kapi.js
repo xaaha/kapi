@@ -195,7 +195,7 @@
       const primary = changed ? button("Save", "save", `Save (${SHORTCUT})`) : button("Cancel", "cancel", `Cancel (${SHORTCUT} or Escape)`);
       primary.classList.add("kapi-primary");
       primary.append(h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
-      bar.replaceChildren(h("span", { class: "kapi-bar-label", text: "Editing" }), primary,
+      bar.replaceChildren(primary,
         ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
     } else {
       const list = peers(selected);

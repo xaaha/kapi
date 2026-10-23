@@ -181,10 +181,6 @@
   align-items: stretch;
 }
 
-#kapi-chrome > .kapi-bar[data-place="outside"] .kapi-bar-label {
-  padding: 4px 6px;
-}
-
 #kapi-chrome > .kapi-bar[data-place="outside"] button {
   padding: 4px 8px;
   font-size: 13px;
@@ -205,12 +201,6 @@
   font-weight: 400;
   opacity: 0.8;
   white-space: pre;
-}
-
-#kapi-chrome .kapi-bar-label {
-  padding: 0 8px 0 6px;
-  font: 12px/1 var(--kapi-mono);
-  color: var(--kapi-muted);
 }
 
 #kapi-chrome .kapi-panel {
@@ -483,6 +473,8 @@
 }
 
 #kapi-chrome .kapi-msg-text {
+  font-size: 15px;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -519,6 +511,7 @@
   border-radius: var(--kapi-radius-sm);
   background: var(--kapi-bg);
   font: inherit;
+  font-size: 15px;
   color: inherit;
 }
 
