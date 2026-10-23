@@ -500,6 +500,28 @@ test("Undo shows only when there is something to undo, on the left so the theme 
   await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
 });
 
+test("the Kapi logo stays at the top left on wide desktops and scrolls away when there is no room", async () => {
+  const wide = await browser.open(server.url, { width: 1440, height: 700 });
+  try {
+    await wide.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
+    await wide.waitFor(`scrollY >= 1200`);
+    const [head, page] = await wide.eval(`[".kapi-site-head", "#kapi-page"].map((q) => (({ top, left, right, bottom }) => ({ top, left, right, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+    assert.ok(head.top >= 0 && head.bottom <= 80, JSON.stringify(head));
+    const textLeft = await wide.eval(`document.querySelector("#kapi-page").getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector("#kapi-page")).paddingLeft)`);
+    assert.ok(head.right <= textLeft, JSON.stringify({ head, page, textLeft }));
+  } finally {
+    await wide.close();
+  }
+  const narrow = await browser.open(server.url, { width: 1100, height: 700 });
+  try {
+    await narrow.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
+    await narrow.waitFor(`scrollY >= 1200`);
+    assert.ok(await narrow.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom < 0`));
+  } finally {
+    await narrow.close();
+  }
+});
+
 test("submits kapi-form answers", async () => {
   await click('input[name="when"][value="later"]');
   await click('input[name="envs"][value="staging"]');
