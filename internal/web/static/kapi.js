@@ -252,7 +252,7 @@
       setRoom(null);
       r = target.getBoundingClientRect();
       bar.style.left = `${r.right + BAR_GAP}px`;
-      bar.style.top = `${Math.max(r.top, Math.min(8, r.bottom - height))}px`;
+      bar.style.top = `${Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)}px`;
       return;
     }
     bar.dataset.place = "inside";
