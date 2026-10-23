@@ -780,10 +780,6 @@
       else if (!editing) select(null);
       return;
     }
-    if (e.key === "Enter" && !editing && selected && !e.isComposing && !focus?.closest("button, input, select, textarea, a[href], [contenteditable]")) {
-      e.preventDefault();
-      return startEdit();
-    }
     if (!inEditor || e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && editing.singleLine && inContent && e.shiftKey) {
       e.preventDefault();
