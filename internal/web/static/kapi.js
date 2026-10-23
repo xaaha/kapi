@@ -99,6 +99,7 @@
   const roomStyle = h("style");
   const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle);
   const phone = matchMedia("(max-width: 760px)");
+  phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
   const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
   let room = null;
@@ -201,12 +202,13 @@
       const list = peers(selected);
       const i = list.indexOf(selected);
       const archived = selected.getAttribute("data-kapi-state") === "archived";
-      bar.replaceChildren(...(archived ? [button("Unarchive", "unarchive")] : [button("Edit", "edit"), button("Archive", "archive")]),
+      const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
+      bar.replaceChildren(...(archived ? [button("Unarchive", "unarchive")] : [
+        ...(phone.matches ? [button("Edit", "edit")] : []),
+        ...(flip ? [button("Flip", "flip", "Flip between top to bottom and left to right")] : []),
+        button("Archive", "archive")]),
         button("↑", "up", "Move up"), button("↓", "down", "Move down"),
         button("Delete", "delete"));
-      if (!archived && selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]')) {
-        bar.querySelector('[data-action="edit"]').after(button("Flip", "flip", "Flip between top to bottom and left to right"));
-      }
       bar.querySelector('[data-action="up"]').disabled = i <= 0;
       bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
     }
@@ -777,6 +779,10 @@
       else if (!notice.hidden) notice.hidden = true;
       else if (!editing) select(null);
       return;
+    }
+    if (e.key === "Enter" && !editing && selected && !e.isComposing && !focus?.closest("button, input, select, textarea, a[href], [contenteditable]")) {
+      e.preventDefault();
+      return startEdit();
     }
     if (!inEditor || e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && editing.singleLine && inContent && e.shiftKey) {
