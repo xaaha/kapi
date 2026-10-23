@@ -134,13 +134,27 @@ test("on 409 it refetches the page and tells the user", async () => {
   assert.equal(requests("POST", "/ops")[0].body.rev, 1);
 });
 
+test("Enter edits the selected block and the desktop toolbar has no Edit button", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.equal(await page.eval(`document.querySelectorAll('.kapi-bar [data-action="edit"]').length`), 0);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  assert.equal(await page.eval(`!!document.querySelector('.kapi-bar [data-action="cancel"]')`), false);
+  await page.eval(`document.activeElement.blur()`);
+  await page.key("Enter");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="cancel"]')`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector('.kapi-bar [data-action="cancel"]')`);
+});
+
 test("shows the 422 inbound-link error and keeps the block", async () => {
   await select("bbbbbbbb");
   await click('.kapi-bar [data-action="delete"]');
   await until(async () => (await notice()) === "“Move the session store to the new clust…” is linked from “See the summary before starting.”");
   assert.equal(await page.eval(`document.querySelector(".kapi-notice").dataset.kind`), "error");
   assert.notEqual(await text("bbbbbbbb"), null);
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   assert.equal(await notice(), "");
 });
@@ -232,7 +246,7 @@ test("Enter does not send while an input method is composing", async () => {
 
 test("plain Enter in the block and source editors is a new line, not a save", async () => {
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.key("Enter");
   await page.type("next line");
@@ -243,7 +257,7 @@ test("plain Enter in the block and source editors is a new line, not a save", as
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
 
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.eval(`(a => a.setSelectionRange(a.value.length, a.value.length))(document.activeElement)`);
   await page.key("Enter");
@@ -258,7 +272,7 @@ test("plain Enter in the block and source editors is a new line, not a save", as
 
 test("edits a prose preset's rendered body in place and saves it as inner", async () => {
   await select("ffffffff");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
   assert.equal(await page.eval(`document.activeElement.isContentEditable`), true);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
@@ -277,7 +291,7 @@ test("a prose preset whose body does not round-trip to its source is edited as s
   await page.eval(`location.reload()`);
   await page.waitFor(`document.readyState === "complete" && !!document.querySelector('[data-kapi-id="ffffffff"] b')`);
   await select("ffffffff");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.equal(await page.eval(`document.activeElement.value`), "Copy during the <em>quiet</em> window.");
   assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 0);
@@ -289,7 +303,7 @@ test("edits table cells in place as text and sends only the changed cells", asyn
   await click('[data-kapi-id="gggggggg"] th');
   const order = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody td:first-child')].map((td) => td.textContent).join(",")`);
   assert.notEqual(await order(), "beta,Alpha,gamma");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.querySelectorAll('[data-kapi-id="gggggggg"] [contenteditable="plaintext-only"]').length === 8`);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-source").length`), 0);
   await page.eval(`(() => {
@@ -311,7 +325,7 @@ const shortcut = () => page.eval(`/Mac|iPhone|iPad/.test(navigator.platform) ? "
 test("the edit bar offers Save only after a change and highlights the default action", async () => {
   const mod = await shortcut();
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   assert.deepEqual(await barButtons(), [`*Cancel ${mod}`]);
   await page.type("!");
@@ -337,7 +351,7 @@ test("Cmd or Ctrl+Enter runs the default action in every editor, and Escape canc
   for (const { id, ready } of kinds) {
     for (const end of ["ctrl unchanged", "escape changed"]) {
       await select(id);
-      await click('.kapi-bar [data-action="edit"]');
+      await page.key("Enter");
       await page.waitFor(ready);
       if (end === "escape changed") {
         await page.type("x");
@@ -349,7 +363,7 @@ test("Cmd or Ctrl+Enter runs the default action in every editor, and Escape canc
     }
   }
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(kinds[3].ready);
   await page.type("x");
   await page.key("Enter", { ctrl: true });
@@ -358,7 +372,7 @@ test("Cmd or Ctrl+Enter runs the default action in every editor, and Escape canc
 
 test("in a table cell plain Enter runs the default action, and Tab moves to the bar", async () => {
   await click('[data-kapi-id="gggggggg"] th');
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
   await page.key("Tab");
   assert.equal(await page.eval(`document.activeElement.dataset.action`), "cancel");
@@ -367,7 +381,7 @@ test("in a table cell plain Enter runs the default action, and Tab moves to the 
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
   assert.equal(requests("POST", "/ops").length, 0);
 
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
   await page.type("!");
   await page.key("Tab");
@@ -380,7 +394,7 @@ test("in a table cell plain Enter runs the default action, and Tab moves to the 
 
 test("while a block is being edited the composer keys belong to the composer", async () => {
   await click('[data-kapi-id="gggggggg"] th');
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
   await page.type("!");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
@@ -410,7 +424,7 @@ test("text typed while a message is still sending stays in the composer", async 
 
 test("Shift+Enter in a table cell inserts nothing", async () => {
   await click('[data-kapi-id="gggggggg"] th');
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] th')`);
   await page.key("Enter", { shift: true });
   await new Promise((r) => setTimeout(r, 100));
@@ -421,7 +435,7 @@ test("Shift+Enter in a table cell inserts nothing", async () => {
 
 test("edits a block in place and posts its new outer HTML", async () => {
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   assert.equal(await page.eval(`document.activeElement.innerText`), "Move the session store to the new cluster in two steps.");
   await page.type(" Then verify.");
@@ -443,7 +457,7 @@ test("edits a block in place and posts its new outer HTML", async () => {
 
 test("Escape cancels an edit without posting", async () => {
   await select("aaaaaaaa");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
   await page.type("junk");
   await page.key("Escape");
@@ -490,7 +504,7 @@ test("submits kapi-form answers", async () => {
 test("ignores Escape and a second save while a save is in flight", async () => {
   server.state.opDelay = 300;
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   assert.equal(await page.eval(`document.activeElement.innerText`), "Move the session store to the new cluster in two steps.");
   await page.type(" Then verify.");
@@ -589,7 +603,7 @@ test("chrome styles do not reach page content that reuses chrome class names", a
 
 test("refetches other changed blocks while one is being edited", async () => {
   await select("aaaaaaaa");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
   server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
   server.push({ kind: "revision", target: "aaaaaaaa,cccccccc", text: "edited" });
@@ -603,7 +617,7 @@ test("refetches other changed blocks while one is being edited", async () => {
 
 test("a save sends the rev from when the edit started, and a stale save keeps the text", async () => {
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.type(" Mine.");
   server.bumpBehindBrowser("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Other tab wrote this.</p>');
@@ -627,7 +641,7 @@ test("a save sends the rev from when the edit started, and a stale save keeps th
 
 test("a stale source save keeps the source text", async () => {
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   const mine = "Mine.";
   await page.eval(`document.activeElement.value = ${JSON.stringify(mine)}`);
@@ -643,7 +657,7 @@ test("a stale source save keeps the source text", async () => {
 
 test("a whole-page refresh waits until the edit ends", async () => {
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.type(" Mine.");
   const loads = pageLoads();
@@ -670,7 +684,7 @@ test("server error text renders as text in the notice", async () => {
 
 test("edits a code block as its inner source in a textarea", async () => {
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.deepEqual(requests("GET", "/source/jjjjjjjj").map((r) => r.search), ["?part=inner"]);
   assert.equal(await page.eval(`document.activeElement.value`), "if a &lt; b {\n\tswap()\n}");
@@ -688,7 +702,7 @@ test("edits a code block as its inner source in a textarea", async () => {
 
 test("saving a source edit with no change just closes the editor", async () => {
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.key("Enter", { ctrl: true });
   await page.waitFor(`!document.querySelector(".kapi-source")`);
@@ -697,7 +711,7 @@ test("saving a source edit with no change just closes the editor", async () => {
 
 test("Escape cancels a source edit and shows the block again", async () => {
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   await page.type("junk");
   await page.key("Escape");
@@ -874,7 +888,7 @@ test("every table sorts by a header click, numeric or by locale, without an op",
 
 test("edits prose that contains a preset as source", async () => {
   await select("hhhhhhhh");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.deepEqual(requests("GET", "/source/hhhhhhhh").map((r) => r.search), ["?part=inner"]);
   assert.equal(await page.eval(`document.activeElement.value`), '<p>Before the cutover:</p><kapi-callout kind="note">Freeze writes.</kapi-callout>');
@@ -921,7 +935,7 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
   const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
   assert.ok(bar.left >= el.right && bar.left - el.right <= 12 && Math.abs(bar.top - el.top) <= 1, JSON.stringify({ bar, el }));
   assert.deepEqual(await page.eval(OVERLAPS), []);
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]')`);
   const editing = await barBox();
   assert.ok(Math.abs(editing.left - bar.left) <= 1 && Math.abs(editing.top - bar.top) <= 1, JSON.stringify({ bar, editing }));
@@ -948,7 +962,7 @@ test("in a narrow window the toolbar goes inside the ring above the block's cont
     const [bar, el] = await narrow.eval(`[".kapi-bar", '[data-kapi-id="bbbbbbbb"]'].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
     assert.ok(bar.top >= el.top && bar.right <= el.right && bar.left >= el.left, JSON.stringify({ bar, el }));
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
-    await narrow.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
+    await narrow.key("Enter");
     await narrow.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]') && document.querySelector(".kapi-bar").dataset.place === "inside"`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     await narrow.eval(`document.querySelector('.kapi-bar [data-action="cancel"]').click()`);
@@ -971,7 +985,7 @@ test("the block toolbar never covers page content", async () => {
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
 
@@ -1025,7 +1039,7 @@ test("the source editor is labelled and takes the block's place", async () => {
   await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').style.margin = "20px 0"`);
   const before = await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').getBoundingClientRect().top + scrollY`);
   await select("jjjjjjjj");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   const [label, top] = await page.eval(`(() => {
     const box = document.querySelector(".kapi-source").closest(".kapi-source-box");
@@ -1051,7 +1065,7 @@ const restartText = () => page.eval(`(b => b && !b.hidden ? b.textContent : "")(
 
 test("after a daemon restart the stream stops and the reopen command is shown, keeping unsaved text", async () => {
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.type(" Mine.");
   server.state.restarted = "kapi open plan.html";
@@ -1099,7 +1113,7 @@ const copyable = (selector) =>
 test("after a restart that reopened the page, the old tab says so and keeps unsent and unsaved text", async () => {
   await page.eval(`document.querySelector(".kapi-composer textarea").value = "unsent note"`);
   await select("bbbbbbbb");
-  await click('.kapi-bar [data-action="edit"]');
+  await page.key("Enter");
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
   await page.type(" Mine.");
   server.state.restarted = "kapi open plan.html";
