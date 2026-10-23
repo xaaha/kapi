@@ -1275,3 +1275,26 @@ test("sequence diagrams and prose show no Flip", async () => {
     assert.equal(await hasFlip(), false, id);
   }
 });
+
+async function mouseClickAt(x, y) {
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+test("clicking empty page space clears the selection, and clicking the chat keeps it", async () => {
+  await reopenWith([{ id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
+  const selected = () => page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId ?? null`);
+  await mouseClick('[data-kapi-id="pppppppp"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="pppppppp"]').hasAttribute("data-kapi-selected")`);
+
+  await mouseClick(".kapi-panel textarea");
+  assert.equal(await selected(), "pppppppp");
+
+  const { x, y } = await page.eval(`(() => {
+    const r = document.querySelector('[data-kapi-id="pppppppp"]').getBoundingClientRect();
+    return { x: r.x + 10, y: r.bottom + 40 };
+  })()`);
+  assert.equal(await page.eval(`!!document.elementFromPoint(${x}, ${y}).closest("[data-kapi-id], #kapi-chrome")`), false);
+  await mouseClickAt(x, y);
+  await page.waitFor(`!document.querySelector("[data-kapi-selected]")`);
+});

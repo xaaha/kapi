@@ -725,6 +725,13 @@
     if (el && main.contains(el)) select(el);
   });
 
+  document.addEventListener("click", (e) => {
+    if (editing || !selected || !getSelection().isCollapsed) return;
+    // A click can re-render the toolbar before it bubbles here, so e.target may already be detached.
+    if (e.composedPath().some((n) => n === root || (n instanceof Element && n.matches(BLOCK)))) return;
+    select(null);
+  });
+
   main.addEventListener("dblclick", (e) => {
     if (!editing && closest(e.target, BLOCK) === selected) startEdit();
   });
