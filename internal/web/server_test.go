@@ -367,6 +367,18 @@ func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	if resp := s.get("/p/0123456789abcdef/"); resp.code != http.StatusNotFound {
 		t.Errorf("unknown page: %d", resp.code)
 	}
+	for _, f := range []string{"hanken-grotesk", "hanken-grotesk-italic", "source-serif-4", "source-serif-4-italic"} {
+		resp := s.get("/static/fonts/" + f + ".woff2")
+		if resp.code != http.StatusOK || resp.header.Get("Content-Type") != "font/woff2" || !strings.HasPrefix(resp.body, "wOF2") {
+			t.Errorf("GET font %s: %d %q", f, resp.code, resp.header.Get("Content-Type"))
+		}
+	}
+	chrome := s.get("/static/chrome.css").body
+	for _, want := range []string{`font-family: "Hanken Grotesk"`, `url("fonts/hanken-grotesk.woff2")`, `font-family: "Source Serif 4"`, `url("fonts/source-serif-4.woff2")`} {
+		if !strings.Contains(chrome, want) {
+			t.Errorf("chrome.css lacks %s", want)
+		}
+	}
 }
 
 func TestThemeScriptRunsBeforeAnyStyle(t *testing.T) {

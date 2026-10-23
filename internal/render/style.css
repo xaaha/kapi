@@ -184,6 +184,7 @@ body {
 .kapi-plan-body > :last-child { margin-bottom: 0; }
 
 .kapi-badge {
+  font-family: var(--kapi-font);
   display: inline-block;
   padding: 0.0625rem 0.5rem;
   border-radius: 6px;
@@ -226,6 +227,13 @@ body {
 .kapi-kv dd { min-width: 0; margin: 0; }
 .kapi-kv dd > :first-child { margin-top: 0; }
 .kapi-kv dd > :last-child { margin-bottom: 0; }
+
+:where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),
+.kapi-callout-body,
+.kapi-details > :not(summary) {
+  font-family: var(--kapi-font-body);
+  font-size: 1.0625rem;
+}
 
 .kapi-details {
   margin: 1.25rem 0;
