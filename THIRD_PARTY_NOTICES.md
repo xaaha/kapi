@@ -28,7 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-The icons in `internal/web/static/kapi.js` are path data from
+The icons in `internal/web/static/kapi.js` and `internal/render/icons.go` are path data from
 [Phosphor Icons](https://phosphoricons.com) (`@phosphor-icons/core` 2.1.1), used
 under this licence:
 

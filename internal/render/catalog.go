@@ -76,10 +76,11 @@ func (s *Store) Source() ([]byte, uint64) {
 	{
 		Name:    "kapi-plan",
 		Summary: "Numbered steps with risks and open questions in line",
-		Example: `<!-- Children: <kapi-step>, <kapi-risk> and <kapi-question>, each holding prose. Steps are numbered in order. -->
+		Example: `<!-- Children: <kapi-step>, <kapi-risk> and <kapi-question>, each holding prose. Steps are numbered in order.
+     state on a step (done, failed, blocked, progress, waiting or info) shows its status icon in place of the number. -->
 <kapi-plan>
-  <kapi-step>Add the page store with revisions under <code>revs/</code>.</kapi-step>
-  <kapi-step>Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step state="done">Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step state="progress">Serve the rendered page and block endpoints.</kapi-step>
   <kapi-risk>Agents editing the file mid-request can race a browser op.</kapi-risk>
   <kapi-question>Should undo cross an agent edit?</kapi-question>
 </kapi-plan>`,
@@ -142,10 +143,13 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-badge",
-		Summary: "A small coloured label for a status, inside prose or a table cell",
+		Summary: "A small coloured label or status icon, inside prose or a table cell",
 		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default). Body: a word or two.
+     state: done (green check), failed or blocked (red x), progress (orange), waiting (grey clock) or info (blue).
+     It leads the label with its icon and sets the tone unless tone is given. With no body it is the icon alone.
      Use it inline: inside a <p>, an <li> or a table cell. -->
-<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>`,
+<p>PR #19 is <kapi-badge tone="green">merged</kapi-badge>, #18 is <kapi-badge tone="yellow">in review</kapi-badge>.</p>
+<p>Copy <kapi-badge state="done"></kapi-badge> Compare <kapi-badge state="progress"></kapi-badge> Flip <kapi-badge state="waiting">next</kapi-badge></p>`,
 	},
 	{
 		Name:    "kapi-kv",

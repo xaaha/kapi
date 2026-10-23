@@ -90,7 +90,7 @@ var presetAttrs = map[string][]string{
 	"kapi-diff":    {"lang", "file"},
 	"kapi-diagram": {"type", "dir"},
 	"kapi-form":    {"name"},
-	"kapi-badge":   {"tone"},
+	"kapi-badge":   {"tone", "state"},
 	"kapi-details": {"summary", "open"},
 }
 
@@ -114,6 +114,7 @@ func TestSanitizerAttributePayloads(t *testing.T) {
 		}
 		srcs = append(srcs,
 			`<kapi-compare><kapi-option title="`+q+`">x</kapi-option></kapi-compare>`,
+			`<kapi-plan><kapi-step state="`+q+`" data-kapi-id="`+q+`">x</kapi-step></kapi-plan>`,
 			`<kapi-checklist data-kapi-id="`+q+`"><kapi-task done="`+q+`" data-kapi-id="`+q+`">x</kapi-task></kapi-checklist>`,
 			`<kapi-kv data-kapi-id="`+q+`"><kapi-item key="`+q+`" data-kapi-id="`+q+`">x</kapi-item></kapi-kv>`,
 			`<kapi-form name="`+q+`"><kapi-choice name="`+q+`"><kapi-opt value="`+q+`">x</kapi-opt></kapi-choice><kapi-text name="`+q+`">x</kapi-text></kapi-form>`,

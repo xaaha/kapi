@@ -1,5 +1,6 @@
 <h1>Kapi component gallery</h1>
 <p>Every preset and every colour on one page. Badges sit in prose: <kapi-badge tone="red">failing</kapi-badge> <kapi-badge tone="orange">stale</kapi-badge> <kapi-badge tone="yellow">in review</kapi-badge> <kapi-badge tone="green">merged</kapi-badge> <kapi-badge tone="blue">open</kapi-badge> <kapi-badge tone="purple">new</kapi-badge> <kapi-badge tone="grey">draft</kapi-badge>.</p>
+<p>Status icons carry state at a glance: <kapi-badge state="done"></kapi-badge> done, <kapi-badge state="failed"></kapi-badge> failed, <kapi-badge state="progress"></kapi-badge> in progress, <kapi-badge state="waiting"></kapi-badge> waiting and <kapi-badge state="info"></kapi-badge> info. A badge with a state leads with its icon: <kapi-badge state="done">merged</kapi-badge> <kapi-badge state="blocked">blocked</kapi-badge>.</p>
 
 <kapi-kv>
   <kapi-item key="Owner">Track C, presets</kapi-item>
@@ -89,8 +90,9 @@
 
 <h2>Plan</h2>
 <kapi-plan>
-  <kapi-step>Add the page store with revisions under <code>revs/</code>.</kapi-step>
-  <kapi-step>Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step state="done">Add the page store with revisions under <code>revs/</code>.</kapi-step>
+  <kapi-step state="progress">Serve the rendered page and block endpoints.</kapi-step>
+  <kapi-step>Ship the browser chrome.</kapi-step>
   <kapi-risk>Agents editing the file mid-request can race a browser op.</kapi-risk>
   <kapi-question>Should undo cross an agent edit?</kapi-question>
 </kapi-plan>
