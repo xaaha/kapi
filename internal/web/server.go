@@ -64,7 +64,8 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
-	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg"} {
+	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
+		"fonts/hanken-grotesk.woff2", "fonts/hanken-grotesk-italic.woff2", "fonts/source-serif-4.woff2", "fonts/source-serif-4-italic.woff2"} {
 		s.mux.HandleFunc("GET /static/"+name, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFileFS(w, r, static, "static/"+name)
