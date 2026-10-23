@@ -111,7 +111,7 @@ var nestedProse = map[string]string{
 var nestedPresets = map[string]string{
 	"callout": `<kapi-callout kind="key" data-kapi-id="presaaaa"><p>inner</p></kapi-callout>`,
 	"code":    `<kapi-code lang="go" data-kapi-id="presaaaa">x := 1</kapi-code>`,
-	"table":   `<kapi-table sort="on" data-kapi-id="presaaaa"><table><tr><td>1</td></tr></table></kapi-table>`,
+	"table":   `<kapi-table data-kapi-id="presaaaa"><table><tr><td>1</td></tr></table></kapi-table>`,
 	"diagram": `<kapi-diagram data-kapi-id="presaaaa">a -> b</kapi-diagram>`,
 	"form": `<kapi-form name="f" data-kapi-id="presaaaa"><kapi-choice name="c"><kapi-opt value="v">V</kapi-opt></kapi-choice>` +
 		`<kapi-text name="t">T</kapi-text></kapi-form>`,

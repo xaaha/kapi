@@ -856,7 +856,7 @@ test("every request carries the token prefix and every POST is JSON", async () =
   for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
 });
 
-test("sortable tables sort by a header click, numeric or by locale, without an op", async () => {
+test("every table sorts by a header click, numeric or by locale, without an op", async () => {
   const column = (i) => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[${i}].textContent)`);
   const sortState = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] th')].map((th) => th.getAttribute("aria-sort"))`);
   const header = (i) => click(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
@@ -1274,4 +1274,27 @@ test("sequence diagrams and prose show no Flip", async () => {
     await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.equal(await hasFlip(), false, id);
   }
+});
+
+async function mouseClickAt(x, y) {
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+test("clicking empty page space clears the selection, and clicking the chat keeps it", async () => {
+  await reopenWith([{ id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
+  const selected = () => page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId ?? null`);
+  await mouseClick('[data-kapi-id="pppppppp"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="pppppppp"]').hasAttribute("data-kapi-selected")`);
+
+  await mouseClick(".kapi-panel textarea");
+  assert.equal(await selected(), "pppppppp");
+
+  const { x, y } = await page.eval(`(() => {
+    const r = document.querySelector('[data-kapi-id="pppppppp"]').getBoundingClientRect();
+    return { x: r.x + 10, y: r.bottom + 40 };
+  })()`);
+  assert.equal(await page.eval(`!!document.elementFromPoint(${x}, ${y}).closest("[data-kapi-id], #kapi-chrome")`), false);
+  await mouseClickAt(x, y);
+  await page.waitFor(`!document.querySelector("[data-kapi-selected]")`);
 });

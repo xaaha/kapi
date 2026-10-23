@@ -719,10 +719,17 @@
 
   main.addEventListener("click", (e) => {
     if (editing) return;
-    const th = closest(e.target, '[data-kapi-sort="on"] th');
+    const th = closest(e.target, ".kapi-table th");
     if (th && main.contains(th)) sortTable(th);
     const el = closest(e.target, BLOCK);
     if (el && main.contains(el)) select(el);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (editing || !selected || !getSelection().isCollapsed) return;
+    // A click can re-render the toolbar before it bubbles here, so e.target may already be detached.
+    if (e.composedPath().some((n) => n === root || (n instanceof Element && n.matches(BLOCK)))) return;
+    select(null);
   });
 
   main.addEventListener("dblclick", (e) => {

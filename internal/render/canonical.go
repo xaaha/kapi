@@ -11,7 +11,6 @@ var presetSourceAttrs = map[string]map[string]bool{
 	"kapi-callout": set("kind"),
 	"kapi-code":    set("lang", "file", "lines"),
 	"kapi-diff":    set("lang", "file"),
-	"kapi-table":   set("sort"),
 	"kapi-diagram": set("type", "dir"),
 	"kapi-form":    set("name"),
 	"kapi-choice":  set("name", "multiple"),

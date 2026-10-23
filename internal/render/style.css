@@ -127,10 +127,10 @@ body {
 .kapi-table th { white-space: nowrap; }
 .kapi-table tbody tr:last-child > * { border-bottom: 0; }
 .kapi-table tbody tr:hover { background: var(--kapi-subtle); }
-.kapi-table[data-kapi-sort="on"] th { cursor: pointer; user-select: none; }
-.kapi-table[data-kapi-sort="on"] th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-purple-text); }
-.kapi-table[data-kapi-sort="on"] th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-purple-text); }
+.kapi-table th { cursor: pointer; user-select: none; }
+.kapi-table th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
+.kapi-table th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-purple-text); }
+.kapi-table th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-purple-text); }
 
 .kapi-tone-red { --kapi-tone-fill: var(--kapi-red-fill); --kapi-tone-border: var(--kapi-red-border); --kapi-tone-text: var(--kapi-red-text); --kapi-tone-solid: var(--kapi-red-solid); --kapi-tone-tint: var(--kapi-red-tint); }
 .kapi-tone-orange { --kapi-tone-fill: var(--kapi-orange-fill); --kapi-tone-border: var(--kapi-orange-border); --kapi-tone-text: var(--kapi-orange-text); --kapi-tone-solid: var(--kapi-orange-solid); --kapi-tone-tint: var(--kapi-orange-tint); }
