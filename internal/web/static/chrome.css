@@ -286,8 +286,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding: 0 4px;
+  padding: 8px 16px;
   font-size: 12.5px;
 }
 
@@ -569,7 +568,8 @@
   }
 
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-panel-head,
-  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-scroll {
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-scroll,
+  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-presence {
     display: none;
   }
 
