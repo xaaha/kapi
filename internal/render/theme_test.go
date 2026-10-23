@@ -221,7 +221,7 @@ func TestPageStylesLeaveTheChatStatusClassAlone(t *testing.T) {
 
 func TestHighlightedPreDropsTheCardShadow(t *testing.T) {
 	m := regexp.MustCompile(`(?s)#kapi-page pre\.kapi-hl,\s*pre\.kapi-hl \{([^}]*)\}`).FindStringSubmatch(string(baseCSS))
-	if m == nil || !strings.Contains(m[1], "box-shadow: none;") {
+	if len(m) < 2 || !strings.Contains(m[1], "box-shadow: none;") {
 		t.Error("pre.kapi-hl inside a code card must set box-shadow: none, or it draws a second card shadow")
 	}
 }
