@@ -269,12 +269,12 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 
 | Method and path | Body | Response |
 |---|---|---|
-| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N">`, `kapi.js` |
-| `GET /p/{id}/blocks/{block}` | | `render.Block` output, header `Kapi-Rev` |
+| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N" data-undo="bool">`, `kapi.js` |
+| `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone) |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
-| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N}`; 409 `{"rev":current}` when stale; 422 `{"error":"..."}` |
+| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool}`; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 

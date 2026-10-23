@@ -354,7 +354,7 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -586,6 +586,27 @@ func TestASaveIsNotRefusedWhenOnlyAnotherBlockChanged(t *testing.T) {
 	}
 	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`); code != http.StatusConflict || out["rev"] != 3.0 {
 		t.Errorf("op on the block the agent changed: %d %v, want 409 rev 3", code, out)
+	}
+}
+
+func TestPageAndOpsSayWhetherThereIsAnythingToUndo(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	if page := s.get("/p/" + s.id + "/").body; !strings.Contains(page, `data-undo="false"`) {
+		t.Fatalf("fresh page should offer no undo: %.300s", page)
+	}
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`)
+	if code != http.StatusOK || out["undo"] != true {
+		t.Fatalf("archive: %d %v, want undo true", code, out)
+	}
+	if page := s.get("/p/" + s.id + "/").body; !strings.Contains(page, `data-undo="true"`) {
+		t.Errorf("page after an op should offer undo: %.300s", page)
+	}
+	if resp := s.get("/p/" + s.id + "/blocks/aaaaaaaa"); resp.header.Get("Kapi-Undo") != "true" {
+		t.Errorf("block Kapi-Undo = %q, want true", resp.header.Get("Kapi-Undo"))
+	}
+	code, out = s.post("/ops", `{"rev":2,"op":{"kind":"undo"}}`)
+	if code != http.StatusOK || out["undo"] != false {
+		t.Errorf("undo: %d %v, want undo false", code, out)
 	}
 }
 
