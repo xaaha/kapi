@@ -1281,6 +1281,32 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+test("the selection ring, the human message and the Send button use the blue accent", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
+  const [blue, solid, ring, send, mine] = await page.eval(`(() => {
+    const probe = (v) => {
+      const s = document.createElement("span");
+      s.style.color = v;
+      document.getElementById("kapi-chrome").append(s);
+      const c = getComputedStyle(s).color;
+      s.remove();
+      return c;
+    };
+    const msg = document.createElement("li");
+    msg.className = "kapi-msg";
+    msg.dataset.author = "human";
+    document.querySelector(".kapi-log").append(msg);
+    const mine = getComputedStyle(msg).borderTopColor;
+    msg.remove();
+    return [probe("var(--kapi-blue-text)"), probe("var(--kapi-blue-solid)"),
+      getComputedStyle(document.querySelector(".kapi-ring")).boxShadow, getComputedStyle(document.querySelector(".kapi-composer .kapi-primary")).backgroundColor, mine];
+  })()`);
+  assert.ok(ring.startsWith(blue), ring);
+  assert.equal(send, solid);
+  assert.equal(mine, await page.eval(`(() => { const s = document.createElement("span"); s.style.color = "var(--kapi-blue-border)"; document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; })()`));
+});
+
 test("the block toolbar shows icons with short labels, and Delete is drawn in the theme red", async () => {
   await select("bbbbbbbb");
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);

@@ -117,12 +117,12 @@ body {
 :where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
 :where(#kapi-page) li::marker { color: var(--kapi-faint); }
 :where(#kapi-page) a {
-  color: var(--kapi-purple-text);
+  color: var(--kapi-blue-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
-:where(#kapi-page) a:hover { color: var(--kapi-purple-text); text-decoration-thickness: 2px; }
+:where(#kapi-page) a:hover { color: var(--kapi-blue-text); text-decoration-thickness: 2px; }
 :where(#kapi-page) :where(strong, b) { font-weight: 650; }
 :where(#kapi-page) :where(code, kbd, samp) { font-family: var(--kapi-mono); font-size: 0.875em; }
 :where(#kapi-page) :not(pre) > code {
@@ -154,7 +154,7 @@ body {
 :where(#kapi-page) blockquote {
   margin: 1.25rem 0;
   padding: 0.1rem 0 0.1rem 1rem;
-  border-left: 3px solid var(--kapi-purple-border);
+  border-left: 3px solid var(--kapi-blue-border);
   color: var(--kapi-muted);
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
@@ -209,8 +209,8 @@ body {
 .kapi-table tbody tr:hover { background: var(--kapi-subtle); }
 .kapi-table th { cursor: pointer; user-select: none; }
 .kapi-table th::after { content: "\2195"; margin-left: 0.4em; color: var(--kapi-faint); font-size: 0.85em; }
-.kapi-table th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-purple-text); }
-.kapi-table th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-purple-text); }
+.kapi-table th[aria-sort="ascending"]::after { content: "\2191"; color: var(--kapi-blue-text); }
+.kapi-table th[aria-sort="descending"]::after { content: "\2193"; color: var(--kapi-blue-text); }
 
 .kapi-tone-red { --kapi-tone-fill: var(--kapi-red-fill); --kapi-tone-border: var(--kapi-red-border); --kapi-tone-text: var(--kapi-red-text); --kapi-tone-solid: var(--kapi-red-solid); --kapi-tone-tint: var(--kapi-red-tint); }
 .kapi-tone-orange { --kapi-tone-fill: var(--kapi-orange-fill); --kapi-tone-border: var(--kapi-orange-border); --kapi-tone-text: var(--kapi-orange-text); --kapi-tone-solid: var(--kapi-orange-solid); --kapi-tone-tint: var(--kapi-orange-tint); }
@@ -315,7 +315,7 @@ body {
 }
 .kapi-details[open] > summary::before { transform: translateY(-0.15rem) rotate(45deg); }
 .kapi-details > summary:hover { background: var(--kapi-subtle); }
-.kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
+.kapi-details > summary:focus-visible { outline: 2px solid var(--kapi-blue-text); outline-offset: 2px; }
 .kapi-details[open] > summary { border-bottom: 1px solid var(--kapi-border); border-radius: var(--kapi-radius) var(--kapi-radius) 0 0; }
 .kapi-details-body { padding: 0.75rem 1rem 0.9rem; }
 .kapi-details-body > :first-child { margin-top: 0; }
@@ -344,10 +344,10 @@ body {
   width: 1.05rem;
   height: 1.05rem;
   margin: 0.25rem 0 0;
-  accent-color: var(--kapi-purple-solid);
+  accent-color: var(--kapi-blue-solid);
   cursor: pointer;
 }
-.kapi-task input:focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
+.kapi-task input:focus-visible { outline: 2px solid var(--kapi-blue-text); outline-offset: 2px; }
 .kapi-task-body { min-width: 0; }
 .kapi-task-body > :first-child { margin-top: 0; }
 .kapi-task-body > :last-child { margin-bottom: 0; }
@@ -382,10 +382,10 @@ body {
 .kapi-code-file { margin-right: auto; color: var(--kapi-fg); font-weight: 600; overflow-wrap: anywhere; }
 .kapi-code-lang {
   padding: 0 0.5rem;
-  border: 1px solid var(--kapi-purple-border);
+  border: 1px solid var(--kapi-blue-border);
   border-radius: 999px;
-  background: var(--kapi-purple-fill);
-  color: var(--kapi-purple-text);
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
   font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: lowercase;
@@ -461,7 +461,7 @@ pre.kapi-hl {
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius);
   background: var(--kapi-surface);
-  box-shadow: inset 0 3px 0 var(--kapi-purple-text);
+  box-shadow: inset 0 3px 0 var(--kapi-blue-text);
 }
 #kapi-page .kapi-option-title,
 .kapi-option-title {
@@ -592,8 +592,8 @@ pre.kapi-hl {
   cursor: pointer;
 }
 .kapi-opt:hover { border-color: var(--kapi-border-strong); }
-.kapi-opt:has(input:checked) { border-color: var(--kapi-purple-text); background: var(--kapi-purple-fill); }
-.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-purple-text); }
+.kapi-opt:has(input:checked) { border-color: var(--kapi-blue-text); background: var(--kapi-blue-fill); }
+.kapi-opt input { flex: none; margin: 0.3rem 0 0; accent-color: var(--kapi-blue-text); }
 .kapi-text { display: flex; flex-direction: column; gap: 0.45rem; }
 .kapi-text-label { font-weight: 600; }
 .kapi-text textarea {
@@ -609,21 +609,21 @@ pre.kapi-hl {
   font-size: 0.95rem;
   resize: vertical;
 }
-.kapi-text textarea:focus { border-color: var(--kapi-purple-text); outline: 3px solid var(--kapi-purple-fill); outline-offset: 0; }
-.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-purple-text); outline-offset: 2px; }
+.kapi-text textarea:focus { border-color: var(--kapi-blue-text); outline: 3px solid var(--kapi-blue-fill); outline-offset: 0; }
+.kapi-form :is(input, button):focus-visible { outline: 2px solid var(--kapi-blue-text); outline-offset: 2px; }
 .kapi-form-actions { display: flex; justify-content: flex-end; }
 .kapi-form-actions button {
   padding: 0.5rem 1.1rem;
   border: 0;
   border-radius: var(--kapi-radius-sm);
-  background: var(--kapi-purple-solid);
+  background: var(--kapi-blue-solid);
   color: var(--kapi-on-solid);
   font: inherit;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
 }
-.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-purple-solid) 88%, var(--kapi-fg)); }
+.kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-blue-solid) 88%, var(--kapi-fg)); }
 
 .kapi-error {
   margin: 1.25rem 0;

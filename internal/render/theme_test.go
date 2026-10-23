@@ -142,3 +142,21 @@ func TestStylesUseOnlyThemeTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestPurpleIsOnlyAToneAndADiagramColour(t *testing.T) {
+	chrome, err := os.ReadFile("../web/static/chrome.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{".kapi-tone-purple": true, ".kapi-diagram .kd-node rect": true}
+	for name, css := range map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome)} {
+		for _, m := range regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`).FindAllStringSubmatch(css, -1) {
+			if !strings.Contains(m[2], "--kapi-purple-") {
+				continue
+			}
+			if sel := strings.TrimSpace(m[1]); !allowed[sel] {
+				t.Errorf("%s: %s uses a purple token; accents are blue", name, sel)
+			}
+		}
+	}
+}
