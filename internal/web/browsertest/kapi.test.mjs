@@ -1621,3 +1621,42 @@ test("clicking empty page space clears the selection, and clicking the chat keep
   await mouseClickAt(x, y);
   await page.waitFor(`!document.querySelector("[data-kapi-selected]")`);
 });
+
+test("a heading folds everything under it until the next heading of the same or higher level, per viewer", async () => {
+  await reopenWith([
+    { id: "h1h1h1h1", html: '<h1 data-kapi-id="h1h1h1h1">Gallery</h1>' },
+    { id: "p1p1p1p1", html: '<p data-kapi-id="p1p1p1p1">Intro.</p>' },
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">Callouts</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
+  ]);
+  const shown = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"]').checkVisibility()`);
+  const toggle = async (id) => {
+    const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+    await mouseClickAt(x, y);
+  };
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+
+  await toggle("h2aaaaaa");
+  assert.equal(await shown("p2p2p2p2"), false);
+  assert.equal(await shown("h2bbbbbb"), true);
+  assert.equal(await shown("p3p3p3p3"), true);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-selected")`), false);
+
+  await toggle("h1h1h1h1");
+  for (const id of ["p1p1p1p1", "h2aaaaaa", "p2p2p2p2", "h2bbbbbb", "p3p3p3p3"]) assert.equal(await shown(id), false, id);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h1h1h1h1"]').dataset.kapiFolded`), "5 blocks");
+
+  await page.eval(`location.reload()`);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h1h1h1h1"][data-kapi-folded]')`);
+  assert.equal(await shown("p3p3p3p3"), false);
+
+  await toggle("h1h1h1h1");
+  assert.equal(await shown("h2bbbbbb"), true);
+  assert.equal(await shown("p2p2p2p2"), false);
+  await toggle("h2aaaaaa");
+  assert.equal(await shown("p2p2p2p2"), true);
+  assert.equal(requests("POST", "/ops").length, 0);
+});

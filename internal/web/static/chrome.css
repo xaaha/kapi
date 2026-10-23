@@ -706,3 +706,58 @@
 #kapi-chrome .kapi-copy-code[data-kapi-copied] {
   color: var(--kapi-green-text);
 }
+
+#kapi-page > :is(h1, h2, h3, h4, h5, h6) {
+  position: relative;
+}
+
+#kapi-page > :is(h1, h2, h3, h4, h5, h6)::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -1.3rem;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.5rem;
+  background: var(--kapi-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+#kapi-page > :is(h1, h2, h3, h4, h5, h6):hover::before {
+  opacity: 0.85;
+}
+
+#kapi-page > [data-kapi-folded]::before {
+  opacity: 0.85;
+  transform: rotate(-90deg);
+}
+
+#kapi-page > [data-kapi-folded]::after {
+  content: attr(data-kapi-folded) " hidden";
+  margin-left: 0.6em;
+  color: var(--kapi-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+
+#kapi-page > [data-kapi-hidden] {
+  display: none !important;
+}
+
+@media (hover: none) {
+  #kapi-page > :is(h1, h2, h3, h4, h5, h6)::before {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-page > :is(h1, h2, h3, h4, h5, h6)::before {
+    transition: none;
+  }
+}

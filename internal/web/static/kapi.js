@@ -497,6 +497,8 @@
     copy.removeAttribute("data-kapi-selected");
     copy.removeAttribute("data-kapi-excerpt");
     copy.removeAttribute("data-kapi-bar-room");
+    copy.removeAttribute("data-kapi-folded");
+    copy.removeAttribute("data-kapi-hidden");
     return copy.outerHTML.replaceAll(ZWSP, "");
   }
 
@@ -581,6 +583,7 @@
     showUndo(fresh.dataset.undo);
     labelArchived(main);
     numberRows(main);
+    applyFolds();
     select(keep ? find(keep) : null);
   }
 
@@ -609,6 +612,7 @@
         select(next);
       }
     }
+    applyFolds();
   }
 
   function addEntry(ev, body) {
@@ -829,8 +833,49 @@
     });
   });
 
+  const FOLD_KEY = `kapi-folds:${location.pathname}`;
+  const folds = new Set((() => {
+    try {
+      return JSON.parse(localStorage.getItem(FOLD_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  })());
+  const FOLD_HIT = 28;
+  const levelOf = (el) => Number(/^H([1-6])$/.exec(el.tagName)?.[1] ?? 0);
+
+  function applyFolds() {
+    const open = [];
+    const close = (entry) => {
+      if (entry.folded) entry.el.dataset.kapiFolded = `${entry.count} block${entry.count === 1 ? "" : "s"}`;
+      else entry.el.removeAttribute("data-kapi-folded");
+    };
+    for (const el of main.children) {
+      const level = levelOf(el);
+      while (level && open.length && open.at(-1).level >= level) close(open.pop());
+      const hidden = open.some((entry) => entry.folded);
+      for (const entry of open) if (entry.folded) entry.count++;
+      el.toggleAttribute("data-kapi-hidden", hidden);
+      if (level) open.push({ el, level, folded: folds.has(idOf(el)), count: 0 });
+    }
+    while (open.length) close(open.pop());
+    if (selected?.hasAttribute("data-kapi-hidden")) select(null);
+  }
+
+  function toggleFold(heading) {
+    const id = idOf(heading);
+    if (!folds.delete(id)) folds.add(id);
+    try {
+      localStorage.setItem(FOLD_KEY, JSON.stringify([...folds]));
+    } catch {}
+    applyFolds();
+  }
+
   main.addEventListener("click", (e) => {
     if (editing) return;
+    const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
+    const gap = heading && heading.getBoundingClientRect().left - e.clientX;
+    if (gap > 0 && gap <= FOLD_HIT) return toggleFold(heading);
     const pill = closest(e.target, ".kapi-code-lang");
     const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
@@ -949,5 +994,6 @@
 
   labelArchived(main);
   numberRows(main);
+  applyFolds();
   connect();
 })();
