@@ -1281,6 +1281,18 @@ const DIAGRAMS = [
 ];
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
+test("the logo sits at the top left of the page as a site header, not in the chat panel", async () => {
+  const [head, page_, inPanel, label] = await page.eval(`(() => {
+    const box = (el) => (({ left, top, bottom }) => ({ left, top, bottom }))(el.getBoundingClientRect());
+    const head = document.querySelector("body > .kapi-site-head");
+    return [head && box(head), box(document.getElementById("kapi-page")), !!document.querySelector(".kapi-panel .kapi-logo"), head?.querySelector(".kapi-logo")?.getAttribute("aria-label")];
+  })()`);
+  assert.ok(head, "no site header");
+  assert.ok(head.left <= 24 && head.top <= 24 && head.bottom <= page_.top, JSON.stringify({ head, page_ }));
+  assert.equal(label, "Kapi");
+  assert.equal(inPanel, false);
+});
+
 test("the selection ring, the human message and the Send button use the blue accent", async () => {
   await select("bbbbbbbb");
   await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);

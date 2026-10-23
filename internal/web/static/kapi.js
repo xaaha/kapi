@@ -104,7 +104,7 @@
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), ...themeToggle(),
+    h("header", { class: "kapi-panel-head" }, ...themeToggle(),
       button("Undo", "undo", "Undo the last change")),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
@@ -117,6 +117,8 @@
   const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
   let room = null;
   document.body.append(root);
+  main.before(h("header", { class: "kapi-site-head" },
+    h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
 
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
