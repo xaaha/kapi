@@ -118,7 +118,6 @@ body {
   background: color-mix(in srgb, var(--kapi-border) 70%, var(--kapi-surface));
   border-bottom-color: var(--kapi-border-strong);
 }
-:where(#kapi-page) tbody tr:nth-child(even) > td { background: color-mix(in srgb, var(--kapi-subtle) 50%, var(--kapi-surface)); }
 :where(#kapi-page) caption { caption-side: bottom; padding-top: 0.5rem; color: var(--kapi-muted); font-size: 0.875rem; text-align: left; }
 
 .kapi-table {

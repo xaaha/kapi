@@ -187,7 +187,7 @@ test("sends a chat message with Enter, targeted at the selected block", async ()
   await page.key("Enter");
   await page.waitFor(`document.querySelector(".kapi-msg .kapi-msg-text")?.textContent === "Looks good"`);
   assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", target: "", text: "Looks good" });
-  await page.waitFor(`document.querySelector(".kapi-composer textarea").value === ""`);
+  await page.waitFor(`document.querySelector(".kapi-composer textarea").value === "" && !document.querySelector(".kapi-composer .kapi-primary").disabled`);
 
   await select("bbbbbbbb");
   assert.equal(await page.eval(`document.querySelector(".kapi-target").textContent`), "About: Move the session store to the new clust…  ×");
