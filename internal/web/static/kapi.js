@@ -118,7 +118,7 @@
   let room = null;
   document.body.append(root);
   main.before(h("header", { class: "kapi-site-head" },
-    h("span", { class: "kapi-logo", role: "img", "aria-label": "Kapi", title: "Kapi" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
+    h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
 
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
