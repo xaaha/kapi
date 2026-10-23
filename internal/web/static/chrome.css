@@ -727,12 +727,11 @@
   transition: opacity 0.15s, transform 0.15s;
 }
 
-#kapi-page > :is(h1, h2, h3, h4, h5, h6):hover::before {
+#kapi-page > :is(h1, h2, h3, h4, h5, h6):is(:hover, [data-kapi-selected])::before {
   opacity: 0.85;
 }
 
 #kapi-page > [data-kapi-folded]::before {
-  opacity: 0.85;
   transform: rotate(-90deg);
 }
 
@@ -748,12 +747,6 @@
 
 #kapi-page > [data-kapi-hidden] {
   display: none !important;
-}
-
-@media (hover: none) {
-  #kapi-page > :is(h1, h2, h3, h4, h5, h6)::before {
-    opacity: 0.5;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

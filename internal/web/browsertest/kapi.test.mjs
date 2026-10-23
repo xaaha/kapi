@@ -1644,6 +1644,8 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(await shown("p3p3p3p3"), true);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-selected")`), false);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
 
   await toggle("h1h1h1h1");
   for (const id of ["p1p1p1p1", "h2aaaaaa", "p2p2p2p2", "h2bbbbbb", "p3p3p3p3"]) assert.equal(await shown(id), false, id);
