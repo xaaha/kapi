@@ -112,14 +112,13 @@
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
-  const roomStyle = h("style");
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
-  const root = h("div", { id: "kapi-chrome" }, ring, panel, roomStyle, copyButton);
+  const root = h("div", { id: "kapi-chrome" }, ring, panel, copyButton);
   const phone = matchMedia("(max-width: 760px)");
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
+  const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
   const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
-  let room = null;
   document.body.append(root);
   showUndo(main.dataset.undo);
   main.before(h("header", { class: "kapi-site-head" },
@@ -239,51 +238,48 @@
     placeRing();
   }
 
-  function setRoom(el, px) {
-    if (room?.el === el && room.px === px) return;
-    if (room && room.el !== el) room.el.removeAttribute("data-kapi-bar-room");
-    if (!el) {
-      room = null;
-      roomStyle.textContent = "";
-      return;
-    }
-    const base = room?.el === el ? room.base : parseFloat(getComputedStyle(el).paddingTop) || 0;
-    room = { el, px, base };
-    el.setAttribute("data-kapi-bar-room", "");
-    roomStyle.textContent = `#kapi-page [data-kapi-bar-room] { padding-top: ${base + px}px !important; }`;
-  }
-
   function dockBar(floating) {
     if (floating && bar.parentElement !== root) root.append(bar);
     if (!floating && bar.parentElement !== panel) panel.insertBefore(bar, composer);
     if (!floating) bar.removeAttribute("data-place");
   }
 
+  function coversContent(box, target) {
+    const hit = (r) => r.width && r.height && r.left < box.right && box.left < r.right && r.top < box.bottom && box.top < r.bottom;
+    const range = document.createRange();
+    const within = (el) => [...el.childNodes].some((n) => {
+      if (n.nodeType === Node.TEXT_NODE) {
+        if (!n.data.trim()) return false;
+        range.selectNodeContents(n);
+        return [...range.getClientRects()].some(hit);
+      }
+      if (n.nodeType !== Node.ELEMENT_NODE) return false;
+      const r = n.getBoundingClientRect();
+      if (n.matches(SOLID)) return hit(r);
+      return (!r.width && !r.height) || hit(r) ? within(n) : false;
+    });
+    const t = target.getBoundingClientRect();
+    return hit(new DOMRect(t.x - 4, t.y - 4, t.width + 8, t.height + 8)) || within(main);
+  }
+
   function placeBar() {
     const target = editing?.box || selected;
-    if (phone.matches || bar.hidden || !target?.isConnected) {
-      dockBar(false);
-      return setRoom(null);
-    }
+    if (phone.matches || bar.hidden || !target?.isConnected) return dockBar(false);
     dockBar(true);
-    bar.dataset.place = "outside";
     const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
-    let r = target.getBoundingClientRect();
-    let { width, height } = bar.getBoundingClientRect();
-    if (r.right + BAR_GAP + width <= areaRight - 4) {
-      setRoom(null);
-      r = target.getBoundingClientRect();
-      bar.style.left = `${r.right + BAR_GAP}px`;
-      bar.style.top = `${Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)}px`;
-      return;
-    }
-    bar.dataset.place = "inside";
-    ({ width, height } = bar.getBoundingClientRect());
-    setRoom(target, Math.ceil(height) + 8);
-    r = target.getBoundingClientRect();
-    if (r.top + 4 < 0) return dockBar(false);
-    bar.style.left = `${r.right - width - 4}px`;
-    bar.style.top = `${r.top + 4}px`;
+    const r = target.getBoundingClientRect();
+    const { width, height } = bar.getBoundingClientRect();
+    const left = Math.min(r.right, areaRight - 4) - width;
+    const spot = [
+      ["outside", r.right + BAR_GAP, Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)],
+      ["above", left, r.top - BAR_GAP - height],
+      ["below", left, r.bottom + BAR_GAP],
+    ].find(([, x, y]) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight &&
+      !coversContent(new DOMRect(x, y, width, height), target));
+    if (!spot) return dockBar(false);
+    bar.dataset.place = spot[0];
+    bar.style.left = `${spot[1]}px`;
+    bar.style.top = `${spot[2]}px`;
   }
 
   function placeRing() {

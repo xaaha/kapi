@@ -1087,7 +1087,7 @@ test("on a tall block the toolbar stays in view while the block scrolls", async 
   await page.waitFor(`(b => b.top >= 0 && b.bottom <= innerHeight)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
   await page.eval(`scrollTo(0, document.body.scrollHeight)`);
-  await page.waitFor(`(b => b.bottom <= document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().bottom + 1)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+  await page.waitFor(`(b => b.parentElement.classList.contains("kapi-panel") || b.getBoundingClientRect().bottom <= document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().bottom + 1)(document.querySelector(".kapi-bar"))`);
 });
 
 test("the toolbar is one row and stays fully in view for a block at the bottom of the window", async () => {
@@ -1104,28 +1104,24 @@ test("the toolbar is one row and stays fully in view for a block at the bottom o
   assert.deepEqual(await page.eval(OVERLAPS), []);
 });
 
-test("in a narrow window the toolbar goes inside the ring above the block's content", async () => {
+test("in a narrow window the toolbar floats at the block's top right edge, and docks when the block's top scrolls away", async () => {
   const narrow = await browser.open(server.url, { width: 900, height: 700 });
   try {
     await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
-    await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "inside"`);
-    assert.equal(await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-bar-room")`), true);
+    await narrow.waitFor(`["above", "below"].includes(document.querySelector(".kapi-bar").dataset.place)`);
     const [bar, el] = await narrow.eval(`[".kapi-bar", '[data-kapi-id="bbbbbbbb"]'].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
-    assert.ok(bar.top >= el.top && bar.right <= el.right && bar.left >= el.left, JSON.stringify({ bar, el }));
+    assert.ok((bar.bottom <= el.top - 4 || bar.top >= el.bottom + 4) && Math.abs(bar.right - el.right) <= 1, JSON.stringify({ bar, el }));
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     await narrow.eval(`document.querySelector("[data-kapi-selected]").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
-    await narrow.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]') && document.querySelector(".kapi-bar").dataset.place === "inside"`);
+    await narrow.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]') && document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     await narrow.eval(`document.querySelector('.kapi-bar [data-action="cancel"]').click()`);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
-    await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "inside"`);
     await narrow.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
     await narrow.waitFor(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
     assert.equal(await narrow.eval(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").checkVisibility()`), true);
-    await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
-    await narrow.waitFor(`!document.querySelector('[data-kapi-id="cccccccc"]').hasAttribute("data-kapi-bar-room")`);
   } finally {
     await narrow.close();
   }
@@ -1151,6 +1147,39 @@ test("the block toolbar never covers page content", async () => {
   } finally {
     await phone.close();
   }
+});
+
+const COMPARE = [
+  { id: "aaaaaaaa", html: '<h2 data-kapi-id="aaaaaaaa">Compare</h2>' },
+  {
+    id: "kkkkkkkk",
+    html:
+      '<div data-kapi-id="kkkkkkkk" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">' +
+      '<section data-kapi-id="oooooooo" style="padding: 16px"><h3 style="margin: 0">Server-sent events</h3><p>One long GET per tab.</p></section>' +
+      '<section data-kapi-id="qqqqqqqq" style="padding: 16px"><h3 style="margin: 0">WebSocket</h3><p>Two-way, with its own replay.</p></section></div>',
+  },
+  { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in two steps, copying first.</p>' },
+  { id: "cccccccc", html: '<ul data-kapi-id="cccccccc"><li>Copy data</li><li>Flip reads</li></ul>' },
+];
+
+test("selecting a block never moves the page, and its toolbar covers no block's content, at every desktop width", async () => {
+  await reopenWith(COMPARE);
+  for (const width of [900, 1100, 1280, 1440, 1920]) {
+    await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
+    await page.waitFor(`innerWidth === ${width}`);
+    for (const id of ["aaaaaaaa", "kkkkkkkk", "oooooooo", "qqqqqqqq", "bbbbbbbb", "cccccccc"]) {
+      await page.key("Escape");
+      await page.waitFor(`!document.querySelector("[data-kapi-selected]")`);
+      const boxes = `JSON.stringify([...document.querySelectorAll("#kapi-page [data-kapi-id]")].map((e) => (({ left, top, width, height }) => [left, top, width, height])(e.getBoundingClientRect())))`;
+      const before = await page.eval(boxes);
+      await select(id);
+      await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+      await page.eval(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+      assert.equal(await page.eval(boxes), before, `${id} at ${width}`);
+      assert.deepEqual(await page.eval(OVERLAPS), [], `${id} at ${width}`);
+    }
+  }
+  await page.call("Emulation.clearDeviceMetricsOverride");
 });
 
 test("block tags name presets and jump to and flash the block", async () => {
