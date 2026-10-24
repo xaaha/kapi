@@ -328,7 +328,8 @@ func clearPresence(l *eventlog.Log) error {
 	events, _ := l.After(0)
 	last := map[string]string{}
 	var readers []string
-	for _, e := range events {
+	for i := range events {
+		e := &events[i]
 		if e.Kind == eventlog.KindPresence {
 			if _, ok := last[e.Author]; !ok {
 				readers = append(readers, e.Author)
@@ -585,7 +586,8 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 
 	for {
 		events, changed := l.After(sent)
-		for _, e := range events {
+		for i := range events {
+			e := &events[i]
 			sent = e.Seq
 			if e.Author == req.Reader {
 				mu.Lock()
@@ -605,7 +607,7 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			mu.Lock()
 			delivered = e.Seq
 			mu.Unlock()
-			if err := enc.Encode(Response{Event: &e}); err != nil {
+			if err := enc.Encode(Response{Event: e}); err != nil {
 				return
 			}
 		}

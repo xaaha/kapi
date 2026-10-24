@@ -708,6 +708,40 @@ func TestMessagesAndAnswersAppendEvents(t *testing.T) {
 	}
 }
 
+func TestNotesAppendAsOneBatchWithTheirQuotes(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p><p data-kapi-id="bbbbbbbb">Two</p>`)
+	body := `{"notes":[{"target":"aaaaaaaa","quote":"One","prefix":"","suffix":"","text":"why?"},` +
+		`{"target":"aaaaaaaa,bbbbbbbb","part":"row 2, Owner","quote":"One Two","prefix":"x","suffix":"y","text":"merge these"}],"text":"and tidy up"}`
+	if code, out := s.post("/notes", body); code != http.StatusOK || out["seq"] != 3.0 {
+		t.Fatalf("notes: %d %v", code, out)
+	}
+	ev := s.events()
+	if len(ev) != 3 {
+		t.Fatalf("events = %+v", ev)
+	}
+	if e := ev[1]; e.Kind != "note" || e.Author != "human" || e.Target != "aaaaaaaa,bbbbbbbb" || e.Part != "row 2, Owner" ||
+		e.Quote != "One Two" || e.Prefix != "x" || e.Suffix != "y" || e.Text != "merge these" {
+		t.Errorf("second note = %+v", e)
+	}
+	if e := ev[2]; e.Kind != "message" || e.Target != "" || e.Text != "and tidy up" {
+		t.Errorf("trailing message = %+v", e)
+	}
+	for _, bad := range []string{
+		`{"notes":[]}`,
+		`{"notes":[],"text":"  "}`,
+		`{"notes":[{"target":"aaaaaaaa","text":" "}]}`,
+		`{"notes":[{"target":"","text":"no target"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","text":"ok"},{"target":"aaaaaaaa","text":""}]}`,
+	} {
+		if code, _ := s.post("/notes", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /notes %s: %d, want 422", bad, code)
+		}
+	}
+	if n := len(s.events()); n != 3 {
+		t.Errorf("rejected batches appended events: %d, want 3", n)
+	}
+}
+
 type sse struct {
 	t    *testing.T
 	msgs chan [2]string
