@@ -326,6 +326,13 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 `{id}` is the same 16-hex page id the daemon already uses for
 `pages/<id>/`.
 
+Ask AI writes the notes: on any text selection, across blocks too, it
+targets the blocks the selection touches, and on a selected block it targets
+the block, or the table cell last clicked in it. Queued notes stay in the
+browser's `localStorage` under `kapi-drafts:<page id>`, editable and
+removable, until one Send posts them, with any typed message, to
+`POST /p/{id}/notes`. The chat box sends plain messages with no target.
+
 ### Events stream
 
 The event log is `pages/<id>/events.ndjson`, one JSON event per line, and

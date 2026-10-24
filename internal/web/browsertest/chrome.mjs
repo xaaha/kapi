@@ -111,10 +111,10 @@ export async function launch() {
           }
           throw new Error(`timed out waiting for ${expression} (last: ${last})`);
         },
-        async key(key, { ctrl = false, shift = false } = {}) {
-          const code = { Enter: 13, Escape: 27, Tab: 9 }[key] || 0;
-          const base = { key, code: key, windowsVirtualKeyCode: code, modifiers: (ctrl ? 2 : 0) | (shift ? 8 : 0) };
-          const down = key === "Enter" ? { type: "keyDown", text: "\r" } : { type: "rawKeyDown" };
+        async key(key, { ctrl = false, shift = false, meta = false, commands } = {}) {
+          const code = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, Delete: 46 }[key] || (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0);
+          const base = { key, code: key, windowsVirtualKeyCode: code, modifiers: (ctrl ? 2 : 0) | (meta ? 4 : 0) | (shift ? 8 : 0) };
+          const down = key === "Enter" ? { type: "keyDown", text: "\r" } : { type: "rawKeyDown", ...(commands && { commands }) };
           await call("Input.dispatchKeyEvent", { ...down, ...base });
           await call("Input.dispatchKeyEvent", { type: "keyUp", ...base });
         },
