@@ -249,6 +249,54 @@ test("the delete notice does not appear for a delete made by the agent", async (
   assert.equal(await undoNote(), null);
 });
 
+test("the delete notice goes away when undo stops being available", async () => {
+  await deleteBlock("cccccccc");
+  server.state.history = [];
+  server.push({ kind: "revision", target: "", text: "file changed" });
+  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("a refused Undo keeps the notice so the reader can retry", async () => {
+  await deleteBlock("cccccccc");
+  server.state.rev++;
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await notice()) !== "");
+  assert.notEqual(await undoNote(), null);
+  assert.equal(await page.eval(`document.querySelector("#kapi-page .kapi-undo-note button").disabled`), false);
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice neither counts as a folded block nor gets folded away", async () => {
+  await reopenWith([
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">Callouts</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
+  ]);
+  await deleteBlock("h2bbbbbb");
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "2 blocks");
+  assert.equal(await page.eval(`document.querySelector("#kapi-page .kapi-undo-note").checkVisibility()`), true);
+});
+
+test("a second click on Undo lands on the notice and does nothing", async () => {
+  await deleteBlock("cccccccc");
+  server.state.opDelay = 400;
+  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width - 20, y: top + height / 2 }))(document.querySelector("#kapi-page .kapi-undo-note button").getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await mouseClickAt(x, y);
+  assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected]")`), false);
+  assert.notEqual(await undoNote(), null);
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.equal(requests("POST", "/ops").length, 2);
+  assert.equal(await undoNote(), null);
+});
+
 test("the delete notice fits the 390px phone layout", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {

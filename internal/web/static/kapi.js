@@ -30,6 +30,7 @@
   let flushTimer = 0;
   let queue = Promise.resolve();
   let noticeTimer = 0;
+  let note = null;
   let retryDelay = 1000;
 
   function h(tag, props = {}, ...kids) {
@@ -106,7 +107,10 @@
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const undoButton = button("Undo", "undo", "Undo the last change");
-  const showUndo = (can) => (undoButton.hidden = String(can) !== "true");
+  const showUndo = (can) => {
+    undoButton.hidden = String(can) !== "true";
+    if (undoButton.hidden) dismissNote();
+  };
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
@@ -195,7 +199,6 @@
   }
 
   const NOTE_MS = 6000;
-  let note = null;
 
   function dismissNote() {
     if (!note) return;
@@ -384,7 +387,7 @@
 
   async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
     notice.hidden = true;
-    dismissNote();
+    if (kind !== "undo") dismissNote();
     busy = true;
     renderBar();
     try {
@@ -574,7 +577,15 @@
   }
 
   async function action(name) {
-    if (name === "undo") return (await op("undo", { id: "" }))?.ok && refresh(null);
+    if (name === "undo") {
+      const pill = note?.el.querySelector("button");
+      if (pill) pill.disabled = true;
+      const res = await op("undo", { id: "" });
+      if (pill) pill.disabled = false;
+      if (!res?.ok) return;
+      await refresh(null);
+      return dismissNote();
+    }
     if (name === "save") return saveEdit();
     if (name === "cancel") return cancelEdit();
     if (!selected) return;
@@ -916,6 +927,7 @@
       else entry.el.removeAttribute("data-kapi-folded");
     };
     for (const el of main.children) {
+      if (el === note?.el) continue;
       const level = levelOf(el);
       while (level && open.length && open.at(-1).level >= level) close(open.pop());
       const hidden = open.some((entry) => entry.folded);
