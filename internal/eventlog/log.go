@@ -20,6 +20,7 @@ type Event struct {
 	Author string    `json:"author"`
 	Kind   string    `json:"kind"`
 	Target string    `json:"target,omitempty"`
+	Rev    uint64    `json:"rev,omitempty"`
 	Text   string    `json:"text"`
 }
 

@@ -49,6 +49,7 @@ type Op struct {
 type Summary struct {
 	Text string
 	IDs  []string
+	Seq  uint64
 }
 
 type Store struct {
@@ -61,14 +62,26 @@ type Store struct {
 
 	conversion string
 	held       []heldFile
+
+	log    *eventlog.Log
+	event  *revEvent
+	logged uint64
 }
 
 type state struct {
 	Rev  uint64     `json:"rev"`
 	Undo []uint64   `json:"undo"`
 	Next *state     `json:"next,omitempty"`
-	Temp string     `json:"temp,omitempty"`
-	Held []heldFile `json:"held,omitempty"`
+	Temp  string     `json:"temp,omitempty"`
+	Held  []heldFile `json:"held,omitempty"`
+	Event *revEvent  `json:"event,omitempty"`
+}
+
+type revEvent struct {
+	Rev    uint64   `json:"rev"`
+	Author string   `json:"author"`
+	Text   string   `json:"text"`
+	IDs    []string `json:"ids,omitempty"`
 }
 
 type heldFile struct {
@@ -100,11 +113,17 @@ func ID(path string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-func Open(home, path string) (*Store, error) {
+func Open(home, path string, l *eventlog.Log) (*Store, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("page path must be absolute: %q", path)
 	}
-	s := &Store{path: path, dir: filepath.Join(home, "pages", ID(path))}
+	s := &Store{path: path, dir: filepath.Join(home, "pages", ID(path)), log: l}
+	events, _ := l.After(0)
+	for _, e := range events {
+		if e.Kind == "revision" {
+			s.logged = max(s.logged, e.Rev)
+		}
+	}
 	if err := os.MkdirAll(filepath.Join(s.dir, "revs"), 0o700); err != nil {
 		return nil, err
 	}
@@ -148,6 +167,9 @@ func Open(home, path string) (*Store, error) {
 	if _, err := s.checkHeld(true); err != nil {
 		return nil, err
 	}
+	if _, err := s.logEvent(); err != nil {
+		return nil, err
+	}
 	for attempt := 0; ; attempt++ {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -160,12 +182,16 @@ func Open(home, path string) (*Store, error) {
 		if s.rev > 0 && bytes.Equal(raw, s.src) && bytes.Equal(src, raw) {
 			return s, nil
 		}
-		err = s.commit(src, raw, s.rev+1, s.undo)
+		var ev *revEvent
+		if text != "" {
+			ev = &revEvent{Author: "kapi", Text: text}
+		}
+		_, err = s.commit(src, raw, s.rev+1, s.undo, ev)
 		if errors.Is(err, errFileChanged) && attempt < 10 {
 			continue
 		}
 		if errors.Is(err, errFileChanged) {
-			err = s.commit(raw, raw, s.rev+1, s.undo)
+			_, err = s.commit(raw, raw, s.rev+1, s.undo, nil)
 		}
 		if err != nil {
 			return nil, err
@@ -178,7 +204,7 @@ func Open(home, path string) (*Store, error) {
 }
 
 func (s *Store) load(st *state) error {
-	s.rev, s.undo = st.Rev, st.Undo
+	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
 	if s.rev > 0 {
 		src, err := os.ReadFile(s.revPath(s.rev))
 		if err != nil {
@@ -194,7 +220,7 @@ func (s *Store) load(st *state) error {
 		return err
 	}
 	if after, err := os.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
-		s.src, s.rev, s.undo = after, st.Next.Rev, st.Next.Undo
+		s.src, s.rev, s.undo, s.event = after, st.Next.Rev, st.Next.Undo, st.Next.Event
 	}
 	return nil
 }
@@ -408,27 +434,26 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil || bytes.Equal(raw, s.src) {
 			return Summary{}, false, err
 		}
-		old := s.src
 		src, text, err := s.absorb(raw, s.rev+1)
 		if err != nil {
 			return Summary{}, false, err
 		}
-		err = s.commit(src, raw, s.rev+1, s.undo)
+		ids := changedBlocks(s.src, src)
+		summary := "edited in the file"
+		if len(ids) > 0 {
+			summary += ": " + describeIDs(src, ids)
+		}
+		if text != "" {
+			summary += "; " + text
+		}
+		seq, err := s.commit(src, raw, s.rev+1, s.undo, &revEvent{Author: "file", Text: summary, IDs: ids})
 		if errors.Is(err, errFileChanged) {
 			continue
 		}
 		if err != nil {
 			return Summary{}, false, err
 		}
-		ids := changedBlocks(old, s.src)
-		summary := "edited in the file"
-		if len(ids) > 0 {
-			summary += ": " + describeIDs(s.src, ids)
-		}
-		if text != "" {
-			summary += "; " + text
-		}
-		return Summary{Text: summary, IDs: ids}, true, nil
+		return Summary{Text: summary, IDs: ids, Seq: seq}, true, nil
 	}
 	return Summary{}, false, nil
 }
@@ -466,10 +491,11 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 		if err != nil {
 			return s.rev, Summary{}, err
 		}
-		if err := s.commit(src, raw, s.rev+1, s.undo[:n-1]); err != nil {
+		sum := Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}
+		if sum.Seq, err = s.commit(src, raw, s.rev+1, s.undo[:n-1], &revEvent{Author: "human", Text: sum.Text}); err != nil {
 			return s.rev, Summary{}, stale(err)
 		}
-		return s.rev, Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}, nil
+		return s.rev, sum, nil
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
@@ -489,7 +515,7 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	if bytes.Equal(src, s.src) {
 		return s.rev, Summary{}, nil
 	}
-	if err := s.commit(src, raw, s.rev+1, append(s.undo, s.rev)); err != nil {
+	if sum.Seq, err = s.commit(src, raw, s.rev+1, append(s.undo, s.rev), &revEvent{Author: "human", Text: sum.Text, IDs: sum.IDs}); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}
 	return s.rev, sum, nil
@@ -537,36 +563,42 @@ var (
 	writeTemp      = (*os.File).Write
 )
 
-func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
+func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent) (uint64, error) {
+	if _, err := s.logEvent(); err != nil {
+		return 0, err
+	}
 	swapped, err := s.checkHeld(false)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if swapped {
-		return errFileChanged
+		return 0, errFileChanged
 	}
 	if !bytes.Equal(src, base) {
 		quiet, err := settled(s.path, placement{b: base})
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if !quiet {
-			return errFileChanged
+			return 0, errFileChanged
 		}
 	}
 	if err := writeAtomic(s.revPath(rev), src); err != nil {
-		return err
+		return 0, err
+	}
+	if ev != nil {
+		ev.Rev = rev
 	}
 	next := state{Rev: rev, Undo: undo}
 	if !bytes.Equal(src, base) {
 		now := state{Rev: s.rev, Undo: s.undo}
 		var n [4]byte
 		if _, err := rand.Read(n[:]); err != nil {
-			return err
+			return 0, err
 		}
-		intent := state{Rev: rev, Undo: undo, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
+		intent := state{Rev: rev, Undo: undo, Event: ev, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
 		if err := s.saveState(&state{Rev: s.rev, Undo: s.undo, Next: &intent}); err != nil {
-			return err
+			return 0, err
 		}
 		tmp := filepath.Join(filepath.Dir(s.path), intent.Temp)
 		m, err := replaceFileVia(tmp, s.path, src, base)
@@ -574,15 +606,30 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64) error {
 			err = errors.Join(err, s.hold(tmp, m))
 		}
 		if err != nil {
-			return errors.Join(err, s.saveState(&now))
+			return 0, errors.Join(err, s.saveState(&now))
 		}
 	}
-	s.src, s.rev, s.undo = src, rev, undo
-	return s.saveState(&next)
+	s.src, s.rev, s.undo, s.event = src, rev, undo, ev
+	if err := s.saveState(&next); err != nil {
+		return 0, err
+	}
+	return s.logEvent()
+}
+
+func (s *Store) logEvent() (uint64, error) {
+	if s.event == nil || s.event.Rev <= s.logged {
+		return 0, nil
+	}
+	e, err := s.log.Append(&eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Text: s.event.Text})
+	if err != nil {
+		return 0, err
+	}
+	s.logged = s.event.Rev
+	return e.Seq, nil
 }
 
 func (s *Store) saveState(st *state) error {
-	st.Held = s.held
+	st.Held, st.Event = s.held, s.event
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err

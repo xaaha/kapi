@@ -126,7 +126,7 @@ type Preset struct{ Name, Summary, Example string }
 
 // package page
 type Store struct{ /* one per page, under $KAPI_HOME/pages/<id>/ */ }
-func Open(home, path string) (*Store, error)
+func Open(home, path string, l *eventlog.Log) (*Store, error) // l is the page's event log; the store writes its revision events
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
@@ -139,7 +139,7 @@ type Op struct {
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
 }
-type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
+type Summary struct{ Text string; IDs []string; Seq uint64 } // `deleted callout "Freeze writes."` etc.; Seq is the revision event the store logged
 var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
@@ -229,6 +229,19 @@ the temp file holds a displaced agent write. When the page still holds `rev`,
 the named temp file is kapi's unfinished write, so it is deleted. Any other
 temp file is never swapped in. It is renamed to `.<name>.kapi-kept-<digits>`,
 so its bytes are not lost and open does not consider it again.
+
+The revision event is part of the commit. The store, not its caller, appends
+it to the event log while it still holds the page, so commits and their events
+never interleave. Each revision event carries the `rev` it describes. The
+store writes the event it is about to log into `state.json` together with the
+revision: as `"event":{"rev":N,"author":"...","text":"...","ids":[...]}` next
+to `rev`, and inside `next` before a swap. On open, and before every commit,
+the store compares that event's `rev` with the highest `rev` of any revision
+event in the log, and appends the event only when the log does not have it
+yet. So a kill between the commit and the append logs the event once on the
+next open, and a reopen with nothing lost logs nothing. A commit that logs no
+event, such as the first load or a file edit made while kapi was down,
+records none.
 
 ## HTTP
 
@@ -327,7 +340,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 |---|---|---|
 | `message` | chat message from `human` or an agent | append to the chat panel |
 | `answer` | form answer | show as sent |
-| `revision` | page changed; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
+| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
 Read receipts are not in the event log. Each reader has two positions:

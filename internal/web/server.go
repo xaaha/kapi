@@ -170,7 +170,7 @@ func (s *Server) withPage(h pageHandler) http.HandlerFunc {
 		s.mu.Lock()
 		s.seen[id] = true
 		s.mu.Unlock()
-		if err := refresh(st, l); err != nil {
+		if _, _, err := st.Refresh(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -195,29 +195,15 @@ func (s *Server) Poll(ctx context.Context, every time.Duration) {
 		}
 		s.mu.Unlock()
 		for _, id := range ids {
-			st, l, err := s.pages.Page(id)
+			st, _, err := s.pages.Page(id)
 			if err == nil {
-				err = refresh(st, l)
+				_, _, err = st.Refresh()
 			}
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				log.Printf("poll %s: %v", id, err)
 			}
 		}
 	}
-}
-
-func refresh(st *page.Store, l *eventlog.Log) error {
-	sum, changed, err := st.Refresh()
-	if err != nil || !changed {
-		return err
-	}
-	_, err = appendRevision(l, "file", sum)
-	return err
-}
-
-func appendRevision(l *eventlog.Log, author string, sum page.Summary) (uint64, error) {
-	ev, err := l.Append(&eventlog.Event{Author: author, Kind: "revision", Target: strings.Join(sum.IDs, ","), Text: sum.Text})
-	return ev.Seq, err
 }
 
 func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
@@ -382,7 +368,7 @@ type opResult struct {
 	Seq  uint64 `json:"seq,omitempty"`
 }
 
-func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
+func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
 	var in struct {
 		Rev uint64  `json:"rev"`
 		Op  page.Op `json:"op"`
@@ -399,14 +385,7 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	var seq uint64
-	if sum.Text != "" {
-		if seq, err = appendRevision(l, "human", sum); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	writeJSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: seq})
+	writeJSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq})
 }
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {

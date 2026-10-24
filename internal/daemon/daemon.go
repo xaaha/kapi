@@ -368,14 +368,9 @@ func (s *Server) openStore(path string) (*page.Store, *eventlog.Log, bool, error
 	if st, ok := s.stores[path]; ok {
 		return st, l, false, nil
 	}
-	st, err := page.Open(s.home, path)
+	st, err := page.Open(s.home, path, l)
 	if err != nil {
 		return nil, nil, false, err
-	}
-	if text := st.Conversion(); text != "" {
-		if _, err := l.Append(&eventlog.Event{Author: "kapi", Kind: "revision", Text: text}); err != nil {
-			return nil, nil, false, err
-		}
 	}
 	s.stores[path] = st
 	return st, l, true, nil

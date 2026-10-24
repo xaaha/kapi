@@ -63,11 +63,11 @@ func (f *fakePages) Page(id string) (*page.Store, *eventlog.Log, error) {
 	if st, ok := f.pages[id]; ok {
 		return st, f.logs[id], nil
 	}
-	st, err := page.Open(f.home, path)
+	l, err := eventlog.Open(filepath.Join(f.home, "pages", id))
 	if err != nil {
 		return nil, nil, err
 	}
-	l, err := eventlog.Open(filepath.Join(f.home, "pages", id))
+	st, err := page.Open(f.home, path, l)
 	if err != nil {
 		return nil, nil, err
 	}
