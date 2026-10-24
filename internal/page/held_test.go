@@ -91,7 +91,7 @@ func TestSwapBackChildProcess(t *testing.T) {
 	defer traceWrites(func(writeEvent) {
 		if n++; n == at {
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	})()
 	if _, _, err := s.Refresh(); err != nil {

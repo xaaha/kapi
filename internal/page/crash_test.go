@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
 )
@@ -86,7 +87,7 @@ func TestCrashChildProcess(t *testing.T) {
 				}
 			}
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	})()
 	if err := runCrashScenario(os.Getenv("KAPI_CRASH_HOME"), os.Getenv("KAPI_CRASH_PAGE"), func(*Store) {}); err != nil {
@@ -348,7 +349,7 @@ func TestRestoreChildProcess(t *testing.T) {
 			agentRename(t, path, agentWrite)
 		case "restore":
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	}
 	_, _, _ = s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})

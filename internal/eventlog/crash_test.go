@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var crashTexts = []string{"one", "two", "three", "four"}
@@ -59,7 +60,7 @@ func TestCrashChildProcess(t *testing.T) {
 	defer traceWrites(func(string, string) {
 		if n++; n == at {
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	})()
 	if err := runCrashScenario(os.Getenv("KAPI_LOG_CRASH_DIR"), func(*Log) {}); err != nil {
