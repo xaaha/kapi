@@ -221,6 +221,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return res.end(pageHTML());
     }
     if (req.method === "GET" && rest.startsWith("blocks/")) {
+      if (state.blocksDelay) await new Promise((r) => setTimeout(r, state.blocksDelay));
       const id = rest.slice(7);
       const b = state.blocks.find((x) => x.id === id);
       const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];

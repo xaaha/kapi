@@ -664,6 +664,23 @@ test("refetches other changed blocks while one is being edited", async () => {
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
 
+test("an edit started while its block is being refetched keeps the block it is editing", async () => {
+  server.state.blocksDelay = 300;
+  server.bumpBehindBrowser("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent rewrote this.</p>');
+  server.push({ kind: "revision", target: "bbbbbbbb", text: "edited" });
+  await until(() => requests("GET", "/blocks/bbbbbbbb").length === 1);
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(await page.eval(`document.activeElement.isConnected && document.activeElement.isContentEditable`), true);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  server.state.blocksDelay = 0;
+  await page.key("Escape");
+  await until(async () => (await text("bbbbbbbb")) === "Agent rewrote this.");
+});
+
 test("a save sends the rev from when the edit started, and a stale save keeps the text", async () => {
   await select("bbbbbbbb");
   await editSelected();

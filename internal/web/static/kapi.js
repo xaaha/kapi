@@ -576,6 +576,7 @@
     if (!res.ok) throw new Error(res.status);
     const fresh = new DOMParser().parseFromString(await res.text(), "text/html").getElementById("kapi-page");
     if (!fresh) throw new Error("no page");
+    if (editing) return void (pending = "page");
     const keep = selected && idOf(selected);
     selected = null;
     main.replaceChildren(...fresh.childNodes);
@@ -601,6 +602,10 @@
       tpl.innerHTML = (await res.text()).trim();
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
+      if (editing?.el === el) {
+        schedule([id]);
+        continue;
+      }
       el.replaceWith(next);
       labelArchived(next);
       numberRows(next);
