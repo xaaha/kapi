@@ -389,12 +389,14 @@
     notice.hidden = true;
     if (kind !== "undo") dismissNote();
     busy = true;
+    opInFlight = true;
     renderBar();
     try {
       const res = await request("/ops", { rev, op: { kind, ...fields } });
       if (!res || res.ok) {
         if (res) {
           main.dataset.rev = res.data.rev;
+          if (res.data.seq) ownSeqs.add(res.data.seq);
           showUndo(res.data.undo);
         }
         return res;
@@ -410,7 +412,9 @@
       return res;
     } finally {
       busy = false;
+      opInFlight = false;
       renderBar();
+      releaseRevisions();
     }
   }
 
@@ -727,6 +731,22 @@
     return presence;
   }
 
+  let heldRevisions = [];
+  let opInFlight = false;
+  const ownSeqs = new Set();
+
+  function onRevision(ev) {
+    if (opInFlight) return void heldRevisions.push(ev);
+    if (ownSeqs.delete(ev.seq)) return;
+    schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
+  }
+
+  function releaseRevisions() {
+    const held = heldRevisions;
+    heldRevisions = [];
+    held.forEach(onRevision);
+  }
+
   function onEvent(ev) {
     if (ev.kind === "read" || ev.kind === "queued") {
       if (typeof ev.seq !== "number") return;
@@ -747,7 +767,7 @@
       if (ev.author === "human") lastHuman = ev.seq;
       else lastReply = ev.seq;
       markRead();
-    } else if (ev.kind === "revision") schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
+    } else if (ev.kind === "revision") onRevision(ev);
     else if (ev.kind === "presence") {
       presence = ev.text === "watching" ? "watching" : "none";
       setStatus(agentState());

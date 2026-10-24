@@ -154,8 +154,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       b.html = b.html.replace(taskPattern(op.id), (li) =>
         li.replace(/<input type="checkbox"( checked="")?/, `<input type="checkbox"${op.done ? ' checked=""' : ""}`));
       state.rev++;
-      push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
-      return { status: 200, body: { rev: state.rev, undo: state.history.length > 0 } };
+      const ev = push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
+      return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: ev.seq } };
     }
     const i = state.blocks.findIndex((b) => b.id === op.id);
     if (op.kind !== "undo" && i < 0) return { status: 422, body: { error: `no block #${op.id}` } };
@@ -187,8 +187,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     state.rev++;
     const target = ["text", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
-    push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
-    return { status: 200, body: { rev: state.rev, undo: state.history.length > 0 } };
+    const ev = push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
+    return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: ev.seq } };
   }
 
   const json = (res, status, body) => {
