@@ -297,6 +297,74 @@ test("edits a prose preset's rendered body in place and saves it as inner", asyn
   assert.equal(server.state.blocks.find((b) => b.id === "ffffffff").source, '<kapi-callout data-kapi-id="ffffffff" kind="note">Copy during the <em>quiet</em> window. Then verify.</kapi-callout>');
 });
 
+async function addBlock(block) {
+  server.state.blocks.push(block);
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector('[data-kapi-id="${block.id}"]') && !!document.getElementById("kapi-chrome")`);
+}
+
+test("Escape ends an edit even when focus has left the text", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`document.activeElement.blur()`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await select("dddddddd");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "dddddddd"`);
+});
+
+test("a code block inside a callout stays one piece while the callout is edited", async () => {
+  await addBlock({
+    id: "kkkkkkkk",
+    html: '<aside class="kapi-callout" data-kapi-preset="callout" data-kapi-id="kkkkkkkk"><div class="kapi-callout-body" data-kapi-text="kkkkkkkk"><p>Run</p>' +
+      '<figure class="kapi-code" data-kapi-preset="code" data-kapi-id="llllllll" data-kapi-text="llllllll" data-kapi-raw=""><pre><code>kapi open</code></pre></figure></div></aside>',
+  });
+  await select("kkkkkkkk");
+  await editSelected();
+  await page.waitFor(`document.querySelector('[data-kapi-id="kkkkkkkk"] .kapi-callout-body').isContentEditable`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="llllllll"]').isContentEditable`), false);
+  assert.equal(await page.eval(`getSelection().anchorNode.parentElement.tagName`), "P");
+  await page.type(" it");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  const { parts } = requests("POST", "/ops")[0].body.op;
+  assert.deepEqual(parts.map((p) => p.id), ["kkkkkkkk"]);
+  assert.match(parts[0].inner, /^<p>Run it<\/p><figure/);
+});
+
+test("a closed details block opens when it is edited", async () => {
+  await addBlock({
+    id: "pppppppp",
+    html: '<details class="kapi-details" data-kapi-preset="details" data-kapi-id="pppppppp"><summary>Why</summary><div class="kapi-details-body" data-kapi-text="pppppppp"><p>Because.</p></div></details>',
+  });
+  await select("pppppppp");
+  await editSelected();
+  await page.waitFor(`document.querySelector('[data-kapi-id="pppppppp"]').open && document.activeElement?.classList.contains("kapi-details-body")`);
+  assert.equal(await page.eval(`document.activeElement.checkVisibility()`), true);
+});
+
+test("ticking a task while its checklist is being edited keeps the edit", async () => {
+  const task = (id, text) => `<li class="kapi-task" data-kapi-preset="task" data-kapi-id="${id}"><input type="checkbox"><span class="kapi-task-body" data-kapi-text="${id}">${text}</span></li>`;
+  await addBlock({ id: "mmmmmmmm", html: `<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="mmmmmmmm">${task("nnnnnnnn", "one")}${task("oooooooo", "two")}</ul>` });
+  await select("mmmmmmmm");
+  await editSelected();
+  await page.waitFor(`document.querySelectorAll('[data-kapi-id="mmmmmmmm"] [contenteditable="true"]').length === 2`);
+  await click('[data-kapi-id="oooooooo"] input');
+  await until(() => requests("POST", "/ops").some((r) => r.body.op.kind === "check"));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`document.querySelectorAll('[data-kapi-id="mmmmmmmm"] [contenteditable="true"]').length`), 2);
+  await page.eval(`(h => { h.focus(); getSelection().selectAllChildren(h); getSelection().collapseToEnd(); })(document.querySelector('[data-kapi-text="oooooooo"]'))`);
+  await page.type(" more");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").some((r) => r.body.op.kind === "text"));
+  const op = requests("POST", "/ops").find((r) => r.body.op.kind === "text").body.op;
+  assert.deepEqual(op.parts, [{ id: "oooooooo", inner: "two more" }]);
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => page.eval(`document.querySelector('[data-kapi-id="oooooooo"] input').checked`));
+});
+
 test("a block with no text of its own says so and opens no editor", async () => {
   await page.eval(`document.querySelector('[data-kapi-id="eeeeeeee"]').click()`);
   await page.waitFor(`document.querySelector('[data-kapi-id="eeeeeeee"]').hasAttribute("data-kapi-selected")`);
@@ -707,9 +775,7 @@ test("a stale source save keeps the source text", async () => {
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   const mine = "Mine.";
   await page.eval(`document.activeElement.value = ${JSON.stringify(mine)}`);
-  server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
-  server.push({ kind: "revision", target: "cccccccc", text: "edited" });
-  await until(async () => (await text("cccccccc")) === "Agent rewrote this");
+  server.bumpBehindBrowser("jjjjjjjj", '<figure data-kapi-id="jjjjjjjj" data-kapi-preset="code" class="kapi-code"><pre><code>agent()</code></pre></figure>');
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
   assert.equal(requests("POST", "/ops")[0].body.rev, 1);
@@ -1665,7 +1731,7 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-selected")`), false);
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
-  assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+  await page.waitFor(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity === "0"`);
 
   await toggle("h1h1h1h1");
   for (const id of ["p1p1p1p1", "h2aaaaaa", "p2p2p2p2", "h2bbbbbb", "p3p3p3p3"]) assert.equal(await shown(id), false, id);

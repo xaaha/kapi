@@ -86,19 +86,23 @@ part's start and end tags and puts the new HTML between them, after it:
 
 - swaps every preset in it (an element with `data-kapi-preset`) for that
   preset's current source, which must come from the same part;
-- drops `contenteditable`, every `data-kapi-*` attribute other than
-  `data-kapi-id`, and zero-width spaces;
+- drops `contenteditable`, every `data-kapi-*` attribute, a `data-kapi-id`
+  that was not already in the part, and the zero-width space the editor puts
+  after new inline code;
 - writes it in the renderer's canonical form, so markup the page would drop
   (inline styles, scripts) is not saved.
 
 `row` counts the `tr` elements of the source table in source order, header
 rows included; `col` counts the `th` and `td` children of that row. Raw parts
-are saved byte for byte. A part outside the block, a part given twice, a cell
+are saved byte for byte and only on their own: a raw part inside a larger
+block is 422. A part outside the block, a part given twice, a cell
 outside the table, a part of a preset with no text, HTML that would close the
 part early, or a part whose source holds markup the page does not show
 (`ErrHiddenMarkup`) is 422 and changes nothing. All parts land as one
-revision and one undo step, and follow the same staleness, dangling-link and
-no-change rules as `edit`.
+revision and one undo step, and follow the same dangling-link and no-change
+rules as `edit`. A `text` op at an older `rev` applies when the source of
+every part it sets is unchanged since that `rev`, so ticking a task while
+its checklist is being edited does not refuse the save.
 
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element

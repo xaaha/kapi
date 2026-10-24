@@ -512,6 +512,9 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	if err != nil {
 		return false
 	}
+	if op.Kind == "text" {
+		return textUnchanged(then, s.src, op)
+	}
 	was, err := Outer(then, op.ID)
 	if err != nil {
 		return false
@@ -989,7 +992,7 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 			}
 			with = string(src[e.start:e.tagEnd]) + *op.Inner + string(src[e.closeStart:e.end])
 		}
-		out, err := edit(src, els, e, with, op.Inner != nil)
+		out, err := edit(src, els, e, with, op.Inner != nil, false)
 		if err != nil {
 			return nil, Summary{}, err
 		}
@@ -1045,7 +1048,7 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 	return nil, Summary{}, fmt.Errorf("unknown op kind %q", op.Kind)
 }
 
-func edit(src []byte, els []element, e *element, with string, inner bool) ([]byte, error) {
+func edit(src []byte, els []element, e *element, with string, inner, keptPresets bool) ([]byte, error) {
 	frag, root, err := fragment(with)
 	if err != nil && inner {
 		return nil, ErrInnerEscapes
@@ -1064,7 +1067,7 @@ func edit(src []byte, els []element, e *element, with string, inner bool) ([]byt
 			}
 		}
 	}
-	if !strings.HasPrefix(root.name, "kapi-") {
+	if !strings.HasPrefix(root.name, "kapi-") && !keptPresets {
 		for _, f := range parse(frag) {
 			if _, ok := f.attr("data-kapi-preset"); ok || (strings.HasPrefix(f.name, "kapi-") && !render.Inline(f.name)) {
 				return nil, ErrPresetInProse

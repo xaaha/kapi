@@ -375,11 +375,17 @@
   const PART = "[data-kapi-text]";
 
   function partsOf(el) {
-    return [el, ...el.querySelectorAll(PART)].filter((n) => n.matches(PART));
+    return [el, ...el.querySelectorAll(PART)].filter((n) => n.matches(PART) && (n === el || !n.hasAttribute("data-kapi-raw")));
   }
 
   function islandsOf(host) {
     return [...host.querySelectorAll("[data-kapi-preset]")].filter((n) => n.parentElement.closest(`[data-kapi-preset], ${PART}`) === host);
+  }
+
+  function ownText(host) {
+    const copy = host.cloneNode(true);
+    for (const island of islandsOf(copy)) island.replaceWith(island.dataset.kapiId || "");
+    return copy.innerHTML;
   }
 
   function partOf(host) {
@@ -388,21 +394,33 @@
     return part;
   }
 
+  function caretAtEnd(host) {
+    host.focus();
+    const walk = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, (n) =>
+      n.data.trim() && n.parentElement.closest('[contenteditable="false"], [contenteditable="true"]') === host ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP);
+    let last = null;
+    while (walk.nextNode()) last = walk.currentNode;
+    if (last) getSelection().collapse(last, last.data.length);
+    else {
+      getSelection().selectAllChildren(host);
+      getSelection().collapseToEnd();
+    }
+  }
+
   function editInPlace(el, hosts) {
     for (const host of hosts) {
+      const details = host.closest("details");
+      if (details) details.open = true;
       host.contentEditable = "true";
       for (const island of islandsOf(host)) island.contentEditable = "false";
     }
-    const parts = hosts.map((host) => ({ host, original: host.innerHTML }));
+    const parts = hosts.map((host) => ({ host, original: host.innerHTML, own: ownText(host) }));
     const op = () => {
-      const changed = parts.filter(({ host, original }) => host.innerHTML !== original);
+      const changed = parts.filter(({ host, own }) => ownText(host) !== own);
       return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: host.innerHTML })) } : null;
     };
     editing = { el, rev: Number(main.dataset.rev), hosts: parts, op, singleLine: hosts.every((host) => host.matches("td, th, span")) };
-    const first = hosts[0];
-    first.focus();
-    getSelection().selectAllChildren(first);
-    getSelection().collapseToEnd();
+    caretAtEnd(hosts[0]);
     renderBar();
   }
 
@@ -536,6 +554,8 @@
     return queue;
   }
 
+  const touchesEdit = (el) => !!editing && !!el && (editing.el.contains(el) || el.contains(editing.el));
+
   function schedule(ids) {
     pending = pending === "page" || !ids ? "page" : new Set([...(pending || []), ...ids]);
     scheduleFlush();
@@ -549,9 +569,9 @@
         pending = null;
         return refresh(null);
       }
-      const held = editing && idOf(editing.el);
-      const ids = [...pending].filter((id) => id !== held);
-      pending = pending.has(held) ? new Set([held]) : null;
+      const held = [...pending].filter((id) => touchesEdit(find(id)));
+      const ids = [...pending].filter((id) => !held.includes(id));
+      pending = held.length ? new Set(held) : null;
       if (ids.length) refresh(ids);
     }, 30);
   }
@@ -578,7 +598,7 @@
     for (const id of ids) {
       const el = find(id);
       if (!el) return loadPage();
-      if (editing?.el === el) {
+      if (touchesEdit(el)) {
         schedule([id]);
         continue;
       }
@@ -588,7 +608,7 @@
       tpl.innerHTML = (await res.text()).trim();
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
-      if (editing?.el === el) {
+      if (touchesEdit(el)) {
         schedule([id]);
         continue;
       }
@@ -923,7 +943,7 @@
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
     if (e.key === "Escape") {
-      if (inEditor) cancelEdit();
+      if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
       else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
       else if (!editing) select(null);

@@ -2,6 +2,8 @@ package page
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -24,8 +26,6 @@ type Part struct {
 	Col   int    `json:"col,omitempty"`
 	Inner string `json:"inner"`
 }
-
-const keepMark = "kapi-keep:"
 
 func setText(src []byte, op *Op) ([]byte, error) {
 	if len(op.Parts) == 0 {
@@ -57,6 +57,9 @@ func setText(src []byte, op *Op) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		if render.TextOf(t.name) == render.RawText && p.ID != op.ID {
+			return nil, fmt.Errorf("#%s is shown as one piece inside #%s; edit it on its own", p.ID, op.ID)
+		}
 		inner := p.Inner
 		if p.Row != nil || render.TextOf(t.name) == render.BodyText {
 			if inner, err = cleanText(src, els, t.name, from, to, p.Inner); err != nil {
@@ -64,11 +67,35 @@ func setText(src []byte, op *Op) ([]byte, error) {
 			}
 		}
 		with := string(src[t.start:from]) + inner + string(src[to:t.end])
-		if src, err = edit(src, els, t, with, p.Row == nil); err != nil {
+		if src, err = edit(src, els, t, with, p.Row == nil, true); err != nil {
 			return nil, err
 		}
 	}
 	return src, nil
+}
+
+func textUnchanged(then, now []byte, op *Op) bool {
+	for _, p := range op.Parts {
+		was, okWas := partSource(then, p)
+		is, okIs := partSource(now, p)
+		if !okWas || !okIs || was != is {
+			return false
+		}
+	}
+	return len(op.Parts) > 0
+}
+
+func partSource(src []byte, p Part) (string, bool) {
+	els := parse(src)
+	t, err := find(els, p.ID)
+	if err != nil {
+		return "", false
+	}
+	from, to, err := partRange(els, t, p)
+	if err != nil {
+		return "", false
+	}
+	return string(src[from:to]), true
 }
 
 func partRange(els []element, t *element, p Part) (int, int, error) {
@@ -118,14 +145,21 @@ func cleanText(src []byte, els []element, host string, from, to int, in string) 
 	if strings.HasPrefix(host, presetPrefix) || host == "td" || host == "th" {
 		wrap = "div"
 	}
-	was, err := masked(string(src[from:to]), wrap)
+	nonce := make([]byte, 8)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	stored := masker{wrap: wrap, mark: "kapi-keep-" + hex.EncodeToString(nonce) + ":"}
+	was, err := stored.mask(string(src[from:to]))
 	if err != nil {
 		return "", err
 	}
-	if canon, err := canonicalIn(was, wrap); err != nil || rerender(canon, wrap) != rerender(was, wrap) {
+	if canon, err := canonicalIn(was, wrap); err != nil || stored.rerender(canon) != stored.rerender(was) {
 		return "", ErrHiddenMarkup
 	}
-	now, err := masked(in, wrap)
+	typed := stored
+	typed.typed, typed.known = true, kept
+	now, err := typed.mask(in)
 	if err != nil {
 		return "", err
 	}
@@ -133,15 +167,16 @@ func cleanText(src []byte, els []element, host string, from, to int, in string) 
 	if err != nil {
 		return "", err
 	}
+	open := "<!--" + stored.mark
 	var b strings.Builder
 	for {
-		i := strings.Index(out, "<!--"+keepMark)
+		i := strings.Index(out, open)
 		if i < 0 {
 			b.WriteString(out)
 			return b.String(), nil
 		}
 		j := strings.Index(out[i:], "-->")
-		id := out[i+len("<!--"+keepMark) : i+j]
+		id := out[i+len(open) : i+j]
 		source, ok := kept[id]
 		if !ok {
 			return "", fmt.Errorf("#%s is not part of this text", id)
@@ -153,8 +188,14 @@ func cleanText(src []byte, els []element, host string, from, to int, in string) 
 	}
 }
 
-func masked(s, wrap string) (string, error) {
-	nodes, err := html.ParseFragment(strings.NewReader(s), &html.Node{Type: html.ElementNode, Data: wrap, DataAtom: atom.Lookup([]byte(wrap))})
+type masker struct {
+	wrap, mark string
+	typed      bool
+	known      map[string]string
+}
+
+func (m masker) mask(s string) (string, error) {
+	nodes, err := html.ParseFragment(strings.NewReader(s), &html.Node{Type: html.ElementNode, Data: m.wrap, DataAtom: atom.Lookup([]byte(m.wrap))})
 	if err != nil {
 		return "", err
 	}
@@ -162,20 +203,20 @@ func masked(s, wrap string) (string, error) {
 	walk = func(n *html.Node) error {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			switch {
-			case c.Type == html.TextNode:
-				c.Data = strings.ReplaceAll(c.Data, "\u200b", "")
+			case c.Type == html.TextNode && m.typed && c.PrevSibling != nil && c.PrevSibling.Data == "code":
+				c.Data = strings.TrimPrefix(c.Data, "\u200b")
 			case c.Type != html.ElementNode:
 			case isKept(c):
 				id := nodeAttr(c, idAttr)
 				if id == "" {
 					return fmt.Errorf("a <%s> in the text has no %s", c.Data, idAttr)
 				}
-				keep := &html.Node{Type: html.CommentNode, Data: keepMark + id}
+				keep := &html.Node{Type: html.CommentNode, Data: m.mark + id}
 				n.InsertBefore(keep, c)
 				n.RemoveChild(c)
 				c = keep
 			default:
-				c.Attr = chromeless(c.Attr)
+				c.Attr = m.chromeless(c.Attr)
 				if err := walk(c); err != nil {
 					return err
 				}
@@ -183,35 +224,44 @@ func masked(s, wrap string) (string, error) {
 		}
 		return nil
 	}
-	var b bytes.Buffer
+	holder := &html.Node{Type: html.ElementNode, Data: "div"}
 	for _, n := range nodes {
-		holder := &html.Node{Type: html.ElementNode, Data: "div"}
 		holder.AppendChild(n)
-		if err := walk(holder); err != nil {
+	}
+	if err := walk(holder); err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	for c := holder.FirstChild; c != nil; c = c.NextSibling {
+		if err := html.Render(&b, c); err != nil {
 			return "", err
-		}
-		for c := holder.FirstChild; c != nil; c = c.NextSibling {
-			if err := html.Render(&b, c); err != nil {
-				return "", err
-			}
 		}
 	}
 	return b.String(), nil
 }
 
-func isKept(n *html.Node) bool {
-	return strings.HasPrefix(n.Data, presetPrefix) || nodeAttr(n, "data-kapi-preset") != ""
-}
-
-func chromeless(attrs []html.Attribute) []html.Attribute {
+func (m masker) chromeless(attrs []html.Attribute) []html.Attribute {
 	out := attrs[:0]
 	for _, a := range attrs {
-		if a.Key == "contenteditable" || (strings.HasPrefix(a.Key, "data-kapi-") && a.Key != idAttr) {
+		_, known := m.known[a.Val]
+		if a.Key == "contenteditable" || (strings.HasPrefix(a.Key, "data-kapi-") && a.Key != idAttr) || (m.typed && a.Key == idAttr && !known) {
 			continue
 		}
 		out = append(out, a)
 	}
 	return out
+}
+
+func (m masker) rerender(s string) string {
+	out, err := m.mask(s)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+func isKept(n *html.Node) bool {
+	return strings.HasPrefix(n.Data, presetPrefix) || nodeAttr(n, "data-kapi-preset") != ""
 }
 
 func nodeAttr(n *html.Node, key string) string {
@@ -237,12 +287,4 @@ func canonicalIn(s, wrap string) (string, error) {
 		return inner, nil
 	}
 	return "", ErrInnerEscapes
-}
-
-func rerender(s, wrap string) string {
-	out, err := masked(s, wrap)
-	if err != nil {
-		return ""
-	}
-	return out
 }

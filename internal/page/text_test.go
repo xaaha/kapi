@@ -76,6 +76,23 @@ func TestATextOpOnATableThatChangedIsStale(t *testing.T) {
 	}
 }
 
+func TestATextOpIsStaleOnlyWhenItsOwnTextChanged(t *testing.T) {
+	const src = "<kapi-checklist data-kapi-id=\"aaaaaaaa\"><kapi-task data-kapi-id=\"bbbbbbbb\">one</kapi-task><kapi-task data-kapi-id=\"cccccccc\">two</kapi-task></kapi-checklist>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "check", ID: "cccccccc", Done: true})
+	if _, _, err := s.Apply(1, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "cccccccc", Inner: "two more"}}}); err != nil {
+		t.Fatalf("text op after a tick on the same task: %v", err)
+	}
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Inner: "uno"}}})
+	if _, _, err := s.Apply(3, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Inner: "eins"}}}); !errors.Is(err, ErrStale) {
+		t.Errorf("text op over text that changed since: err = %v, want ErrStale", err)
+	}
+	if got, want := onDisk(t, path), "<kapi-checklist data-kapi-id=\"aaaaaaaa\"><kapi-task data-kapi-id=\"bbbbbbbb\">uno</kapi-task><kapi-task done data-kapi-id=\"cccccccc\">two more</kapi-task></kapi-checklist>\n"; got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestATextOpFollowsImpliedEndTags(t *testing.T) {
 	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>b<tr><td>c<td>d</table></kapi-table>\n"
 	home, path := newPage(t, src)
@@ -95,7 +112,7 @@ func TestATextOpKeepsTheSourceOfPresetsInsideTheText(t *testing.T) {
 	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{cell(0, 0,
 		`now <span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb" contenteditable="false">merged</span> <a href="#cccccccc">c</a>`)}})
 	mustApply(t, s, &Op{Kind: "text", ID: "cccccccc", Parts: []Part{{ID: "cccccccc",
-		Inner: `<p data-kapi-selected="">run it` + "\u200b" + `</p>` + "\n" + `<figure class="kapi-code" data-kapi-preset="code" data-kapi-id="dddddddd"><pre>whatever the page shows</pre></figure>`}}})
+		Inner: `<p data-kapi-selected="">run it</p>` + "\n" + `<figure class="kapi-code" data-kapi-preset="code" data-kapi-id="dddddddd"><pre>whatever the page shows</pre></figure>`}}})
 	want := strings.NewReplacer("<td>see ", "<td>now ", "<p>run</p>", "<p>run it</p>").Replace(src)
 	if got := onDisk(t, path); got != want {
 		t.Errorf("file =\n%s\nwant\n%s", got, want)
@@ -130,6 +147,49 @@ func TestATextOpRefusesTextWithMarkupThePageHides(t *testing.T) {
 	}
 	if got := onDisk(t, path); got != src {
 		t.Errorf("refused op changed the file:\n%s", got)
+	}
+}
+
+func TestATextOpRefusesARawPartInsideItsBlock(t *testing.T) {
+	const src = "<kapi-callout data-kapi-id=\"aaaaaaaa\"><p>run</p><kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">x\n</kapi-code></kapi-callout>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Inner: `<figcaption>go</figcaption><pre><code><span class="kapi-line">x</span></code></pre>`}}}); err == nil {
+		t.Error("a raw part edited through its container was accepted")
+	}
+	if got := onDisk(t, path); got != src {
+		t.Errorf("refused op changed the file:\n%s", got)
+	}
+}
+
+func TestATextOpEditsProseThatHoldsABlockPreset(t *testing.T) {
+	const src = "<div data-kapi-id=\"aaaaaaaa\"><p>intro</p><kapi-callout data-kapi-id=\"bbbbbbbb\" kind=\"note\">Freeze writes.</kapi-callout></div>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa",
+		Inner: `<p>intro, edited</p><aside class="kapi-callout" data-kapi-preset="callout" data-kapi-id="bbbbbbbb" contenteditable="false">Freeze writes.</aside>`}}})
+	if got, want := onDisk(t, path), strings.Replace(src, "<p>intro</p>", "<p>intro, edited</p>", 1); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestATextOpDropsOnlyTheZeroWidthSpaceAfterNewInlineCode(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a\u200bb</p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "a\u200bb <code>c</code>\u200b d"}}})
+	if got, want := onDisk(t, path), "<p data-kapi-id=\"aaaaaaaa\">a\u200bb <code>c</code> d</p>\n"; got != want {
+		t.Errorf("file = %q, want %q", got, want)
+	}
+}
+
+func TestATextOpDropsIdsPastedFromElsewhereAndKeepsCommentsThatLookLikeItsMarks(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a<!--kapi-keep:bbbbbbbb--></p>\n<p data-kapi-id=\"bbbbbbbb\">b <kapi-badge data-kapi-id=\"cccccccc\">x</kapi-badge></p>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: `a<!--kapi-keep:bbbbbbbb--> <span data-kapi-id="bbbbbbbb">b</span>`}}})
+	if got, want := onDisk(t, path), strings.Replace(src, "a<!--kapi-keep:bbbbbbbb--></p>", "a<!--kapi-keep:bbbbbbbb--> <span>b</span></p>", 1); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
 	}
 }
 

@@ -127,6 +127,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     refused: 0,
     read: {},
     queued: {},
+    textAt: {},
   };
 
   const pageHTML = () =>
@@ -164,7 +165,12 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
     if (op.kind === "orient") state.blocks[i].html = state.blocks[i].html.replace(/data-kapi-dir="[^"]*"/, `data-kapi-dir="${op.dir}"`);
-    else if (op.kind === "text") for (const part of op.parts) setPart(state.blocks[i], part);
+    else if (op.kind === "text") {
+      for (const part of op.parts) {
+        setPart(state.blocks[i], part);
+        state.textAt[part.id] = state.rev + 1;
+      }
+    }
     else if (op.kind === "delete") state.blocks.splice(i, 1);
     else if (op.kind === "archive" || op.kind === "unarchive") {
       const html = state.blocks[i].html.replace(/ data-kapi-state="[^"]*"/, "");
@@ -267,7 +273,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
         state.nextOpError = null;
         return json(res, 422, { error });
       }
-      if (parsed.rev !== state.rev) return json(res, 409, { rev: state.rev });
+      const textStill = parsed.op.kind === "text" && [parsed.op.id, ...parsed.op.parts.map((p) => p.id)].every((id) => (state.textAt[id] ?? 0) <= parsed.rev);
+      if (parsed.rev !== state.rev && !textStill) return json(res, 409, { rev: state.rev });
       const { status, body: out } = apply(parsed.op);
       return json(res, status, out);
     }
@@ -296,6 +303,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const b = state.blocks.find((x) => x.id === id);
       b.html = html;
       state.rev++;
+      state.textAt[id] = state.rev;
     },
     close() {
       const closed = new Promise((resolve) => server.close(resolve));

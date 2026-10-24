@@ -41,6 +41,7 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 		Skip   string
 		Edited []struct{ Key, Mark string }
 		Raw    []string
+		Blocks []string
 		Errors []string
 	}
 	if err := json.Unmarshal(out, &report); err != nil {
@@ -52,8 +53,8 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 	for _, e := range report.Errors {
 		t.Error(e)
 	}
-	if len(report.Edited) < 40 || len(report.Raw) < 3 {
-		t.Errorf("edited %d text parts and opened %d raw ones; the gallery has more", len(report.Edited), len(report.Raw))
+	if len(report.Edited) < 40 || len(report.Raw) < 3 || len(report.Blocks) < 5 {
+		t.Errorf("edited %d text parts, opened %d raw ones and %d whole blocks; the gallery has more", len(report.Edited), len(report.Raw), len(report.Blocks))
 	}
 	after, err := os.ReadFile(s.path)
 	if err != nil {
@@ -61,7 +62,6 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 	}
 	for _, e := range report.Edited {
 		if !strings.Contains(string(after), e.Mark+"<") && !strings.Contains(string(after), e.Mark+"\n") {
-			t.Logf("%s", after)
 			t.Errorf("%s: %q is not in the file", e.Key, e.Mark)
 		}
 	}
