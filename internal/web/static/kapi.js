@@ -877,9 +877,21 @@
     if (selected?.hasAttribute("data-kapi-hidden")) select(null);
   }
 
-  function toggleFold(heading) {
+  function foldableHeadings() {
+    return [...main.children].filter((el, i) => {
+      const level = levelOf(el);
+      const next = main.children[i + 1];
+      return level >= 1 && level <= 3 && next && !(levelOf(next) && levelOf(next) <= level);
+    });
+  }
+
+  function toggleFold(heading, all) {
     const id = idOf(heading);
-    if (!folds.delete(id)) folds.add(id);
+    if (all) {
+      const ids = foldableHeadings().map(idOf);
+      if (ids.every((each) => folds.has(each))) for (const each of ids) folds.delete(each);
+      else for (const each of ids) folds.add(each);
+    } else if (!folds.delete(id)) folds.add(id);
     try {
       localStorage.setItem(FOLD_KEY, JSON.stringify([...folds]));
     } catch {}
@@ -893,7 +905,7 @@
     }
     const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
     const gap = heading && heading.getBoundingClientRect().left - e.clientX;
-    if (gap > 0 && gap <= FOLD_HIT) return toggleFold(heading);
+    if (gap > 0 && gap <= FOLD_HIT) return toggleFold(heading, e.altKey);
     const pill = closest(e.target, ".kapi-code-lang");
     const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
