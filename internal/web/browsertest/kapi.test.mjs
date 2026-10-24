@@ -194,6 +194,125 @@ test("deletes an unlinked block", async () => {
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "delete", id: "cccccccc" } });
 });
 
+const undoNote = () => page.eval(`(n => n ? { text: n.textContent, prev: n.previousElementSibling?.dataset.kapiId ?? null, next: n.nextElementSibling?.dataset.kapiId ?? null } : null)(document.querySelector("#kapi-page .kapi-undo-note"))`);
+const deleteBlock = async (id) => {
+  const loads = pageLoads();
+  await select(id);
+  await click('.kapi-bar [data-action="delete"]');
+  await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+  await until(() => pageLoads() > loads);
+  await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note") && !document.querySelector("[data-kapi-selected]")`);
+};
+
+test("a delete leaves an Undo notice where the block was", async () => {
+  const before = await page.eval(`document.documentElement.scrollHeight`);
+  await deleteBlock("cccccccc");
+  assert.deepEqual(await undoNote(), { text: "DeletedUndo", prev: "bbbbbbbb", next: "dddddddd" });
+  assert.equal(await text("cccccccc"), null);
+  assert.ok((await page.eval(`document.documentElement.scrollHeight`)) <= before);
+});
+
+test("Undo in the notice restores the block with an undo op and removes the notice", async () => {
+  await deleteBlock("cccccccc");
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.deepEqual(requests("POST", "/ops")[1].body.op, { kind: "undo", id: "" });
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice survives the page reload that follows the delete", async () => {
+  await deleteBlock("cccccccc");
+  await until(() => pageLoads() >= 3);
+  assert.notEqual(await undoNote(), null);
+});
+
+test("the delete notice goes away after a few seconds", async () => {
+  await deleteBlock("cccccccc");
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`, 8000);
+});
+
+test("the delete notice goes away on the next op", async () => {
+  await deleteBlock("cccccccc");
+  await select("dddddddd");
+  await click('.kapi-bar [data-action="up"]');
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("the delete notice goes away on Escape", async () => {
+  await deleteBlock("cccccccc");
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("the delete notice does not appear for a delete made by the agent", async () => {
+  server.state.blocks.splice(2, 1);
+  server.state.rev++;
+  server.push({ kind: "revision", target: "", text: "deleted #cccccccc" });
+  await until(async () => (await text("cccccccc")) === null);
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice goes away when undo stops being available", async () => {
+  await deleteBlock("cccccccc");
+  server.state.history = [];
+  server.push({ kind: "revision", target: "", text: "file changed" });
+  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("a refused Undo keeps the notice so the reader can retry", async () => {
+  await deleteBlock("cccccccc");
+  server.state.rev++;
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await notice()) !== "");
+  assert.notEqual(await undoNote(), null);
+  assert.equal(await page.eval(`document.querySelector("#kapi-page .kapi-undo-note button").disabled`), false);
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice neither counts as a folded block nor gets folded away", async () => {
+  await reopenWith([
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">Callouts</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
+  ]);
+  await deleteBlock("h2bbbbbb");
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "2 blocks");
+  assert.equal(await page.eval(`document.querySelector("#kapi-page .kapi-undo-note").checkVisibility()`), true);
+});
+
+test("a second click on Undo lands on the notice and does nothing", async () => {
+  await deleteBlock("cccccccc");
+  server.state.opDelay = 400;
+  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width - 20, y: top + height / 2 }))(document.querySelector("#kapi-page .kapi-undo-note button").getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await mouseClickAt(x, y);
+  assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected]")`), false);
+  assert.notEqual(await undoNote(), null);
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.equal(requests("POST", "/ops").length, 2);
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice fits the 390px phone layout", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    await phone.eval(`document.querySelector('.kapi-bar [data-action="delete"]').click()`);
+    await phone.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+    assert.ok(await phone.eval(`(r => r.left >= 0 && r.right <= innerWidth && r.height >= 28)(document.querySelector("#kapi-page .kapi-undo-note").getBoundingClientRect())`));
+  } finally {
+    await phone.close();
+  }
+});
+
 test("sends a chat message with Enter, targeted at the selected block", async () => {
   assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter to send, Shift+Enter for a new line");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
@@ -1210,6 +1329,80 @@ test("on phones Send sits to the right of the composer on the same row", async (
     await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
     await phone.waitFor(`document.querySelector(".kapi-scroll").checkVisibility()`);
     assert.deepEqual(await phone.eval(row), { right: true, sameRow: true, edge: 12 });
+  } finally {
+    await phone.close();
+  }
+});
+
+for (const width of [390, 360]) {
+  test(`on ${width} px phones the logo and theme toggle stay on screen while chat is collapsed`, async () => {
+    const phone = await browser.open(server.url, { width, height: 800 });
+    const hit = (sel) => `(() => {
+      const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && !!at?.closest(${JSON.stringify(sel)});
+    })()`;
+    try {
+      await phone.eval(`document.getElementById("kapi-page").style.paddingBottom = "3000px"; scrollTo(0, 1500)`);
+      await phone.waitFor(`scrollY > 1000`);
+      assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
+      assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
+      assert.equal(await phone.eval(hit(".kapi-site-head .kapi-logo")), true);
+      assert.equal(await phone.eval(hit('.kapi-theme [data-theme-choice="dark"]')), true);
+      await phone.eval(`document.querySelector('.kapi-theme [data-theme-choice="dark"]').click()`);
+      await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
+      assert.deepEqual(phone.errors, []);
+    } finally {
+      await phone.close();
+    }
+  });
+}
+
+async function mobilePage(width) {
+  const phone = await browser.open(server.url, { width, height: 800 });
+  await phone.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 2, mobile: true });
+  await phone.call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await phone.call("Page.navigate", { url: server.url });
+  await phone.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-theme") && innerWidth === ${width}`);
+  return phone;
+}
+
+const tap = async (phone, selector) => {
+  const { x, y } = await phone.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await phone.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+};
+
+test("tapping the theme toggle on a phone does not expand the chat", async () => {
+  const phone = await mobilePage(390);
+  try {
+    await tap(phone, '.kapi-theme [data-theme-choice="dark"]');
+    await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
+    assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
+    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    await phone.waitFor(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`);
+  } finally {
+    await phone.close();
+  }
+});
+
+test("on phones anchors and the selection ring stay clear of the top strip", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`(() => {
+      const s = document.createElement("style");
+      s.textContent = ":where(#kapi-page) :where([id]) { scroll-margin-top: 1.5rem; }";
+      document.head.prepend(s);
+      document.getElementById("kapi-page").style.paddingBottom = "3000px";
+      document.querySelector('[data-kapi-id="bbbbbbbb"]').id = "target";
+      location.hash = "target";
+    })()`);
+    await phone.waitFor(`scrollY > 0`);
+    const strip = await phone.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom`);
+    assert.ok(await phone.eval(`document.getElementById("target").getBoundingClientRect().top`) >= strip);
+    const z = (sel) => phone.eval(`Number(getComputedStyle(document.querySelector(${JSON.stringify(sel)})).zIndex)`);
+    assert.ok((await z(".kapi-ring")) < (await z(".kapi-site-head")));
   } finally {
     await phone.close();
   }

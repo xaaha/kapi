@@ -628,10 +628,31 @@
 @media screen and (max-width: 760px) {
   html {
     padding-bottom: var(--kapi-bar-height, 104px);
+    scroll-padding-top: 46px;
+  }
+
+  #kapi-chrome .kapi-ring {
+    z-index: 2147481999;
   }
 
   .kapi-site-head {
-    padding: 14px 0.9rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 2147482000;
+    box-sizing: border-box;
+    height: 46px;
+    padding: 0 0.9rem;
+    background: var(--kapi-bg);
+  }
+
+  #kapi-chrome .kapi-panel-head {
+    position: fixed;
+    top: 0;
+    right: 0;
+    box-sizing: border-box;
+    height: 46px;
+    padding: 0 0.9rem;
+    border-bottom: 0;
   }
 
   #kapi-chrome .kapi-panel {
@@ -643,7 +664,6 @@
     box-shadow: var(--kapi-shadow);
   }
 
-  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-panel-head,
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-scroll,
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-presence {
     display: none;
@@ -784,5 +804,55 @@
 @media (prefers-reduced-motion: reduce) {
   #kapi-page > :is(h1, h2, h3, h4, h5, h6)::before {
     transition: none;
+  }
+}
+
+#kapi-page .kapi-undo-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--kapi-blue-border);
+  border-radius: 999px;
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
+  font: 600 13px/28px var(--kapi-font);
+  list-style: none;
+  animation: kapi-note-in 120ms ease-out;
+}
+
+#kapi-page .kapi-undo-note button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kapi-blue-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+#kapi-page .kapi-undo-note button:hover {
+  background: var(--kapi-blue-tint);
+}
+
+#kapi-page .kapi-undo-note button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 1px;
+}
+
+@keyframes kapi-note-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-page .kapi-undo-note {
+    animation: none;
   }
 }

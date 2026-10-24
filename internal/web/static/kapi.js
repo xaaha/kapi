@@ -30,6 +30,7 @@
   let flushTimer = 0;
   let queue = Promise.resolve();
   let noticeTimer = 0;
+  let note = null;
   let retryDelay = 1000;
 
   function h(tag, props = {}, ...kids) {
@@ -106,7 +107,10 @@
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
       h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
   const undoButton = button("Undo", "undo", "Undo the last change");
-  const showUndo = (can) => (undoButton.hidden = String(can) !== "true");
+  const showUndo = (can) => {
+    undoButton.hidden = String(can) !== "true";
+    if (undoButton.hidden) dismissNote();
+  };
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
@@ -192,6 +196,46 @@
     notice.dataset.kind = kind;
     notice.hidden = false;
     if (kind === "info") noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
+  }
+
+  const NOTE_MS = 6000;
+
+  function dismissNote() {
+    if (!note) return;
+    clearTimeout(note.timer);
+    note.el.remove();
+    note = null;
+  }
+
+  function placeNote() {
+    if (!note || note.el.isConnected) return;
+    const { prev, next, parent } = note.spot;
+    const nextEl = next && find(next);
+    const prevEl = prev && find(prev);
+    if (nextEl) nextEl.before(note.el);
+    else if (prevEl) prevEl.after(note.el);
+    else ((parent && find(parent)) || main).append(note.el);
+  }
+
+  function showNote(spot) {
+    dismissNote();
+    const el = h(spot.list ? "li" : "div", { class: "kapi-undo-note", role: "status", onclick: (e) => e.stopPropagation() },
+      h("span", { text: "Deleted" }),
+      h("button", { type: "button", text: "Undo", onclick: () => action("undo") }));
+    note = { el, spot, timer: setTimeout(dismissNote, NOTE_MS) };
+    placeNote();
+  }
+
+  function noteSpot(el) {
+    const list = peers(el);
+    const i = list.indexOf(el);
+    const parent = el.parentElement;
+    return {
+      prev: list[i - 1] && idOf(list[i - 1]),
+      next: list[i + 1] && idOf(list[i + 1]),
+      parent: parent === main ? "" : idOf(closest(parent, "[data-kapi-id]")),
+      list: parent.matches("ul, ol"),
+    };
   }
 
   function select(el) {
@@ -343,6 +387,7 @@
 
   async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
     notice.hidden = true;
+    if (kind !== "undo") dismissNote();
     busy = true;
     renderBar();
     try {
@@ -487,6 +532,7 @@
   function startEdit() {
     if (!selected || editing || busy) return;
     notice.hidden = true;
+    dismissNote();
     if (selected.hasAttribute("data-kapi-raw")) return editRaw(selected);
     const hosts = partsOf(selected);
     if (!hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
@@ -531,7 +577,15 @@
   }
 
   async function action(name) {
-    if (name === "undo") return (await op("undo", { id: "" }))?.ok && refresh(null);
+    if (name === "undo") {
+      const pill = note?.el.querySelector("button");
+      if (pill) pill.disabled = true;
+      const res = await op("undo", { id: "" });
+      if (pill) pill.disabled = false;
+      if (!res?.ok) return;
+      await refresh(null);
+      return dismissNote();
+    }
     if (name === "save") return saveEdit();
     if (name === "cancel") return cancelEdit();
     if (!selected) return;
@@ -542,7 +596,12 @@
       const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
       return (await op("orient", { id, dir }))?.ok && refresh([id]);
     }
-    if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
+    if (name === "delete") {
+      const spot = noteSpot(selected);
+      if (!(await op("delete", { id }))?.ok) return;
+      await refresh(null);
+      return showNote(spot);
+    }
     const list = peers(selected);
     const i = list.indexOf(selected);
     const before = name === "up" ? list[i - 1] : list[i + 2];
@@ -595,6 +654,7 @@
     numberRows(main);
     applyFolds();
     select(keep ? find(keep) : null);
+    placeNote();
   }
 
   async function loadBlocks(ids) {
@@ -627,6 +687,7 @@
       }
     }
     applyFolds();
+    placeNote();
   }
 
   function addEntry(ev, body) {
@@ -866,6 +927,7 @@
       else entry.el.removeAttribute("data-kapi-folded");
     };
     for (const el of main.children) {
+      if (el === note?.el) continue;
       const level = levelOf(el);
       while (level && open.length && open.at(-1).level >= level) close(open.pop());
       const hidden = open.some((entry) => entry.folded);
@@ -962,6 +1024,7 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     if (e.key === "Escape") {
+      dismissNote();
       if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
       else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
@@ -1017,7 +1080,9 @@
     }
   }).observe(panel);
   notice.addEventListener("click", () => (notice.hidden = true));
-  panel.addEventListener("focusin", () => panel.classList.add("kapi-expanded"));
+  panel.addEventListener("focusin", (e) => {
+    if (!e.target.closest(".kapi-panel-head")) panel.classList.add("kapi-expanded");
+  });
   panel.addEventListener("focusout", (e) => {
     if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
   });
