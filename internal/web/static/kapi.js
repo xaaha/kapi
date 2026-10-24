@@ -194,6 +194,47 @@
     if (kind === "info") noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
   }
 
+  const NOTE_MS = 6000;
+  let note = null;
+
+  function dismissNote() {
+    if (!note) return;
+    clearTimeout(note.timer);
+    note.el.remove();
+    note = null;
+  }
+
+  function placeNote() {
+    if (!note || note.el.isConnected) return;
+    const { prev, next, parent } = note.spot;
+    const nextEl = next && find(next);
+    const prevEl = prev && find(prev);
+    if (nextEl) nextEl.before(note.el);
+    else if (prevEl) prevEl.after(note.el);
+    else ((parent && find(parent)) || main).append(note.el);
+  }
+
+  function showNote(spot) {
+    dismissNote();
+    const el = h(spot.list ? "li" : "div", { class: "kapi-undo-note", role: "status", onclick: (e) => e.stopPropagation() },
+      h("span", { text: "Deleted" }),
+      h("button", { type: "button", text: "Undo", onclick: () => action("undo") }));
+    note = { el, spot, timer: setTimeout(dismissNote, NOTE_MS) };
+    placeNote();
+  }
+
+  function noteSpot(el) {
+    const list = peers(el);
+    const i = list.indexOf(el);
+    const parent = el.parentElement;
+    return {
+      prev: list[i - 1] && idOf(list[i - 1]),
+      next: list[i + 1] && idOf(list[i + 1]),
+      parent: parent === main ? "" : idOf(closest(parent, "[data-kapi-id]")),
+      list: parent.matches("ul, ol"),
+    };
+  }
+
   function select(el) {
     if (editing) return;
     selected?.removeAttribute("data-kapi-selected");
@@ -343,6 +384,7 @@
 
   async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
     notice.hidden = true;
+    dismissNote();
     busy = true;
     renderBar();
     try {
@@ -487,6 +529,7 @@
   function startEdit() {
     if (!selected || editing || busy) return;
     notice.hidden = true;
+    dismissNote();
     if (selected.hasAttribute("data-kapi-raw")) return editRaw(selected);
     const hosts = partsOf(selected);
     if (!hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
@@ -542,7 +585,12 @@
       const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
       return (await op("orient", { id, dir }))?.ok && refresh([id]);
     }
-    if (name === "delete") return (await op("delete", { id }))?.ok && refresh(null);
+    if (name === "delete") {
+      const spot = noteSpot(selected);
+      if (!(await op("delete", { id }))?.ok) return;
+      await refresh(null);
+      return showNote(spot);
+    }
     const list = peers(selected);
     const i = list.indexOf(selected);
     const before = name === "up" ? list[i - 1] : list[i + 2];
@@ -595,6 +643,7 @@
     numberRows(main);
     applyFolds();
     select(keep ? find(keep) : null);
+    placeNote();
   }
 
   async function loadBlocks(ids) {
@@ -627,6 +676,7 @@
       }
     }
     applyFolds();
+    placeNote();
   }
 
   function addEntry(ev, body) {
@@ -951,6 +1001,7 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     if (e.key === "Escape") {
+      dismissNote();
       if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
       else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;

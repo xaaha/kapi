@@ -786,3 +786,53 @@
     transition: none;
   }
 }
+
+#kapi-page .kapi-undo-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--kapi-blue-border);
+  border-radius: 999px;
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
+  font: 600 13px/28px var(--kapi-font);
+  list-style: none;
+  animation: kapi-note-in 120ms ease-out;
+}
+
+#kapi-page .kapi-undo-note button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kapi-blue-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+#kapi-page .kapi-undo-note button:hover {
+  background: var(--kapi-blue-tint);
+}
+
+#kapi-page .kapi-undo-note button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 1px;
+}
+
+@keyframes kapi-note-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-page .kapi-undo-note {
+    animation: none;
+  }
+}

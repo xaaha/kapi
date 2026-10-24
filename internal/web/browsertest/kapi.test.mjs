@@ -194,6 +194,74 @@ test("deletes an unlinked block", async () => {
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "delete", id: "cccccccc" } });
 });
 
+const undoNote = () => page.eval(`(n => n ? { text: n.textContent, prev: n.previousElementSibling?.dataset.kapiId ?? null, next: n.nextElementSibling?.dataset.kapiId ?? null } : null)(document.querySelector("#kapi-page .kapi-undo-note"))`);
+const deleteBlock = async (id) => {
+  await select(id);
+  await click('.kapi-bar [data-action="delete"]');
+  await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+};
+
+test("a delete leaves an Undo notice where the block was", async () => {
+  const before = await page.eval(`document.documentElement.scrollHeight`);
+  await deleteBlock("cccccccc");
+  assert.deepEqual(await undoNote(), { text: "DeletedUndo", prev: "bbbbbbbb", next: "dddddddd" });
+  assert.equal(await text("cccccccc"), null);
+  assert.ok((await page.eval(`document.documentElement.scrollHeight`)) <= before);
+});
+
+test("Undo in the notice restores the block with an undo op and removes the notice", async () => {
+  await deleteBlock("cccccccc");
+  await click("#kapi-page .kapi-undo-note button");
+  await until(async () => (await text("cccccccc")) !== null);
+  assert.deepEqual(requests("POST", "/ops")[1].body.op, { kind: "undo", id: "" });
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice survives the page reload that follows the delete", async () => {
+  await deleteBlock("cccccccc");
+  await until(() => pageLoads() >= 3);
+  assert.notEqual(await undoNote(), null);
+});
+
+test("the delete notice goes away after a few seconds", async () => {
+  await deleteBlock("cccccccc");
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`, 8000);
+});
+
+test("the delete notice goes away on the next op", async () => {
+  await deleteBlock("cccccccc");
+  await select("dddddddd");
+  await click('.kapi-bar [data-action="up"]');
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("the delete notice goes away on Escape", async () => {
+  await deleteBlock("cccccccc");
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
+});
+
+test("the delete notice does not appear for a delete made by the agent", async () => {
+  server.state.blocks.splice(2, 1);
+  server.state.rev++;
+  server.push({ kind: "revision", target: "", text: "deleted #cccccccc" });
+  await until(async () => (await text("cccccccc")) === null);
+  assert.equal(await undoNote(), null);
+});
+
+test("the delete notice fits the 390px phone layout", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    await phone.eval(`document.querySelector('.kapi-bar [data-action="delete"]').click()`);
+    await phone.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+    assert.ok(await phone.eval(`(r => r.left >= 0 && r.right <= innerWidth && r.height >= 28)(document.querySelector("#kapi-page .kapi-undo-note").getBoundingClientRect())`));
+  } finally {
+    await phone.close();
+  }
+});
+
 test("sends a chat message with Enter, targeted at the selected block", async () => {
   assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter to send, Shift+Enter for a new line");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
