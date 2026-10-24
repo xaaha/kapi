@@ -1999,3 +1999,65 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(await shown("p2p2p2p2"), true);
   assert.equal(requests("POST", "/ops").length, 0);
 });
+
+const FOLD_ALL_PAGE = [
+  { id: "h1h1h1h1", html: '<h1 data-kapi-id="h1h1h1h1">Gallery</h1>' },
+  { id: "p1p1p1p1", html: '<p data-kapi-id="p1p1p1p1">Intro.</p>' },
+  { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">Callouts</h2>' },
+  { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
+  { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
+  { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
+  { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Sub</h3>' },
+  { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Sub text.</p>' },
+  { id: "h3eeeeee", html: '<h3 data-kapi-id="h3eeeeee">Empty</h3>' },
+  { id: "h2dddddd", html: '<h2 data-kapi-id="h2dddddd">Last</h2>' },
+];
+
+async function arrowClick(id, modifiers = 0) {
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
+}
+
+const foldedIds = () => page.eval(`[...document.querySelectorAll("[data-kapi-folded]")].map((el) => el.dataset.kapiId)`);
+const ALT = 1;
+
+test("Option-click on an h2 arrow folds every h2 with content, again unfolds them, and other levels keep their state", async () => {
+  await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h3cccccc");
+  await arrowClick("h2bbbbbb", ALT);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb", "h3cccccc"]);
+  await arrowClick("h2aaaaaa", ALT);
+  assert.deepEqual(await foldedIds(), ["h3cccccc"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p2p2p2p2"]').checkVisibility()`), true);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
+test("Option-click folds the rest of a level from a mixed state, h3 arrows touch only h3, and the state survives a reload", async () => {
+  await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h2aaaaaa");
+  await arrowClick("h2bbbbbb", ALT);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb"]);
+  await page.eval(`location.reload()`);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h2aaaaaa"][data-kapi-folded]')`);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb"]);
+  await arrowClick("h2bbbbbb", ALT);
+  assert.deepEqual(await foldedIds(), []);
+  await arrowClick("h3cccccc", ALT);
+  assert.deepEqual(await foldedIds(), ["h3cccccc"]);
+});
+
+test("Option-click on the only h1 folds it, a plain click folds one heading, and Option-click selects nothing", async () => {
+  await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h1h1h1h1", ALT);
+  assert.deepEqual(await foldedIds(), ["h1h1h1h1"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p3p3p3p3"]').checkVisibility()`), false);
+  await arrowClick("h1h1h1h1", ALT);
+  assert.deepEqual(await foldedIds(), []);
+  await arrowClick("h2bbbbbb");
+  assert.deepEqual(await foldedIds(), ["h2bbbbbb"]);
+  await arrowClick("h2bbbbbb");
+  await arrowClick("h2aaaaaa", ALT);
+  assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected]")`), false);
+  assert.equal(await page.eval(`document.querySelector(".kapi-bar").hidden`), true);
+});
