@@ -196,9 +196,12 @@ test("deletes an unlinked block", async () => {
 
 const undoNote = () => page.eval(`(n => n ? { text: n.textContent, prev: n.previousElementSibling?.dataset.kapiId ?? null, next: n.nextElementSibling?.dataset.kapiId ?? null } : null)(document.querySelector("#kapi-page .kapi-undo-note"))`);
 const deleteBlock = async (id) => {
+  const loads = pageLoads();
   await select(id);
   await click('.kapi-bar [data-action="delete"]');
   await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+  await until(() => pageLoads() > loads);
+  await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note") && !document.querySelector("[data-kapi-selected]")`);
 };
 
 test("a delete leaves an Undo notice where the block was", async () => {
