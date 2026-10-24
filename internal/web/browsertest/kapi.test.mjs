@@ -1690,6 +1690,24 @@ async function mouseClickAt(x, y) {
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
 }
 
+test("a real double click edits a block even when its toolbar appears under the pointer", async () => {
+  await reopenWith([{ id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose that the toolbar lands on.</p>' }]);
+  for (const width of [1100, 1280, 1920]) {
+    await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
+    const { x, y } = await page.eval(`(r => ({ x: r.right - 20, y: r.top + 8 }))(document.querySelector('[data-kapi-id="pppppppp"]').getBoundingClientRect())`);
+    for (const clickCount of [1, 2]) {
+      await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount });
+      await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount });
+    }
+    await page.waitFor(`document.activeElement?.dataset.kapiId === "pppppppp" && document.activeElement.isContentEditable`);
+    assert.equal(requests("POST", "/ops").length, 0, `width ${width}`);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector("[contenteditable]")`);
+    await page.key("Escape");
+  }
+  await page.call("Emulation.clearDeviceMetricsOverride");
+});
+
 test("clicking empty page space clears the selection, and clicking the chat keeps it", async () => {
   await reopenWith([{ id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose.</p>' }]);
   const selected = () => page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId ?? null`);

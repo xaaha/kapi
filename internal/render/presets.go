@@ -169,7 +169,7 @@ func renderOption(b *bytes.Buffer, n *html.Node) error {
 		return err
 	}
 	writeStart(b, "section", outerAttrs(n, "kapi-option"))
-	b.WriteString(`<h4 class="kapi-option-title">`)
+	writeStart(b, "h4", attrHost(n, "kapi-option-title"))
 	writeText(b, title)
 	b.WriteString(`</h4>`)
 	writeStart(b, "div", bodyAttrs(n, "kapi-option-body"))
@@ -234,11 +234,13 @@ func renderChoice(b *bytes.Buffer, n *html.Node) error {
 	}
 	writeStart(b, "fieldset", outerAttrs(n, "kapi-choice", "data-kapi-field", name, "data-kapi-choice", kind))
 	var legend, opts []*html.Node
+	contiguous := true
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode && c.Data == "kapi-opt" {
 			opts = append(opts, c)
 		} else {
 			legend = append(legend, c)
+			contiguous = contiguous && (len(opts) == 0 || (c.Type == html.TextNode && strings.TrimSpace(c.Data) == ""))
 		}
 	}
 	if len(opts) == 0 {
@@ -249,7 +251,7 @@ func renderChoice(b *bytes.Buffer, n *html.Node) error {
 		renderNode(&lb, c)
 	}
 	if text := bytes.TrimSpace(lb.Bytes()); len(text) > 0 {
-		b.WriteString("<legend>")
+		writeStart(b, "legend", leadHost(n, contiguous))
 		b.Write(text)
 		b.WriteString("</legend>")
 	}
@@ -276,11 +278,10 @@ func renderOpt(b *bytes.Buffer, n *html.Node) error {
 	}
 	writeStart(b, "label", outerAttrs(n, "kapi-opt"))
 	writeStart(b, "input", kv("type", kind, "name", name, "value", value))
+	writeStart(b, "span", bodyAttrs(n, ""))
 	if hasContent(n) {
-		writeStart(b, "span", bodyAttrs(n, ""))
 		renderChildren(b, n)
 	} else {
-		b.WriteString("<span>")
 		writeText(b, value)
 	}
 	b.WriteString("</span></label>")
@@ -334,7 +335,13 @@ func renderBadge(b *bytes.Buffer, n *html.Node) error {
 		writeStart(b, "span", outerAttrs(n, "kapi-badge-icon kapi-tone-"+tone, "role", "img", "aria-label", icon.label))
 		b.WriteString(icon.svg())
 	}
-	renderChildren(b, n)
+	if id, ok := attr(n, textAttr); ok && hasContent(n) {
+		writeStart(b, "span", kv(textAttr, id))
+		renderChildren(b, n)
+		writeEnd(b, "span")
+	} else {
+		renderChildren(b, n)
+	}
 	writeEnd(b, "span")
 	return nil
 }
@@ -373,7 +380,7 @@ func renderKVItem(b *bytes.Buffer, n *html.Node) error {
 		return err
 	}
 	writeStart(b, "div", outerAttrs(n, "kapi-kv-item"))
-	b.WriteString("<dt>")
+	writeStart(b, "dt", attrHost(n, ""))
 	writeText(b, key)
 	b.WriteString("</dt>")
 	writeStart(b, "dd", bodyAttrs(n, ""))
@@ -392,7 +399,7 @@ func renderDetails(b *bytes.Buffer, n *html.Node) error {
 		open = []string{"open", ""}
 	}
 	writeStart(b, "details", outerAttrs(n, "kapi-details", open...))
-	b.WriteString("<summary>")
+	writeStart(b, "summary", attrHost(n, ""))
 	writeText(b, summary)
 	b.WriteString(`</summary>`)
 	writeStart(b, "div", bodyAttrs(n, "kapi-details-body"))

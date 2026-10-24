@@ -66,21 +66,27 @@ parts are text:
 
 | Text | Presets | Rendered as | Edited as |
 |---|---|---|---|
-| body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
+| body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task`, `kapi-badge` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
+| attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
+| question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
 | raw | `kapi-code`, `kapi-diff`, `kapi-diagram` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
-| none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-choice`, `kapi-kv`, `kapi-checklist`, `kapi-badge` | nothing | through the parts inside it |
+| none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the
 text, such as a badge in a cell or a code block in a callout, stays one piece
 that cannot be typed into, and it is saved from its source byte for byte. A
-block with no text part says so and opens no editor. Attributes (`kind`,
-`tone`, `key`, `title`, `summary`, `done`, ids) and rendered chrome (labels,
-marks, headings) are never editable. A new preset fails the render tests
+block with no text part says so and opens no editor. A badge inside text
+stays one piece, but its own text is a part. Attributes that are not shown as
+text (`kind`, `tone`, `state`, `done`, `value`, `name`, ids) and rendered
+chrome (callout labels, plan marks, the form button) are never editable. A new preset fails the render tests
 until it is in `textParts`, and a test edits every text part of the gallery.
 
 All of it is saved as one `text` op:
-`{"kind":"text","id":"<block id>","parts":[{"id":"<part id>","inner":"..."},{"id":"<table id>","row":r,"col":c,"inner":"..."}]}`.
+`{"kind":"text","id":"<block id>","parts":[{"id":"<part id>","inner":"..."},{"id":"<table id>","row":r,"col":c,"inner":"..."},{"id":"<item id>","attr":"key","inner":"Owner"},{"id":"<choice id>","lead":true,"inner":"..."}]}`.
+An attribute part sets that attribute to the text with its whitespace
+collapsed, and an empty one is 422. A question part keeps the whitespace
+around it and is 422 when the question is split around the options.
 `inner` is the part's HTML as the browser holds it. The store keeps each
 part's start and end tags and puts the new HTML between them, after it:
 

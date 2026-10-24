@@ -16,6 +16,7 @@
 
   let selected = null;
   let editing = null;
+  let selectedAt = 0;
   let presence = "none";
   let lastSeq = 0;
   let readUpTo = 0;
@@ -197,6 +198,7 @@
   function select(el) {
     if (editing) return;
     selected?.removeAttribute("data-kapi-selected");
+    if (el !== selected) selectedAt = performance.now();
     selected = el;
     el?.setAttribute("data-kapi-selected", "");
     targetChip.hidden = !el;
@@ -391,8 +393,13 @@
   function partOf(host) {
     const part = { id: host.dataset.kapiText };
     if (host.dataset.kapiCell) [part.row, part.col] = host.dataset.kapiCell.split(",").map(Number);
+    if (host.dataset.kapiAttr) part.attr = host.dataset.kapiAttr;
+    if (host.hasAttribute("data-kapi-lead")) part.lead = true;
     return part;
   }
+
+  const SINGLE_LINE = "td, th, span, dt, summary, legend, [data-kapi-attr]";
+  const innerOf = (host) => (host.dataset.kapiAttr ? host.textContent : host.innerHTML);
 
   function caretAtEnd(host) {
     host.focus();
@@ -411,15 +418,15 @@
     for (const host of hosts) {
       const details = host.closest("details");
       if (details) details.open = true;
-      host.contentEditable = "true";
+      host.contentEditable = host.dataset.kapiAttr ? "plaintext-only" : "true";
       for (const island of islandsOf(host)) island.contentEditable = "false";
     }
     const parts = hosts.map((host) => ({ host, original: host.innerHTML, own: ownText(host) }));
     const op = () => {
       const changed = parts.filter(({ host, own }) => ownText(host) !== own);
-      return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: host.innerHTML })) } : null;
+      return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: innerOf(host) })) } : null;
     };
-    editing = { el, rev: Number(main.dataset.rev), hosts: parts, op, singleLine: hosts.every((host) => host.matches("td, th, span")) };
+    editing = { el, rev: Number(main.dataset.rev), hosts: parts, op };
     caretAtEnd(hosts[0]);
     renderBar();
   }
@@ -758,6 +765,7 @@
       return;
     }
     if (e.target === targetChip) return select(null);
+    if (e.detail > 1 && bar.contains(e.target) && performance.now() - selectedAt < 600) return startEdit();
     const b = e.target.closest("[data-action]");
     if (b && !b.disabled) action(b.dataset.action);
   });
@@ -883,7 +891,10 @@
   }
 
   main.addEventListener("click", (e) => {
-    if (editing) return;
+    if (editing) {
+      if (closest(e.target, "summary")?.isContentEditable) e.preventDefault();
+      return;
+    }
     const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
     const gap = heading && heading.getBoundingClientRect().left - e.clientX;
     if (gap > 0 && gap <= FOLD_HIT) return toggleFold(heading);
@@ -942,6 +953,7 @@
     const focus = document.activeElement;
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
+    const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     if (e.key === "Escape") {
       if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
       else if (panel.contains(focus)) focus.blur();
@@ -950,9 +962,9 @@
       return;
     }
     if (!inEditor || e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter" && editing.singleLine && inContent && e.shiftKey) {
+    if (e.key === "Enter" && singleLine && e.shiftKey) {
       e.preventDefault();
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (editing.singleLine && inContent))) {
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey || singleLine)) {
       e.preventDefault();
       defaultAction();
     } else if (e.key === "Tab" && !e.shiftKey && inContent) {

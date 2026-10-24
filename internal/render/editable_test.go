@@ -64,13 +64,32 @@ func TestEveryPresetMarksTheTextItDeclares(t *testing.T) {
 		name, id := "kapi-"+attrVal(n, "data-kapi-preset"), attrVal(n, "data-kapi-id")
 		kind := TextOf(name)
 		seen[kind] = true
-		got := marked[id]
+		var got, attrs []*html.Node
+		for _, m := range marked[id] {
+			if _, ok := attr(m, attrAttr); ok {
+				attrs = append(attrs, m)
+			} else {
+				got = append(got, m)
+			}
+		}
+		if want := TextAttr(name); want != "" && (len(attrs) != 1 || attrVal(attrs[0], attrAttr) != want) {
+			t.Errorf("%s #%s declares its %s as text but marks %d attribute parts", name, id, want, len(attrs))
+		} else if want == "" && len(attrs) != 0 {
+			t.Errorf("%s #%s marks attribute parts it does not declare", name, id)
+		}
 		switch kind {
 		case NoText:
 			if len(got) != 0 {
 				t.Errorf("%s #%s declares no text but marks %d parts", name, id, len(got))
 			}
+		case LeadText:
+			if len(got) != 1 || got[0].Data != "legend" || attrVal(got[0], textAttr) != id {
+				t.Errorf("%s #%s declares a lead but does not mark its legend", name, id)
+			}
 		case BodyText:
+			if _, icon := attr(n, "role"); icon && len(got) == 0 {
+				break
+			}
 			if len(got) != 1 || got[0] == n {
 				t.Errorf("%s #%s declares a body but marks %d parts", name, id, len(got))
 			}
@@ -89,7 +108,7 @@ func TestEveryPresetMarksTheTextItDeclares(t *testing.T) {
 			}
 		}
 	}
-	for _, kind := range []TextPart{NoText, BodyText, CellText, RawText} {
+	for _, kind := range []TextPart{NoText, BodyText, CellText, RawText, LeadText} {
 		if !seen[kind] {
 			t.Errorf("the sample has no preset whose text is of kind %d", kind)
 		}

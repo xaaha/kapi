@@ -14,6 +14,7 @@ const (
 	BodyText
 	CellText
 	RawText
+	LeadText
 )
 
 var textParts = map[string]TextPart{
@@ -29,16 +30,24 @@ var textParts = map[string]TextPart{
 	"kapi-question":  BodyText,
 	"kapi-diagram":   RawText,
 	"kapi-form":      NoText,
-	"kapi-choice":    NoText,
+	"kapi-choice":    LeadText,
 	"kapi-opt":       BodyText,
 	"kapi-text":      BodyText,
-	"kapi-badge":     NoText,
+	"kapi-badge":     BodyText,
 	"kapi-kv":        NoText,
 	"kapi-item":      BodyText,
 	"kapi-details":   BodyText,
 	"kapi-checklist": NoText,
 	"kapi-task":      BodyText,
 }
+
+var textAttrs = map[string]string{
+	"kapi-item":    "key",
+	"kapi-option":  "title",
+	"kapi-details": "summary",
+}
+
+func TextAttr(tag string) string { return textAttrs[tag] }
 
 func TextOf(tag string) TextPart {
 	if !strings.HasPrefix(tag, "kapi-") {
@@ -51,9 +60,11 @@ const (
 	textAttr = "data-kapi-text"
 	rawAttr  = "data-kapi-raw"
 	cellAttr = "data-kapi-cell"
+	attrAttr = "data-kapi-attr"
+	leadAttr = "data-kapi-lead"
 )
 
-var textMarks = set(textAttr, rawAttr, cellAttr)
+var textMarks = set(textAttr, rawAttr, cellAttr, attrAttr, leadAttr)
 
 func markText(root *html.Node) {
 	var walk func(n *html.Node)
@@ -73,7 +84,7 @@ func markText(root *html.Node) {
 				setAttrs(c, textAttr, id)
 			case TextOf(c.Data) == RawText:
 				setAttrs(c, textAttr, id, rawAttr, "")
-			case TextOf(c.Data) == BodyText && isPreset(c):
+			case (TextOf(c.Data) == BodyText || TextOf(c.Data) == LeadText || TextAttr(c.Data) != "") && isPreset(c):
 				setAttrs(c, textAttr, id)
 			case c.Data == "kapi-table":
 				markCells(c, id)
@@ -125,6 +136,24 @@ func unmark(n *html.Node) {
 
 func setAttrs(n *html.Node, pairs ...string) {
 	n.Attr = append(n.Attr, kv(pairs...)...)
+}
+
+func attrHost(n *html.Node, class string) []html.Attribute {
+	out := kv("class", class)
+	if class == "" {
+		out = nil
+	}
+	if id, ok := attr(n, textAttr); ok && TextAttr(n.Data) != "" {
+		out = append(out, kv(textAttr, id, attrAttr, TextAttr(n.Data))...)
+	}
+	return out
+}
+
+func leadHost(n *html.Node, contiguous bool) []html.Attribute {
+	if id, ok := attr(n, textAttr); ok && contiguous {
+		return kv(textAttr, id, leadAttr, "")
+	}
+	return nil
 }
 
 func bodyAttrs(n *html.Node, class string) []html.Attribute {

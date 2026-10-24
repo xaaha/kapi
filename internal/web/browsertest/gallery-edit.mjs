@@ -8,6 +8,7 @@ if (!findChrome()) {
 
 const browser = await launch();
 let page;
+const CHROME = "[data-kapi-raw], .kapi-callout-label, .kapi-plan-mark, .kapi-form-actions, svg";
 
 async function settle() {
   let last = await page.eval(`document.getElementById("kapi-page").innerHTML.length + ":" + document.getElementById("kapi-page").dataset.rev`);
@@ -21,6 +22,7 @@ async function settle() {
 
 async function doubleClick(target) {
   await settle();
+  await page.key("Escape");
   const at = await page.eval(`(() => {
     for (const d of document.querySelectorAll("details")) d.open = true;
     const n = ${target};
@@ -36,7 +38,7 @@ async function doubleClick(target) {
 const report = { edited: [], raw: [], blocks: [], errors: [] };
 try {
   page = await browser.open(url, { width: 1280, height: 900 });
-  const keyOf = `(n) => n.dataset.kapiText + (n.dataset.kapiCell ? "/" + n.dataset.kapiCell : "")`;
+  const keyOf = `(n) => n.dataset.kapiText + (n.dataset.kapiCell ? "/" + n.dataset.kapiCell : "") + (n.dataset.kapiAttr ? "@" + n.dataset.kapiAttr : "") + (n.hasAttribute("data-kapi-lead") ? "@lead" : "")`;
   const find = (key) => `[...document.querySelectorAll("[data-kapi-text]")].find((n) => (${keyOf})(n) === ${JSON.stringify(key)})`;
   const keys = await page.eval(`[...document.querySelectorAll("[data-kapi-text]")].map(${keyOf})`);
   for (const [i, key] of keys.entries()) {
@@ -68,7 +70,7 @@ try {
       await page.key("Escape").catch(() => {});
     }
   }
-  const blocks = await page.eval(`[...document.querySelectorAll("#kapi-page > [data-kapi-id]")].filter((b) => b.querySelector("[data-kapi-text]") && !b.matches("[data-kapi-text]")).map((b) => b.dataset.kapiId)`);
+  const blocks = await page.eval(`[...document.querySelectorAll("#kapi-page > [data-kapi-id]")].filter((b) => !b.matches("[data-kapi-raw]")).map((b) => b.dataset.kapiId)`);
   for (const id of blocks) {
     const block = `document.querySelector('[data-kapi-id="${id}"]')`;
     try {
@@ -77,6 +79,17 @@ try {
       await page.waitFor(`!!document.querySelector("[contenteditable=true]")`);
       const leak = await page.eval(`[...${block}.querySelectorAll("[data-kapi-raw]")].filter((n) => n.isContentEditable).length + document.querySelectorAll(".kapi-source").length`);
       if (leak) throw new Error(`${leak} raw parts or text boxes opened while editing the whole block`);
+      const stuck = await page.eval(`(() => {
+        const out = [];
+        const walk = document.createTreeWalker(${block}, NodeFilter.SHOW_TEXT);
+        while (walk.nextNode()) {
+          const n = walk.currentNode;
+          if (!n.data.trim() || n.parentElement.isContentEditable || n.parentElement.closest(${JSON.stringify(CHROME)})) continue;
+          out.push(n.data.trim().slice(0, 40));
+        }
+        return out;
+      })()`);
+      if (stuck.length) throw new Error(`text that cannot be edited: ${JSON.stringify(stuck)}`);
       report.blocks.push(id);
     } catch (err) {
       report.errors.push(`block ${id}: ${err.message.slice(0, 160)}`);

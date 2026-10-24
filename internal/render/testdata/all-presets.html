@@ -778,9 +778,9 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
 <p data-kapi-id="e5f6g7h2" data-kapi-text="e5f6g7h2">This page walks through moving page state into the Go daemon. It uses every kapi preset, so it doubles as the visual reference for the design system. See <a href="#k3f9a2bq">the risky step</a> before you start, and <a href="https://github.com/xaaha/kapi">the repo</a> for context.</p>
 
 <dl class="kapi-kv" data-kapi-preset="kv" data-kapi-id="kvaaaaaa">
-  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitemaa"><dt>Owner</dt><dd data-kapi-text="kvitemaa">Track A, the server</dd></div>
-  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitembb"><dt>Status</dt><dd data-kapi-text="kvitembb"><span class="kapi-badge kapi-tone-yellow" data-kapi-preset="badge" data-kapi-id="badgebbb">in review</span></dd></div>
-  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitemcc"><dt>Rollback</dt><dd data-kapi-text="kvitemcc">Flip <code>KAPI_STORE</code> back and restart the daemon.</dd></div>
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitemaa"><dt data-kapi-text="kvitemaa" data-kapi-attr="key">Owner</dt><dd data-kapi-text="kvitemaa">Track A, the server</dd></div>
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitembb"><dt data-kapi-text="kvitembb" data-kapi-attr="key">Status</dt><dd data-kapi-text="kvitembb"><span class="kapi-badge kapi-tone-yellow" data-kapi-preset="badge" data-kapi-id="badgebbb"><span data-kapi-text="badgebbb">in review</span></span></dd></div>
+  <div class="kapi-kv-item" data-kapi-preset="item" data-kapi-id="kvitemcc"><dt data-kapi-text="kvitemcc" data-kapi-attr="key">Rollback</dt><dd data-kapi-text="kvitemcc">Flip <code>KAPI_STORE</code> back and restart the daemon.</dd></div>
 </dl>
 
 <aside class="kapi-callout kapi-callout-note kapi-tone-blue" data-kapi-preset="callout" role="note" data-kapi-id="n0teaaaa"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body" data-kapi-text="n0teaaaa"><p>Nothing here ships until the <code>kapi open</code> command lands on main.</p></div></aside>
@@ -829,25 +829,25 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
     <tbody>
       <tr><td data-kapi-text="tableaaa" data-kapi-cell="1,0"><code>GET /p/{id}/</code></td><td data-kapi-text="tableaaa" data-kapi-cell="1,1">4</td><td data-kapi-text="tableaaa" data-kapi-cell="1,2">11</td><td data-kapi-text="tableaaa" data-kapi-cell="1,3">Full render with CSS</td></tr>
       <tr><td data-kapi-text="tableaaa" data-kapi-cell="2,0"><code>GET /p/{id}/blocks/{block}</code></td><td data-kapi-text="tableaaa" data-kapi-cell="2,1">1</td><td data-kapi-text="tableaaa" data-kapi-cell="2,2">3</td><td data-kapi-text="tableaaa" data-kapi-cell="2,3">One element</td></tr>
-      <tr><td data-kapi-text="tableaaa" data-kapi-cell="3,0"><code>POST /p/{id}/ops</code></td><td data-kapi-text="tableaaa" data-kapi-cell="3,1">6</td><td data-kapi-text="tableaaa" data-kapi-cell="3,2">19</td><td data-kapi-text="tableaaa" data-kapi-cell="3,3">Writes the file and a revision <span class="kapi-badge kapi-tone-yellow" data-kapi-preset="badge" data-kapi-id="badgeaaa">slowest</span></td></tr>
+      <tr><td data-kapi-text="tableaaa" data-kapi-cell="3,0"><code>POST /p/{id}/ops</code></td><td data-kapi-text="tableaaa" data-kapi-cell="3,1">6</td><td data-kapi-text="tableaaa" data-kapi-cell="3,2">19</td><td data-kapi-text="tableaaa" data-kapi-cell="3,3">Writes the file and a revision <span class="kapi-badge kapi-tone-yellow" data-kapi-preset="badge" data-kapi-id="badgeaaa"><span data-kapi-text="badgeaaa">slowest</span></span></td></tr>
     </tbody>
   </table></div>
 
-<details class="kapi-details" data-kapi-preset="details" data-kapi-id="detailsa"><summary>Why the p99 for ops is high</summary><div class="kapi-details-body" data-kapi-text="detailsa">
+<details class="kapi-details" data-kapi-preset="details" data-kapi-id="detailsa"><summary data-kapi-text="detailsa" data-kapi-attr="summary">Why the p99 for ops is high</summary><div class="kapi-details-body" data-kapi-text="detailsa">
   <p>Every op writes the page file and a revision copy, and both are synced to disk before the reply.</p>
 </div></details>
 
 <h2 data-kapi-id="h2dddddd" data-kapi-text="h2dddddd">Transport options</h2>
 <div class="kapi-compare" data-kapi-preset="compare" data-kapi-id="compaaaa">
-  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optaaaaa"><h4 class="kapi-option-title">Server-sent events</h4><div class="kapi-option-body" data-kapi-text="optaaaaa">
+  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optaaaaa"><h4 class="kapi-option-title" data-kapi-text="optaaaaa" data-kapi-attr="title">Server-sent events</h4><div class="kapi-option-body" data-kapi-text="optaaaaa">
     <p>One long GET per tab. Built into every browser and reconnects with <code>Last-Event-ID</code>.</p>
     <ul><li>No new dependency</li><li>Plain HTTP, easy to curl</li></ul>
   </div></section>
-  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optbbbbb"><h4 class="kapi-option-title">WebSocket</h4><div class="kapi-option-body" data-kapi-text="optbbbbb">
+  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optbbbbb"><h4 class="kapi-option-title" data-kapi-text="optbbbbb" data-kapi-attr="title">WebSocket</h4><div class="kapi-option-body" data-kapi-text="optbbbbb">
     <p>Two-way, but needs its own reconnect and replay logic.</p>
     <ul><li>Needs a library or hand-rolled framing</li></ul>
   </div></section>
-  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optccccc"><h4 class="kapi-option-title">Polling</h4><div class="kapi-option-body" data-kapi-text="optccccc">
+  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="optccccc"><h4 class="kapi-option-title" data-kapi-text="optccccc" data-kapi-attr="title">Polling</h4><div class="kapi-option-body" data-kapi-text="optccccc">
     <p>Simplest to build. Adds up to a second of lag and wakes the daemon for nothing.</p>
   </div></section>
 </div>
@@ -868,8 +868,8 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
 
 <h2 data-kapi-id="h2ffffff" data-kapi-text="h2ffffff">Your call</h2>
 <form class="kapi-form" data-kapi-preset="form" name="cutover" data-kapi-form="cutover" data-kapi-id="formaaaa">
-  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="window" data-kapi-choice="single" data-kapi-id="choiaaaa"><legend>When should the cutover run?</legend><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="window" value="tonight"><span>Tonight, 22:00</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="window" value="weekend"><span>Saturday morning</span></label></div></fieldset>
-  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="notify" data-kapi-choice="multiple" data-kapi-id="choibbbb"><legend>Who needs a heads-up?</legend><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="support"><span>Support</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="sales"><span>Sales</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="oncall"><span>The on-call engineer</span></label></div></fieldset>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="window" data-kapi-choice="single" data-kapi-id="choiaaaa"><legend data-kapi-text="choiaaaa" data-kapi-lead="">When should the cutover run?</legend><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="window" value="tonight"><span>Tonight, 22:00</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="window" value="weekend"><span>Saturday morning</span></label></div></fieldset>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="notify" data-kapi-choice="multiple" data-kapi-id="choibbbb"><legend data-kapi-text="choibbbb" data-kapi-lead="">Who needs a heads-up?</legend><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="support"><span>Support</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="sales"><span>Sales</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="notify" value="oncall"><span>The on-call engineer</span></label></div></fieldset>
   <label class="kapi-text" data-kapi-preset="text" data-kapi-field="notes" data-kapi-id="textaaaa"><span class="kapi-text-label" data-kapi-text="textaaaa">Anything else?</span><textarea name="notes" rows="3"></textarea></label>
 <div class="kapi-form-actions"><button type="submit">Send answers</button></div></form>
 

@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+var typedMark = regexp.MustCompile(` zq\d+`)
+
 var idTag = regexp.MustCompile(`<[a-z][\w-]*\b[^>]*\bdata-kapi-id="([^"]+)"[^>]*>`)
 
 func tagsByID(src string) map[string]string {
@@ -61,11 +63,11 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range report.Edited {
-		if !strings.Contains(string(after), e.Mark+"<") && !strings.Contains(string(after), e.Mark+"\n") {
+		if !strings.Contains(string(after), e.Mark+"<") && !strings.Contains(string(after), e.Mark+"\n") && !strings.Contains(string(after), e.Mark+`"`) {
 			t.Errorf("%s: %q is not in the file", e.Key, e.Mark)
 		}
 	}
-	was, is := tagsByID(string(before)), tagsByID(string(after))
+	was, is := tagsByID(string(before)), tagsByID(typedMark.ReplaceAllString(string(after), ""))
 	for id, tag := range was {
 		if is[id] != tag {
 			t.Errorf("#%s: %s became %s", id, tag, is[id])

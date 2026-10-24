@@ -193,6 +193,47 @@ func TestATextOpDropsIdsPastedFromElsewhereAndKeepsCommentsThatLookLikeItsMarks(
 	}
 }
 
+func TestATextOpSetsTextHeldInAttributes(t *testing.T) {
+	const src = "<kapi-kv data-kapi-id=\"aaaaaaaa\"><kapi-item data-kapi-id=\"bbbbbbbb\" key=\"Owner\">Track C</kapi-item></kapi-kv>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Attr: "key", Inner: " Owner &\n \"lead\" "}}})
+	if got, want := onDisk(t, path), strings.Replace(src, `key="Owner"`, `key="Owner &amp; &#34;lead&#34;"`, 1); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	for _, p := range []Part{{ID: "bbbbbbbb", Attr: "key", Inner: "  "}, {ID: "bbbbbbbb", Attr: "title", Inner: "x"}, {ID: "aaaaaaaa", Attr: "key", Inner: "x"}} {
+		if _, _, err := s.Apply(2, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{p}}); err == nil {
+			t.Errorf("%+v was accepted", p)
+		}
+	}
+}
+
+func TestATextOpSetsTheQuestionOfAChoiceAndKeepsItsOptions(t *testing.T) {
+	const src = "<kapi-form data-kapi-id=\"aaaaaaaa\" name=\"f\"><kapi-choice data-kapi-id=\"bbbbbbbb\" name=\"w\">When?\n  <kapi-opt data-kapi-id=\"cccccccc\" value=\"now\">Now</kapi-opt></kapi-choice></kapi-form>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Lead: true, Inner: "When should it <em>run</em>?"}, {ID: "cccccccc", Inner: "Right now"}}})
+	if got, want := onDisk(t, path), strings.NewReplacer("When?\n", "When should it <em>run</em>?\n", ">Now<", ">Right now<").Replace(src); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	const split = "<kapi-choice data-kapi-id=\"aaaaaaaa\" name=\"w\">a<kapi-opt data-kapi-id=\"cccccccc\" value=\"x\"></kapi-opt><p>b</p></kapi-choice>\n"
+	home, path = newPage(t, split)
+	s = open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Lead: true, Inner: "c"}}}); err == nil {
+		t.Error("a question split around its options was accepted")
+	}
+}
+
+func TestATextOpSetsTheTextOfABadgeAndKeepsItsTone(t *testing.T) {
+	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>x <kapi-badge data-kapi-id=\"bbbbbbbb\" tone=\"green\">open</kapi-badge></td></tr></table></kapi-table>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "bbbbbbbb", Inner: "merged"}}})
+	if got, want := onDisk(t, path), strings.Replace(src, ">open<", ">merged<", 1); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestATextOpWithManyPartsIsOneRevision(t *testing.T) {
 	const src = "<kapi-checklist data-kapi-id=\"aaaaaaaa\"><kapi-task data-kapi-id=\"bbbbbbbb\">one</kapi-task><kapi-task data-kapi-id=\"cccccccc\" done>two</kapi-task></kapi-checklist>\n"
 	home, path := newPage(t, src)
@@ -231,7 +272,10 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceAndKeepsTheRest(t *testing.T) {
 		}
 	}
 	for _, p := range parts {
-		name := p.part.ID
+		name := p.part.ID + p.part.Attr
+		if p.part.Lead {
+			name += "lead"
+		}
 		if p.part.Row != nil {
 			name += "/" + strconv.Itoa(*p.part.Row) + "," + strconv.Itoa(p.part.Col)
 		}
@@ -240,13 +284,16 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceAndKeepsTheRest(t *testing.T) {
 			s := open(t, home, path)
 			part := p.part
 			mark := "edited" + strings.ReplaceAll(name, "/", "")
-			if p.kind == render.RawText {
+			switch {
+			case p.kind == render.RawText:
 				inner, err := Inner(src, part.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
 				part.Inner = string(inner)
-			} else {
+			case part.Attr != "":
+				part.Inner += " " + mark
+			default:
 				part.Inner += " <em>" + mark + "</em>"
 			}
 			if _, _, err := s.Apply(1, &Op{Kind: "text", ID: part.ID, Parts: []Part{part}}); err != nil {
@@ -257,7 +304,8 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceAndKeepsTheRest(t *testing.T) {
 				again := renderedParts(t, out)
 				var found bool
 				for _, q := range again {
-					found = found || (q.part.ID == part.ID && rowOf(q.part) == rowOf(part) && q.part.Col == part.Col && strings.HasSuffix(q.part.Inner, "<em>"+mark+"</em>"))
+					same := q.part.ID == part.ID && rowOf(q.part) == rowOf(part) && q.part.Col == part.Col && q.part.Attr == part.Attr && q.part.Lead == part.Lead
+					found = found || (same && (strings.HasSuffix(q.part.Inner, "<em>"+mark+"</em>") || strings.HasSuffix(q.part.Inner, " "+mark)))
 				}
 				if !found {
 					t.Errorf("the edit does not show in its part after rendering")
@@ -265,7 +313,7 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceAndKeepsTheRest(t *testing.T) {
 			} else if !bytes.Equal(out, src) {
 				t.Errorf("saving a raw part unchanged changed the file")
 			}
-			before, after := attrsByID(src), attrsByID(out)
+			before, after := attrsByID(src, part), attrsByID(out, part)
 			for id, attrs := range before {
 				if after[id] != attrs {
 					t.Errorf("#%s: attributes %q became %q", id, attrs, after[id])
@@ -319,8 +367,13 @@ func renderedParts(t *testing.T, src []byte) []renderedPart {
 				rp.kind = render.CellText
 			}
 			for _, a := range n.Attr {
-				if a.Key == "data-kapi-raw" {
+				switch a.Key {
+				case "data-kapi-raw":
 					rp.kind = render.RawText
+				case "data-kapi-attr":
+					rp.part.Attr = a.Val
+				case "data-kapi-lead":
+					rp.part.Lead = true
 				}
 			}
 			parts = append(parts, rp)
@@ -335,7 +388,7 @@ func renderedParts(t *testing.T, src []byte) []renderedPart {
 	return parts
 }
 
-func attrsByID(src []byte) map[string]string {
+func attrsByID(src []byte, edited Part) map[string]string {
 	out := map[string]string{}
 	for _, e := range parse(src) {
 		if e.id == "" {
@@ -344,6 +397,9 @@ func attrsByID(src []byte) map[string]string {
 		var b strings.Builder
 		b.WriteString(e.name)
 		for _, a := range e.attrs {
+			if e.id == edited.ID && a.Key == edited.Attr {
+				continue
+			}
 			b.WriteString(" " + a.Key + "=" + a.Val)
 		}
 		out[e.id] = b.String()

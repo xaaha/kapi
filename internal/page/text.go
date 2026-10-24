@@ -24,6 +24,8 @@ type Part struct {
 	ID    string `json:"id"`
 	Row   *int   `json:"row,omitempty"`
 	Col   int    `json:"col,omitempty"`
+	Attr  string `json:"attr,omitempty"`
+	Lead  bool   `json:"lead,omitempty"`
 	Inner string `json:"inner"`
 }
 
@@ -33,7 +35,7 @@ func setText(src []byte, op *Op) ([]byte, error) {
 	}
 	seen := map[string]bool{}
 	for _, p := range op.Parts {
-		key := p.ID
+		key := p.ID + "/" + p.Attr + "/" + strconv.FormatBool(p.Lead)
 		if p.Row != nil {
 			key += "/" + strconv.Itoa(*p.Row) + "," + strconv.Itoa(p.Col)
 		}
@@ -53,6 +55,12 @@ func setText(src []byte, op *Op) ([]byte, error) {
 		if !block.contains(t) {
 			return nil, fmt.Errorf("#%s is not inside #%s", p.ID, op.ID)
 		}
+		if p.Attr != "" {
+			if src, err = setTextAttr(src, t, p); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		from, to, err := partRange(els, t, p)
 		if err != nil {
 			return nil, err
@@ -61,10 +69,14 @@ func setText(src []byte, op *Op) ([]byte, error) {
 			return nil, fmt.Errorf("#%s is shown as one piece inside #%s; edit it on its own", p.ID, op.ID)
 		}
 		inner := p.Inner
-		if p.Row != nil || render.TextOf(t.name) == render.BodyText {
+		if render.TextOf(t.name) != render.RawText {
 			if inner, err = cleanText(src, els, t.name, from, to, p.Inner); err != nil {
 				return nil, err
 			}
+		}
+		if p.Lead {
+			old := string(src[from:to])
+			inner = old[:len(old)-len(strings.TrimLeft(old, " \t\r\n"))] + strings.TrimSpace(inner) + old[len(strings.TrimRight(old, " \t\r\n")):]
 		}
 		with := string(src[t.start:from]) + inner + string(src[to:t.end])
 		if src, err = edit(src, els, t, with, p.Row == nil, true); err != nil {
@@ -85,11 +97,25 @@ func textUnchanged(then, now []byte, op *Op) bool {
 	return len(op.Parts) > 0
 }
 
+func setTextAttr(src []byte, t *element, p Part) ([]byte, error) {
+	if render.TextAttr(t.name) != p.Attr {
+		return nil, fmt.Errorf("%w: the %s of a <%s> is not text", ErrNoText, p.Attr, t.name)
+	}
+	value := strings.Join(strings.Fields(strings.ReplaceAll(p.Inner, "\u200b", "")), " ")
+	if value == "" {
+		return nil, fmt.Errorf("the %s of #%s cannot be empty", p.Attr, t.id)
+	}
+	return setAttr(src, t, p.Attr, value), nil
+}
+
 func partSource(src []byte, p Part) (string, bool) {
 	els := parse(src)
 	t, err := find(els, p.ID)
 	if err != nil {
 		return "", false
+	}
+	if p.Attr != "" {
+		return t.attr(p.Attr)
 	}
 	from, to, err := partRange(els, t, p)
 	if err != nil {
@@ -110,10 +136,40 @@ func partRange(els []element, t *element, p Part) (int, int, error) {
 		}
 		return rows[r][c].tagEnd, rows[r][c].closeStart, nil
 	}
+	if p.Lead {
+		return leadRange(els, t)
+	}
 	if kind := render.TextOf(t.name); (kind != render.BodyText && kind != render.RawText) || voidElements[t.name] || t.selfClosing {
 		return 0, 0, fmt.Errorf("%w: #%s is a <%s>", ErrNoText, t.id, t.name)
 	}
 	return t.tagEnd, t.closeStart, nil
+}
+
+func leadRange(els []element, t *element) (int, int, error) {
+	if render.TextOf(t.name) != render.LeadText {
+		return 0, 0, fmt.Errorf("%w: #%s is a <%s>", ErrNoText, t.id, t.name)
+	}
+	self := -1
+	for i := range els {
+		if &els[i] == t {
+			self = i
+		}
+	}
+	to := -1
+	for i := range els {
+		if els[i].parent != self {
+			continue
+		}
+		if els[i].name == "kapi-opt" && to < 0 {
+			to = els[i].start
+		} else if els[i].name != "kapi-opt" && to >= 0 {
+			return 0, 0, fmt.Errorf("%w: the question of #%s is split around its options", ErrNoText, t.id)
+		}
+	}
+	if to < 0 {
+		to = t.closeStart
+	}
+	return t.tagEnd, to, nil
 }
 
 func cellsOf(els []element, e *element) [][]*element {
