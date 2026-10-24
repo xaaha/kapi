@@ -513,6 +513,20 @@ func TestATextOpSetsACell(t *testing.T) {
 	}
 }
 
+func TestAnOpReturnsTheSeqOfTheRevisionEventItLogged(t *testing.T) {
+	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n")
+	s.post("/messages", `{"kind":"message","text":"hello"}`)
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"aaaaaaaa"}}`)
+	ev := s.events()
+	if code != http.StatusOK || len(ev) != 2 || ev[1].Kind != "revision" || out["seq"] != float64(ev[1].Seq) {
+		t.Fatalf("archive: %d %v, events %+v", code, out, ev)
+	}
+	code, out = s.post("/ops", `{"rev":2,"op":{"kind":"archive","id":"aaaaaaaa"}}`)
+	if _, has := out["seq"]; code != http.StatusOK || has || len(s.events()) != 2 {
+		t.Errorf("an op that changes nothing: %d %v, want no seq and no event", code, out)
+	}
+}
+
 func TestOpsApplyAndLogARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">see <a href=\"#aaaaaaaa\">a</a></p>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"archive","id":"bbbbbbbb"}}`)

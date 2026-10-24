@@ -233,7 +233,7 @@ test("Undo in the notice restores the block with an undo op and removes the noti
 
 test("the delete notice survives the page reload that follows the delete", async () => {
   await deleteBlock("cccccccc");
-  await until(() => pageLoads() >= 3);
+  await until(() => pageLoads() >= 2);
   assert.notEqual(await undoNote(), null);
 });
 
@@ -1605,14 +1605,14 @@ test("ticking a task sends a check op and refetches only that task", async () =>
   await click('[data-kapi-id="tttttttt"] input');
   await until(() => requests("POST", "/ops").length === 1);
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "check", id: "tttttttt", done: true } });
-  await until(() => requests("GET", "/blocks/tttttttt").length >= 1);
+  await until(() => requests("GET", "/blocks/tttttttt").length === 1);
   assert.equal(await checked("tttttttt"), true);
   await page.waitFor(`!document.querySelector('[data-kapi-id="tttttttt"] input').disabled`);
 
   await click('[data-kapi-id="uuuuuuuu"] input');
   await until(() => requests("POST", "/ops").length === 2);
   assert.deepEqual(requests("POST", "/ops")[1].body, { rev: 2, op: { kind: "check", id: "uuuuuuuu", done: false } });
-  await until(() => requests("GET", "/blocks/uuuuuuuu").length >= 1);
+  await until(() => requests("GET", "/blocks/uuuuuuuu").length === 1);
   assert.equal(await checked("uuuuuuuu"), false);
   assert.equal(pageLoads(), loads);
 });
@@ -1892,6 +1892,30 @@ test("the floating toolbar shows icons only, each named by an instant tooltip, a
   assert.equal(icon, red);
 });
 
+test("an op fetches its block once, whether its own revision event comes before or after the reply", async () => {
+  for (const delay of [0, 300]) {
+    const before = requests("GET", "/blocks/cccccccc").length;
+    server.state.opDelay = delay;
+    await select("cccccccc");
+    await click('.kapi-bar [data-action="archive"]');
+    await page.waitFor(`document.querySelector('[data-kapi-id="cccccccc"]')?.dataset.kapiState === "archived"`);
+    await click('.kapi-bar [data-action="unarchive"]');
+    await page.waitFor(`!document.querySelector('[data-kapi-id="cccccccc"]')?.dataset.kapiState`);
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(requests("GET", "/blocks/cccccccc").length - before, 2, `delay ${delay}`);
+  }
+});
+
+test("an agent edit that lands while an op is in flight is still shown", async () => {
+  server.state.opDelay = 300;
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="archive"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  server.bumpBehindBrowser("dddddddd", '<p data-kapi-id="dddddddd">The agent changed this.</p>');
+  server.push({ kind: "revision", target: "dddddddd", text: "edited" });
+  await until(async () => (await text("dddddddd")) === "The agent changed this.");
+});
+
 test("Flip on a diagram sends an orient op and refetches the diagram", async () => {
   await reopenWith(DIAGRAMS);
   await select("ffffffff");
@@ -1902,7 +1926,7 @@ test("Flip on a diagram sends an orient op and refetches the diagram", async () 
   await until(() => requests("POST", "/ops").length === 1);
   assert.deepEqual(requests("POST", "/ops")[0].body, { rev: 1, op: { kind: "orient", id: "ffffffff", dir: "lr" } });
   await until(async () => (await page.eval(`document.querySelector('[data-kapi-id="ffffffff"]').dataset.kapiDir`)) === "lr");
-  assert.ok(requests("GET", "/blocks/ffffffff").length >= 1);
+  assert.equal(requests("GET", "/blocks/ffffffff").length, 1);
   await page.waitFor(`document.querySelector('.kapi-bar [data-action="flip"]')?.getAttribute("aria-label") === "Flow top to bottom"`);
   await click('.kapi-bar [data-action="flip"]');
   await until(() => requests("POST", "/ops").length === 2);

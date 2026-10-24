@@ -211,12 +211,13 @@ func refresh(st *page.Store, l *eventlog.Log) error {
 	if err != nil || !changed {
 		return err
 	}
-	return appendRevision(l, "file", sum)
+	_, err = appendRevision(l, "file", sum)
+	return err
 }
 
-func appendRevision(l *eventlog.Log, author string, sum page.Summary) error {
-	_, err := l.Append(&eventlog.Event{Author: author, Kind: "revision", Target: strings.Join(sum.IDs, ","), Text: sum.Text})
-	return err
+func appendRevision(l *eventlog.Log, author string, sum page.Summary) (uint64, error) {
+	ev, err := l.Append(&eventlog.Event{Author: author, Kind: "revision", Target: strings.Join(sum.IDs, ","), Text: sum.Text})
+	return ev.Seq, err
 }
 
 func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
@@ -378,6 +379,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 type opResult struct {
 	Rev  uint64 `json:"rev"`
 	Undo bool   `json:"undo"`
+	Seq  uint64 `json:"seq,omitempty"`
 }
 
 func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
@@ -390,20 +392,21 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 	}
 	rev, sum, err := st.Apply(in.Rev, &in.Op)
 	if errors.Is(err, page.ErrStale) {
-		writeJSON(w, http.StatusConflict, opResult{rev, st.CanUndo()})
+		writeJSON(w, http.StatusConflict, opResult{Rev: rev, Undo: st.CanUndo()})
 		return
 	}
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	var seq uint64
 	if sum.Text != "" {
-		if err := appendRevision(l, "human", sum); err != nil {
+		if seq, err = appendRevision(l, "human", sum); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, opResult{rev, st.CanUndo()})
+	writeJSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: seq})
 }
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
