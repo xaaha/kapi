@@ -217,7 +217,7 @@ func TestARevisionEventAFailedAppendLostIsLoggedOnceOnReopen(t *testing.T) {
 func failOneAppend(t *testing.T) {
 	t.Helper()
 	append0 := appendEvent
-	appendEvent = func(l *eventlog.Log, e *eventlog.Event) (eventlog.Event, error) {
+	appendEvent = func(*eventlog.Log, *eventlog.Event) (eventlog.Event, error) {
 		appendEvent = append0
 		return eventlog.Event{}, errors.New("disk full")
 	}
