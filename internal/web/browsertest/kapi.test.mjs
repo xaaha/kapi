@@ -281,7 +281,13 @@ test("the delete notice neither counts as a folded block nor gets folded away", 
   ]);
   await deleteBlock("h2bbbbbb");
   const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  const probe = () => page.eval(`JSON.stringify({ at: (e => e && (e.tagName + "." + e.className + " " + (e.dataset.kapiId || "")))(document.elementFromPoint(${x}, ${y})), main: [...document.getElementById("kapi-page").children].map((c) => c.tagName + (c.dataset.kapiId ? "#" + c.dataset.kapiId : "." + c.className)), h2: document.querySelector('[data-kapi-id="h2aaaaaa"]').outerHTML.slice(0, 200), sel: document.querySelector("[data-kapi-selected]")?.dataset.kapiId ?? null, folds: localStorage.getItem("kapi-folds:" + location.pathname), w: innerWidth })`);
+  console.log("DEBUG before", await probe());
+  page.events = [];
+  await page.eval(`window.__clicks = []; document.addEventListener("click", (e) => window.__clicks.push(e.target.tagName + " " + (e.target.dataset?.kapiId || "") + " " + e.clientX + "," + e.clientY), true)`);
   await mouseClickAt(x, y);
+  await new Promise((r) => setTimeout(r, 300));
+  console.log("DEBUG after", await probe(), await page.eval(`JSON.stringify(window.__clicks)`));
   await page.waitFor(`!!document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "2 blocks");
   assert.equal(await page.eval(`document.querySelector("#kapi-page .kapi-undo-note").checkVisibility()`), true);
