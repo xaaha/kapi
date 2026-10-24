@@ -1,7 +1,7 @@
 <div class="kapi-compare" data-kapi-preset="compare" data-kapi-id="m0000001">
   <p>Intro paragraph spans the grid.</p>
-  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="m0000002"><h4 class="kapi-option-title">Option A</h4><div class="kapi-option-body"><p>Fast.</p></div></section>
-  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="m0000003"><h4 class="kapi-option-title">Option "B"</h4><div class="kapi-option-body">Bare text body.</div></section>
+  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="m0000002"><h4 class="kapi-option-title">Option A</h4><div class="kapi-option-body" data-kapi-text="m0000002"><p>Fast.</p></div></section>
+  <section class="kapi-option" data-kapi-preset="option" data-kapi-id="m0000003"><h4 class="kapi-option-title">Option "B"</h4><div class="kapi-option-body" data-kapi-text="m0000003">Bare text body.</div></section>
   <div class="kapi-error" data-kapi-preset="option" role="alert" data-kapi-id="m0000004"><span class="kapi-error-tag">&lt;kapi-option&gt;</span> needs a title attribute</div>
 </div>
 <div class="kapi-error" data-kapi-preset="option" role="alert" data-kapi-id="m0000005"><span class="kapi-error-tag">&lt;kapi-option&gt;</span> must be a direct child of &lt;kapi-compare&gt;</div>

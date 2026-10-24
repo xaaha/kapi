@@ -21,6 +21,8 @@ h1 { font-size: 30px; line-height: 1.2; }
 form { display: grid; gap: 10px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
 `;
 
+const cells = (row, ...list) => list.map(([tag, text], col) => `<${tag} data-kapi-text="gggggggg" data-kapi-cell="${row},${col}">${text}</${tag}>`).join("");
+
 export const SAMPLE = [
   { id: "aaaaaaaa", html: '<h1 data-kapi-id="aaaaaaaa">Migration plan</h1>' },
   { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in two steps.</p>' },
@@ -41,8 +43,8 @@ export const SAMPLE = [
     id: "gggggggg",
     html:
       '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table>' +
-      "<thead><tr><th>Shard</th><th>Rows</th></tr></thead><tbody>" +
-      "<tr><td>beta</td><td>10</td></tr><tr><td>Alpha</td><td>9</td></tr><tr><td>gamma</td><td>1,200</td></tr>" +
+      `<thead><tr>${cells(0, ["th", "Shard"], ["th", "Rows"])}</tr></thead><tbody>` +
+      `<tr>${cells(1, ["td", "beta"], ["td", "10"])}</tr><tr>${cells(2, ["td", "Alpha"], ["td", "9"])}</tr><tr>${cells(3, ["td", "gamma"], ["td", "1,200"])}</tr>` +
       "</tbody></table></div>",
   },
   {
@@ -71,30 +73,39 @@ export const SAMPLE = [
   },
 ];
 
+const idIn = (attrs) => attrs.match(/data-kapi-id="([^"]*)"/)?.[1] ?? "";
+
 const renderSource = (src) =>
   src
     .replace(
       /^<kapi-callout([^>]*)>([\s\S]*)<\/kapi-callout>$/,
-      '<aside$1 data-kapi-preset="kapi-callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body">$2</div></aside>',
+      (_, attrs, body) => `<aside${attrs} data-kapi-preset="kapi-callout" class="kapi-callout"><div class="kapi-callout-label">Note</div><div class="kapi-callout-body" data-kapi-text="${idIn(attrs)}">${body}</div></aside>`,
     )
     .replace(
       /^<kapi-code([^>]*)>([\s\S]*)<\/kapi-code>$/,
-      '<figure$1 data-kapi-preset="code" class="kapi-code"><pre><code>$2</code></pre></figure>',
+      (_, attrs, body) => `<figure${attrs} data-kapi-preset="code" class="kapi-code" data-kapi-text="${idIn(attrs)}" data-kapi-raw=""><pre><code>${body}</code></pre></figure>`,
     );
 
-const escapeText = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const marked = (html) =>
+  html.replace(/^<([\w-]+)([^>]*)>/, (open, tag, attrs) =>
+    /data-kapi-preset|data-kapi-text/.test(attrs) || !idIn(attrs) ? open : `<${tag}${attrs} data-kapi-text="${idIn(attrs)}">`);
 
-function setCells(html, cells) {
-  let row = -1;
-  return html.replace(/<tr>([\s\S]*?)<\/tr>/g, (tr, body) => {
-    row++;
-    let col = -1;
-    return tr.replace(/<(t[hd])([^>]*)>([\s\S]*?)<\/\1>/g, (cell, tag, attrs, text) => {
-      col++;
-      const c = cells.find((x) => x.row === row && x.col === col);
-      return c ? `<${tag}${attrs}>${escapeText(c.text)}</${tag}>` : cell;
-    });
-  });
+function setPart(b, part) {
+  const inner = part.inner.replaceAll("\u200b", "");
+  if (part.row !== undefined) {
+    const cell = new RegExp(`(<(t[hd])[^>]*data-kapi-cell="${part.row},${part.col}"[^>]*>)[\\s\\S]*?(</\\2>)`);
+    b.html = b.html.replace(cell, (_, open, tag, close) => open + inner + close);
+  } else if (b.source) {
+    const [, open, , close] = tags(b.source);
+    b.source = open + inner + close;
+    b.html = renderSource(b.source);
+  } else if (part.id === b.id) {
+    const [, open, , close] = tags(b.html);
+    b.html = open + inner + close;
+  } else {
+    const host = new RegExp(`(<([\\w-]+)[^>]*data-kapi-text="${part.id}"[^>]*>)[\\s\\S]*?(</\\2>)`);
+    b.html = b.html.replace(host, (_, open, tag, close) => open + inner + close);
+  }
 }
 
 const tags = (src) => src.match(/^(<[^>]*>)([\s\S]*)(<\/[\w-]+>)$/);
@@ -121,7 +132,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><title>Fake kapi</title>` +
     `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
-    `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}">${state.blocks.map((b) => b.html).join("\n")}</main>` +
+    `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
@@ -153,18 +164,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     state.history.push(state.blocks.map((b) => ({ ...b })));
     if (op.kind === "orient") state.blocks[i].html = state.blocks[i].html.replace(/data-kapi-dir="[^"]*"/, `data-kapi-dir="${op.dir}"`);
-    else if (op.kind === "edit" && "inner" in op) {
-      const b = state.blocks[i];
-      const [, open, , close] = tags(b.source ?? b.html);
-      if (b.source) {
-        b.source = open + op.inner + close;
-        b.html = renderSource(b.source);
-      } else b.html = open + op.inner + close;
-    } else if (op.kind === "edit" && state.blocks[i].source) {
-      state.blocks[i].source = op.html;
-      state.blocks[i].html = renderSource(op.html);
-    } else if (op.kind === "edit") state.blocks[i].html = op.html;
-    else if (op.kind === "cells") state.blocks[i].html = setCells(state.blocks[i].html, op.cells);
+    else if (op.kind === "text") for (const part of op.parts) setPart(state.blocks[i], part);
     else if (op.kind === "delete") state.blocks.splice(i, 1);
     else if (op.kind === "archive" || op.kind === "unarchive") {
       const html = state.blocks[i].html.replace(/ data-kapi-state="[^"]*"/, "");
@@ -180,7 +180,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks = prev;
     }
     state.rev++;
-    const target = ["edit", "cells", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
+    const target = ["text", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
     push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev, undo: state.history.length > 0 } };
   }
@@ -227,7 +227,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];
       if (!b && !inner) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) });
-      return res.end(b ? b.html : inner);
+      return res.end(b ? marked(b.html) : inner);
     }
     if (req.method === "GET" && rest.startsWith("source/")) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));

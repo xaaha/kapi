@@ -55,33 +55,50 @@ Unknown `kapi-*` elements render as a visible error box, never silently.
 
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
 rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
-direction it was drawn in. Prose elements render to the same HTML as their source.
+direction it was drawn in. Prose elements render to the same HTML as their
+source, plus the `data-kapi-text` mark on top-level blocks described below.
 
 ### Editing
 
-Readers edit what they see, never markup:
+Readers edit what they see, never markup. Every preset declares, in one table
+in the renderer (`textParts` in `internal/render/editable.go`), which of its
+parts are text:
 
-| Block | Edited as | Saved as |
-|---|---|---|
-| prose (no `data-kapi-preset`) | the element itself, in place | `edit` with the element's outer HTML |
-| `kapi-table` | each rendered `th` and `td`, in place, as plain text | `cells` with only the changed cells |
-| `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question` | the rendered body, in place | `edit` with `inner` set to the body |
-| `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-form`, and any other block that holds presets | a textarea with `GET /p/{id}/source/{block}?part=inner` | `edit` with `inner` set to the textarea |
+| Text | Presets | Rendered as | Edited as |
+|---|---|---|---|
+| body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
+| cells | `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
+| raw | `kapi-code`, `kapi-diff`, `kapi-diagram` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-choice`, `kapi-kv`, `kapi-checklist`, `kapi-badge` | nothing | through the parts inside it |
 
-A prose preset is edited in place only when its rendered body round-trips to
-its source inner (the browser parses the source inner and compares it with
-the body's HTML); otherwise it falls back to the textarea. In every mode the
-element's opening tag, its attributes and its closing tag are never shown and
-never change, and rendered chrome (labels, marks, headings) is not editable.
+Editing a block edits every text part inside it at once. A preset inside the
+text, such as a badge in a cell or a code block in a callout, stays one piece
+that cannot be typed into, and it is saved from its source byte for byte. A
+block with no text part says so and opens no editor. Attributes (`kind`,
+`tone`, `key`, `title`, `summary`, `done`, ids) and rendered chrome (labels,
+marks, headings) are never editable. A new preset fails the render tests
+until it is in `textParts`, and a test edits every text part of the gallery.
 
-A `cells` op is `{"kind":"cells","id":"<table id>","cells":[{"row":r,"col":c,"text":"..."}]}`.
+All of it is saved as one `text` op:
+`{"kind":"text","id":"<block id>","parts":[{"id":"<part id>","inner":"..."},{"id":"<table id>","row":r,"col":c,"inner":"..."}]}`.
+`inner` is the part's HTML as the browser holds it. The store keeps each
+part's start and end tags and puts the new HTML between them, after it:
+
+- swaps every preset in it (an element with `data-kapi-preset`) for that
+  preset's current source, which must come from the same part;
+- drops `contenteditable`, every `data-kapi-*` attribute other than
+  `data-kapi-id`, and zero-width spaces;
+- writes it in the renderer's canonical form, so markup the page would drop
+  (inline styles, scripts) is not saved.
+
 `row` counts the `tr` elements of the source table in source order, header
-rows included; `col` counts the `th` and `td` children of that row. The store
-sets each cell's text, HTML-escaped, between its existing tags, so the cell's
-tag and attributes stay as they were. A cell outside the table, a cell given
-twice, an empty `cells` list or a target that is not a `kapi-table` is 422.
-Adding or removing rows and columns is out of scope. A `cells` op follows the
-same staleness, dangling-link and no-change rules as `edit`.
+rows included; `col` counts the `th` and `td` children of that row. Raw parts
+are saved byte for byte. A part outside the block, a part given twice, a cell
+outside the table, a part of a preset with no text, HTML that would close the
+part early, or a part whose source holds markup the page does not show
+(`ErrHiddenMarkup`) is 422 and changes nothing. All parts land as one
+revision and one undo step, and follow the same staleness, dangling-link and
+no-change rules as `edit`.
 
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
@@ -103,11 +120,11 @@ func Open(home, path string) (*Store, error)
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
-    Kind string // edit, cells, delete, archive, unarchive, move, undo, check, orient
+    Kind string // edit, text, delete, archive, unarchive, move, undo, check, orient
     ID   string
     HTML string // edit: new outer HTML of the element
     Inner *string // edit, instead of HTML: new source between the element's start and end tags
-    Cells []Cell  // cells: {Row, Col, Text} for each changed table cell
+    Parts []Part  // text: {ID, Row, Col, Inner} for each changed text part
     Before string // move: id to insert before, "" means end
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
@@ -145,7 +162,7 @@ restores it.
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
-This applies to `edit`, `cells`, `archive`, `unarchive`, `delete`, `check` and
+This applies to `edit`, `text`, `archive`, `unarchive`, `delete`, `check` and
 `orient` only. `move` and `undo` depend on the whole page, so they need the exact current `rev`. `ErrStale`
 (409) means the target element itself changed, or a `move` or `undo` came at
 an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is

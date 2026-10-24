@@ -88,8 +88,8 @@ func TestDetailsIsClosedUnlessOpen(t *testing.T) {
 func TestChecklistRendersTickableTasks(t *testing.T) {
 	out := render(t, `<kapi-checklist><kapi-task done data-kapi-id="aaaaaaaa">Copy &amp; check</kapi-task><kapi-task data-kapi-id="bbbbbbbb">Flip</kapi-task></kapi-checklist>`)
 	want := `<ul class="kapi-checklist" data-kapi-preset="checklist">` +
-		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="aaaaaaaa"><input type="checkbox" checked="" aria-label="Copy &amp; check"><span class="kapi-task-body">Copy &amp; check</span></li>` +
-		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="bbbbbbbb"><input type="checkbox" aria-label="Flip"><span class="kapi-task-body">Flip</span></li></ul>`
+		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="aaaaaaaa"><input type="checkbox" checked="" aria-label="Copy &amp; check"><span class="kapi-task-body" data-kapi-text="aaaaaaaa">Copy &amp; check</span></li>` +
+		`<li class="kapi-task" data-kapi-preset="task" data-kapi-id="bbbbbbbb"><input type="checkbox" aria-label="Flip"><span class="kapi-task-body" data-kapi-text="bbbbbbbb">Flip</span></li></ul>`
 	if out != want {
 		t.Errorf("got  %s\nwant %s", out, want)
 	}

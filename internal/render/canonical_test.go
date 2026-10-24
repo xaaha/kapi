@@ -111,7 +111,7 @@ func checkCanonical(t *testing.T, name, src string) {
 	if rc := render(t, c); rc != r {
 		t.Errorf("%s: Render(Canonical(src)) differs from Render(src)\nsrc:       %s\ncanonical: %s\nrender:    %s\nviaCanon:  %s", name, src, c, r, rc)
 	}
-	if pr, pc := proseOnly(t, r, renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
+	if pr, pc := proseOnly(t, unmarked(r), renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
 	}
 	assertParseStable(t, name, r)
@@ -127,6 +127,10 @@ func checkCanonical(t *testing.T, name, src string) {
 }
 
 var kapiIDAttr = regexp.MustCompile(`data-kapi-id="([^"]*)"`)
+
+var textMark = regexp.MustCompile(` data-kapi-(text|raw|cell)="[^"]*"`)
+
+func unmarked(s string) string { return textMark.ReplaceAllString(s, "") }
 
 func TestCanonicalKeepsTheFirstOfDuplicateIDs(t *testing.T) {
 	cases := map[string]string{
@@ -156,7 +160,7 @@ func TestCanonicalProseIsRender(t *testing.T) {
 		if strings.Contains(src, "kapi-") {
 			continue
 		}
-		if c, r := canonical(t, src), render(t, src); c != r {
+		if c, r := canonical(t, src), unmarked(render(t, src)); c != r {
 			t.Errorf("Canonical(%q) = %q, Render = %q", src, c, r)
 		}
 	}

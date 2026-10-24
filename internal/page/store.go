@@ -40,16 +40,10 @@ type Op struct {
 	ID     string  `json:"id"`
 	HTML   string  `json:"html,omitempty"`
 	Inner  *string `json:"inner,omitempty"`
-	Cells  []Cell  `json:"cells,omitempty"`
+	Parts  []Part  `json:"parts,omitempty"`
 	Before string  `json:"before,omitempty"`
 	Done   bool    `json:"done,omitempty"`
 	Dir    string  `json:"dir,omitempty"`
-}
-
-type Cell struct {
-	Row  int    `json:"row"`
-	Col  int    `json:"col"`
-	Text string `json:"text"`
 }
 
 type Summary struct {
@@ -510,7 +504,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
-	case "edit", "cells", "archive", "unarchive", "delete", "check", "orient":
+	case "edit", "text", "archive", "unarchive", "delete", "check", "orient":
 	default:
 		return false
 	}
@@ -1000,16 +994,12 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 			return nil, Summary{}, err
 		}
 		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
-	case "cells":
-		with, err := setCells(src, els, e, op.Cells)
+	case "text":
+		out, err := setText(src, op)
 		if err != nil {
 			return nil, Summary{}, err
 		}
-		out, err := edit(src, els, e, with, false)
-		if err != nil {
-			return nil, Summary{}, err
-		}
-		return out, Summary{Text: "edited cells of " + describeID(out, op.ID), IDs: one}, nil
+		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
 	case "delete":
 		for i := range els {
 			l := &els[i]
@@ -1275,62 +1265,6 @@ func excerpt(outer []byte) string {
 		}
 	}
 	return strings.TrimRight(cut, " ") + "\u2026"
-}
-
-func setCells(src []byte, els []element, e *element, cells []Cell) (string, error) {
-	if e.name != "kapi-table" {
-		return "", fmt.Errorf("a cells op needs a kapi-table, not <%s>", e.name)
-	}
-	if len(cells) == 0 {
-		return "", errors.New("a cells op needs at least one cell")
-	}
-	table := -1
-	var rows [][]*element
-	for i := range els {
-		c := &els[i]
-		switch {
-		case !e.contains(c):
-		case c.name == "table" && table < 0:
-			table = i
-		case c.name == "tr" && table >= 0 && nearest(els, i, "table") == table:
-			rows = append(rows, nil)
-		case (c.name == "td" || c.name == "th") && len(rows) > 0 && c.parent >= 0 && els[c.parent].name == "tr" && nearest(els, c.parent, "table") == table:
-			rows[len(rows)-1] = append(rows[len(rows)-1], c)
-		}
-	}
-	var changes []cellChange
-	seen := map[[2]int]bool{}
-	for _, c := range cells {
-		if c.Row < 0 || c.Row >= len(rows) || c.Col < 0 || c.Col >= len(rows[c.Row]) {
-			return "", fmt.Errorf("the table has no cell at row %d, column %d", c.Row, c.Col)
-		}
-		if seen[[2]int{c.Row, c.Col}] {
-			return "", fmt.Errorf("the cell at row %d, column %d is set twice", c.Row, c.Col)
-		}
-		seen[[2]int{c.Row, c.Col}] = true
-		cell := rows[c.Row][c.Col]
-		changes = append(changes, cellChange{cell.tagEnd, cell.closeStart, html.EscapeString(c.Text)})
-	}
-	outer, err := spliceCells(src[e.start:e.end], e.start, changes)
-	return string(outer), err
-}
-
-type cellChange struct {
-	from, to int
-	text     string
-}
-
-func spliceCells(outer []byte, base int, changes []cellChange) ([]byte, error) {
-	slices.SortFunc(changes, func(a, b cellChange) int { return b.from - a.from })
-	for i := 1; i < len(changes); i++ {
-		if changes[i].to > changes[i-1].from {
-			return nil, errors.New("two cells of the op overlap in the source")
-		}
-	}
-	for _, c := range changes {
-		outer = splice(outer, c.from-base, c.to-base, c.text)
-	}
-	return outer, nil
 }
 
 func nearest(els []element, i int, name string) int {

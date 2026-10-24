@@ -1,8 +1,8 @@
 <div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000001"><table>
-    <thead><tr><th>Name</th><th scope="col">Count</th></tr></thead>
-    <tbody><tr><td>a</td><td>1</td></tr><tr><td colspan="2">wide</td></tr></tbody>
+    <thead><tr><th data-kapi-text="t0000001" data-kapi-cell="0,0">Name</th><th scope="col" data-kapi-text="t0000001" data-kapi-cell="0,1">Count</th></tr></thead>
+    <tbody><tr><td data-kapi-text="t0000001" data-kapi-cell="1,0">a</td><td data-kapi-text="t0000001" data-kapi-cell="1,1">1</td></tr><tr><td colspan="2" data-kapi-text="t0000001" data-kapi-cell="2,0">wide</td></tr></tbody>
   </table></div>
-<div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000002"><table><tbody><tr><th>x</th></tr><tr><td>1</td></tr></tbody></table></div>
-<div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000003"><table><tbody><tr><td>1</td></tr></tbody></table></div>
+<div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000002"><table><tbody><tr><th data-kapi-text="t0000002" data-kapi-cell="0,0">x</th></tr><tr><td data-kapi-text="t0000002" data-kapi-cell="1,0">1</td></tr></tbody></table></div>
+<div class="kapi-table" data-kapi-preset="table" data-kapi-id="t0000003"><table><tbody><tr><td data-kapi-text="t0000003" data-kapi-cell="0,0">1</td></tr></tbody></table></div>
 <div class="kapi-error" data-kapi-preset="table" role="alert" data-kapi-id="t0000004"><span class="kapi-error-tag">&lt;kapi-table&gt;</span> body must be exactly one &lt;table&gt;</div>
-<table data-kapi-id="t0000005"><caption>Plain prose table</caption><tbody><tr><th>a</th></tr><tr><td>b</td></tr></tbody></table>
+<table data-kapi-id="t0000005" data-kapi-text="t0000005"><caption>Plain prose table</caption><tbody><tr><th>a</th></tr><tr><td>b</td></tr></tbody></table>

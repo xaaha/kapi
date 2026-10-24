@@ -133,7 +133,8 @@ func renderCallout(b *bytes.Buffer, n *html.Node) error {
 		return fmt.Errorf("kind must be note, warning, key, danger or success, not %q", kind)
 	}
 	writeStart(b, "aside", outerAttrs(n, "kapi-callout kapi-callout-"+kind+" kapi-tone-"+k.tone, "role", "note"))
-	b.WriteString(`<div class="kapi-callout-label">` + k.label + `</div><div class="kapi-callout-body">`)
+	b.WriteString(`<div class="kapi-callout-label">` + k.label + `</div>`)
+	writeStart(b, "div", bodyAttrs(n, "kapi-callout-body"))
 	renderChildren(b, n)
 	b.WriteString("</div></aside>")
 	return nil
@@ -170,7 +171,8 @@ func renderOption(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "section", outerAttrs(n, "kapi-option"))
 	b.WriteString(`<h4 class="kapi-option-title">`)
 	writeText(b, title)
-	b.WriteString(`</h4><div class="kapi-option-body">`)
+	b.WriteString(`</h4>`)
+	writeStart(b, "div", bodyAttrs(n, "kapi-option-body"))
 	renderChildren(b, n)
 	b.WriteString("</div></section>")
 	return nil
@@ -191,11 +193,12 @@ func planItem(class, label, tone string) presetFunc {
 		}
 		if !stated {
 			writeStart(b, "div", outerAttrs(n, "kapi-plan-item "+class+" kapi-tone-"+tone))
-			b.WriteString(`<span class="kapi-plan-mark">` + label + `</span><div class="kapi-plan-body">`)
+			b.WriteString(`<span class="kapi-plan-mark">` + label + `</span>`)
 		} else {
 			writeStart(b, "div", outerAttrs(n, "kapi-plan-item "+class+" kapi-tone-"+icon.tone))
-			b.WriteString(`<span class="kapi-plan-mark kapi-plan-state" role="img" aria-label="` + icon.label + `">` + icon.svg() + `</span><div class="kapi-plan-body">`)
+			b.WriteString(`<span class="kapi-plan-mark kapi-plan-state" role="img" aria-label="` + icon.label + `">` + icon.svg() + `</span>`)
 		}
+		writeStart(b, "div", bodyAttrs(n, "kapi-plan-body"))
 		renderChildren(b, n)
 		b.WriteString("</div></div>")
 		return nil
@@ -273,10 +276,11 @@ func renderOpt(b *bytes.Buffer, n *html.Node) error {
 	}
 	writeStart(b, "label", outerAttrs(n, "kapi-opt"))
 	writeStart(b, "input", kv("type", kind, "name", name, "value", value))
-	b.WriteString("<span>")
 	if hasContent(n) {
+		writeStart(b, "span", bodyAttrs(n, ""))
 		renderChildren(b, n)
 	} else {
+		b.WriteString("<span>")
 		writeText(b, value)
 	}
 	b.WriteString("</span></label>")
@@ -289,7 +293,7 @@ func renderTextField(b *bytes.Buffer, n *html.Node) error {
 		return err
 	}
 	writeStart(b, "label", outerAttrs(n, "kapi-text", "data-kapi-field", name))
-	b.WriteString(`<span class="kapi-text-label">`)
+	writeStart(b, "span", bodyAttrs(n, "kapi-text-label"))
 	renderChildren(b, n)
 	b.WriteString("</span>")
 	writeStart(b, "textarea", kv("name", name, "rows", "3"))
@@ -371,7 +375,8 @@ func renderKVItem(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "div", outerAttrs(n, "kapi-kv-item"))
 	b.WriteString("<dt>")
 	writeText(b, key)
-	b.WriteString("</dt><dd>")
+	b.WriteString("</dt>")
+	writeStart(b, "dd", bodyAttrs(n, ""))
 	renderChildren(b, n)
 	b.WriteString("</dd></div>")
 	return nil
@@ -389,7 +394,8 @@ func renderDetails(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "details", outerAttrs(n, "kapi-details", open...))
 	b.WriteString("<summary>")
 	writeText(b, summary)
-	b.WriteString(`</summary><div class="kapi-details-body">`)
+	b.WriteString(`</summary>`)
+	writeStart(b, "div", bodyAttrs(n, "kapi-details-body"))
 	renderChildren(b, n)
 	b.WriteString("</div></details>")
 	return nil
@@ -412,7 +418,7 @@ func renderTask(b *bytes.Buffer, n *html.Node) error {
 		box = append(box, kv("checked", "")...)
 	}
 	writeStart(b, "input", append(box, kv("aria-label", nodeText(n))...))
-	b.WriteString(`<span class="kapi-task-body">`)
+	writeStart(b, "span", bodyAttrs(n, "kapi-task-body"))
 	renderChildren(b, n)
 	b.WriteString("</span></li>")
 	return nil

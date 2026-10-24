@@ -372,25 +372,38 @@
   }
 
   const BLOCK = '[data-kapi-id]:not([data-kapi-id] [data-kapi-preset="badge"])';
-  const PROSE_PRESETS = new Set(["callout", "option", "step", "risk", "question"]);
-  const PROSE_BODY = ":scope > .kapi-callout-body, :scope > .kapi-option-body, :scope > .kapi-plan-body";
+  const PART = "[data-kapi-text]";
 
-  function editInPlace(el, hosts, rev, op, singleLine = false) {
-    editing = { el, rev, hosts: hosts.map((host) => ({ host, original: host.innerHTML })), op, singleLine };
-    for (const { host } of editing.hosts) host.contentEditable = host.matches("th, td") ? "plaintext-only" : "true";
+  function partsOf(el) {
+    return [el, ...el.querySelectorAll(PART)].filter((n) => n.matches(PART));
+  }
+
+  function islandsOf(host) {
+    return [...host.querySelectorAll("[data-kapi-preset]")].filter((n) => n.parentElement.closest(`[data-kapi-preset], ${PART}`) === host);
+  }
+
+  function partOf(host) {
+    const part = { id: host.dataset.kapiText };
+    if (host.dataset.kapiCell) [part.row, part.col] = host.dataset.kapiCell.split(",").map(Number);
+    return part;
+  }
+
+  function editInPlace(el, hosts) {
+    for (const host of hosts) {
+      host.contentEditable = "true";
+      for (const island of islandsOf(host)) island.contentEditable = "false";
+    }
+    const parts = hosts.map((host) => ({ host, original: host.innerHTML }));
+    const op = () => {
+      const changed = parts.filter(({ host, original }) => host.innerHTML !== original);
+      return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: host.innerHTML })) } : null;
+    };
+    editing = { el, rev: Number(main.dataset.rev), hosts: parts, op, singleLine: hosts.every((host) => host.matches("td, th, span")) };
     const first = hosts[0];
     first.focus();
     getSelection().selectAllChildren(first);
     getSelection().collapseToEnd();
     renderBar();
-  }
-
-  function editProse(el) {
-    const initial = outerHTMLOf(el);
-    editInPlace(el, [el], Number(main.dataset.rev), () => {
-      const html = outerHTMLOf(el);
-      return html === initial ? null : { kind: "edit", html };
-    });
   }
 
   function rowsOf(table) {
@@ -400,7 +413,6 @@
   function numberRows(scope) {
     for (const table of scope.querySelectorAll('[data-kapi-preset$="table"] table')) {
       const rows = rowsOf(table);
-      rows.forEach((tr, i) => tr.setAttribute("data-kapi-row", i));
       const head = table.tHead?.rows[0] ?? rows.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
       if (!head) continue;
       const labels = [...head.cells].flatMap((c) => Array(c.colSpan).fill(c.textContent.trim()));
@@ -422,29 +434,7 @@
     }
   }
 
-  function editCells(el, table) {
-    const cells = rowsOf(table).flatMap((tr) =>
-      [...tr.cells].map((cell, col) => ({ cell, row: Number(tr.dataset.kapiRow), col, text: cell.textContent })));
-    editInPlace(el, cells.map((c) => c.cell), Number(main.dataset.rev), () => {
-      const changed = cells.filter((c) => c.cell.textContent !== c.text).map(({ row, col, cell }) => ({ row, col, text: cell.textContent }));
-      return changed.length ? { kind: "cells", cells: changed } : null;
-    }, true);
-  }
-
-  function roundTrips(src, body) {
-    const tpl = document.createElement("template");
-    tpl.innerHTML = src;
-    return tpl.innerHTML.trim() === body.innerHTML.trim();
-  }
-
-  async function startEdit() {
-    if (!selected || editing || busy) return;
-    const el = selected;
-    notice.hidden = true;
-    if (!el.matches("[data-kapi-preset], :has([data-kapi-preset])")) return editProse(el);
-    const preset = el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
-    const table = preset === "table" && el.querySelector("table");
-    if (table && !table.querySelector("[data-kapi-preset]")) return editCells(el, table);
+  async function editRaw(el) {
     busy = true;
     renderBar();
     let rev = Number(main.dataset.rev);
@@ -455,25 +445,31 @@
         return res.text();
       }, () => null);
     busy = false;
-    if (src === null) say("Could not load the source of this block.", "error");
+    if (src === null) say("Could not load the text of this block.", "error");
     if (src === null || selected !== el || editing) return renderBar();
-    const body = PROSE_PRESETS.has(preset) && el.querySelector(PROSE_BODY);
-    if (body && roundTrips(src, body)) {
-      const initial = body.innerHTML;
-      return editInPlace(el, [body], rev, () => (body.innerHTML.replaceAll(ZWSP, "") === initial ? null : { kind: "edit", inner: body.innerHTML.replaceAll(ZWSP, "") }));
-    }
-    const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Source of ${describe(idOf(el))}` });
+    const kind = el.getAttribute("data-kapi-preset");
+    const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Text of ${describe(idOf(el))}` });
     area.value = src;
     area.rows = Math.min(24, src.split("\n").length + 2);
-    const box = h("div", { class: "kapi-source-box" }, h("div", { class: "kapi-source-label", text: `Editing source of: ${preset || "this section"}` }), area);
+    const box = h("div", { class: "kapi-source-box" }, h("div", { class: "kapi-source-label", text: `Editing ${kind}` }), area);
     const style = getComputedStyle(el);
     box.style.marginTop = style.marginTop;
     box.style.marginBottom = style.marginBottom;
     el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
-    editing = { el, area, box, rev, op: () => (area.value === src ? null : { kind: "edit", inner: area.value }) };
+    const id = el.dataset.kapiText;
+    editing = { el, area, box, rev, op: () => (area.value === src ? null : { kind: "text", parts: [{ id, inner: area.value }] }) };
     area.focus();
     renderBar();
+  }
+
+  function startEdit() {
+    if (!selected || editing || busy) return;
+    notice.hidden = true;
+    if (selected.hasAttribute("data-kapi-raw")) return editRaw(selected);
+    const hosts = partsOf(selected);
+    if (!hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
+    editInPlace(selected, hosts);
   }
 
   function endEdit(restore) {
@@ -485,21 +481,11 @@
     for (const { host, original } of hosts || []) {
       if (restore) host.innerHTML = original;
       host.removeAttribute("contenteditable");
+      for (const n of host.querySelectorAll("[contenteditable]")) n.removeAttribute("contenteditable");
     }
     editing = null;
     renderBar();
     if (pending) scheduleFlush();
-  }
-
-  function outerHTMLOf(el) {
-    const copy = el.cloneNode(true);
-    copy.removeAttribute("contenteditable");
-    copy.removeAttribute("data-kapi-selected");
-    copy.removeAttribute("data-kapi-excerpt");
-    copy.removeAttribute("data-kapi-bar-room");
-    copy.removeAttribute("data-kapi-folded");
-    copy.removeAttribute("data-kapi-hidden");
-    return copy.outerHTML.replaceAll(ZWSP, "");
   }
 
   function cancelEdit() {
@@ -969,7 +955,7 @@
     if (e.inputType !== "insertText" || !e.data?.endsWith("`")) return;
     const sel = getSelection();
     const node = sel.anchorNode;
-    if (!sel.isCollapsed || node?.nodeType !== Node.TEXT_NODE || node.parentElement.closest("code, pre, [contenteditable=plaintext-only]")) return;
+    if (!sel.isCollapsed || node?.nodeType !== Node.TEXT_NODE || node.parentElement.closest("code, pre")) return;
     const before = node.data.slice(0, sel.anchorOffset);
     const open = before.lastIndexOf("`", before.length - 2);
     const inner = before.slice(open + 1, -1);

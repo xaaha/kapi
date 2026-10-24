@@ -18,6 +18,7 @@ func Render(src []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	markText(root)
 	var b bytes.Buffer
 	renderChildren(&b, root)
 	return b.Bytes(), nil
@@ -28,6 +29,7 @@ func Block(src []byte, id string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	markText(root)
 	for n := root.FirstChild; n != nil; n = n.NextSibling {
 		if found := findBlock(n, id); found != nil {
 			var b bytes.Buffer
@@ -264,7 +266,7 @@ func outerAttrs(n *html.Node, class string, extra ...string) []html.Attribute {
 	out := kv("class", class, "data-kapi-preset", strings.TrimPrefix(n.Data, "kapi-"))
 	out = append(out, kv(extra...)...)
 	for _, a := range n.Attr {
-		if a.Namespace == "" && isDataAttr(a.Key) && a.Key != "data-kapi-preset" {
+		if a.Namespace == "" && isDataAttr(a.Key) && a.Key != "data-kapi-preset" && (!textMarks[a.Key] || TextOf(n.Data) == RawText) {
 			out = append(out, html.Attribute{Key: a.Key, Val: a.Val})
 		}
 	}

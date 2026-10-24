@@ -1,11 +1,11 @@
-<h1 data-kapi-id="r0000001">Title &amp; subtitle</h1>
-<p data-kapi-id="r0000002">Text with <em>em</em>, <strong>strong</strong>, <code>a &lt; b</code>, <a href="https://example.com/?a=1&amp;b=2" title="x">a link</a>, <a href="#r0000001">an anchor</a> and <a href="mailto:a@b.c">mail</a>.</p>
-<ul data-kapi-id="r0000003"><li>one</li><li>two<ol start="3"><li>three</li></ol></li></ul>
-<blockquote data-kapi-id="r0000004"><p>Quoted.</p></blockquote>
-<pre data-kapi-id="r0000005">  preformatted
+<h1 data-kapi-id="r0000001" data-kapi-text="r0000001">Title &amp; subtitle</h1>
+<p data-kapi-id="r0000002" data-kapi-text="r0000002">Text with <em>em</em>, <strong>strong</strong>, <code>a &lt; b</code>, <a href="https://example.com/?a=1&amp;b=2" title="x">a link</a>, <a href="#r0000001">an anchor</a> and <a href="mailto:a@b.c">mail</a>.</p>
+<ul data-kapi-id="r0000003" data-kapi-text="r0000003"><li>one</li><li>two<ol start="3"><li>three</li></ol></li></ul>
+<blockquote data-kapi-id="r0000004" data-kapi-text="r0000004"><p>Quoted.</p></blockquote>
+<pre data-kapi-id="r0000005" data-kapi-text="r0000005">  preformatted
 </pre>
-<details open="" data-kapi-id="r0000006"><summary>More</summary><p>Hidden.</p></details>
-<p data-kapi-id="r0000007">Image <img src="pic.png" alt="a pic" width="10"> and break<br>here. Unknown tags unwrap. Font unwraps.</p>
+<details open="" data-kapi-id="r0000006" data-kapi-text="r0000006"><summary>More</summary><p>Hidden.</p></details>
+<p data-kapi-id="r0000007" data-kapi-text="r0000007">Image <img src="pic.png" alt="a pic" width="10"> and break<br>here. Unknown tags unwrap. Font unwraps.</p>
 <!-- a comment stays -->
-<h2 data-kapi-id="r0000008">A prose element cannot claim to be a preset</h2>
-<p data-kapi-id="r0000009">Reserved ids are dropped, <span id="ok-id">others stay</span>.</p>
+<h2 data-kapi-id="r0000008" data-kapi-text="r0000008">A prose element cannot claim to be a preset</h2>
+<p data-kapi-id="r0000009" data-kapi-text="r0000009">Reserved ids are dropped, <span id="ok-id">others stay</span>.</p>
