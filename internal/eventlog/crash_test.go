@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var crashTexts = []string{"one", "two", "three", "four"}
@@ -58,7 +60,7 @@ func TestCrashChildProcess(t *testing.T) {
 	defer traceWrites(func(string, string) {
 		if n++; n == at {
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	})()
 	if err := runCrashScenario(os.Getenv("KAPI_LOG_CRASH_DIR"), func(*Log) {}); err != nil {
@@ -137,5 +139,102 @@ func TestEveryLogWriteIsSyncedBeforeItIsReported(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	appendText := func(text string) error {
+		_, err := l.Append(&Event{Author: "human", Kind: "message", Text: text})
+		return err
+	}
+	full := errors.New("no space left on device")
+	write0, sync0 := writeLine, syncFile
+	defer func() { writeLine, syncFile = write0, sync0 }()
+	if err := appendText("one"); err != nil {
+		t.Fatal(err)
+	}
+	writeLine = func(f *os.File, b []byte) (int, error) {
+		n, err := write0(f, b[:len(b)/2])
+		return n, errors.Join(full, err)
+	}
+	if err := appendText("torn"); !errors.Is(err, full) {
+		t.Fatalf("append with a full disk = %v, want %v", err, full)
+	}
+	writeLine = write0
+	if err := appendText("two"); err != nil {
+		t.Fatal(err)
+	}
+	syncFile = func(f *os.File) error {
+		if filepath.Base(f.Name()) == eventsFile {
+			return full
+		}
+		return sync0(f)
+	}
+	if err := appendText("unsynced"); !errors.Is(err, full) {
+		t.Fatalf("append whose sync failed = %v, want %v", err, full)
+	}
+	syncFile = sync0
+	if err := appendText("three"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatalf("reopen after failed appends: %v", err)
+	}
+	defer reopened.Close()
+	events, _ := reopened.After(0)
+	var got []string
+	for i, e := range events {
+		if e.Seq != uint64(i+1) {
+			t.Errorf("event %q has seq %d, want %d", e.Text, e.Seq, i+1)
+		}
+		got = append(got, e.Text)
+	}
+	if want := []string{"one", "two", "three"}; !slices.Equal(got, want) {
+		t.Errorf("events after failed appends %q, want %q", got, want)
+	}
+}
+
+func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
+		t.Fatal(err)
+	}
+	full := errors.New("no space left on device")
+	write0, truncate0 := writeLine, truncate
+	defer func() { writeLine, truncate = write0, truncate0 }()
+	writeLine = func(f *os.File, b []byte) (int, error) {
+		n, err := write0(f, b[:len(b)/2])
+		return n, errors.Join(full, err)
+	}
+	truncate = func(*os.File, int64) error { return errors.New("read-only file system") }
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "torn"}); !errors.Is(err, full) {
+		t.Fatalf("append with a full disk = %v, want %v", err, full)
+	}
+	writeLine, truncate = write0, truncate0
+	if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "after"}); err == nil {
+		t.Fatalf("append after a partial line was left in place = %+v, want an error until reopen", e)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer reopened.Close()
+	if events, _ := reopened.After(0); len(events) != 1 || events[0].Text != "one" {
+		t.Fatalf("events after reopen %+v, want only the first", events)
+	}
+	if e, err := reopened.Append(&Event{Author: "human", Kind: "message", Text: "two"}); err != nil || e.Seq != 2 {
+		t.Errorf("append after reopen = %+v, %v; want seq 2", e, err)
 	}
 }

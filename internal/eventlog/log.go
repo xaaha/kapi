@@ -20,6 +20,7 @@ type Event struct {
 	Author string    `json:"author"`
 	Kind   string    `json:"kind"`
 	Target string    `json:"target,omitempty"`
+	Rev    uint64    `json:"rev,omitempty"`
 	Text   string    `json:"text"`
 }
 
@@ -27,6 +28,8 @@ type Log struct {
 	mu      sync.Mutex
 	dir     string
 	file    *os.File
+	size    int64
+	broken  error
 	events  []Event
 	pos     positions
 	changed chan struct{}
@@ -49,6 +52,8 @@ const (
 var (
 	syncFile   = (*os.File).Sync
 	renameFile = os.Rename
+	writeLine  = (*os.File).Write
+	truncate   = (*os.File).Truncate
 )
 
 func Open(dir string) (*Log, error) {
@@ -75,7 +80,7 @@ func Open(dir string) (*Log, error) {
 		f.Close()
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -107,6 +112,9 @@ func (l *Log) Close() error {
 func (l *Log) Append(in *Event) (Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.broken != nil {
+		return Event{}, l.broken
+	}
 	e := *in
 	e.Seq = uint64(len(l.events)) + 1
 	if e.Time.IsZero() {
@@ -116,16 +124,26 @@ func (l *Log) Append(in *Event) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
-	if _, err := l.file.Write(append(line, '\n')); err != nil {
-		return Event{}, err
+	line = append(line, '\n')
+	if _, err := writeLine(l.file, line); err != nil {
+		return Event{}, errors.Join(err, l.undoAppend())
 	}
 	if err := syncFile(l.file); err != nil {
-		return Event{}, err
+		return Event{}, errors.Join(err, l.undoAppend())
 	}
+	l.size += int64(len(line))
 	l.events = append(l.events, e)
 	close(l.changed)
 	l.changed = make(chan struct{})
 	return e, nil
+}
+
+func (l *Log) undoAppend() error {
+	if err := truncate(l.file, l.size); err != nil {
+		l.broken = fmt.Errorf("%s may end in a partial line; reopen the log before appending: %w", l.file.Name(), err)
+		return l.broken
+	}
+	return nil
 }
 
 // After returns events with seq greater than cursor, and a channel closed on the next append.

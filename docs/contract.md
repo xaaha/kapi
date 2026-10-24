@@ -126,7 +126,7 @@ type Preset struct{ Name, Summary, Example string }
 
 // package page
 type Store struct{ /* one per page, under $KAPI_HOME/pages/<id>/ */ }
-func Open(home, path string) (*Store, error)
+func Open(home, path string, l *eventlog.Log) (*Store, error) // l is the page's event log; the store writes its revision events
 func (s *Store) Source() ([]byte, uint64)        // current source and revision
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) // ErrStale when rev != current
 type Op struct {
@@ -139,7 +139,7 @@ type Op struct {
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
 }
-type Summary struct{ Text string; IDs []string } // `deleted callout "Freeze writes."` etc., goes into the event log
+type Summary struct{ Text string; IDs []string; Seq uint64 } // `deleted callout "Freeze writes."` etc.; Seq is the revision event the store logged
 var ErrStale, ErrNotFound, ErrInboundLinks error
 ```
 
@@ -230,11 +230,28 @@ the named temp file is kapi's unfinished write, so it is deleted. Any other
 temp file is never swapped in. It is renamed to `.<name>.kapi-kept-<digits>`,
 so its bytes are not lost and open does not consider it again.
 
+The revision event is part of the commit. The store, not its caller, appends
+it to the event log while it still holds the page, so commits and their events
+never interleave. Each revision event carries the `rev` it describes. The
+store writes the event it is about to log into `state.json` together with the
+revision: as `"event":{"rev":N,"author":"...","text":"...","ids":[...]}` next
+to `rev`, and inside `next` before a swap. On open, and at the start of every
+op and refresh, the store compares that event's `rev` with the highest `rev` of any revision
+event in the log, and appends the event only when the log does not have it
+yet. So a kill between the commit and the append logs the event once on the
+next open, an append that failed is retried by the next op or refresh, and a
+reopen with nothing lost logs nothing. A commit that logs no
+event, such as the first load or a file edit made while kapi was down,
+records none.
+
 ## HTTP
 
 The daemon also listens on `127.0.0.1` and writes
 `http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
 `kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
+`http.url`, `previous-tokens`, `pages/<id>/page.txt` and `pages/<id>/viewing`
+are written like the page store's files: a fsynced temp file in the same
+folder, a rename, then an fsync of the folder.
 
 On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
@@ -311,9 +328,12 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 ### Events stream
 
 The event log is `pages/<id>/events.ndjson`, one JSON event per line, and
-each append is fsynced before it is reported. A final line without its
-newline is a torn write: opening the log drops it and truncates the file to
-the last whole line. `positions.json` is replaced through a fsynced temp
+each append is fsynced before it is reported. An append whose write or
+fsync fails, such as on a full disk, truncates the file back to where the
+line started before it reports the error, so the next append never lands on
+a partial line. If that truncation fails too, the log refuses every append
+until it is reopened, so a partial line can only ever be the last one. A final line without its newline is a torn write: opening the
+log drops it and truncates the file to the last whole line. `positions.json` is replaced through a fsynced temp
 file and a rename, followed by an fsync of the folder. An empty or
 unreadable `positions.json` or `cursors.json` counts as missing, so the log
 still opens. Events past the last readable position are then delivered
@@ -327,7 +347,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 |---|---|---|
 | `message` | chat message from `human` or an agent | append to the chat panel |
 | `answer` | form answer | show as sent |
-| `revision` | page changed; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
+| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
 Read receipts are not in the event log. Each reader has two positions:

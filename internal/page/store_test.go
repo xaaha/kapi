@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -30,11 +31,21 @@ func newPage(t *testing.T, src string) (home, path string) {
 
 func open(t *testing.T, home, path string) *Store {
 	t.Helper()
-	s, err := Open(home, path)
+	s, err := Open(home, path, pageLog(t, home, path))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
+}
+
+func pageLog(t *testing.T, home, path string) *eventlog.Log {
+	t.Helper()
+	l, err := eventlog.Open(filepath.Join(home, "pages", ID(path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	return l
 }
 
 func onDisk(t *testing.T, path string) string {
@@ -570,10 +581,11 @@ func TestApplyUnknownIDOrKind(t *testing.T) {
 
 func TestOpenNeedsAnAbsoluteExistingPath(t *testing.T) {
 	home := t.TempDir()
-	if _, err := Open(home, "plan.html"); err == nil {
+	missing := filepath.Join(home, "missing.html")
+	if _, err := Open(home, "plan.html", pageLog(t, home, missing)); err == nil {
 		t.Error("relative path accepted")
 	}
-	if _, err := Open(home, filepath.Join(home, "missing.html")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := Open(home, missing, pageLog(t, home, missing)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("missing file: err = %v", err)
 	}
 }
@@ -1164,7 +1176,7 @@ func TestOpenUnderAnAgentThatKeepsWritingStillOpens(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 		}()
-		_, err := Open(home, path)
+		_, err := Open(home, path, pageLog(t, home, path))
 		close(stop)
 		<-done
 		if errors.Is(err, errFileChanged) {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
 )
@@ -40,28 +41,35 @@ func traceWrites(on func(writeEvent)) (restore func()) {
 }
 
 func runCrashScenario(home, path string, after func(*Store)) error {
-	s, err := Open(home, path)
-	if err != nil {
-		return err
-	}
-	l, err := eventlog.Open(s.dir)
+	l, err := eventlog.Open(filepath.Join(home, "pages", ID(path)))
 	if err != nil {
 		return err
 	}
 	defer l.Close()
+	s, err := Open(home, path, l)
+	if err != nil {
+		return err
+	}
 	after(s)
 	for _, op := range crashOps {
 		_, rev := s.Source()
-		_, sum, err := s.Apply(rev, op)
-		if err != nil {
-			return err
-		}
-		if _, err := l.Append(&eventlog.Event{Author: "human", Kind: "revision", Text: sum.Text}); err != nil {
+		if _, _, err := s.Apply(rev, op); err != nil {
 			return err
 		}
 		after(s)
 	}
 	return nil
+}
+
+func revisionEvents(t *testing.T, home, path string) (*Store, []eventlog.Event) {
+	t.Helper()
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, _ := l.After(0)
+	return s, slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Kind != "revision" })
 }
 
 func TestCrashChildProcess(t *testing.T) {
@@ -79,7 +87,7 @@ func TestCrashChildProcess(t *testing.T) {
 				}
 			}
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	})()
 	if err := runCrashScenario(os.Getenv("KAPI_CRASH_HOME"), os.Getenv("KAPI_CRASH_PAGE"), func(*Store) {}); err != nil {
@@ -106,6 +114,10 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 	restore()
 	if err != nil {
 		t.Fatal(err)
+	}
+	_, logged := revisionEvents(t, home, path)
+	if len(logged) != len(crashOps) {
+		t.Fatalf("an uninterrupted run logged %d revision events, want %d", len(logged), len(crashOps))
 	}
 	whole := map[string]bool{}
 	for _, m := range marks {
@@ -137,15 +149,15 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 					t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
 				}
 				checkWhole(t, home, path, whole)
-				s, err := Open(home, path)
-				if err != nil {
-					t.Fatalf("reopen after a kill at write %d: %v", at, err)
+				s, events := revisionEvents(t, home, path)
+				_, rev := s.Source()
+				want := revisions(logged[:rev-1])
+				if got := revisions(events); !slices.Equal(got, want) {
+					t.Errorf("after a kill at write %d at rev %d, revision events %+v, want each op's once: %+v", at, rev, got, want)
 				}
-				l, err := eventlog.Open(s.dir)
-				if err != nil {
-					t.Fatalf("event log after a kill at write %d: %v", at, err)
+				if _, again := revisionEvents(t, home, path); !slices.Equal(revisions(again), want) {
+					t.Errorf("a second reopen after a kill at write %d changed the revision events to %+v", at, revisions(again))
 				}
-				l.Close()
 				for _, dir := range []string{filepath.Dir(path), s.dir, filepath.Join(s.dir, "revs")} {
 					if left, _ := filepath.Glob(filepath.Join(dir, ".*.kapi-*")); len(left) > 0 {
 						t.Errorf("reopen after a kill at write %d left temp files %v", at, left)
@@ -173,6 +185,95 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestARevisionEventAFailedAppendLostIsLoggedOnceOnReopen(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	l, err := eventlog.Open(filepath.Join(home, "pages", ID(path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`}); err == nil {
+		t.Fatal("Apply reported success with a closed event log")
+	}
+	if got := onDisk(t, path); got != oneBlockUno {
+		t.Fatalf("page = %q, want the edit committed before the append failed", got)
+	}
+	for range 2 {
+		_, events := revisionEvents(t, home, path)
+		if len(events) != 1 || events[0].Rev != 2 || events[0].Author != "human" || !strings.Contains(events[0].Text, "uno") {
+			t.Fatalf("revision events after reopening = %+v, want the edit's event once", events)
+		}
+	}
+}
+
+func failOneAppend(t *testing.T) {
+	t.Helper()
+	append0 := appendEvent
+	appendEvent = func(*eventlog.Log, *eventlog.Event) (eventlog.Event, error) {
+		appendEvent = append0
+		return eventlog.Event{}, errors.New("disk full")
+	}
+	t.Cleanup(func() { appendEvent = append0 })
+}
+
+func TestARevisionEventWhoseAppendFailedIsLoggedBeforeTheNextOp(t *testing.T) {
+	home, path := newPage(t, crashStart)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failOneAppend(t)
+	if _, _, err := s.Apply(1, crashOps[0]); err == nil {
+		t.Fatal("Apply reported success when its event append failed")
+	}
+	mustApply(t, s, crashOps[1])
+	events, _ := l.After(0)
+	if got := revisions(events); len(got) != 2 || got[0].rev != 2 || got[1].rev != 3 {
+		t.Fatalf("revision events %+v, want the failed op's at rev 2, then the next op's at rev 3", got)
+	}
+}
+
+func TestARefreshRetriesAFileEditEventWhoseAppendFailed(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalWrite(t, path, oneBlockUno)
+	failOneAppend(t)
+	if _, _, err := s.Refresh(); err == nil {
+		t.Fatal("Refresh reported success when its event append failed")
+	}
+	if _, _, err := s.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := l.After(0)
+	if got := revisions(events); len(got) != 1 || got[0].rev != 2 || got[0].author != "file" {
+		t.Fatalf("revision events %+v, want the file edit's event once at rev 2", got)
+	}
+}
+
+type loggedRevision struct {
+	rev                  uint64
+	author, target, text string
+}
+
+func revisions(events []eventlog.Event) []loggedRevision {
+	out := make([]loggedRevision, len(events))
+	for i := range events {
+		out[i] = loggedRevision{events[i].Rev, events[i].Author, events[i].Target, events[i].Text}
+	}
+	return out
 }
 
 func checkWhole(t *testing.T, home, path string, whole map[string]bool) {
@@ -297,7 +398,7 @@ func TestRestoreChildProcess(t *testing.T) {
 			agentRename(t, path, agentWrite)
 		case "restore":
 			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
-			select {}
+			time.Sleep(time.Hour)
 		}
 	}
 	_, _, _ = s.Apply(1, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p data-kapi-id="aaaaaaaa">uno</p>`})
