@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -39,9 +40,12 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(node, "browsertest/gallery-edit.mjs", s.srv.URL+"/"+token+"/p/"+s.id+"/").Output()
+	cmd := exec.Command(node, "browsertest/gallery-edit.mjs", s.srv.URL+"/"+token+"/p/"+s.id+"/")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("gallery-edit.mjs: %v\n%s", err, out)
+		t.Fatalf("gallery-edit.mjs: %v\n%s\n%s", err, out, stderr.Bytes())
 	}
 	var report struct {
 		Skip   string
