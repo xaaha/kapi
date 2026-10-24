@@ -30,6 +30,8 @@ import (
 
 var ErrAlreadyRunning = errors.New("daemon already running")
 
+var writeAtomic = page.WriteAtomic
+
 type Request struct {
 	Op     string   `json:"op"`
 	Page   string   `json:"page"`
@@ -262,7 +264,7 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 	pollCtx, stopPoll := context.WithCancel(ctx)
 	go h.Poll(pollCtx, 300*time.Millisecond)
 	urlFile := HTTPURLPath(s.home)
-	if err := writeFile(urlFile, s.baseURL+"\n"); err != nil {
+	if err := writeAtomic(urlFile, []byte(s.baseURL+"\n")); err != nil {
 		stopPoll()
 		srv.Close()
 		return nil, err
@@ -295,15 +297,7 @@ func rememberToken(home, token string) ([][32]byte, error) {
 	for _, h := range kept {
 		out.WriteString(hex.EncodeToString(h[:]) + "\n")
 	}
-	return previous, writeFile(path, out.String())
-}
-
-func writeFile(path, text string) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return previous, writeAtomic(path, []byte(out.String()))
 }
 
 func (s *Server) page(path string) (*eventlog.Log, error) {
@@ -320,7 +314,7 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "page.txt"), []byte(path+"\n"), 0o600); err != nil {
+	if err := writeAtomic(filepath.Join(dir, "page.txt"), []byte(path+"\n")); err != nil {
 		return nil, err
 	}
 	if err := clearPresence(l); err != nil {

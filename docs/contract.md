@@ -248,6 +248,9 @@ records none.
 The daemon also listens on `127.0.0.1` and writes
 `http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
 `kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
+`http.url`, `previous-tokens`, `pages/<id>/page.txt` and `pages/<id>/viewing`
+are written like the page store's files: a fsynced temp file in the same
+folder, a rename, then an fsync of the folder.
 
 On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every

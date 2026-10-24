@@ -28,7 +28,7 @@ func (s *Server) Viewing(id string) (done func()) {
 	defer s.viewingMu.Unlock()
 	s.viewers[id]++
 	if s.viewers[id] == 1 {
-		if err := writeFile(file, ""); err != nil {
+		if err := writeAtomic(file, nil); err != nil {
 			log.Printf("viewing %s: %v", id, err)
 		}
 	}

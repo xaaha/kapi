@@ -334,7 +334,7 @@ func (s *Store) absorb(raw []byte, rev uint64) ([]byte, string, error) {
 	if err := os.MkdirAll(filepath.Join(s.dir, "raw"), 0o700); err != nil {
 		return nil, "", err
 	}
-	if err := writeAtomic(s.rawPath(rev), raw); err != nil {
+	if err := WriteAtomic(s.rawPath(rev), raw); err != nil {
 		return nil, "", err
 	}
 	text := fmt.Sprintf("split %d block(s) so each has its own id", ch.splits)
@@ -583,7 +583,7 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 			return 0, errFileChanged
 		}
 	}
-	if err := writeAtomic(s.revPath(rev), src); err != nil {
+	if err := WriteAtomic(s.revPath(rev), src); err != nil {
 		return 0, err
 	}
 	if ev != nil {
@@ -634,7 +634,7 @@ func (s *Store) saveState(st *state) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(s.dir, "state.json"), b)
+	return WriteAtomic(filepath.Join(s.dir, "state.json"), b)
 }
 
 const tempMark = ".kapi-"
@@ -661,7 +661,7 @@ func findTemps(dir, base string) ([]string, error) {
 	return temps, nil
 }
 
-func writeAtomic(path string, b []byte) error {
+func WriteAtomic(path string, b []byte) error {
 	return replaceFile(path, b, nil)
 }
 
