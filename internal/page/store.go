@@ -69,9 +69,9 @@ type Store struct {
 }
 
 type state struct {
-	Rev  uint64     `json:"rev"`
-	Undo []uint64   `json:"undo"`
-	Next *state     `json:"next,omitempty"`
+	Rev   uint64     `json:"rev"`
+	Undo  []uint64   `json:"undo"`
+	Next  *state     `json:"next,omitempty"`
 	Temp  string     `json:"temp,omitempty"`
 	Held  []heldFile `json:"held,omitempty"`
 	Event *revEvent  `json:"event,omitempty"`
