@@ -631,7 +631,23 @@
   }
 
   .kapi-site-head {
-    padding: 14px 0.9rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 2147482000;
+    box-sizing: border-box;
+    height: 46px;
+    padding: 0 0.9rem;
+    background: var(--kapi-bg);
+  }
+
+  #kapi-chrome .kapi-panel-head {
+    position: fixed;
+    top: 0;
+    right: 0;
+    box-sizing: border-box;
+    height: 46px;
+    padding: 0 0.9rem;
+    border-bottom: 0;
   }
 
   #kapi-chrome .kapi-panel {
@@ -643,7 +659,6 @@
     box-shadow: var(--kapi-shadow);
   }
 
-  #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-panel-head,
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-scroll,
   #kapi-chrome .kapi-panel:not(.kapi-expanded) .kapi-presence {
     display: none;
