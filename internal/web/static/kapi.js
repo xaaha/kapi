@@ -389,7 +389,7 @@
     notice.hidden = true;
     if (kind !== "undo") dismissNote();
     busy = true;
-    opInFlight = true;
+    opsInFlight++;
     renderBar();
     try {
       const res = await request("/ops", { rev, op: { kind, ...fields } });
@@ -412,9 +412,9 @@
       return res;
     } finally {
       busy = false;
-      opInFlight = false;
+      opsInFlight--;
       renderBar();
-      releaseRevisions();
+      if (!opsInFlight) releaseRevisions();
     }
   }
 
@@ -732,11 +732,11 @@
   }
 
   let heldRevisions = [];
-  let opInFlight = false;
+  let opsInFlight = 0;
   const ownSeqs = new Set();
 
   function onRevision(ev) {
-    if (opInFlight) return void heldRevisions.push(ev);
+    if (opsInFlight) return void heldRevisions.push(ev);
     if (ownSeqs.delete(ev.seq)) return;
     schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
   }
