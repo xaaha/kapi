@@ -235,11 +235,12 @@ it to the event log while it still holds the page, so commits and their events
 never interleave. Each revision event carries the `rev` it describes. The
 store writes the event it is about to log into `state.json` together with the
 revision: as `"event":{"rev":N,"author":"...","text":"...","ids":[...]}` next
-to `rev`, and inside `next` before a swap. On open, and before every commit,
-the store compares that event's `rev` with the highest `rev` of any revision
+to `rev`, and inside `next` before a swap. On open, and at the start of every
+op and refresh, the store compares that event's `rev` with the highest `rev` of any revision
 event in the log, and appends the event only when the log does not have it
 yet. So a kill between the commit and the append logs the event once on the
-next open, and a reopen with nothing lost logs nothing. A commit that logs no
+next open, an append that failed is retried by the next op or refresh, and a
+reopen with nothing lost logs nothing. A commit that logs no
 event, such as the first load or a file edit made while kapi was down,
 records none.
 

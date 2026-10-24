@@ -214,6 +214,55 @@ func TestARevisionEventAFailedAppendLostIsLoggedOnceOnReopen(t *testing.T) {
 	}
 }
 
+func failOneAppend(t *testing.T) {
+	t.Helper()
+	append0 := appendEvent
+	appendEvent = func(l *eventlog.Log, e *eventlog.Event) (eventlog.Event, error) {
+		appendEvent = append0
+		return eventlog.Event{}, errors.New("disk full")
+	}
+	t.Cleanup(func() { appendEvent = append0 })
+}
+
+func TestARevisionEventWhoseAppendFailedIsLoggedBeforeTheNextOp(t *testing.T) {
+	home, path := newPage(t, crashStart)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failOneAppend(t)
+	if _, _, err := s.Apply(1, crashOps[0]); err == nil {
+		t.Fatal("Apply reported success when its event append failed")
+	}
+	mustApply(t, s, crashOps[1])
+	events, _ := l.After(0)
+	if got := revisions(events); len(got) != 2 || got[0].rev != 2 || got[1].rev != 3 {
+		t.Fatalf("revision events %+v, want the failed op's at rev 2, then the next op's at rev 3", got)
+	}
+}
+
+func TestARefreshRetriesAFileEditEventWhoseAppendFailed(t *testing.T) {
+	home, path := newPage(t, oneBlock)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalWrite(t, path, oneBlockUno)
+	failOneAppend(t)
+	if _, _, err := s.Refresh(); err == nil {
+		t.Fatal("Refresh reported success when its event append failed")
+	}
+	if _, _, err := s.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := l.After(0)
+	if got := revisions(events); len(got) != 1 || got[0].rev != 2 || got[0].author != "file" {
+		t.Fatalf("revision events %+v, want the file edit's event once at rev 2", got)
+	}
+}
+
 type loggedRevision struct {
 	rev                  uint64
 	author, target, text string

@@ -426,6 +426,9 @@ func (s *Store) CanUndo() bool {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, err := s.logEvent(); err != nil {
+		return Summary{}, false, err
+	}
 	if _, err := s.checkHeld(false); err != nil {
 		return Summary{}, false, err
 	}
@@ -461,6 +464,9 @@ func (s *Store) Refresh() (Summary, bool, error) {
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, err := s.logEvent(); err != nil {
+		return s.rev, Summary{}, err
+	}
 	if _, err := s.checkHeld(false); err != nil {
 		return s.rev, Summary{}, err
 	}
@@ -557,6 +563,7 @@ var (
 	errFileChanged = errors.New("the file changed while kapi was writing it")
 	errNoSwap      = errors.New("this file system cannot swap files atomically")
 	replaceHook    func(stage string)
+	appendEvent    = (*eventlog.Log).Append
 	syncFile       = (*os.File).Sync
 	renameFile     = os.Rename
 	swapFiles      = exchangeFiles
@@ -564,9 +571,6 @@ var (
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent) (uint64, error) {
-	if _, err := s.logEvent(); err != nil {
-		return 0, err
-	}
 	swapped, err := s.checkHeld(false)
 	if err != nil {
 		return 0, err
@@ -620,7 +624,7 @@ func (s *Store) logEvent() (uint64, error) {
 	if s.event == nil || s.event.Rev <= s.logged {
 		return 0, nil
 	}
-	e, err := s.log.Append(&eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Text: s.event.Text})
+	e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Text: s.event.Text})
 	if err != nil {
 		return 0, err
 	}
