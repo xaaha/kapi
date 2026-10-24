@@ -22,9 +22,13 @@ func tagsByID(src string) map[string]string {
 }
 
 func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
+	skip := t.Skip
+	if os.Getenv("CI") != "" {
+		skip = t.Fatal
+	}
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("node is not installed")
+		skip("node is not installed")
 	}
 	gallery, err := os.ReadFile("../render/testdata/gallery.html")
 	if err != nil {
@@ -50,7 +54,7 @@ func TestEveryTextPartOfTheGalleryEditsInPlaceInChrome(t *testing.T) {
 		t.Fatalf("report %q: %v", out, err)
 	}
 	if report.Skip != "" {
-		t.Skip(report.Skip)
+		skip(report.Skip)
 	}
 	for _, e := range report.Errors {
 		t.Error(e)
