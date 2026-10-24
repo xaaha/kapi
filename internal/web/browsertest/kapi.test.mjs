@@ -202,7 +202,18 @@ const deleteBlock = async (id) => {
   await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
   await until(() => pageLoads() > loads);
   await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note") && !document.querySelector("[data-kapi-selected]")`);
+  await settled();
 };
+
+async function settled() {
+  let last = await page.eval(`window.kapiSettle = 0; new MutationObserver(() => window.kapiSettle++).observe(document.getElementById("kapi-page"), { childList: true }); 0`);
+  for (let quiet = 0; quiet < 3; ) {
+    await new Promise((r) => setTimeout(r, 100));
+    const now = await page.eval(`window.kapiSettle`);
+    quiet = now === last ? quiet + 1 : 0;
+    last = now;
+  }
+}
 
 test("a delete leaves an Undo notice where the block was", async () => {
   const before = await page.eval(`document.documentElement.scrollHeight`);
