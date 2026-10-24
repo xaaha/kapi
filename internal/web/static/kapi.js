@@ -877,18 +877,17 @@
     if (selected?.hasAttribute("data-kapi-hidden")) select(null);
   }
 
-  function foldableHeadings() {
+  function foldableHeadings(level) {
     return [...main.children].filter((el, i) => {
-      const level = levelOf(el);
       const next = main.children[i + 1];
-      return level >= 1 && level <= 3 && next && !(levelOf(next) && levelOf(next) <= level);
+      return levelOf(el) === level && next && !(levelOf(next) && levelOf(next) <= level);
     });
   }
 
   function toggleFold(heading, all) {
     const id = idOf(heading);
     if (all) {
-      const ids = foldableHeadings().map(idOf);
+      const ids = foldableHeadings(levelOf(heading)).map(idOf);
       if (ids.every((each) => folds.has(each))) for (const each of ids) folds.delete(each);
       else for (const each of ids) folds.add(each);
     } else if (!folds.delete(id)) folds.add(id);

@@ -1803,7 +1803,9 @@ const FOLD_ALL_PAGE = [
   { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">A note.</p>' },
   { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">Tables</h2>' },
   { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">A table.</p>' },
-  { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Empty</h3>' },
+  { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Sub</h3>' },
+  { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Sub text.</p>' },
+  { id: "h3eeeeee", html: '<h3 data-kapi-id="h3eeeeee">Empty</h3>' },
   { id: "h2dddddd", html: '<h2 data-kapi-id="h2dddddd">Last</h2>' },
 ];
 
@@ -1815,34 +1817,39 @@ async function arrowClick(id, modifiers = 0) {
 
 const foldedIds = () => page.eval(`[...document.querySelectorAll("[data-kapi-folded]")].map((el) => el.dataset.kapiId)`);
 const ALT = 1;
-const ALL_FOLDED = ["h1h1h1h1", "h2aaaaaa", "h2bbbbbb"];
 
-test("Option-click on a fold arrow folds every heading that has content, and again unfolds them all", async () => {
+test("Option-click on an h2 arrow folds every h2 with content, again unfolds them, and other levels keep their state", async () => {
   await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h3cccccc");
   await arrowClick("h2bbbbbb", ALT);
-  assert.deepEqual(await foldedIds(), ALL_FOLDED);
-  await arrowClick("h1h1h1h1", ALT);
-  assert.deepEqual(await foldedIds(), []);
-  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p3p3p3p3"]').checkVisibility()`), true);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb", "h3cccccc"]);
+  await arrowClick("h2aaaaaa", ALT);
+  assert.deepEqual(await foldedIds(), ["h3cccccc"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p2p2p2p2"]').checkVisibility()`), true);
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
-test("Option-click folds all from a mixed state and the state survives a reload", async () => {
+test("Option-click folds the rest of a level from a mixed state, h3 arrows touch only h3, and the state survives a reload", async () => {
   await reopenWith(FOLD_ALL_PAGE);
   await arrowClick("h2aaaaaa");
-  assert.deepEqual(await foldedIds(), ["h2aaaaaa"]);
-  await arrowClick("h1h1h1h1", ALT);
-  assert.deepEqual(await foldedIds(), ALL_FOLDED);
+  await arrowClick("h2bbbbbb", ALT);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb"]);
   await page.eval(`location.reload()`);
-  await page.waitFor(`!!document.querySelector('[data-kapi-id="h1h1h1h1"][data-kapi-folded]')`);
-  assert.deepEqual(await foldedIds(), ALL_FOLDED);
-  assert.equal(await page.eval(`JSON.parse(localStorage.getItem("kapi-folds:" + location.pathname)).length`), 3);
-  await arrowClick("h1h1h1h1", ALT);
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="h2aaaaaa"][data-kapi-folded]')`);
+  assert.deepEqual(await foldedIds(), ["h2aaaaaa", "h2bbbbbb"]);
+  await arrowClick("h2bbbbbb", ALT);
   assert.deepEqual(await foldedIds(), []);
+  await arrowClick("h3cccccc", ALT);
+  assert.deepEqual(await foldedIds(), ["h3cccccc"]);
 });
 
-test("a plain click folds one heading and Option-click selects nothing", async () => {
+test("Option-click on the only h1 folds it, a plain click folds one heading, and Option-click selects nothing", async () => {
   await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h1h1h1h1", ALT);
+  assert.deepEqual(await foldedIds(), ["h1h1h1h1"]);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p3p3p3p3"]').checkVisibility()`), false);
+  await arrowClick("h1h1h1h1", ALT);
+  assert.deepEqual(await foldedIds(), []);
   await arrowClick("h2bbbbbb");
   assert.deepEqual(await foldedIds(), ["h2bbbbbb"]);
   await arrowClick("h2bbbbbb");
