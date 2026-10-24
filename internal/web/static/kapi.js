@@ -1006,7 +1006,9 @@
     }
   }).observe(panel);
   notice.addEventListener("click", () => (notice.hidden = true));
-  panel.addEventListener("focusin", () => panel.classList.add("kapi-expanded"));
+  panel.addEventListener("focusin", (e) => {
+    if (!e.target.closest(".kapi-panel-head")) panel.classList.add("kapi-expanded");
+  });
   panel.addEventListener("focusout", (e) => {
     if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
   });

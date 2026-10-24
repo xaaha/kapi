@@ -628,6 +628,11 @@
 @media screen and (max-width: 760px) {
   html {
     padding-bottom: var(--kapi-bar-height, 104px);
+    scroll-padding-top: 46px;
+  }
+
+  #kapi-chrome .kapi-ring {
+    z-index: 2147481999;
   }
 
   .kapi-site-head {

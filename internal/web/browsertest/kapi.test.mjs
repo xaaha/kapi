@@ -1239,6 +1239,56 @@ for (const width of [390, 360]) {
   });
 }
 
+async function mobilePage(width) {
+  const phone = await browser.open(server.url, { width, height: 800 });
+  await phone.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 2, mobile: true });
+  await phone.call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await phone.call("Page.navigate", { url: server.url });
+  await phone.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-theme") && innerWidth === ${width}`);
+  return phone;
+}
+
+const tap = async (phone, selector) => {
+  const { x, y } = await phone.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await phone.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+};
+
+test("tapping the theme toggle on a phone does not expand the chat", async () => {
+  const phone = await mobilePage(390);
+  try {
+    await tap(phone, '.kapi-theme [data-theme-choice="dark"]');
+    await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
+    assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
+    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    await phone.waitFor(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`);
+  } finally {
+    await phone.close();
+  }
+});
+
+test("on phones anchors and the selection ring stay clear of the top strip", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.eval(`(() => {
+      const s = document.createElement("style");
+      s.textContent = ":where(#kapi-page) :where([id]) { scroll-margin-top: 1.5rem; }";
+      document.head.prepend(s);
+      document.getElementById("kapi-page").style.paddingBottom = "3000px";
+      document.querySelector('[data-kapi-id="bbbbbbbb"]').id = "target";
+      location.hash = "target";
+    })()`);
+    await phone.waitFor(`scrollY > 0`);
+    const strip = await phone.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom`);
+    assert.ok(await phone.eval(`document.getElementById("target").getBoundingClientRect().top`) >= strip);
+    const z = (sel) => phone.eval(`Number(getComputedStyle(document.querySelector(${JSON.stringify(sel)})).zIndex)`);
+    assert.ok((await z(".kapi-ring")) < (await z(".kapi-site-head")));
+  } finally {
+    await phone.close();
+  }
+});
+
 test("the source editor is labelled and takes the block's place", async () => {
   await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').style.margin = "20px 0"`);
   const before = await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').getBoundingClientRect().top + scrollY`);
