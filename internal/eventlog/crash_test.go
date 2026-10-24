@@ -200,3 +200,41 @@ func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
 		t.Errorf("events after failed appends %q, want %q", got, want)
 	}
 }
+
+func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
+		t.Fatal(err)
+	}
+	full := errors.New("no space left on device")
+	write0, truncate0 := writeLine, truncate
+	defer func() { writeLine, truncate = write0, truncate0 }()
+	writeLine = func(f *os.File, b []byte) (int, error) {
+		n, err := write0(f, b[:len(b)/2])
+		return n, errors.Join(full, err)
+	}
+	truncate = func(*os.File, int64) error { return errors.New("read-only file system") }
+	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "torn"}); !errors.Is(err, full) {
+		t.Fatalf("append with a full disk = %v, want %v", err, full)
+	}
+	writeLine, truncate = write0, truncate0
+	if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "after"}); err == nil {
+		t.Fatalf("append after a partial line was left in place = %+v, want an error until reopen", e)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer reopened.Close()
+	if events, _ := reopened.After(0); len(events) != 1 || events[0].Text != "one" {
+		t.Fatalf("events after reopen %+v, want only the first", events)
+	}
+	if e, err := reopened.Append(&Event{Author: "human", Kind: "message", Text: "two"}); err != nil || e.Seq != 2 {
+		t.Errorf("append after reopen = %+v, %v; want seq 2", e, err)
+	}
+}
