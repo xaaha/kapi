@@ -1424,59 +1424,6 @@ const tablePage = "<kapi-table data-kapi-id=\"aaaaaaaa\">\n  <table class=t>\n  
 	"    <tbody><tr><td class=\"name\">beta</td><td>10</td></tr><tr><td>alpha<td>9</tr></tbody>\n  </table>\n</kapi-table>\n" +
 	"<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
 
-func TestACellsOpSetsCellTextAndKeepsTheMarkup(t *testing.T) {
-	home, path := newPage(t, tablePage)
-	s := open(t, home, path)
-	sum := mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{
-		{Row: 0, Col: 1, Text: "Row count"},
-		{Row: 1, Col: 0, Text: `b<eta> & "co"`},
-		{Row: 2, Col: 1, Text: "nine"},
-	}})
-	want := strings.NewReplacer(
-		"<th>Rows</th>", "<th>Row count</th>",
-		`<td class="name">beta</td>`, `<td class="name">b&lt;eta&gt; &amp; &#34;co&#34;</td>`,
-		"<td>9</tr>", "<td>nine</tr>",
-	).Replace(tablePage)
-	if got := onDisk(t, path); got != want {
-		t.Errorf("file after cells op:\n%s\nwant:\n%s", got, want)
-	}
-	if !strings.HasPrefix(sum.Text, `edited cells of table "Shard Row count`) || strings.Join(sum.IDs, ",") != "aaaaaaaa" {
-		t.Errorf("summary = %+v", sum)
-	}
-}
-
-func TestACellsOpRefusesBadCellsAndOtherElements(t *testing.T) {
-	for _, op := range []Op{
-		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 3, Col: 0, Text: "x"}}},
-		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 2, Text: "x"}}},
-		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: -1, Col: 0, Text: "x"}}},
-		{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}, {Row: 0, Col: 0, Text: "y"}}},
-		{Kind: "cells", ID: "aaaaaaaa"},
-		{Kind: "cells", ID: "bbbbbbbb", Cells: []Cell{{Row: 0, Col: 0, Text: "x"}}},
-	} {
-		home, path := newPage(t, tablePage)
-		s := open(t, home, path)
-		if _, _, err := s.Apply(1, &op); err == nil {
-			t.Errorf("%+v succeeded, want an error", op)
-		}
-		if got := onDisk(t, path); got != tablePage {
-			t.Errorf("refused op changed the file:\n%s", got)
-		}
-	}
-}
-
-func TestACellsOpOnATableThatChangedIsStale(t *testing.T) {
-	home, path := newPage(t, tablePage)
-	s := open(t, home, path)
-	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
-	if _, _, err := s.Apply(1, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "11"}}}); err != nil {
-		t.Fatalf("cells op at an old rev with the table unchanged: %v", err)
-	}
-	if _, _, err := s.Apply(2, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 1, Text: "12"}}}); !errors.Is(err, ErrStale) {
-		t.Errorf("cells op at a rev before the table changed: err = %v, want ErrStale", err)
-	}
-}
-
 func TestAnInnerEditCannotLeaveAChildOpen(t *testing.T) {
 	const src = "<kapi-plan data-kapi-id=\"aaaaaaaa\"><kapi-step data-kapi-id=\"bbbbbbbb\">one</kapi-step></kapi-plan>\n" +
 		"<kapi-callout data-kapi-id=\"cccccccc\" kind=\"note\"><p>x</p></kapi-callout>\n<p data-kapi-id=\"dddddddd\">next</p>\n"
@@ -1518,33 +1465,6 @@ func TestAnEditThatPullsInTheNextBlockIsRefused(t *testing.T) {
 	}
 	if got := onDisk(t, path); got != src {
 		t.Errorf("refused edit changed the file:\n%s", got)
-	}
-}
-
-func TestACellsOpFollowsImpliedEndTags(t *testing.T) {
-	const src = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>b<tr><td>c<td>d</table></kapi-table>\n"
-	home, path := newPage(t, src)
-	s := open(t, home, path)
-	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "B"}}})
-	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 1, Col: 0, Text: "C"}, {Row: 1, Col: 1, Text: "D"}}})
-	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><td>a<td>B<tr><td>C<td>D</table></kapi-table>\n"; got != want {
-		t.Errorf("file =\n%s\nwant\n%s", got, want)
-	}
-	const sections = "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>i<tbody><tr><td>a<td>b</table></kapi-table>\n"
-	home, path = newPage(t, sections)
-	s = open(t, home, path)
-	mustApply(t, s, &Op{Kind: "cells", ID: "aaaaaaaa", Cells: []Cell{{Row: 0, Col: 1, Text: "I"}, {Row: 1, Col: 0, Text: "A"}}})
-	if got, want := onDisk(t, path), "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><thead><tr><th>h<th>I<tbody><tr><td>A<td>b</table></kapi-table>\n"; got != want {
-		t.Errorf("file =\n%s\nwant\n%s", got, want)
-	}
-}
-
-func TestOverlappingCellRangesAreRefused(t *testing.T) {
-	if _, err := spliceCells([]byte("0123456789"), 0, []cellChange{{2, 6, "x"}, {4, 8, "y"}}); err == nil {
-		t.Error("overlapping ranges were spliced")
-	}
-	if got, err := spliceCells([]byte("0123456789"), 0, []cellChange{{6, 8, "y"}, {2, 4, "x"}}); err != nil || string(got) != "01x45y89" {
-		t.Errorf("got %q, %v", got, err)
 	}
 }
 

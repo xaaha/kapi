@@ -1,7 +1,7 @@
 <ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="l0000001">
-  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000002"><input type="checkbox" checked="" aria-label="Copy the session store"><span class="kapi-task-body">Copy the session store</span></li>
-  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000003"><input type="checkbox" aria-label="Flip reads to the new cluster"><span class="kapi-task-body">Flip reads to the <code>new</code> cluster</span></li>
-  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000004"><input type="checkbox" checked="" aria-label="Delete the old handler."><span class="kapi-task-body"><p>Delete the old handler.</p></span></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000002"><input type="checkbox" checked="" aria-label="Copy the session store"><span class="kapi-task-body" data-kapi-text="l0000002">Copy the session store</span></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000003"><input type="checkbox" aria-label="Flip reads to the new cluster"><span class="kapi-task-body" data-kapi-text="l0000003">Flip reads to the <code>new</code> cluster</span></li>
+  <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000004"><input type="checkbox" checked="" aria-label="Delete the old handler."><span class="kapi-task-body" data-kapi-text="l0000004"><p>Delete the old handler.</p></span></li>
 </ul>
 <div class="kapi-error" data-kapi-preset="checklist" role="alert" data-kapi-id="l0000005"><span class="kapi-error-tag">&lt;kapi-checklist&gt;</span> holds only &lt;kapi-task&gt; children, not &lt;li&gt;</div>
 <div class="kapi-error" data-kapi-preset="task" role="alert" data-kapi-id="l0000006"><span class="kapi-error-tag">&lt;kapi-task&gt;</span> must be a direct child of &lt;kapi-checklist&gt;</div>

@@ -133,7 +133,7 @@ func TestProseRendersAsItsSource(t *testing.T) {
 <!-- a comment -->
 <pre data-kapi-id="gggggggg">  indented
     code</pre>`
-	if got := render(t, src); got != src {
+	if got := unmarked(render(t, src)); got != src {
 		t.Errorf("prose did not render as its source\ngot:\n%s\nwant:\n%s", got, src)
 	}
 }
