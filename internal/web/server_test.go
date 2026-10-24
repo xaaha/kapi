@@ -740,6 +740,12 @@ func TestNotesAppendAsOneBatchWithTheirQuotes(t *testing.T) {
 	if n := len(s.events()); n != 3 {
 		t.Errorf("rejected batches appended events: %d, want 3", n)
 	}
+	if code, out := s.post("/notes", `{"notes":[],"text":"just a message"}`); code != http.StatusOK || out["seq"] != 4.0 {
+		t.Errorf("message without notes: %d %v", code, out)
+	}
+	if e := s.events()[3]; e.Kind != "message" || e.Text != "just a message" {
+		t.Errorf("message without notes = %+v", e)
+	}
 }
 
 type sse struct {

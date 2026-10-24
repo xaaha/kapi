@@ -654,6 +654,11 @@
     }
   }
 
+  function changeDrafts(change) {
+    drafts = change(loadDrafts());
+    saveDrafts();
+  }
+
   function saveDrafts() {
     try {
       if (drafts.length) localStorage.setItem(draftsKey, JSON.stringify(drafts));
@@ -663,10 +668,12 @@
   }
 
   function cellPart(cell) {
-    const label = cell.getAttribute("data-kapi-label");
-    if (!cell.hasAttribute("data-kapi-col")) return `column ${cell.textContent.trim()}`;
-    const rows = rowsOf(cell.closest("table")).filter((tr) => tr.querySelector("[data-kapi-col]"));
+    const table = cell.closest("table");
+    const header = (tr) => tr.parentElement === table.tHead || (tr.cells.length > 0 && [...tr.cells].every((c) => c.tagName === "TH"));
+    if (header(cell.parentElement)) return `column ${cell.textContent.trim()}`;
+    const rows = rowsOf(table).filter((tr) => !header(tr));
     const row = `row ${rows.indexOf(cell.parentElement) + 1}`;
+    const label = cell.getAttribute("data-kapi-label");
     return label ? `${row}, ${label}` : row;
   }
 
@@ -680,6 +687,14 @@
     const first = lineAt(range.startContainer, range.startOffset);
     const last = lineAt(range.endContainer, range.endOffset);
     return first === last ? `line ${first}` : `lines ${first} to ${last}`;
+  }
+
+  function within(range, el) {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    if (range.compareBoundaryPoints(Range.START_TO_START, r) > 0) r.setStart(range.startContainer, range.startOffset);
+    if (range.compareBoundaryPoints(Range.END_TO_END, r) < 0) r.setEnd(range.endContainer, range.endOffset);
+    return r;
   }
 
   function rangeText(range) {
@@ -702,7 +717,7 @@
     const common = range.commonAncestorContainer;
     const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
     const blocks = host && main.contains(host) ? [host]
-      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b));
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && rangeText(within(range, b)));
     if (!blocks.length) return null;
     const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
     const both = (selector) => {
@@ -749,7 +764,7 @@
     if (editing) return;
     if (textRange) {
       const anchor = rangeAnchor(textRange);
-      if (anchor) showAsk(anchor, textRange.cloneRange());
+      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange());
     } else if (selected) {
       const anchor = blockAnchor(selected);
       let range = null;
@@ -757,11 +772,11 @@
         range = document.createRange();
         range.selectNodeContents(lastPoint.cell);
       }
-      showAsk(anchor, range);
+      showAsk(anchor, range, null);
     }
   }
 
-  function showAsk(anchor, range) {
+  function showAsk(anchor, range, restore) {
     closeAsk();
     const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
     const head = h("div", { class: "kapi-ask-head" }, about);
@@ -800,7 +815,7 @@
     const box = h("div", { class: "kapi-ask", role: "dialog", "aria-label": "Note for the agent" }, head, text,
       h("div", { class: "kapi-ask-row" }, cancel, queueButton, sendNow));
     root.append(box);
-    asking = { box, anchor, range, text, sync, at: (range ?? selected)?.getBoundingClientRect() };
+    asking = { box, anchor, range, restore, text, sync, at: (range ?? selected)?.getBoundingClientRect() };
     sync();
     highlight(range);
     renderBar();
@@ -824,7 +839,7 @@
 
   function closeAsk(restore = false) {
     if (!asking) return;
-    const { box, range } = asking;
+    const { box, restore: range } = asking;
     asking = null;
     box.remove();
     highlight(null);
@@ -832,6 +847,7 @@
     if (restore && range && main.contains(range.startContainer) && !range.collapsed && range.startContainer.isConnected) {
       getSelection().removeAllRanges();
       getSelection().addRange(range);
+      trackSelection();
     }
   }
 
@@ -839,9 +855,9 @@
     const text = asking?.text.value.trim();
     if (!text || sending) return false;
     const { target, part, quote, prefix, suffix } = asking.anchor;
-    drafts.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, target, part, quote, prefix, suffix, text });
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     closeAsk();
-    saveDrafts();
+    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, text }]);
     return true;
   }
 
@@ -852,6 +868,7 @@
   async function sendNotes() {
     if (sending) return;
     const text = input.value.trim();
+    drafts = loadDrafts();
     if (!drafts.length) return send();
     const batch = drafts.slice();
     sending = true;
@@ -863,8 +880,7 @@
     sendButton.disabled = false;
     if (res?.ok) {
       const sent = new Set(batch.map((d) => d.id));
-      drafts = drafts.filter((d) => !sent.has(d.id));
-      return saveDrafts();
+      return changeDrafts((list) => list.filter((d) => !sent.has(d.id)));
     }
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
     renderQueue();
@@ -877,8 +893,8 @@
     const done = (save) => {
       if (!area.isConnected) return;
       const next = area.value.trim();
-      if (save && next) d.text = next;
-      saveDrafts();
+      if (save && next) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
+      else renderQueue();
     };
     area.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
@@ -907,8 +923,7 @@
           h("div", { class: "kapi-queued-tools" },
             h("button", { type: "button", "aria-label": "Edit note", "data-tip": "Edit", onclick: () => editDraft(item, d) }, icon("pencil")),
             h("button", { type: "button", "aria-label": "Remove note", "data-tip": "Remove", onclick: () => {
-              drafts = drafts.filter((x) => x !== d);
-              saveDrafts();
+              changeDrafts((list) => list.filter((x) => x.id !== d.id));
             } }, icon("x"))));
         return item;
       }));
@@ -1325,6 +1340,11 @@
   document.addEventListener("pointerdown", (e) => {
     pointerDown = e.button === 0 && !root.contains(e.target);
   }, true);
+  document.addEventListener("pointermove", (e) => {
+    if (!pointerDown || e.buttons) return;
+    pointerDown = false;
+    trackSelection();
+  }, true);
   document.addEventListener("pointerup", () => {
     if (!pointerDown) return;
     pointerDown = false;
@@ -1469,5 +1489,10 @@
   numberRows(main);
   applyFolds();
   renderQueue();
+  addEventListener("storage", (e) => {
+    if (e.key !== draftsKey || queueBox.querySelector("textarea")) return;
+    drafts = loadDrafts();
+    renderQueue();
+  });
   connect();
 })();

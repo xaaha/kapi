@@ -263,6 +263,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return json(res, 200, { seq: ev.seq });
     }
     if (req.method === "POST" && rest === "notes") {
+      if (state.notesDelay) await new Promise((r) => setTimeout(r, state.notesDelay));
       if (state.nextNotesError) {
         const error = state.nextNotesError;
         state.nextNotesError = null;
