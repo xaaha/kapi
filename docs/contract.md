@@ -324,9 +324,11 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 ### Events stream
 
 The event log is `pages/<id>/events.ndjson`, one JSON event per line, and
-each append is fsynced before it is reported. A final line without its
-newline is a torn write: opening the log drops it and truncates the file to
-the last whole line. `positions.json` is replaced through a fsynced temp
+each append is fsynced before it is reported. An append whose write or
+fsync fails, such as on a full disk, truncates the file back to where the
+line started before it reports the error, so the next append never lands on
+a partial line. A final line without its newline is a torn write: opening the
+log drops it and truncates the file to the last whole line. `positions.json` is replaced through a fsynced temp
 file and a rename, followed by an fsync of the folder. An empty or
 unreadable `positions.json` or `cursors.json` counts as missing, so the log
 still opens. Events past the last readable position are then delivered

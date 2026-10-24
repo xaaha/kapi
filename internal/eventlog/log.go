@@ -28,6 +28,7 @@ type Log struct {
 	mu      sync.Mutex
 	dir     string
 	file    *os.File
+	size    int64
 	events  []Event
 	pos     positions
 	changed chan struct{}
@@ -50,6 +51,7 @@ const (
 var (
 	syncFile   = (*os.File).Sync
 	renameFile = os.Rename
+	writeLine  = (*os.File).Write
 )
 
 func Open(dir string) (*Log, error) {
@@ -76,7 +78,7 @@ func Open(dir string) (*Log, error) {
 		f.Close()
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors and unread counts without opening it for writing.
@@ -117,12 +119,14 @@ func (l *Log) Append(in *Event) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
-	if _, err := l.file.Write(append(line, '\n')); err != nil {
-		return Event{}, err
+	line = append(line, '\n')
+	if _, err := writeLine(l.file, line); err != nil {
+		return Event{}, errors.Join(err, l.file.Truncate(l.size))
 	}
 	if err := syncFile(l.file); err != nil {
-		return Event{}, err
+		return Event{}, errors.Join(err, l.file.Truncate(l.size))
 	}
+	l.size += int64(len(line))
 	l.events = append(l.events, e)
 	close(l.changed)
 	l.changed = make(chan struct{})
