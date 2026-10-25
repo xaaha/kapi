@@ -657,24 +657,37 @@
 
   const handoffKey = `kapi-handoff:${base.split("/").pop()}`;
 
+  const handoffList = () => {
+    const list = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+    return Array.isArray(list) ? list.filter((d) => d && typeof d.target === "string" && typeof d.text === "string") : [];
+  };
+
   function handOff() {
     if (!drafts.length) return;
     try {
-      const left = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+      const left = handoffList();
       const known = new Set(left.map((d) => d.id));
       localStorage.setItem(handoffKey, JSON.stringify([...left, ...drafts.filter((d) => !known.has(d.id))]));
-    } catch {}
+    } catch {
+      return;
+    }
+    const n = drafts.length;
+    changeDrafts(() => []);
+    say(n === 1 ? "Your queued note moves to this page's next tab." : `Your ${n} queued notes move to this page's next tab.`);
   }
+
+  let takeOverLater = false;
 
   function takeOver() {
     if (restarted) return;
+    if (queueBox.querySelector("textarea")) return void (takeOverLater = true);
     let left = [];
     try {
-      left = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+      left = handoffList();
       localStorage.removeItem(handoffKey);
     } catch {}
     const known = new Set(drafts.map((d) => d.id));
-    const fresh = Array.isArray(left) ? left.filter((d) => d && typeof d.target === "string" && typeof d.text === "string" && !known.has(d.id)) : [];
+    const fresh = left.filter((d) => !known.has(d.id));
     if (!fresh.length) return;
     changeDrafts((list) => [...list, ...fresh]);
     say(fresh.length === 1 ? "Brought over a queued note from the tab kapi restarted." : `Brought over ${fresh.length} queued notes from the tab kapi restarted.`);
@@ -921,8 +934,12 @@
       if (finished) return;
       finished = true;
       const next = area.value.trim();
-      if (!save || !next || next === d.text) return renderQueue();
-      changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
+      if (save && next && next !== d.text) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
+      else renderQueue();
+      if (takeOverLater) {
+        takeOverLater = false;
+        takeOver();
+      }
     };
     area.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;

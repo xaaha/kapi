@@ -2549,20 +2549,35 @@ test("#39 notes queued in a tab kapi restarted move to the page's next tab, once
     assert.match(await next.eval(`document.querySelector(".kapi-notice").textContent`), /Brought over a queued note/);
     assert.equal(await late.eval(`document.querySelector(".kapi-queue").hidden`), true);
     assert.equal(await next.eval(`localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith("kapi-handoff:")) ?? "") === null`), true);
+    assert.equal(await page.eval(`document.querySelector(".kapi-queue").hidden`), true);
+    await next.eval(`document.querySelector('.kapi-queued-note [aria-label="Remove note"]').click()`);
+    await next.waitFor(`document.querySelector(".kapi-queue").hidden`);
+    await page.eval(`document.querySelector(".kapi-composer textarea").value = "after the restart"`);
+    await click(".kapi-composer .kapi-primary");
+    await until(() => requests("POST", "/messages").length === 1);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(await next.eval(`document.querySelector(".kapi-queue").hidden`), true);
   } finally {
     await next.close();
     await late.close();
   }
 });
 
-test("#39 a tab that is already open takes the notes when the restarted tab notices late", async () => {
+test("#39 a tab that is already open takes the notes when the restarted tab notices late, after an open edit", async () => {
   const next = await browser.open(server.url);
   try {
     await next.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await queueOn(next, "bbbbbbbb", "mine");
+    await next.eval(`document.querySelector('.kapi-queued-note [aria-label="Edit note"]').click()`);
+    await next.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+    await next.eval(`document.activeElement.value = "mine, edited"`);
     const key = `kapi-handoff:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`;
     await page.eval(`localStorage.setItem(${JSON.stringify(key)}, JSON.stringify([{ id: "x1", target: "cccccccc", part: "", quote: "", prefix: "", suffix: "", text: "late carry" }]))`);
-    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
-    assert.equal(await next.eval(`document.querySelector(".kapi-queued-note .kapi-queued-text").textContent`), "late carry");
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(await next.eval(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`), true);
+    await next.key("Enter");
+    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 2`);
+    assert.deepEqual(await next.eval(`[...document.querySelectorAll(".kapi-queued-text")].map((n) => n.textContent)`), ["mine, edited", "late carry"]);
     assert.equal(await page.eval(`localStorage.getItem(${JSON.stringify(key)})`), null);
     assert.equal(await page.eval(`document.querySelector(".kapi-queue").hidden`), true);
   } finally {
@@ -2585,4 +2600,19 @@ test("#39 a bare picture or divider that a selection crosses stays in the note",
   await page.key("Enter", await modifier());
   await until(() => requests("POST", "/notes").length === 1);
   assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,hhhhhhhh,iiiiiiii,bbbbbbbb");
+});
+
+test("#39 a broken handoff is ignored", async () => {
+  const key = `kapi-handoff:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`;
+  for (const value of ["{}", "[null, 3]", "not json"]) {
+    await page.eval(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)})`);
+    const next = await browser.open(server.url);
+    try {
+      await next.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+      assert.equal(await next.eval(`document.querySelector(".kapi-queue").hidden`), true);
+      assert.deepEqual(next.errors, []);
+    } finally {
+      await next.close();
+    }
+  }
 });

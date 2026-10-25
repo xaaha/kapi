@@ -175,6 +175,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 	for _, tc := range []struct{ path, reopen string }{
 		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
