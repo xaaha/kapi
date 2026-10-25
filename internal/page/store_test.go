@@ -535,9 +535,16 @@ func TestOpenNoticesAnEditMadeWhileClosed(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	open(t, home, path)
 	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">changed</p>`)
-	s := open(t, home, path)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, rev := s.Source(); rev != 2 {
 		t.Fatalf("rev = %d, want 2", rev)
+	}
+	if events, _ := l.After(0); len(events) != 1 || events[0].Author != "file" || events[0].Kind != "revision" || events[0].Changed != "aaaaaaaa" || events[0].Rev != 2 {
+		t.Errorf("events = %+v, want one file revision naming aaaaaaaa", events)
 	}
 	if _, _, err := s.Apply(2, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
 		t.Errorf("undo of an edit made while closed: err = %v, want ErrNothingToUndo", err)

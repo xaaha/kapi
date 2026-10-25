@@ -184,7 +184,9 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 			return s, nil
 		}
 		var ev *revEvent
-		if text != "" {
+		if s.rev > 0 && !bytes.Equal(raw, s.src) {
+			ev = fileEvent(s.src, src, text)
+		} else if text != "" {
 			ev = &revEvent{Author: "kapi", Text: text}
 		}
 		_, err = s.commit(src, raw, s.rev+1, s.undo, ev)
@@ -460,22 +462,15 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		ids, changed := changedBlocks(s.src, src)
-		summary := "edited in the file"
-		if len(ids) > 0 {
-			summary += ": " + describeIDs(src, ids)
-		}
-		if text != "" {
-			summary += "; " + text
-		}
-		seq, err := s.commit(src, raw, s.rev+1, s.undo, &revEvent{Author: "file", Text: summary, IDs: ids, Changed: changed})
+		ev := fileEvent(s.src, src, text)
+		seq, err := s.commit(src, raw, s.rev+1, s.undo, ev)
 		if errors.Is(err, errFileChanged) {
 			continue
 		}
 		if err != nil {
 			return Summary{}, false, err
 		}
-		return Summary{Text: summary, IDs: ids, Seq: seq}, true, nil
+		return Summary{Text: ev.Text, IDs: ev.IDs, Seq: seq}, true, nil
 	}
 	return Summary{}, false, nil
 }
@@ -1233,6 +1228,18 @@ func move(src []byte, els []element, e *element, before string) ([]byte, error) 
 		return slices.Concat(src[:rs], src[re:at], []byte(ins), src[at:]), nil
 	}
 	return slices.Concat(src[:at], []byte(ins), src[at:rs], src[re:]), nil
+}
+
+func fileEvent(old, cur []byte, conversion string) *revEvent {
+	ids, changed := changedBlocks(old, cur)
+	summary := "edited in the file"
+	if len(ids) > 0 {
+		summary += ": " + describeIDs(cur, ids)
+	}
+	if conversion != "" {
+		summary += "; " + conversion
+	}
+	return &revEvent{Author: "file", Text: summary, IDs: ids, Changed: changed}
 }
 
 func changedBlocks(old, cur []byte) (ids, changed []string) {

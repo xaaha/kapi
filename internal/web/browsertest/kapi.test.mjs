@@ -2902,3 +2902,14 @@ test("#39 a file edit while you edit another block still marks the note it chang
   await until(async () => (await highlighted("kapi-changed")).join() === "first.");
   assert.equal(await pinStates(), "1:changed");
 });
+
+test("#39 an edit to one list item leaves a note on its sibling waiting", async () => {
+  await withPage([{ id: "uuuuuuuu", html: '<ul data-kapi-id="uuuuuuuu"><li data-kapi-id="vvvvvvvv">first item</li><li data-kapi-id="wwwwwwww">second item</li></ul>' }], async (own, tab) => {
+    own.push({ author: "human", kind: "note", target: "wwwwwwww", quote: "second", rev: 1, text: "this one" });
+    await tab.waitFor(`document.querySelector(".kapi-pins .kapi-pin")?.dataset.state === "waiting"`);
+    own.agentEdit("uuuuuuuu", '<ul data-kapi-id="uuuuuuuu"><li data-kapi-id="vvvvvvvv">first item, edited</li><li data-kapi-id="wwwwwwww">second item</li></ul>', { author: "file", changed: "uuuuuuuu,vvvvvvvv" });
+    own.push({ author: "agent", kind: "message", text: "done" });
+    await tab.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
+    assert.equal(await tab.eval(`document.querySelector(".kapi-pins .kapi-pin").dataset.state`), "waiting");
+  });
+});

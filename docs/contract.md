@@ -241,8 +241,8 @@ event in the log, and appends the event only when the log does not have it
 yet. So a kill between the commit and the append logs the event once on the
 next open, an append that failed is retried by the next op or refresh, and a
 reopen with nothing lost logs nothing. A commit that logs no
-event, such as the first load or a file edit made while kapi was down,
-records none.
+event, such as the first load, records none. A file edit made while kapi was
+down is logged on the next open like any file edit, with author `file`.
 
 ## HTTP
 

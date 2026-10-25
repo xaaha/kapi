@@ -1029,7 +1029,7 @@
       }
     } else if (ev.kind === "revision" && ev.author !== "human") {
       const ids = (ev.changed || ev.target || "").split(",").map((s) => s.trim()).filter(Boolean);
-      const within = (t) => ids.includes(t) || ids.some((id) => !!find(t) && !!find(id)?.contains(find(t)));
+      const within = (t) => ids.includes(t) || (!ev.changed && ids.some((id) => !!find(t) && !!find(id)?.contains(find(t))));
       for (const n of notes) {
         if (n.resolved || n.seq > ev.seq || !targetsOf(n).some(within)) continue;
         n.touched = ev.seq;
