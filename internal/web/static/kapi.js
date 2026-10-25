@@ -457,6 +457,7 @@
 
   menuButton.addEventListener("click", () => (menu.hidden ? openMenu() : closeMenu(true)));
   menu.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") e.stopPropagation();
     const items = menuItems();
     const at = items.indexOf(document.activeElement);
     const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
@@ -465,7 +466,6 @@
       items[(to + items.length) % items.length].focus();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      e.stopPropagation();
       closeMenu(true);
     } else if (e.key === "Tab") closeMenu(false);
   });
