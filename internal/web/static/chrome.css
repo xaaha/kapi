@@ -354,6 +354,81 @@
   color: var(--kapi-fg);
 }
 
+#kapi-chrome .kapi-panel-head {
+  position: relative;
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu-button {
+  display: inline-flex;
+  flex: none;
+  padding: 4px;
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu-button[aria-expanded="true"] {
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
+}
+
+#kapi-chrome .kapi-menu-button svg,
+#kapi-chrome .kapi-menu svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+#kapi-chrome .kapi-menu {
+  position: absolute;
+  z-index: 2147483002;
+  top: calc(100% + 4px);
+  right: 10px;
+  box-sizing: border-box;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-shadow);
+}
+
+#kapi-chrome .kapi-menu[hidden] {
+  display: none;
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  color: var(--kapi-fg);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu button:is(:hover, :focus-visible) {
+  background: var(--kapi-blue-fill);
+  outline: none;
+}
+
+#kapi-chrome .kapi-menu .kapi-menu-detail {
+  grid-column: 2;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--kapi-muted);
+  font: 11.5px/1.4 var(--kapi-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
 #kapi-chrome .kapi-presence {
   display: flex;
   align-items: center;
@@ -1450,8 +1525,23 @@
   }
 
   #kapi-chrome,
-  .kapi-site-head {
+  .kapi-site-head,
+  #kapi-page .kapi-undo-note {
     display: none !important;
+  }
+
+  #kapi-page > :is(h1, h2, h3, h4, h5, h6)::before,
+  #kapi-page > [data-kapi-folded]::after {
+    content: none !important;
+  }
+
+  ::highlight(kapi-ask),
+  ::highlight(kapi-note-waiting),
+  ::highlight(kapi-note-answered),
+  ::highlight(kapi-note-changed),
+  ::highlight(kapi-changed) {
+    background-color: transparent;
+    text-decoration: none;
   }
 }
 
@@ -1519,8 +1609,10 @@
   vertical-align: middle;
 }
 
-#kapi-page > [data-kapi-hidden] {
-  display: none !important;
+@media screen {
+  #kapi-page > [data-kapi-hidden] {
+    display: none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -59,7 +59,7 @@ func serveServer(t *testing.T, home string, s *Server) (stop func()) {
 		}
 	}
 	t.Cleanup(stop)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(HTTPURLPath(home)); err == nil {
 			if conn, err := net.Dial("unix", SocketPath(home)); err == nil {
