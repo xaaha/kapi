@@ -647,25 +647,22 @@
 
   function loadDrafts() {
     try {
-      const list = JSON.parse(localStorage.getItem(draftsKey) || "[]");
+      const list = JSON.parse(sessionStorage.getItem(draftsKey) || "[]");
       return Array.isArray(list) ? list.filter((d) => d && typeof d.target === "string" && typeof d.text === "string") : [];
     } catch {
       return [];
     }
   }
 
-  const SEND_HOLD_MS = 30000;
-  const inFlight = (d, now = Date.now()) => typeof d.sentAt === "number" && now - d.sentAt < SEND_HOLD_MS;
-
   function changeDrafts(change) {
-    drafts = change(loadDrafts());
+    drafts = change(drafts);
     saveDrafts();
   }
 
   function saveDrafts() {
     try {
-      if (drafts.length) localStorage.setItem(draftsKey, JSON.stringify(drafts));
-      else localStorage.removeItem(draftsKey);
+      if (drafts.length) sessionStorage.setItem(draftsKey, JSON.stringify(drafts));
+      else sessionStorage.removeItem(draftsKey);
     } catch {}
     renderQueue();
   }
@@ -722,7 +719,7 @@
     const common = range.commonAncestorContainer;
     const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
     const blocks = host && main.contains(host) ? [host]
-      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (!textOf(b) || rangeText(within(range, b))));
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (textOf(b) ? rangeText(within(range, b)) : !within(range, b).collapsed));
     if (!blocks.length) return null;
     const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
     const both = (selector) => {
@@ -873,20 +870,20 @@
   async function sendNotes() {
     if (sending) return;
     const text = input.value.trim();
-    const now = Date.now();
-    const batch = loadDrafts().filter((d) => !inFlight(d, now));
-    if (!batch.length) return send();
+    if (!drafts.length) return send();
+    const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
     sending = true;
     sendButton.disabled = true;
-    changeDrafts((list) => list.map((d) => (ids.has(d.id) ? { ...d, sentAt: now } : d)));
+    renderQueue();
     input.value = "";
     const res = await request("/notes", { notes: batch.map(({ target, part, quote, prefix, suffix, text: t }) => ({ target, part, quote, prefix, suffix, text: t })), text });
     sending = false;
     sendButton.disabled = false;
+    asking?.sync();
     if (res?.ok) return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
-    changeDrafts((list) => list.map(({ sentAt, ...d }) => (ids.has(d.id) && sentAt === now ? d : { ...d, ...(sentAt && { sentAt }) })));
+    renderQueue();
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
   }
 
@@ -899,13 +896,7 @@
       finished = true;
       const next = area.value.trim();
       if (!save || !next || next === d.text) return renderQueue();
-      changeDrafts((list) => {
-        const open = list.some((x) => x.id === d.id && !inFlight(x));
-        if (open) return list.map((x) => (x.id === d.id ? { ...x, text: next } : x));
-        say("That note left the queue before your edit, so the edit is queued as a new note.");
-        const { sentAt, ...copy } = d;
-        return [...list, { ...copy, id: `${d.id}e${Date.now().toString(36)}`, text: next }];
-      });
+      changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
     };
     area.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
@@ -922,20 +913,13 @@
     area.focus();
   }
 
-  let wakeTimer = 0;
-
   function renderQueue() {
-    const now = Date.now();
     const n = drafts.length;
-    const free = drafts.filter((d) => !inFlight(d, now)).length;
     queueBox.hidden = !n;
-    hint.textContent = free ? `Enter sends ${free === 1 ? "the note" : `the ${free} notes`}` : HINT;
-    clearTimeout(wakeTimer);
-    const held = drafts.filter((d) => inFlight(d, now)).map((d) => d.sentAt + SEND_HOLD_MS - now);
-    if (held.length) wakeTimer = setTimeout(renderQueue, Math.min(...held) + 50);
+    hint.textContent = n ? `Enter sends ${n === 1 ? "the note" : `the ${n} notes`}` : HINT;
     queueBox.replaceChildren(h("h2", { class: "kapi-queue-head", text: n === 1 ? "1 note queued" : `${n} notes queued` }),
       ...drafts.map((d) => {
-        const item = h("div", { class: "kapi-queued-note", "data-draft": d.id, ...(inFlight(d) && { "data-sending": "" }) },
+        const item = h("div", { class: "kapi-queued-note", "data-draft": d.id },
           h("button", { type: "button", class: "kapi-ref kapi-queued-about", "data-ref": d.target.split(",")[0], text: aboutText(d) }),
           h("div", { class: "kapi-queued-text", text: d.text }),
           h("div", { class: "kapi-queued-tools" },
@@ -945,7 +929,7 @@
             } }, icon("x"))));
         return item;
       }));
-    for (const b of queueBox.querySelectorAll(".kapi-queued-tools button")) b.disabled = sending || b.closest("[data-sending]") !== null;
+    for (const b of queueBox.querySelectorAll(".kapi-queued-tools button")) b.disabled = sending;
   }
 
   function refresh(ids) {
@@ -1509,10 +1493,5 @@
   numberRows(main);
   applyFolds();
   renderQueue();
-  addEventListener("storage", (e) => {
-    if (e.key !== draftsKey || queueBox.querySelector("textarea")) return;
-    drafts = loadDrafts();
-    renderQueue();
-  });
   connect();
 })();

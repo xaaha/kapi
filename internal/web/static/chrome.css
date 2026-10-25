@@ -603,10 +603,6 @@
   background: var(--kapi-surface);
 }
 
-#kapi-chrome .kapi-queued-note[data-sending] {
-  opacity: 0.6;
-}
-
 #kapi-chrome .kapi-queued-about {
   grid-column: 1;
   padding: 0;
