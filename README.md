@@ -72,8 +72,9 @@ hook puts it in the agent's context. `kapi watch <page>`
 still streams one line per event for harnesses that deliver every line.
 
 The three-dot menu at the top of the chat panel exports the page as one HTML
-file with its images inside, or as a PDF through the browser's print dialog,
-and copies the page's path.
+file with its images inside, as Markdown (a zip with an images folder when the
+page has images), or as a PDF through the browser's print dialog, and copies the
+page's path.
 
 ## Agent harnesses
 

@@ -258,7 +258,7 @@ port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
 `p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/files`,
-`p/{id}/images`, `p/{id}/ops`, `p/{id}/answers` or `p/{id}/export/html` gets 403 with
+`p/{id}/images`, `p/{id}/ops`, `p/{id}/answers`, `p/{id}/export/html` or `p/{id}/export/markdown` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
 the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
@@ -379,7 +379,10 @@ the notes and opens the list as a sheet.
 
 The three-dot button in the panel header opens the page menu, for actions
 on the whole page rather than a block. Export HTML downloads
-`GET /p/{id}/export/html` under the page's file name. Export PDF opens the
+`GET /p/{id}/export/html` under the page's file name. Export Markdown downloads
+`GET /p/{id}/export/markdown` as `<page>.md`, or `<page>.zip` when the server
+answers with a zip. Both say the server's error in the notice when the export
+fails. Export PDF opens the
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
 stylesheet leaves out the panel, the site header, fold arrows, note
