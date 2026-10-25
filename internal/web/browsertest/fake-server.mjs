@@ -128,7 +128,9 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     read: {},
     queued: {},
     textAt: {},
+    snapshots: {},
   };
+  const snapshot = () => (state.snapshots[state.rev] ??= state.blocks.map((b) => ({ ...b })));
 
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
@@ -147,6 +149,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const findTask = (id) => state.blocks.find((b) => taskPattern(id).test(b.html));
 
   function apply(op) {
+    snapshot();
     if (op.kind === "check") {
       const b = findTask(op.id);
       if (!b) return { status: 422, body: { error: `#${op.id} is not a kapi-task` } };
@@ -229,7 +232,10 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     if (req.method === "GET" && rest.startsWith("blocks/")) {
       if (state.blocksDelay) await new Promise((r) => setTimeout(r, state.blocksDelay));
       const id = rest.slice(7);
-      const b = state.blocks.find((x) => x.id === id);
+      const at = url.searchParams.get("rev");
+      const list = at && Number(at) !== state.rev ? state.snapshots[at] : state.blocks;
+      if (!list) return json(res, 404, { error: "no such revision" });
+      const b = list.find((x) => x.id === id);
       const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];
       if (!b && !inner) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) });
@@ -270,8 +276,13 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
         return json(res, 500, { error });
       }
       let ev;
-      for (const n of parsed.notes) ev = push({ author: "human", kind: "note", ...n });
+      for (const n of parsed.notes) ev = push({ author: "human", kind: "note", rev: parsed.rev, ...n });
       if (parsed.text?.trim()) ev = push({ author: "human", kind: "message", text: parsed.text });
+      return json(res, 200, { seq: ev.seq });
+    }
+    if (req.method === "POST" && rest === "resolve") {
+      if (state.events[parsed.note - 1]?.kind !== "note") return json(res, 422, { error: `#${parsed.note} is not a note on this page` });
+      const ev = push({ author: "human", kind: "resolve", re: [parsed.note] });
       return json(res, 200, { seq: ev.seq });
     }
     if (req.method === "POST" && rest === "answers") {
@@ -311,7 +322,15 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       for (const res of state.streams) res.destroy();
       state.streams.clear();
     },
+    agentEdit(id, html, author = "agent") {
+      snapshot();
+      state.blocks.find((x) => x.id === id).html = html;
+      state.rev++;
+      snapshot();
+      return push({ author, kind: "revision", rev: state.rev, target: id, text: "edited" });
+    },
     bumpBehindBrowser(id, html) {
+      snapshot();
       const b = state.blocks.find((x) => x.id === id);
       b.html = html;
       state.rev++;

@@ -54,7 +54,7 @@
   const ICONS = {
     archive: "M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z",
     unarchive: "M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40ZM90.34,109.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,91.31V152a8,8,0,0,1-16,0V91.31l-18.34,18.35A8,8,0,0,1,90.34,109.66Z",
-    robot: "M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16Zm-52-56H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Z",
+    chat: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM84,116a12,12,0,1,0,12,12A12,12,0,0,0,84,116Zm88,0a12,12,0,1,0,12,12A12,12,0,0,0,172,116Zm60,12A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z",
     x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
@@ -111,6 +111,16 @@
   const HINT = "Enter to send, Shift+Enter for a new line";
   const hint = h("span", { class: "kapi-hint", text: HINT });
   const queueBox = h("section", { class: "kapi-queue", "aria-label": "Queued notes", hidden: "" });
+  const chatTab = h("button", { type: "button", role: "tab", "aria-selected": "true", text: "Chat", onclick: () => showTab("chat") });
+  const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
+  const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
+  const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
+  const stripSummary = h("span", { class: "kapi-strip-summary" });
+  const strip = h("div", { class: "kapi-notes-strip", hidden: "" }, stripSummary,
+    h("button", { type: "button", class: "kapi-btn", text: "Next change", onclick: () => stepNote(1, "changed") }),
+    h("button", { type: "button", class: "kapi-btn kapi-primary", text: "Notes", onclick: () => setSheet(!sheetOpen) }));
+  const pins = h("div", { class: "kapi-pins" });
+  const rail = h("nav", { class: "kapi-rail", "aria-label": "Where the notes are on the page", hidden: "" });
   const composer = h("form", { class: "kapi-composer" },
     input,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
@@ -121,12 +131,12 @@
     if (undoButton.hidden) dismissNote();
   };
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()),
-    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
-    h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, queueBox, composer);
+    h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()), tabs,
+    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), notesView,
+    h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
-  const root = h("div", { id: "kapi-chrome" }, ring, panel, copyButton);
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton);
   const phone = matchMedia("(max-width: 760px)");
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
@@ -274,12 +284,12 @@
       bar.replaceChildren(primary,
         ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
     } else if (text) {
-      bar.replaceChildren(tool("robot", "Ask AI", "ask", "A"));
+      bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
-      bar.replaceChildren(tool("robot", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         tool("archive", "Archive", "archive", "E")]),
@@ -310,6 +320,7 @@
       if (n.matches(SOLID)) return hit(r);
       return (!r.width && !r.height) || hit(r) ? within(n) : false;
     });
+    if (!target) return within(main);
     const t = target.getBoundingClientRect();
     return hit(new DOMRect(t.x - 4, t.y - 4, t.width + 8, t.height + 8)) || within(main);
   }
@@ -341,6 +352,12 @@
     const under = p && ["point", above[1], p.bottom + BAR_GAP];
     const near = !p ? [] : text ? (textBackward ? [above, under, left, right] : [above, under, right, left]) : [right, left];
     let spot = near.find(([, x, y]) => fits(x, y));
+    if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height), null)) {
+      const host = closest(textRange.endContainer.nodeType === Node.ELEMENT_NODE ? textRange.endContainer : textRange.endContainer.parentElement, BLOCK);
+      const gutter = host && ["point", host.getBoundingClientRect().right + BAR_GAP, py];
+      const clear = [above, under, ...(gutter ? [gutter] : [])].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height), null));
+      if (clear) spot = clear;
+    }
     if (!spot && target?.isConnected && !text) {
       const r = target.getBoundingClientRect();
       const left = Math.min(r.right, areaRight - 4) - width;
@@ -790,6 +807,8 @@
   }
 
   function aboutText(anchor) {
+    const root = anchor.re?.length && noteBySeq.get(anchor.re[0]);
+    if (root) return `Reply to note ${root.num}`;
     const quote = anchor.quote && `\u201c${clip(anchor.quote, 60)}\u201d`;
     if (anchor.part) return quote ? `${anchor.part}: ${quote}` : anchor.part;
     return quote || describe(anchor.target.split(",")[0]);
@@ -821,7 +840,7 @@
     closeAsk();
     const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
     const head = h("div", { class: "kapi-ask-head" }, about);
-    if (anchor.part && !anchor.target.includes(",")) {
+    if (anchor.part && !anchor.target.includes(",") && !anchor.re?.length) {
       head.append(h("button", { type: "button", class: "kapi-ask-widen", "aria-label": "Ask about the whole block", title: "Ask about the whole block", onclick: () => {
         asking.anchor = { target: anchor.target.split(",")[0], part: "", quote: "", prefix: "", suffix: "" };
         about.textContent = `About: ${aboutText(asking.anchor)}`;
@@ -895,10 +914,10 @@
   function queueAsk() {
     const text = asking?.text.value.trim();
     if (!text || sending) return false;
-    const { target, part, quote, prefix, suffix } = asking.anchor;
+    const { target, part, quote, prefix, suffix, re = [] } = asking.anchor;
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     closeAsk();
-    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, text }]);
+    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, re, text }]);
     return true;
   }
 
@@ -916,7 +935,7 @@
     sendButton.disabled = true;
     renderQueue();
     input.value = "";
-    const res = await request("/notes", { notes: batch.map(({ target, part, quote, prefix, suffix, text: t }) => ({ target, part, quote, prefix, suffix, text: t })), text });
+    const res = await request("/notes", { rev: Number(main.dataset.rev), notes: batch.map(({ target, part, quote, prefix, suffix, re, text: t }) => ({ target, part, quote, prefix, suffix, ...(Array.isArray(re) && re.length ? { re } : {}), text: t })), text });
     sending = false;
     sendButton.disabled = false;
     asking?.sync();
@@ -975,6 +994,518 @@
     for (const b of queueBox.querySelectorAll(".kapi-queued-tools button")) b.disabled = sending;
   }
 
+  const notes = [];
+  const noteBySeq = new Map();
+  const befores = new Map();
+  const diffs = new Map();
+  const pinEls = new Map();
+  let paintQueued = false;
+  let currentNote = 0;
+  let pop = null;
+  let popTimer = 0;
+  let sheetOpen = false;
+  const STATE_LABEL = { waiting: "Waiting", answered: "Answered", changed: "Changed", resolved: "Resolved" };
+  const NOTE_STATES = ["waiting", "answered", "changed"];
+  const DIFF_MAX = 4000000;
+  const DIFF_CONTEXT = 4;
+  const stateOf = (n) => (n.resolved ? "resolved" : n.last);
+  const targetsOf = (n) => n.target.split(",").map((s) => s.trim()).filter(Boolean);
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function trackNote(ev) {
+    const re = Array.isArray(ev.re) ? ev.re : [];
+    if (ev.kind === "note" && !re.length && ev.author === "human") {
+      const n = { seq: ev.seq, num: notes.length + 1, target: ev.target || "", part: ev.part || "", quote: ev.quote || "", prefix: ev.prefix || "",
+        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false };
+      notes.push(n);
+      noteBySeq.set(ev.seq, n);
+    } else if ((ev.kind === "note" || ev.kind === "message") && re.length) {
+      for (const seq of re) {
+        const n = noteBySeq.get(seq);
+        if (!n) continue;
+        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time });
+        n.last = ev.author === "human" ? "waiting" : "answered";
+      }
+    } else if (ev.kind === "revision" && ev.author !== "human" && ev.target) {
+      const ids = new Set(ev.target.split(",").map((s) => s.trim()));
+      for (const n of notes) {
+        if (n.resolved || n.seq > ev.seq || !targetsOf(n).some((id) => ids.has(id))) continue;
+        n.touched = ev.seq;
+        n.changedTime = ev.time || "";
+        n.changedBy = ev.author;
+        n.last = "changed";
+      }
+    } else if (ev.kind === "resolve") {
+      for (const seq of re) {
+        const n = noteBySeq.get(seq);
+        if (n) n.resolved = true;
+      }
+    } else return;
+    schedulePaint();
+  }
+
+  function schedulePaint() {
+    if (paintQueued) return;
+    paintQueued = true;
+    requestAnimationFrame(() => {
+      paintQueued = false;
+      paintNotes();
+    });
+  }
+
+  function textMap(blocks) {
+    let text = "";
+    const at = [];
+    const push = (ch, node, offset) => {
+      if (ch === " " && (!text || text.endsWith(" "))) return;
+      text += ch;
+      at.push([node, offset]);
+    };
+    const walk = (el) => {
+      for (const c of el.childNodes) {
+        if (c.nodeType === Node.TEXT_NODE) {
+          for (let i = 0; i < c.data.length; i++) push(/\s/.test(c.data[i]) ? " " : c.data[i], c, i);
+        } else if (c.nodeType === Node.ELEMENT_NODE && !c.matches(CHROME_TEXT)) {
+          const gap = !INLINE.test(c.tagName);
+          if (gap) push(" ", c, 0);
+          walk(c);
+          if (gap) push(" ", c, c.childNodes.length);
+        }
+      }
+    };
+    blocks.forEach((b, i) => {
+      if (i) push(" ", b, 0);
+      walk(b);
+    });
+    const range = (from, to) => {
+      while (from < to && text[from] === " ") from++;
+      while (to > from && text[to - 1] === " ") to--;
+      if (from >= to) return null;
+      const r = document.createRange();
+      const [sn, so] = at[from];
+      const [en, eo] = at[to - 1];
+      r.setStart(sn, so);
+      if (en.nodeType === Node.TEXT_NODE) r.setEnd(en, eo + 1);
+      else r.setEnd(en, eo);
+      return r;
+    };
+    return { text, range };
+  }
+
+  const tail = (a, b) => {
+    let i = 0;
+    while (i < a.length && i < b.length && a[a.length - 1 - i] === b[b.length - 1 - i]) i++;
+    return i;
+  };
+  const head = (a, b) => {
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return i;
+  };
+
+  function findQuote(map, n) {
+    const quote = n.quote.endsWith("\u2026") && n.quote.length >= QUOTE_MAX ? n.quote.slice(0, -1) : n.quote;
+    if (!quote) return null;
+    let best = -1;
+    let score = -1;
+    for (let i = map.text.indexOf(quote); i >= 0; i = map.text.indexOf(quote, i + 1)) {
+      const s = tail(map.text.slice(Math.max(0, i - CONTEXT - 1), i).trim(), n.prefix.trim()) + head(map.text.slice(i + quote.length).trim(), n.suffix.trim());
+      if (s > score) [best, score] = [i, s];
+    }
+    return best < 0 ? null : map.range(best, best + quote.length);
+  }
+
+  function wordsOf(map) {
+    const words = [];
+    const re = /\S+/g;
+    for (let m; (m = re.exec(map.text));) words.push({ w: m[0], from: m.index, to: m.index + m[0].length });
+    return words;
+  }
+
+  function diffWords(old, now) {
+    const a = old.map((x) => x.w);
+    const b = now.map((x) => x.w);
+    let lo = 0;
+    while (lo < a.length && lo < b.length && a[lo] === b[lo]) lo++;
+    let hi = 0;
+    while (hi < a.length - lo && hi < b.length - lo && a[a.length - 1 - hi] === b[b.length - 1 - hi]) hi++;
+    const m = a.length - lo - hi;
+    const k = b.length - lo - hi;
+    if ((m + 1) * (k + 1) > DIFF_MAX) return null;
+    const w = k + 1;
+    const lcs = new Uint32Array((m + 1) * w);
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = k - 1; j >= 0; j--) {
+        lcs[i * w + j] = a[lo + i] === b[lo + j] ? lcs[(i + 1) * w + j + 1] + 1 : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
+      }
+    }
+    const removed = [];
+    const added = [];
+    let i = 0;
+    let j = 0;
+    const run = (list, at, word) => {
+      const last = list.at(-1);
+      if (last && last.end === at) {
+        last.words.push(word);
+        last.end = at + 1;
+      } else list.push({ start: at, end: at + 1, words: [word] });
+    };
+    while (i < m || j < k) {
+      if (i < m && j < k && a[lo + i] === b[lo + j]) {
+        i++;
+        j++;
+      } else if (j < k && (i === m || lcs[i * w + j + 1] >= lcs[(i + 1) * w + j])) {
+        run(added, lo + j, b[lo + j]);
+        j++;
+      } else {
+        run(removed, lo + i, a[lo + i]);
+        i++;
+      }
+    }
+    return { removed, added, lo, oldEnd: a.length - hi, newEnd: b.length - hi };
+  }
+
+  function loadBefore(n) {
+    for (const id of targetsOf(n)) {
+      const key = `${id}@${n.rev}`;
+      if (befores.has(key)) continue;
+      befores.set(key, undefined);
+      fetch(`${base}/blocks/${encodeURIComponent(id)}?rev=${n.rev}`).then(async (res) => {
+        const tpl = document.createElement("template");
+        if (res.ok) tpl.innerHTML = (await res.text()).trim();
+        befores.set(key, tpl.content.firstElementChild ?? null);
+        schedulePaint();
+      }, () => befores.delete(key));
+    }
+  }
+
+  function changeOf(n, blocks) {
+    if (!n.touched || n.resolved || !n.rev) return null;
+    loadBefore(n);
+    const old = targetsOf(n).map((id) => befores.get(`${id}@${n.rev}`));
+    if (old.some((el) => el === undefined)) return null;
+    const live = blocks.filter(Boolean);
+    const key = `${main.dataset.rev}|${live.length}`;
+    let d = diffs.get(n.seq);
+    if (d?.key !== key) {
+      const before = wordsOf(textMap(old.filter(Boolean)));
+      const now = wordsOf(textMap(live));
+      d = { key, before, now, result: diffWords(before, now) };
+      diffs.set(n.seq, d);
+    }
+    if (!d.result) return { tooLong: true, marks: [] };
+    const nowMap = textMap(live);
+    const marks = d.result.added.map((r) => nowMap.range(d.now[r.start].from, d.now[r.end - 1].to)).filter(Boolean);
+    const span = (words, end) => {
+      if (end <= d.result.lo) return "";
+      const from = Math.max(0, d.result.lo - DIFF_CONTEXT);
+      const to = Math.min(words.length, end + DIFF_CONTEXT);
+      return `${from ? "\u2026 " : ""}${words.slice(from, to).map((x) => x.w).join(" ")}${to < words.length ? " \u2026" : ""}`;
+    };
+    return { before: span(d.before, d.result.oldEnd), now: span(d.now, d.result.newEnd), marks };
+  }
+
+  function sectionOf(el) {
+    let top = el;
+    while (top && top.parentElement !== main) top = top.parentElement;
+    for (let p = top; p; p = p.previousElementSibling) if (levelOf(p)) return textOf(p);
+    return "";
+  }
+
+  function locate(n) {
+    const blocks = targetsOf(n).map(find);
+    const first = blocks.find(Boolean) ?? null;
+    if (!first) return { blocks, first, range: null, gone: true };
+    const visible = !first.hasAttribute("data-kapi-hidden") && first.getAttribute("data-kapi-state") !== "archived";
+    const range = visible ? findQuote(textMap(blocks.filter(Boolean)), n) : null;
+    return { blocks, first, range, gone: false, visible };
+  }
+
+  function paintNotes() {
+    const hl = window.Highlight && CSS.highlights;
+    const ranges = { waiting: [], answered: [], changed: [], marks: [] };
+    const seen = new Set();
+    for (const n of notes) {
+      const where = locate(n);
+      n.where = where;
+      n.change = changeOf(n, where.blocks);
+      if (!where.range && where.visible && n.change?.marks.length) where.range = n.change.marks[0];
+      n.section = where.first ? sectionOf(where.first) : n.section || "";
+      const state = stateOf(n);
+      if (state !== "resolved" && where.range) ranges[state].push(where.range);
+      if (n.change && where.visible) ranges.marks.push(...n.change.marks);
+      if (!where.first || where.visible === false) continue;
+      seen.add(n.seq);
+      let pin = pinEls.get(n.seq);
+      if (!pin) {
+        pin = h("button", { type: "button", class: "kapi-pin", "data-note": n.seq });
+        pinEls.set(n.seq, pin);
+        pins.append(pin);
+      }
+      pin.textContent = n.num;
+      pin.dataset.state = state;
+      pin.setAttribute("aria-label", `Note ${n.num}, ${STATE_LABEL[state].toLowerCase()}`);
+      placePin(pin, n);
+    }
+    for (const [seq, pin] of pinEls) {
+      if (!seen.has(seq)) {
+        pin.remove();
+        pinEls.delete(seq);
+      }
+    }
+    if (hl) {
+      for (const s of NOTE_STATES) CSS.highlights.set(`kapi-note-${s}`, new Highlight(...ranges[s]));
+      CSS.highlights.set("kapi-changed", new Highlight(...ranges.marks));
+    }
+    renderNotesList();
+    paintRail();
+    if (pop) fillPop(noteBySeq.get(pop.seq));
+  }
+
+  function anchorRect(n) {
+    const { range, first } = n.where || locate(n);
+    const rects = range ? [...range.getClientRects()].filter((r) => r.width || r.height) : [];
+    if (rects.length) return rects.at(-1);
+    return first?.getBoundingClientRect() ?? null;
+  }
+
+  function placePin(pin, n) {
+    const { range, first } = n.where;
+    const rects = range ? [...range.getClientRects()].filter((r) => r.width || r.height) : [];
+    const r = rects.at(-1);
+    const box = first.getBoundingClientRect();
+    const x = r ? r.right + 1 : box.right - 22;
+    const y = r ? r.top - 7 : box.top - 6;
+    pin.style.left = `${Math.round(x + scrollX)}px`;
+    pin.style.top = `${Math.round(y + scrollY)}px`;
+  }
+
+  function placePins() {
+    for (const n of notes) {
+      const pin = pinEls.get(n.seq);
+      if (pin && n.where?.first?.isConnected) placePin(pin, n);
+    }
+    paintRail();
+  }
+
+  function openNotes() {
+    return notes.filter((n) => !n.resolved);
+  }
+
+  function pageOrder(list) {
+    const y = (n) => {
+      const r = n.where?.first?.isConnected ? anchorRect(n) : null;
+      return r ? r.top + scrollY : Infinity;
+    };
+    return list.map((n) => [y(n), n]).sort((a, b) => a[0] - b[0] || a[1].seq - b[1].seq).map(([, n]) => n);
+  }
+
+  function stepNote(dir, only) {
+    const list = pageOrder(openNotes().filter((n) => !only || stateOf(n) === only));
+    if (!list.length) return say(only ? "No changed notes left." : "No open notes on this page.");
+    const i = list.findIndex((n) => n.seq === currentNote);
+    const next = i < 0 ? list[dir > 0 ? 0 : list.length - 1] : list[(i + dir + list.length) % list.length];
+    focusNote(next);
+  }
+
+  function focusNote(n) {
+    if (!n) return;
+    currentNote = n.seq;
+    hidePop(true);
+    setSheet(false);
+    renderNotesList();
+    const where = locate(n);
+    n.where = where;
+    if (!where.first) return showPop(n, null);
+    const target = where.range ? where.range.startContainer.parentElement : where.first;
+    target.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
+    where.first.removeAttribute("data-kapi-note-flash");
+    void where.first.offsetWidth;
+    where.first.setAttribute("data-kapi-note-flash", "");
+    setTimeout(() => where.first.removeAttribute("data-kapi-note-flash"), 1000);
+    setTimeout(() => {
+      placePins();
+      if (currentNote === n.seq) showPop(n, pinEls.get(n.seq) ?? where.first);
+    }, reduced() ? 0 : 450);
+  }
+
+  function ago(time) {
+    const t = new Date(time);
+    if (!time || isNaN(t)) return "";
+    const min = Math.round((Date.now() - t) / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return `${min} min ago`;
+    return t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  const pinChip = (n, extra = "") => h("span", { class: "kapi-pin kapi-pin-static", "data-state": stateOf(n), "aria-hidden": "true", text: `${n.num}${extra}` });
+  const stateChip = (n) => h("span", { class: "kapi-note-chip", "data-state": stateOf(n), text: STATE_LABEL[stateOf(n)] });
+  const noteAbout = (n) => (n.quote ? `\u201c${clip(n.quote, 120)}\u201d` : n.part || describe(targetsOf(n)[0] || ""));
+
+  function fillPop(n) {
+    if (!pop || !n) return;
+    const state = stateOf(n);
+    const lastReply = n.replies.at(-1);
+    const when = state === "changed" ? `${n.changedBy === "file" ? "Edited in the file" : `${n.changedBy} edited`} \u00b7 ${ago(n.changedTime)}` : lastReply && lastReply.author !== "human" ? `${lastReply.author} \u00b7 ${ago(lastReply.time)}` : `Sent ${ago(n.time)}`;
+    const kids = [h("div", { class: "kapi-pop-head" }, pinChip(n), stateChip(n), h("span", { class: "kapi-pop-when", text: when }))];
+    if (n.where?.gone) kids.push(h("p", { class: "kapi-pop-gone", text: "This block is no longer on the page." }));
+    const c = n.change;
+    if (c?.tooLong) kids.push(h("p", { class: "kapi-pop-gone", text: "Changed. Too long to compare word by word." }));
+    else if (c && (c.before || c.now)) {
+      kids.push(h("div", { class: "kapi-diff-box" },
+        ...(c.before ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Before" }), h("span", { class: "kapi-diff-old", text: clip(c.before, 400) }))] : []),
+        ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
+    }
+    const msg = (who, text) => h("div", { class: "kapi-pop-msg" }, h("span", { class: "kapi-pop-who", text: who }), h("span", { class: "kapi-pop-text", text }));
+    kids.push(msg("You", n.text));
+    for (const r of n.replies) kids.push(msg(r.author === "human" ? "You" : r.author, r.text));
+    if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
+    const foot = h("div", { class: "kapi-pop-foot" }, h("span", { class: "kapi-pop-hint", text: matchMedia("(hover: hover)").matches ? "Move away to close" : "Tap outside to close" }));
+    if (!n.resolved) {
+      foot.append(
+        h("button", { type: "button", class: "kapi-link", text: "Reply", onclick: () => replyTo(n) }),
+        h("button", { type: "button", class: "kapi-link", text: "Resolve", onclick: () => resolveNote(n) }));
+    }
+    kids.push(foot);
+    pop.box.replaceChildren(...kids);
+    placePop();
+  }
+
+  function showPop(n, anchor) {
+    clearTimeout(popTimer);
+    if (asking || editing) return;
+    if (!pop || pop.seq !== n.seq) {
+      pop?.box.remove();
+      const box = h("div", { class: "kapi-note-pop", role: "dialog", "aria-label": `Note ${n.num}` });
+      box.addEventListener("pointerenter", () => clearTimeout(popTimer));
+      box.addEventListener("pointerleave", (e) => {
+        if (e.pointerType === "mouse") hidePop();
+      });
+      root.append(box);
+      pop = { seq: n.seq, box, anchor };
+    }
+    pop.anchor = anchor;
+    fillPop(n);
+  }
+
+  function placePop() {
+    if (!pop) return;
+    const a = pop.anchor?.isConnected ? pop.anchor.getBoundingClientRect() : null;
+    const { width, height } = pop.box.getBoundingClientRect();
+    const areaRight = phone.matches ? innerWidth : document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    if (!a) {
+      pop.box.style.left = `${Math.max(8, (areaRight - width) / 2)}px`;
+      pop.box.style.top = `${Math.max(8, (innerHeight - height) / 3)}px`;
+      return;
+    }
+    const left = Math.min(Math.max(8, a.left + a.width / 2 - 28), areaRight - width - 8);
+    const below = a.bottom + 10 + height < innerHeight - 8 || a.top - 10 - height < 8;
+    pop.box.toggleAttribute("data-above", !below);
+    pop.box.style.left = `${Math.max(8, left)}px`;
+    pop.box.style.top = `${below ? a.bottom + 10 : a.top - 10 - height}px`;
+    pop.box.style.setProperty("--kapi-arrow", `${Math.min(Math.max(14, a.left + a.width / 2 - left - 6), width - 26)}px`);
+  }
+
+  function hidePop(now = false) {
+    clearTimeout(popTimer);
+    const go = () => {
+      pop?.box.remove();
+      pop = null;
+    };
+    if (now) go();
+    else popTimer = setTimeout(go, 220);
+  }
+
+  function replyTo(n) {
+    hidePop(true);
+    const range = locate(n).range;
+    showAsk({ target: n.target, part: n.part, quote: n.quote, prefix: n.prefix, suffix: n.suffix, re: [n.seq] }, range, null);
+  }
+
+  async function resolveNote(n) {
+    const res = await request("/resolve", { note: n.seq });
+    if (res && !res.ok) say(res.data.error || `Not resolved (HTTP ${res.status}).`, "error");
+    if (res?.ok) hidePop(true);
+  }
+
+  function noteAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const block = el && closest(el, BLOCK);
+    if (!block || !main.contains(block)) return null;
+    for (const n of notes) {
+      if (n.resolved || !n.where?.range || !targetsOf(n).some((id) => find(id)?.contains(block) || block.contains(find(id)))) continue;
+      if ([...n.where.range.getClientRects()].some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) return n;
+    }
+    return null;
+  }
+
+  let hoverFrame = 0;
+  main.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse" || e.buttons || hoverFrame) return;
+    hoverFrame = requestAnimationFrame(() => {
+      hoverFrame = 0;
+      const n = noteAt(e.clientX, e.clientY);
+      if (n) showPop(n, pinEls.get(n.seq) ?? n.where.first);
+      else if (pop && !pop.box.matches(":hover")) hidePop();
+    });
+  });
+
+  function renderNotesList() {
+    const open = openNotes();
+    const changed = open.filter((n) => stateOf(n) === "changed").length;
+    const summary = notes.length ? `${open.length} open \u00b7 ${changed} changed` : "";
+    notesTab.textContent = open.length ? `Notes ${open.length}` : "Notes";
+    tabs.hidden = !notes.length;
+    strip.hidden = !notes.length;
+    stripSummary.textContent = notes.length === 1 ? `1 note \u00b7 ${changed} changed` : `${notes.length} notes \u00b7 ${changed} changed`;
+    if (!notes.length) return notesView.replaceChildren();
+    const nav = h("div", { class: "kapi-notes-nav" },
+      h("button", { type: "button", class: "kapi-btn", text: "Previous", onclick: () => stepNote(-1) }),
+      h("button", { type: "button", class: "kapi-btn", text: "Next", onclick: () => stepNote(1) }),
+      h("button", { type: "button", class: "kapi-btn kapi-primary", text: "Next change", onclick: () => stepNote(1, "changed") }));
+    if (!changed) nav.lastChild.disabled = true;
+    const item = (n) => h("li", {}, h("button", { type: "button", class: `kapi-note-item${currentNote === n.seq ? " kapi-current" : ""}`, "data-note": n.seq, "data-state": stateOf(n) },
+      pinChip(n),
+      h("span", { class: "kapi-note-body" },
+        ...(n.section || n.where?.gone ? [h("span", { class: "kapi-note-crumb", text: n.where?.gone ? "Block removed" : n.section })] : []),
+        h("span", { class: "kapi-note-quote", text: noteAbout(n) }),
+        h("span", { class: "kapi-note-text", text: n.text }),
+        h("span", { class: "kapi-note-chip", "data-state": stateOf(n), text: stateOf(n) === "changed" && n.changedTime ? `Changed \u00b7 ${ago(n.changedTime)}` : STATE_LABEL[stateOf(n)] }))));
+    const resolved = notes.filter((n) => n.resolved);
+    notesView.replaceChildren(
+      h("div", { class: "kapi-notes-head" }, h("h2", { text: "Notes" }), h("span", { class: "kapi-notes-summary", text: summary }),
+        h("button", { type: "button", class: "kapi-notes-close", "aria-label": "Close notes", onclick: () => setSheet(false) }, icon("x"))),
+      nav,
+      h("p", { class: "kapi-notes-keys" }, h("kbd", { text: "J" }), " next  ", h("kbd", { text: "K" }), " previous"),
+      ...(open.length ? [h("ul", { class: "kapi-note-list" }, ...pageOrder(open).map(item))] : [h("p", { class: "kapi-empty", text: "Every note is resolved." })]),
+      ...(resolved.length ? [h("h3", { class: "kapi-note-group", text: "Resolved" }), h("ul", { class: "kapi-note-list" }, ...resolved.map(item))] : []));
+  }
+
+  function paintRail() {
+    const desktop = !phone.matches;
+    const list = desktop ? openNotes().filter((n) => n.where?.first?.isConnected && n.where.visible !== false) : [];
+    rail.hidden = !list.length;
+    const height = document.documentElement.scrollHeight;
+    rail.replaceChildren(...list.map((n) => {
+      const r = anchorRect(n);
+      const top = r ? (r.top + scrollY) / height : 0;
+      return h("button", { type: "button", class: "kapi-rail-dot", "data-note": n.seq, "data-state": stateOf(n), "aria-label": `Note ${n.num}, ${STATE_LABEL[stateOf(n)].toLowerCase()}`,
+        "data-tip": `Note ${n.num}`, style: `top: calc(${(top * 100).toFixed(2)}% - 5px)` });
+    }));
+  }
+
+  function showTab(name) {
+    const notesOn = name === "notes";
+    chatTab.setAttribute("aria-selected", String(!notesOn));
+    notesTab.setAttribute("aria-selected", String(notesOn));
+    panel.toggleAttribute("data-notes", notesOn);
+  }
+
+  function setSheet(open) {
+    sheetOpen = open && phone.matches;
+    root.toggleAttribute("data-notes-sheet", sheetOpen);
+  }
+
   function refresh(ids) {
     queue = queue.then(() => (ids ? loadBlocks(ids) : loadPage())).catch(() =>
       say("Could not load the latest page from kapi.", "error"));
@@ -1020,6 +1551,7 @@
     applyFolds();
     select(keep ? find(keep) : null);
     placeNote();
+    schedulePaint();
   }
 
   async function loadBlocks(ids) {
@@ -1053,6 +1585,7 @@
     }
     applyFolds();
     placeNote();
+    schedulePaint();
   }
 
   function addEntry(ev, body) {
@@ -1063,9 +1596,14 @@
       const t = new Date(ev.time);
       if (!isNaN(t)) meta.append(h("time", { datetime: ev.time, text: t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }));
     }
-    if (ev.target) {
+    const re = Array.isArray(ev.re) ? ev.re.map((seq) => noteBySeq.get(seq)).filter(Boolean) : [];
+    const own = ev.kind === "note" && !re.length && noteBySeq.get(ev.seq);
+    if (own) meta.append(h("button", { type: "button", class: "kapi-note-ref", "data-note": own.seq, "aria-label": `Note ${own.num}`, text: `Note ${own.num}` }));
+    for (const n of re) meta.append(h("button", { type: "button", class: "kapi-note-ref", "data-note": n.seq, text: `on note ${n.num}` }));
+    if (ev.target && !re.length) {
       const first = ev.target.split(",")[0].trim();
-      const where = ev.part ? `${describe(first)}, ${ev.part}` : describe(first);
+      const kind = find(first)?.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "");
+      const where = ev.part ? (kind ? `${kind}: ${ev.part}` : ev.part) : describe(first);
       meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": first, title: `#${ev.target}`, text: where }));
     }
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
@@ -1124,6 +1662,7 @@
       if (ev.seq <= lastSeq) return;
       lastSeq = ev.seq;
     }
+    trackNote(ev);
     if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
     else if (ev.kind === "note") {
@@ -1201,6 +1740,13 @@
   }
 
   root.addEventListener("click", (e) => {
+    const noted = e.target.closest("[data-note]");
+    if (noted) {
+      const n = noteBySeq.get(Number(noted.dataset.note));
+      if (n && noted.classList.contains("kapi-pin")) showPop(n, noted);
+      else focusNote(n);
+      return;
+    }
     const ref = e.target.closest("[data-ref]");
     if (ref) {
       const el = find(ref.dataset.ref);
@@ -1455,6 +2001,10 @@
         e.preventDefault();
         return action("undo");
       }
+      if (!e.metaKey && !e.ctrlKey && (key === "j" || key === "k") && notes.length) {
+        e.preventDefault();
+        return stepNote(key === "j" ? 1 : -1);
+      }
       if (!e.metaKey && !e.ctrlKey && (textRange || selected)) {
         const block = !textRange && !busy && selected;
         const name = key === "a" ? "ask"
@@ -1465,6 +2015,11 @@
           return action(name);
         }
       }
+    }
+    if (e.key === "Escape" && (pop || sheetOpen)) {
+      hidePop(true);
+      setSheet(false);
+      return;
     }
     if (e.key === "Escape") {
       dismissNote();
@@ -1495,6 +2050,22 @@
   addEventListener("scroll", placeAsk, { passive: true });
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
+  addEventListener("scroll", () => placePop(), { passive: true });
+  addEventListener("resize", () => schedulePaint());
+  phone.addEventListener("change", () => {
+    setSheet(false);
+    schedulePaint();
+  });
+  pins.addEventListener("pointerover", (e) => {
+    const pin = e.pointerType === "mouse" && e.target.closest(".kapi-pin");
+    if (pin) showPop(noteBySeq.get(Number(pin.dataset.note)), pin);
+  });
+  pins.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "mouse" && !pop?.box.contains(e.relatedTarget)) hidePop();
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (pop && !pop.box.contains(e.target) && !e.target.closest?.(".kapi-pin")) hidePop(true);
+  }, true);
   addEventListener("resize", placeRing);
   const ZWSP = "\u200b";
 
@@ -1519,6 +2090,7 @@
     return editing ? renderBar() : placeRing();
   });
   new ResizeObserver(placeRing).observe(main);
+  new ResizeObserver(() => schedulePaint()).observe(main);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
       document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
