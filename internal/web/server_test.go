@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1112,7 +1113,6 @@ func TestImagesUploadServeAndRideOnNotesAndMessages(t *testing.T) {
 	for _, bad := range []string{
 		`{"notes":[{"target":"aaaaaaaa","files":["ffffffffffffffffffffffffffffffff.png"],"text":"x"}]}`,
 		`{"notes":[{"target":"aaaaaaaa","files":["../../page.txt"],"text":"x"}]}`,
-		`{"notes":[{"target":"aaaaaaaa","files":["` + strings.Repeat(name+`","`, 4) + name + `"],"text":"x"}]}`,
 		`{"notes":[{"target":"aaaaaaaa","text":" "}]}`,
 	} {
 		if code, _ := s.post("/notes", bad); code != http.StatusUnprocessableEntity {
@@ -1134,5 +1134,36 @@ func TestImagesUploadServeAndRideOnNotesAndMessages(t *testing.T) {
 	}
 	if n := len(s.events()); n != 3 {
 		t.Errorf("refused sends appended events: %d, want 3", n)
+	}
+}
+
+func TestEachNoteAndTheMessageKeepTheirOwnImages(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	var names []string
+	for i := range 9 {
+		img := append(append([]byte{}, onePixel...), byte(i))
+		code, out := s.upload(img, "image/png", s.srv.URL)
+		if code != http.StatusOK {
+			t.Fatalf("upload %d: %d %v", i, code, out)
+		}
+		names = append(names, out["name"].(string))
+	}
+	list := func(n ...string) string { return `["` + strings.Join(n, `","`) + `"]` }
+	body := `{"notes":[{"target":"aaaaaaaa","files":` + list(names[0:4]...) + `,"text":"a"},{"target":"aaaaaaaa","files":` + list(names[4], names[4], names[4], names[4], names[4]) + `,"text":"b"}],"files":` + list(names[5:9]...) + `,"text":"c"}`
+	if code, out := s.post("/notes", body); code != http.StatusOK {
+		t.Fatalf("two notes and a message, 4 images each at most: %d %v", code, out)
+	}
+	path := func(n string) string { p, _ := s.pages.Attachments().Path(s.id, n); return p }
+	want := [][]string{{path(names[0]), path(names[1]), path(names[2]), path(names[3])}, {path(names[4])}, {path(names[5]), path(names[6]), path(names[7]), path(names[8])}}
+	for i, e := range s.events() {
+		if !slices.Equal(e.Files, want[i]) {
+			t.Errorf("event %d files = %v, want %v in the order sent", i+1, e.Files, want[i])
+		}
+	}
+	if code, _ := s.post("/notes", `{"notes":[{"target":"aaaaaaaa","text":"x"}],"files":`+list(names[0:5]...)+`,"text":"c"}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("five images on the trailing message: %d, want 422", code)
+	}
+	if code, _ := s.post("/messages", `{"kind":"message","files":`+list(names[0:5]...)+`,"text":"c"}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("five images on a message: %d, want 422", code)
 	}
 }

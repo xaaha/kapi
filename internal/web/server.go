@@ -461,7 +461,14 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 
 func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]string) ([][]string, bool) {
 	var all []string
-	for _, names := range groups {
+	unique := make([][]string, len(groups))
+	for i, names := range groups {
+		for _, n := range names {
+			if !slices.Contains(unique[i], n) {
+				unique[i] = append(unique[i], n)
+			}
+		}
+		names = unique[i]
 		if len(names) > attach.MaxPerSend {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": fmt.Sprintf("at most %d images per note or message", attach.MaxPerSend)})
 			return nil, false
@@ -477,11 +484,9 @@ func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]str
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return nil, false
 	}
-	for i, names := range groups {
+	for i, names := range unique {
 		for _, name := range names {
-			if !slices.Contains(out[i], paths[name]) {
-				out[i] = append(out[i], paths[name])
-			}
+			out[i] = append(out[i], paths[name])
 		}
 	}
 	return out, true

@@ -240,3 +240,23 @@ func TestADiskCapEvictsTheOldestButNeverAFreshImage(t *testing.T) {
 		t.Errorf("an image added in the last hour was evicted: %v", err)
 	}
 }
+
+func TestASweepLeavesAnUploadInProgressAlone(t *testing.T) {
+	s, _ := newStore(t)
+	if err := os.MkdirAll(s.dir(page), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tmp, err := writeTemp(s.dir(page), []byte("half"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.touch(tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tmp); err != nil {
+		t.Errorf("a fresh upload's temp file was removed: %v", err)
+	}
+}
