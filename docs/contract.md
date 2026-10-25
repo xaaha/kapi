@@ -340,9 +340,12 @@ chat box sends plain messages with no target.
 
 Sent notes stay on the page. The browser works out each note's state from
 the event log it replays, so nothing new is stored: waiting after the note
-or a human reply to it, answered after a message whose `re` names it,
+or a human reply to it, answered after a message whose `re` names it or one
+of its replies,
 changed after a `revision` not by `human` whose `target` lists one of its
-blocks, and resolved after a `resolve` that names it, which is final. The
+blocks or a block around one, or that has no `target` while the note's text
+differs from what the tab last saw (or, on a fresh load, from the note's
+`rev`), and resolved after a `resolve` that names it, which is final. The
 latest of the first three wins. Each note shows a numbered pin after its
 quote, found again with `prefix` and `suffix`, or on its block when the
 quote is gone, and its quote is underlined in the state's colour through

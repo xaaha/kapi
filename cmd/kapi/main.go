@@ -624,7 +624,7 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		}
 	}
 	text, handed := hookText(resp.Pages, hook.Event == "UserPromptSubmit")
-	if text == "" || (hook.Event == "Stop" && !wakes(resp.Pages)) {
+	if text == "" || (hook.Event == "Stop" && (len(handed) == 0 || !wakes(resp.Pages))) {
 		return nil
 	}
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
@@ -755,11 +755,11 @@ func pagePath(args []string, want int, command string) (string, error) {
 
 func eventLine(e *eventlog.Event) string {
 	if e.Kind == eventlog.KindResolve {
-		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re)))
+		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
 	}
 	kind := e.Kind
 	if len(e.Re) > 0 {
-		kind = "reply to note " + seqList(e.Re)
+		kind = "reply to note " + seqList(e.Re, "#", ", ")
 	}
 	target := ""
 	if e.Target != "" {
@@ -773,15 +773,19 @@ func eventLine(e *eventlog.Event) string {
 	}
 	line := fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, kind, target, e.Text)
 	if e.Kind == eventlog.KindNote && e.Author == "human" {
-		line += fmt.Sprintf(" (answer with kapi say --reply %d)", e.Seq)
+		answer := []uint64{e.Seq}
+		if len(e.Re) > 0 {
+			answer = e.Re
+		}
+		line += " (answer with kapi say --reply " + seqList(answer, "", ",") + ")"
 	}
 	return eventlog.Printable(line)
 }
 
-func seqList(seqs []uint64) string {
+func seqList(seqs []uint64, prefix, sep string) string {
 	out := make([]string, len(seqs))
 	for i, n := range seqs {
-		out[i] = "#" + strconv.FormatUint(n, 10)
+		out[i] = prefix + strconv.FormatUint(n, 10)
 	}
-	return strings.Join(out, ", ")
+	return strings.Join(out, sep)
 }

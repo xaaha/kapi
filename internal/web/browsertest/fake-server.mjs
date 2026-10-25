@@ -322,12 +322,19 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       for (const res of state.streams) res.destroy();
       state.streams.clear();
     },
-    agentEdit(id, html, author = "agent") {
+    agentEdit(id, html, { author = "agent", target = id } = {}) {
       snapshot();
       state.blocks.find((x) => x.id === id).html = html;
       state.rev++;
       snapshot();
-      return push({ author, kind: "revision", rev: state.rev, target: id, text: "edited" });
+      return push({ author, kind: "revision", rev: state.rev, target, text: "edited" });
+    },
+    agentDelete(id) {
+      snapshot();
+      state.blocks = state.blocks.filter((x) => x.id !== id);
+      state.rev++;
+      snapshot();
+      return push({ author: "agent", kind: "revision", rev: state.rev, target: id, text: "deleted" });
     },
     bumpBehindBrowser(id, html) {
       snapshot();

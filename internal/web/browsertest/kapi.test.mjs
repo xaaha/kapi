@@ -1,7 +1,7 @@
 import { after, before, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./chrome.mjs";
-import { startFakeServer } from "./fake-server.mjs";
+import { startFakeServer, SAMPLE } from "./fake-server.mjs";
 import { readFile } from "node:fs/promises";
 
 let browser;
@@ -2763,4 +2763,129 @@ test("#39 on a phone, a strip counts the notes and opens them in a sheet, and Ne
   } finally {
     await phone.close();
   }
+});
+
+test("#39 an answer to a reply answers its note", async () => {
+  server.push(sessionNote);
+  server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", re: [1], text: "and later?" });
+  server.push({ author: "agent", kind: "message", re: [2], text: "later too" });
+  await until(async () => (await pinStates()) === "1:answered");
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-msg")].at(-1).querySelector(".kapi-note-ref").textContent`), "on note 1");
+});
+
+test("#39 editing a changed note's block by hand keeps the pins working", async () => {
+  server.push({ ...sessionNote, quote: "two steps", prefix: "new cluster in ", suffix: "." });
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in three careful steps.</p>');
+  await until(async () => (await highlighted("kapi-changed")).join() === "three careful");
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  await page.eval(`(p => { p.textContent = "Short."; p.dispatchEvent(new InputEvent("input", { bubbles: true })); })(document.querySelector('[data-kapi-id="bbbbbbbb"]'))`);
+  server.push({ author: "agent", kind: "message", re: [1], text: "done" });
+  await until(async () => (await pinStates()) === "1:answered");
+  assert.deepEqual(await highlighted("kapi-changed"), ["Short."]);
+});
+
+test("#39 a quote cut at the length limit still finds its text", async () => {
+  const words = Array.from({ length: 400 }, (_, i) => `w${i % 10}`).join(" ");
+  const long = await startFakeServer({ blocks: [...SAMPLE, { id: "llllllll", html: `<p data-kapi-id="llllllll">${words}</p>` }] });
+  const tab = await browser.open(long.url);
+  try {
+    const quote = `${words.slice(0, 999).trimEnd()}\u2026`;
+    assert.equal(quote.length, 999, "the cut ends on a space, so clip drops it");
+    long.push({ author: "human", kind: "note", target: "llllllll", quote, rev: 1, text: "too long?" });
+    await tab.waitFor(`[...(CSS.highlights.get("kapi-note-waiting") ?? [])].length === 1`);
+    assert.equal(await tab.eval(`[...CSS.highlights.get("kapi-note-waiting")][0].toString().length`), 998);
+    assert.deepEqual(tab.errors, []);
+  } finally {
+    await tab.close();
+    await long.close();
+  }
+});
+
+async function withPage(blocks, fn) {
+  const own = await startFakeServer({ blocks: [...SAMPLE, ...blocks] });
+  const tab = await browser.open(own.url);
+  try {
+    await fn(own, tab);
+    assert.deepEqual(tab.errors, []);
+  } finally {
+    await tab.close();
+    await own.close();
+  }
+}
+
+test("#39 a file edit with no target marks only the notes whose text changed", async () => {
+  server.push(sessionNote);
+  server.push({ author: "human", kind: "note", target: "dddddddd", quote: "before starting", rev: 1, text: "keep?" });
+  await until(async () => (await pinStates()) === "1:waiting 2:waiting");
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in one step.</p>', { author: "file", target: "" });
+  await until(async () => (await pinStates()) === "1:changed 2:waiting");
+  await until(async () => (await highlighted("kapi-changed")).join() === "one step.");
+  await hoverPin(1);
+  assert.match(await page.eval(`document.querySelector(".kapi-note-pop").innerText`), /Edited in the file/);
+  server.agentEdit("dddddddd", '<p data-kapi-id="dddddddd">See <a href="#bbbbbbbb">the summary</a> before starting, twice.</p>', { author: "file", target: "" });
+  await until(async () => (await pinStates()) === "1:changed 2:changed");
+});
+
+test("#39 a revision on the outer block marks a note on a block inside it", async () => {
+  await withPage([{ id: "pppppppp", html: '<div data-kapi-id="pppppppp"><p data-kapi-id="qqqqqqqq">Inner words here.</p></div>' }], async (own, tab) => {
+    own.push({ author: "human", kind: "note", target: "qqqqqqqq", quote: "words", rev: 1, text: "inner?" });
+    await tab.waitFor(`document.querySelector(".kapi-pins .kapi-pin")?.dataset.state === "waiting"`);
+    own.agentEdit("pppppppp", '<div data-kapi-id="pppppppp"><p data-kapi-id="qqqqqqqq">Inner words moved here.</p></div>');
+    await tab.waitFor(`document.querySelector(".kapi-pins .kapi-pin")?.dataset.state === "changed"`);
+  });
+});
+
+test("#39 a quote that appears twice anchors where its surrounding text matches", async () => {
+  await withPage([{ id: "rrrrrrrr", html: '<p data-kapi-id="rrrrrrrr">one go, two go, three go</p>' }], async (own, tab) => {
+    own.push({ author: "human", kind: "note", target: "rrrrrrrr", quote: "go", prefix: "one go, two ", suffix: ", three go", rev: 1, text: "this one" });
+    await tab.waitFor(`[...(CSS.highlights.get("kapi-note-waiting") ?? [])].length === 1`);
+    assert.equal(await tab.eval(`[...CSS.highlights.get("kapi-note-waiting")][0].startOffset`), 12);
+  });
+});
+
+test("#39 the note popover closes when the mouse leaves the pin", async () => {
+  server.push(sessionNote);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await hoverPin(1);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 700 });
+  await page.waitFor(`!document.querySelector(".kapi-note-pop")`);
+
+  const at = (expr) => page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))(${expr}.getBoundingClientRect())`);
+  const move = ({ x, y }) => page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await move(await at(`[...CSS.highlights.get("kapi-note-waiting")][0]`));
+  await page.waitFor(`!!document.querySelector(".kapi-note-pop")`);
+  const word = await page.eval(`(() => { const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild; const r = document.createRange(); r.setStart(t, t.data.indexOf("cluster")); r.setEnd(t, t.data.indexOf("cluster") + 7); const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+  await move(word);
+  await page.waitFor(`!document.querySelector(".kapi-note-pop")`);
+
+  await hoverPin(1);
+  await move(await at(`document.querySelector(".kapi-note-pop")`));
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true, "moving into the popover keeps it open");
+  await move(await at(`document.querySelector(".kapi-panel-head")`));
+  await page.waitFor(`!document.querySelector(".kapi-note-pop")`);
+});
+
+test("#39 a note sent before notes kept their revision turns changed without guessing what changed", async () => {
+  const { rev, ...old } = sessionNote;
+  server.push(old);
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster today.</p>');
+  await until(async () => (await pinStates()) === "1:changed");
+  assert.deepEqual(await highlighted("kapi-changed"), []);
+  assert.ok(!requests("GET", "/blocks/bbbbbbbb").some((r) => r.search.includes("rev=")), "nothing to compare against");
+});
+
+test("#39 a note whose block was deleted stays in the list and says the block is gone", async () => {
+  server.push({ author: "human", kind: "note", target: "dddddddd", quote: "before starting", rev: 1, text: "keep?" });
+  await until(async () => (await pinStates()) === "1:waiting");
+  server.agentDelete("dddddddd");
+  await until(async () => (await pinStates()) === "");
+  await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
+  assert.equal(await page.eval(`document.querySelector('.kapi-note-item[data-note="1"] .kapi-note-crumb').textContent`), "Block removed");
+  assert.equal(await page.eval(`document.querySelector('.kapi-note-item[data-note="1"]').dataset.state`), "changed");
+  await click('.kapi-note-item[data-note="1"]');
+  await page.waitFor(`!!document.querySelector(".kapi-note-pop")`);
+  assert.match(await page.eval(`document.querySelector(".kapi-note-pop").innerText`), /no longer on the page/);
 });

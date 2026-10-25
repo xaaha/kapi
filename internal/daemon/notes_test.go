@@ -88,9 +88,11 @@ func TestAResolveReachesAWatchOnlyWithTheNextEvent(t *testing.T) {
 	}
 	dec := silent(t, conn)
 	call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: "message", Text: "still here"})
-	time.Sleep(100 * time.Millisecond)
-	if q := l.Queued("agent"); q >= resolve.Seq {
-		t.Fatalf("queued through #%d, past the resolve #%d it never printed", q, resolve.Seq)
+	for range 30 {
+		if q := l.Queued("agent"); q >= resolve.Seq {
+			t.Fatalf("queued through #%d, past the resolve #%d it never printed", q, resolve.Seq)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "next"})
 	for _, want := range []string{eventlog.KindResolve, "message"} {

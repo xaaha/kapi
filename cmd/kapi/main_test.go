@@ -359,7 +359,8 @@ func TestRepliesAndResolvesNameTheirNotes(t *testing.T) {
 		e    eventlog.Event
 		want string
 	}{
-		{eventlog.Event{Seq: 14, Author: "human", Kind: "note", Target: "k3f9a2bq", Re: []uint64{12}, Text: "and Bob?"}, `#14 human reply to note #12 on #k3f9a2bq: and Bob? (answer with kapi say --reply 14)`},
+		{eventlog.Event{Seq: 14, Author: "human", Kind: "note", Target: "k3f9a2bq", Re: []uint64{12}, Text: "and Bob?"}, `#14 human reply to note #12 on #k3f9a2bq: and Bob? (answer with kapi say --reply 12)`},
+		{eventlog.Event{Seq: 17, Author: "human", Kind: "note", Target: "a", Re: []uint64{12, 14}, Text: "both?"}, `#17 human reply to note #12, #14 on #a: both? (answer with kapi say --reply 12,14)`},
 		{eventlog.Event{Seq: 15, Author: "codex", Kind: "message", Re: []uint64{12, 14}, Text: "fixed"}, `#15 codex reply to note #12, #14: fixed`},
 		{eventlog.Event{Seq: 16, Author: "human", Kind: "resolve", Re: []uint64{12}}, `#16 human resolved note #12`},
 	} {
@@ -484,6 +485,11 @@ func TestTheStopHookLetsAResolveWaitForTheNextEvent(t *testing.T) {
 	f = &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
 	if out, _ := run(t, f, "hook-messages"); !strings.Contains(out, "#4 human resolved note #2") {
 		t.Errorf("PostToolUse did not carry the resolve along: %s", out)
+	}
+	seen := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{{Seq: 3, Author: "human", Kind: "message", Text: "go"}, resolve}}}}
+	f = &fakeAPI{resp: seen, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+		t.Fatalf("Stop on an already shown message and a resolve: out %q, err %v", out, err)
 	}
 	loud := quiet
 	loud.Pages = []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve, {Seq: 5, Author: "human", Kind: "message", Text: "go"}}}}
