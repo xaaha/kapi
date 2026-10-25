@@ -51,6 +51,10 @@ func TestMarkdownEscapesTextAndKeepsEachConstructApart(t *testing.T) {
 		{"badge states", `<p><kapi-badge state="done"></kapi-badge> <kapi-badge state="waiting">next</kapi-badge> <kapi-badge tone="red">x</kapi-badge></p>`,
 			"✅ ⏳ `next` `x`"},
 		{"plan states", `<kapi-plan><kapi-step state="done">a</kapi-step><kapi-step>b</kapi-step></kapi-plan>`, "1. ✅ a\n2. b"},
+		{"a list after a block that ends in one", `<kapi-plan><kapi-step>a</kapi-step><kapi-risk>r</kapi-risk></kapi-plan><ul><li>b</li></ul>`,
+			"1. a\n\n- **Risk:** r\n\n<!-- -->\n\n- b"},
+		{"heading ending in a hash", `<h2>Issue #</h2><h3>C#</h3>`, "## Issue \\#\n\n### C#"},
+		{"a language that would break the fence", "<kapi-code lang=\"go x\">a</kapi-code><kapi-code file=\"a.g`o\">b</kapi-code>", "```\na\n```\n\n``a.g`o``\n\n```\nb\n```"},
 		{"dropped content", `<p>keep<script>alert(1)</script></p><style>p{}</style><svg><text>no</text></svg>`, "keep"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

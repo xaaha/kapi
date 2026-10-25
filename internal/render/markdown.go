@@ -66,6 +66,9 @@ func (m *mdWriter) block(n *html.Node) []string {
 		if text == "" {
 			return nil
 		}
+		if i := len(strings.TrimRight(text, "#")); i < len(text) && (i == 0 || text[i-1] == ' ') {
+			text = text[:i] + `\` + text[i:]
+		}
 		return []string{strings.Repeat("#", int(n.Data[1]-'0')) + " " + text}
 	case "ul", "ol":
 		return nonEmpty(m.list(n))
@@ -164,7 +167,7 @@ func (m *mdWriter) list(n *html.Node) string {
 func listItem(marker string, body []string) string {
 	text := joinBlocks(body)
 	if text == "" {
-		text = " "
+		return strings.TrimRight(marker, " ")
 	}
 	return prefixLines(text, marker, strings.Repeat(" ", len(marker)))
 }
@@ -189,12 +192,22 @@ func listKind(blk string) string {
 	return "ol"
 }
 
+func trailingListKind(blk string) string {
+	lines := strings.Split(blk, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := lines[i]; l != "" && l[0] != ' ' {
+			return listKind(l)
+		}
+	}
+	return ""
+}
+
 func joinBlocks(blocks []string) string {
 	var b strings.Builder
 	for i, blk := range blocks {
 		if i > 0 {
 			b.WriteString("\n\n")
-			if kind := listKind(blk); kind != "" && kind == listKind(blocks[i-1]) {
+			if kind := listKind(blk); kind != "" && kind == trailingListKind(blocks[i-1]) {
 				b.WriteString("<!-- -->\n\n")
 			}
 		}
@@ -466,7 +479,7 @@ func (m *mdWriter) preset(n *html.Node) []string {
 	case "kapi-diagram":
 		info := "kapi-diagram"
 		for _, k := range []string{"type", "dir"} {
-			if v := attrVal(n, k); v != "" {
+			if v := attrVal(n, k); infoWord.MatchString(v) {
 				info += " " + k + "=" + v
 			}
 		}
@@ -583,14 +596,19 @@ func codeLabel(file, lines string) string {
 	return label
 }
 
+var infoWord = regexp.MustCompile(`^[A-Za-z0-9_+#.-]+$`)
+
 func codeLang(lang, file string) string {
-	if lang != "" || file == "" {
-		return lang
+	if lang != "" {
+		if infoWord.MatchString(lang) {
+			return lang
+		}
+		return ""
 	}
-	if ext := strings.TrimPrefix(filepath.Ext(file), "."); ext != "" {
+	if ext := strings.TrimPrefix(filepath.Ext(file), "."); infoWord.MatchString(ext) {
 		return ext
 	}
-	if l := pickLexer("", file); l != nil && len(l.Config().Aliases) > 0 {
+	if l := pickLexer("", file); file != "" && l != nil && len(l.Config().Aliases) > 0 && infoWord.MatchString(l.Config().Aliases[0]) {
 		return l.Config().Aliases[0]
 	}
 	return ""
