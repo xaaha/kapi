@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"net"
@@ -192,6 +193,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/images", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/export/html", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -371,7 +373,7 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -1211,5 +1213,39 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 	}
 	if code, _ := s.uploadTo("/images", onePixel, "image/png", "http://evil.example"); code != http.StatusForbidden {
 		t.Errorf("cross-site page image: %d", code)
+	}
+}
+
+func TestExportHTMLDownloadsTheRenderedPageWithItsImagesInside(t *testing.T) {
+	name := "0123456789abcdef0123456789abcdef.png"
+	s := newSite(t, `<h1 data-kapi-id="aaaaaaaa">Plan &amp; notes</h1><figure data-kapi-id="bbbbbbbb"><img src="./plan.files/`+name+`" alt=""></figure>`)
+	if err := os.MkdirAll(filepath.Join(filepath.Dir(s.path), "plan.files"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(s.path), "plan.files", name), onePixel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := s.get("/p/" + s.id + "/export/html")
+	if got.code != http.StatusOK || got.header.Get("Content-Type") != "text/html; charset=utf-8" || got.header.Get("Content-Disposition") != "attachment; filename=plan.html" || got.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("export: %d %v", got.code, got.header)
+	}
+	for _, want := range []string{"<title>plan.html</title>", "Plan &amp; notes", `src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(onePixel) + `"`} {
+		if !strings.Contains(got.body, want) {
+			t.Errorf("the export is missing %q:\n%s", want, got.body)
+		}
+	}
+	for _, leak := range []string{token, "kapi.js", "chrome.css", "data-kapi-selected", "plan.files/"} {
+		if strings.Contains(got.body, leak) {
+			t.Errorf("the export carries %q:\n%s", leak, got.body)
+		}
+	}
+	if err := os.WriteFile(s.path, []byte(`<h1 data-kapi-id="aaaaaaaa">Renamed</h1>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.get("/p/" + s.id + "/export/html"); !strings.Contains(got.body, "Renamed") {
+		t.Errorf("the export missed an edit made in the file: %s", got.body)
+	}
+	if got := s.get("/p/0123456789abcdef/export/html"); got.code != http.StatusNotFound {
+		t.Errorf("export of an unknown page: %d", got.code)
 	}
 }

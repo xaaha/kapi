@@ -199,7 +199,7 @@ func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
 	}
 	page, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1" data-undo="false">`) {
+	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1" data-undo="false" data-path=`) {
 		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
 	}
 

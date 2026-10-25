@@ -257,8 +257,8 @@ On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
-`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/ops` or
-`p/{id}/answers` gets 403 with
+`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/files`,
+`p/{id}/images`, `p/{id}/ops`, `p/{id}/answers` or `p/{id}/export/html` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
 the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
@@ -313,10 +313,11 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 
 | Method and path | Body | Response |
 |---|---|---|
-| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N" data-undo="bool">`, `kapi.js` |
+| `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N" data-undo="bool" data-path="<page path>">`, `kapi.js` |
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone); with `?rev=N`, the block as it was at revision `N`, read from the kept revision files, 404 when that revision or the block in it does not exist |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
+| `GET /p/{id}/export/html` | | the page as one self-contained HTML file, the same document `kapi publish` builds with its images embedded as data URLs, but with no size limit; `Content-Disposition: attachment; filename=<page name>` |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"...","files":["<name>"]}` | `{"seq":N}`; text may be empty when there is an image; 422 for an image that is not stored |
 | `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"files":["<name>"],"text":"..."}],"text":"optional message","files":["<name>"]}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
 | `POST /p/{id}/files` | the image bytes, `Content-Type: image/...` | `{"name":"<32 hex>.png","mime":"image/png","size":N}`; the type is read from the bytes, and only PNG, JPEG, GIF and WebP up to 10 MB are kept; 415 for any other type, SVG included, 413 when too big, 507 when the disk cap is full |
@@ -374,6 +375,16 @@ notes in page order under their section heading, with resolved ones apart;
 J and K move to the next and previous note, and a rail beside the page
 marks where each one is. On a phone a strip above the message box counts
 the notes and opens the list as a sheet.
+
+The three-dot button in the panel header opens the page menu, for actions
+on the whole page rather than a block. Export HTML downloads
+`GET /p/{id}/export/html` under the page's file name. Export PDF opens the
+browser's print dialog, where Save as PDF makes the file; while printing,
+the document title is the page name without `.html`, and the print
+stylesheet leaves out the panel, the site header, fold arrows and note
+marks, and prints folded sections in full. Copy path copies `data-path`.
+Escape closes the menu and returns focus to its button; the arrow keys,
+Home and End move between items.
 
 ### Events stream
 

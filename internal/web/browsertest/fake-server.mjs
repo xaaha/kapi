@@ -138,7 +138,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
     `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
-    `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
+    `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}" data-path="/home/me/notes/plan.html">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
@@ -263,6 +263,16 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       if (!b && !inner) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) });
       return res.end(b ? marked(b.html) : inner);
+    }
+    if (req.method === "GET" && rest === "export/html") {
+      if (state.nextExportError) {
+        const error = state.nextExportError;
+        state.nextExportError = null;
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end(error + "\n");
+      }
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Disposition": 'attachment; filename="plan.html"' });
+      return res.end(`<!doctype html><title>plan.html</title><main id="kapi-page">${state.blocks.map((b) => b.html).join("\n")}</main>`);
     }
     if (req.method === "GET" && rest.startsWith("source/")) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));

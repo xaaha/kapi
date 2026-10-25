@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,9 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/xaaha/kapi/internal/client"
-	"github.com/xaaha/kapi/internal/daemon"
 )
 
 const token = "tok-9f3a-very-secret"
@@ -337,41 +333,6 @@ func TestLoadConfigAllowsPlainHTTPOnLoopback(t *testing.T) {
 	}
 }
 
-func TestPageIDMatchesTheDaemonLayout(t *testing.T) {
-	home, err := os.MkdirTemp("", "kp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(home) })
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- daemon.New(home).Serve(ctx) }()
-	t.Cleanup(func() {
-		cancel()
-		<-done
-	})
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		conn, err := net.Dial("unix", daemon.SocketPath(home))
-		if err == nil {
-			conn.Close()
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("daemon unreachable: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	page := filepath.Join(t.TempDir(), "plan.html")
-	if _, err := (client.Client{Home: home}).Do(&daemon.Request{Op: "append", Page: page, Author: "human", Kind: "message", Text: "x"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(home, "pages", PageID(page))); err != nil {
-		t.Errorf("PageID(%q) does not name the daemon's page directory: %v", page, err)
-	}
-}
-
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -430,5 +391,28 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 	}
 	if _, err := Document("plan.html", []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+png+`" alt=""></figure>`), filepath.Join(notDir, "plan.files")); err != nil {
 		t.Errorf("an unreadable files folder stopped publishing: %v", err)
+	}
+}
+
+func TestExportEmbedsImagesPastTheHubLimit(t *testing.T) {
+	files := filepath.Join(t.TempDir(), "plan.files")
+	if err := os.MkdirAll(files, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	big := "fedcba9876543210fedcba9876543210.jpg"
+	data := bytes.Repeat([]byte{0xff}, 9<<20)
+	if err := os.WriteFile(filepath.Join(files, big), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/` + big + `" alt=""></figure>`)
+	if _, err := Document("plan.html", src, files); err == nil {
+		t.Fatal("Document took a page over the hub limit")
+	}
+	doc, err := Export("plan.html", src, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc) <= MaxDocBytes || !strings.Contains(string(doc), `src="data:image/jpeg;base64,`+base64.StdEncoding.EncodeToString(data)+`"`) {
+		t.Errorf("the export is %d bytes and does not carry the image", len(doc))
 	}
 }

@@ -1024,7 +1024,7 @@ test("on phones chat is a composer bar that expands to 40% and collapses back", 
 });
 
 test("Undo renders as a quiet bordered button", async () => {
-  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button")].map((b) => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button)")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
@@ -3215,4 +3215,122 @@ test("#30 an image from another site has no Download tool", async () => {
     await tab.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "archive", "delete"]);
   });
+});
+
+const menuOpen = () => page.eval(`!document.querySelector(".kapi-menu").hidden`);
+const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? document.activeElement.querySelector(".kapi-menu-label").textContent : document.activeElement.className`);
+const menuItem = (label) => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].find((b) => b.textContent.startsWith(${JSON.stringify(label)})).click()`);
+
+test("#23 the three-dot menu opens on its button, steps with the arrow keys, and Escape or a click outside closes it", async () => {
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel-head .kapi-menu-button").getAttribute("aria-expanded")`), "false");
+  await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
+  await page.key("Enter");
+  await until(menuOpen);
+  assert.equal(await page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`), "true");
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`),
+    ["Export HTML", "Export PDF", "Copy path"]);
+  assert.equal(await focusedItem(), "Export HTML");
+  for (const [key, want] of [["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "Export HTML"], ["ArrowUp", "Copy path"], ["Home", "Export HTML"], ["End", "Copy path"]]) {
+    await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key });
+    await page.call("Input.dispatchKeyEvent", { type: "keyUp", key, code: key });
+    assert.equal(await focusedItem(), want, `after ${key}`);
+  }
+  await page.key("Escape");
+  assert.equal(await menuOpen(), false);
+  assert.equal(await page.eval(`document.activeElement.classList.contains("kapi-menu-button")`), true);
+  assert.equal(await page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`), "false");
+
+  await click(".kapi-menu-button");
+  await until(menuOpen);
+  await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
+  assert.equal(await menuOpen(), false);
+  await click(".kapi-menu-button");
+  await click(".kapi-menu-button");
+  assert.equal(await menuOpen(), false);
+});
+
+test("#23 Export HTML downloads the server's export under the page's file name, and says why when it fails", async () => {
+  await page.eval(`window.downloads = []; HTMLAnchorElement.prototype.click = function () { const name = this.download; fetch(this.href).then((r) => r.text()).then((text) => downloads.push({ name, text })); }`);
+  await click(".kapi-menu-button");
+  await menuItem("Export HTML");
+  await until(() => page.eval(`downloads.length === 1`));
+  const [got] = await page.eval(`downloads`);
+  assert.equal(got.name, "plan.html");
+  assert.match(got.text, /Move the session store/);
+  assert.equal(requests("GET", "/export/html").length, 1);
+  assert.equal(await menuOpen(), false);
+
+  server.state.nextExportError = "render page: boom";
+  await click(".kapi-menu-button");
+  await menuItem("Export HTML");
+  await until(async () => /Could not export the page: render page: boom/.test(await notice()));
+  assert.equal(await page.eval(`downloads.length`), 1);
+
+  server.state.restarted = "kapi open plan.html";
+  await click(".kapi-menu-button");
+  await menuItem("Export HTML");
+  await until(() => page.eval(`!document.querySelector(".kapi-restart").hidden`));
+  assert.equal(await page.eval(`downloads.length`), 1);
+});
+
+test("#23 Export PDF opens the print dialog with the page's name as the document title", async () => {
+  await page.eval(`window.printed = []; window.print = () => { dispatchEvent(new Event("beforeprint")); printed.push(document.title); dispatchEvent(new Event("afterprint")); }`);
+  await click(".kapi-menu-button");
+  await menuItem("Export PDF");
+  assert.deepEqual(await page.eval(`printed`), ["plan"]);
+  assert.equal(await page.eval(`document.title`), "Fake kapi");
+  assert.equal(await menuOpen(), false);
+});
+
+test("#23 printing leaves out the chat panel, the menu, fold arrows and note marks, and prints folded sections in full", async () => {
+  await reopenWith(FOLD_ALL_PAGE);
+  await arrowClick("h2aaaaaa");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p2p2p2p2"]').checkVisibility()`), false);
+  await click(".kapi-menu-button");
+  const pseudo = (which) => page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "${which}").content`);
+  const mark = (name) => page.eval(`(s => [s.backgroundColor, s.textDecorationLine])(getComputedStyle(document.querySelector('[data-kapi-id="p1p1p1p1"]'), "::highlight(${name})"))`);
+  assert.notEqual(await pseudo("::after"), "none");
+  assert.notDeepEqual(await mark("kapi-changed"), ["rgba(0, 0, 0, 0)", "none"]);
+  assert.notDeepEqual(await mark("kapi-note-answered"), ["rgba(0, 0, 0, 0)", "none"]);
+  await page.call("Emulation.setEmulatedMedia", { media: "print" });
+  try {
+    assert.deepEqual(await page.eval(`[".kapi-panel", ".kapi-menu", ".kapi-site-head"].map((s) => document.querySelector(s).checkVisibility())`), [false, false, false]);
+    assert.equal(await page.eval(`getComputedStyle(document.documentElement).paddingRight`), "0px");
+    assert.equal(await page.eval(`document.querySelector('[data-kapi-id="p2p2p2p2"]').checkVisibility()`), true);
+    assert.deepEqual([await pseudo("::before"), await pseudo("::after")], ["none", "none"]);
+    for (const name of ["kapi-ask", "kapi-note-waiting", "kapi-note-answered", "kapi-note-changed", "kapi-changed"]) {
+      assert.deepEqual(await mark(name), ["rgba(0, 0, 0, 0)", "none"], name);
+    }
+  } finally {
+    await page.call("Emulation.setEmulatedMedia", { media: "" });
+  }
+});
+
+test("#23 the menu shows the page's path and Copy path puts it on the clipboard", async () => {
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  await click(".kapi-menu-button");
+  assert.equal(await page.eval(`document.querySelector(".kapi-menu-detail").title`), "/home/me/notes/plan.html");
+  await menuItem("Copy path");
+  await until(async () => (await notice()) === "Copied the page path");
+  assert.deepEqual(await page.eval(`copied`), ["/home/me/notes/plan.html"]);
+  await page.eval(`navigator.clipboard.writeText = async () => { throw new Error("denied"); }`);
+  await click(".kapi-menu-button");
+  await menuItem("Copy path");
+  await until(async () => (await notice()) === "Could not copy the page path");
+});
+
+test("#23 on a phone the menu opens under the top bar inside the screen and leaves the chat collapsed", async () => {
+  const p = await browser.open(server.url, { width: 390, height: 844 });
+  try {
+    await p.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+    const box = await p.eval(`(() => { const r = document.querySelector(".kapi-menu").getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; })()`);
+    assert.ok(box.left >= 0 && box.right <= 390 && box.top >= 46 && box.bottom < 844 / 2, JSON.stringify(box));
+    assert.equal(await p.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
+    assert.equal(await p.eval(`document.elementFromPoint(${(box.left + box.right) / 2}, ${box.top + 20}).closest("[role=menuitem]")?.querySelector(".kapi-menu-label").textContent`), "Export HTML");
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
 });

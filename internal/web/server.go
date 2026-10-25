@@ -27,6 +27,7 @@ import (
 	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -63,6 +64,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/{$}", s.withPage(s.handlePage))
 	s.mux.HandleFunc("GET /p/{id}/blocks/{block}", s.withPage(s.handleBlock))
 	s.mux.HandleFunc("GET /p/{id}/source/{block}", s.withPage(s.handleSource))
+	s.mux.HandleFunc("GET /p/{id}/export/html", s.withPage(s.handleExportHTML))
 	s.mux.HandleFunc("GET /p/{id}/events", s.withPage(s.handleEvents))
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/notes", s.withPage(s.handleNotes))
@@ -110,7 +112,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|files|images|ops|answers)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|files|images|ops|answers|export/html)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -231,7 +233,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
 	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
-	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\">\n%s\n</main>\n", rev, st.CanUndo(), body)
+	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
 	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -272,6 +274,22 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 	w.Header().Set("Kapi-Undo", strconv.FormatBool(st.CanUndo()))
 	if _, err := w.Write(out); err != nil { //nolint:gosec // render output, which has no scripts
 		log.Printf("write block: %v", err)
+	}
+}
+
+func (s *Server) handleExportHTML(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
+	src, _ := st.Source()
+	name := filepath.Base(st.Path())
+	doc, err := publish.Export(name, src, page.FilesDir(st.Path()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	if _, err := w.Write(doc); err != nil { //nolint:gosec // a download of the render output, which has no scripts
+		log.Printf("write export: %v", err)
 	}
 }
 
