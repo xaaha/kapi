@@ -15,6 +15,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -511,8 +512,12 @@ func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, _ *pa
 
 func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
 	path, err := s.pages.PagePath(r.PathValue("id"))
-	name := r.PathValue("name")
-	if err != nil || r.PathValue("dir") != filepath.Base(page.FilesDir(path)) || !attach.ValidName(name) {
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	name, ok := page.ImageName(page.FilesDir(path), "./"+url.PathEscape(r.PathValue("dir"))+"/"+r.PathValue("name"))
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}

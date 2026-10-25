@@ -5,11 +5,10 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/xaaha/kapi/internal/attach"
+	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -19,8 +18,6 @@ type File struct {
 	Data []byte
 }
 
-var pageImage = regexp.MustCompile(`^\./[^/]+\.files/([^/]+)$`)
-
 const imagesDir = "images"
 
 func Markdown(pageName string, src []byte, filesDir string) (File, error) {
@@ -28,19 +25,19 @@ func Markdown(pageName string, src []byte, filesDir string) (File, error) {
 	var names []string
 	images := map[string][]byte{}
 	md, err := render.Markdown(src, func(src string) string {
-		m := pageImage.FindStringSubmatch(src)
-		if len(m) < 2 || !attach.ValidName(m[1]) {
+		name, ok := page.ImageName(filesDir, src)
+		if !ok {
 			return src
 		}
-		if _, ok := images[m[1]]; !ok {
-			data, err := os.ReadFile(filepath.Join(filesDir, m[1]))
+		if _, ok := images[name]; !ok {
+			data, err := os.ReadFile(filepath.Join(filesDir, name))
 			if err != nil {
 				return src
 			}
-			images[m[1]] = data
-			names = append(names, m[1])
+			images[name] = data
+			names = append(names, name)
 		}
-		return imagesDir + "/" + m[1]
+		return imagesDir + "/" + name
 	})
 	if err != nil {
 		return File{}, err

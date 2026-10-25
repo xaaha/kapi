@@ -55,12 +55,12 @@ func unzip(t *testing.T, data []byte) map[string][]byte {
 }
 
 func TestD23MarkdownWithoutImagesIsAPlainFile(t *testing.T) {
-	src := `<h1 data-kapi-id="aaaaaaaa">Plan</h1><p data-kapi-id="bbbbbbbb">See <img src="https://example.com/x.png" alt="x"> and <img src="./plan.files/` + missing + `" alt="gone"> and <img src="./plan.files/secret.png" alt="s"></p>`
+	src := `<h1 data-kapi-id="aaaaaaaa">Plan</h1><p data-kapi-id="bbbbbbbb">See <img src="https://example.com/x.png" alt="x"> and <img src="./plan.files/` + missing + `" alt="gone"> and <img src="./plan.files/secret.png" alt="s"> and <img src="./other.files/` + shown + `" alt="o"></p>`
 	f, err := Markdown("plan.html", []byte(src), filesDir(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# Plan\n\nSee ![x](https://example.com/x.png) and ![gone](./plan.files/" + missing + ") and ![s](./plan.files/secret.png)\n"
+	want := "# Plan\n\nSee ![x](https://example.com/x.png) and ![gone](./plan.files/" + missing + ") and ![s](./plan.files/secret.png) and ![o](./other.files/" + shown + ")\n"
 	if f.Name != "plan.md" || f.Type != "text/markdown; charset=utf-8" || string(f.Data) != want {
 		t.Errorf("got %s %s %q, want plan.md with %q", f.Name, f.Type, f.Data, want)
 	}

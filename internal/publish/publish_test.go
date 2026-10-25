@@ -396,9 +396,12 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 	src := `<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/` + png + `" alt=""></figure>` +
 		`<figure data-kapi-id="bbbbbbbb"><img src="./plan.files/ffffffffffffffffffffffffffffffff.png" alt=""></figure>` +
 		`<p data-kapi-id="cccccccc"><img src="https://example.com/x.png" alt=""></p>`
-	doc, err := Document("plan.html", []byte(src), files)
+	doc, err := Document("plan.html", []byte(src+`<p data-kapi-id="hhhhhhhh"><img src="./other.files/`+png+`" alt=""><img data-src="./plan.files/`+png+`" src="https://example.com/y.png"></p>`), files)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if strings.Count(string(doc), "data:image") != 1 || !strings.Contains(string(doc), `src="./other.files/`+png+`"`) || !strings.Contains(string(doc), `data-src="./plan.files/`+png+`"`) {
+		t.Errorf("an image from another page's folder was embedded:\n%s", doc)
 	}
 	want := `src="data:image/png;base64,` + base64.StdEncoding.EncodeToString([]byte("PNGDATA")) + `"`
 	if !strings.Contains(string(doc), want) {

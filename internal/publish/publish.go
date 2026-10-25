@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -79,8 +80,8 @@ func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title s
 const MaxDocBytes = 10 << 20
 
 var (
-	imgTag    = regexp.MustCompile(`<img\b[^>]*>`)
-	pageImage = regexp.MustCompile(`\bsrc="\./[^"/]+\.files/([0-9a-f]{32}\.(png|jpg|gif|webp))"`)
+	imgTag  = regexp.MustCompile(`<img\b[^>]*>`)
+	srcAttr = regexp.MustCompile(`\ssrc="([^"]*)"`)
 )
 
 var imageTypes = map[string]string{"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
@@ -96,9 +97,11 @@ func embedImages(body []byte, filesDir string) ([]byte, []embedded, bool) {
 	total := 0
 	over := false
 	out := imgTag.ReplaceAllFunc(body, func(tag []byte) []byte {
-		return pageImage.ReplaceAllFunc(tag, func(attr []byte) []byte {
-			sub := pageImage.FindSubmatch(attr)
-			name := string(sub[1])
+		return srcAttr.ReplaceAllFunc(tag, func(attr []byte) []byte {
+			name, ok := page.ImageName(filesDir, html.UnescapeString(string(srcAttr.FindSubmatch(attr)[1])))
+			if !ok {
+				return attr
+			}
 			url, seen := urls[name]
 			if !seen {
 				path := filepath.Join(filesDir, name)
@@ -107,7 +110,7 @@ func embedImages(body []byte, filesDir string) ([]byte, []embedded, bool) {
 					total += base64.StdEncoding.EncodedLen(int(info.Size()))
 					over = true
 				} else if data, err := os.ReadFile(path); err == nil {
-					url = []byte(`src="data:` + imageTypes[string(sub[2])] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
+					url = []byte(`src="data:` + imageTypes[strings.TrimPrefix(filepath.Ext(name), ".")] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
 					used = append(used, embedded{name, len(data)})
 					total += len(url)
 				}
@@ -116,7 +119,7 @@ func embedImages(body []byte, filesDir string) ([]byte, []embedded, bool) {
 			if url == nil {
 				return attr
 			}
-			return url
+			return append(attr[:1:1], url...)
 		})
 	})
 	return out, used, over
