@@ -162,6 +162,7 @@ body {
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
+:where(#kapi-page) figure:has(> img:only-child) { margin: 0 0 1rem; }
 :where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-yellow-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
 :where(#kapi-page) del { color: var(--kapi-muted); }
 :where(#kapi-page) details {

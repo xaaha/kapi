@@ -3078,17 +3078,18 @@ test("#30 composer images go out on the message when notes are queued, in the or
   await until(async () => (await chips(".kapi-composer")).length === 0);
 });
 
-test("#30 a file dropped outside the note box and message box does not replace the page", async () => {
+test("#30 a file dropped outside the page and the boxes does not replace the page", async () => {
   const prevented = await page.eval(`(() => {
     const dt = new DataTransfer();
     dt.items.add(new File(["x"], "a.png", { type: "image/png" }));
     const over = new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true });
     const drop = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
-    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(over);
-    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(drop);
+    document.querySelector(".kapi-panel-head").dispatchEvent(over);
+    document.querySelector(".kapi-panel-head").dispatchEvent(drop);
     return over.defaultPrevented && drop.defaultPrevented;
   })()`);
   assert.equal(prevented, true);
+  assert.equal(requests("POST", "/images").length, 0);
 });
 
 test("#30 a message that fails to send keeps its images", async () => {
@@ -3131,4 +3132,87 @@ test("#30 Send stays off while notes send, images out in a send count toward the
   await page.key("Enter");
   await until(async () => (await chips(".kapi-composer")).join() === "ready,uploading");
   assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-composer .kapi-chip:nth-child(2) .kapi-chip-remove")`), true);
+});
+
+const figures = () => page.eval(`[...document.querySelectorAll("#kapi-page > figure:has(> img)")].map((f) => (f.previousElementSibling?.dataset.kapiId ?? "") + ">" + f.querySelector("img").getAttribute("src").split("/").pop())`);
+
+test("#30 an image dropped on a block goes in after it, selected, with a Download button", async () => {
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  const name = Object.keys(server.state.pageFiles)[0];
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "image", id: "bbbbbbbb", src: name });
+  await until(async () => (await figures()).join() === `bbbbbbbb>${name}`);
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.matches("figure")`);
+  assert.deepEqual(await barActions(), ["ask", "download", "archive", "delete"]);
+  assert.equal(await page.eval(`document.querySelector("#kapi-page > figure > img").naturalWidth`), 1, "the image loads from the page's files folder");
+  await page.eval(`window.downloaded = null; HTMLAnchorElement.prototype.click = function () { window.downloaded = [this.download, this.getAttribute("href")]; }`);
+  await click('.kapi-bar [data-action="download"]');
+  const [file, href] = await page.eval(`window.downloaded`);
+  assert.equal(file, name);
+  assert.ok(href.endsWith(`/plan.files/${name}`));
+});
+
+test("#30 an image pasted on the page goes after the selected block, or at the end, and Undo takes it out", async () => {
+  await select("cccccccc");
+  await page.eval(`document.activeElement.blur()`);
+  await giveImage("paste", "body");
+  await until(async () => (await figures()).length === 1);
+  assert.equal((await figures())[0].split(">")[0], "cccccccc");
+  await page.eval(`document.querySelector("[data-kapi-selected]")?.removeAttribute("data-kapi-selected")`);
+  await page.key("Escape");
+  await page.key("Escape");
+  await giveImage("paste", "body", { tag: "end" });
+  await until(async () => (await figures()).length === 2);
+  assert.equal(requests("POST", "/ops").at(-1).body.op.id, "");
+  await page.key("z", await modifier());
+  await until(async () => (await figures()).length === 1);
+  await giveImage("paste", ".kapi-composer textarea", { tag: "chat" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  assert.equal(requests("POST", "/images").length, 2, "a paste in the message box attaches to the message, not the page");
+});
+
+test("#30 a page image that is not a supported type, or fails to upload, says so and adds nothing", async () => {
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]', { type: "image/svg+xml" });
+  await until(async () => (await notice()).includes("Only PNG, JPEG, GIF and WebP"));
+  server.state.nextUploadError = "the disk is full";
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await notice()).includes("the disk is full"));
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.deepEqual(await figures(), []);
+});
+
+test("#30 the same image dropped twice selects the new copy, and a page that changed meanwhile still gets the image", async () => {
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await figures()).length === 1);
+  const first = await page.eval(`document.querySelector("#kapi-page > figure:has(> img)").dataset.kapiId`);
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await figures()).length === 2);
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.matches("figure") && document.querySelector("[data-kapi-selected]").dataset.kapiId !== ${JSON.stringify(first)}`);
+  assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]").previousElementSibling.dataset.kapiId`), "bbbbbbbb");
+
+  server.bumpBehindBrowser("dddddddd", '<p data-kapi-id="dddddddd">Changed by the agent.</p>');
+  await giveImage("drop", '[data-kapi-id="cccccccc"]', { tag: "late" });
+  await until(async () => (await figures()).length === 3);
+  const tries = requests("POST", "/ops").slice(-2).map((r) => r.body.op.id);
+  assert.deepEqual(tries, ["cccccccc", "cccccccc"], "the image op is tried again after a stale refusal");
+});
+
+test("#30 a drop of an image and a file that is not one adds the image and says what was skipped", async () => {
+  await page.eval(`(() => {
+    const bytes = Uint8Array.from(atob(${JSON.stringify(PNG)}), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], "a.png", { type: "image/png" }));
+    dt.items.add(new File(["%PDF"], "b.pdf", { type: "application/pdf" }));
+    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  })()`);
+  await until(async () => (await figures()).length === 1);
+  await until(async () => (await notice()).includes("Only PNG, JPEG, GIF and WebP"));
+});
+
+test("#30 an image from another site has no Download tool", async () => {
+  await withPage([{ id: "eeeeeeef", html: '<figure data-kapi-id="eeeeeeef"><img src="data:image/png;base64,' + PNG + '" alt=""></figure>' }], async (own, tab) => {
+    await tab.eval(`document.querySelector('[data-kapi-id="eeeeeeef"]').click()`);
+    await tab.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "archive", "delete"]);
+  });
 });
