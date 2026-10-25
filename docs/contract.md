@@ -317,7 +317,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone); with `?rev=N`, the block as it was at revision `N`, read from the kept revision files, 404 when that revision or the block in it does not exist |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
-| `GET /p/{id}/export/html` | | the page as one self-contained HTML file, the same document `kapi publish` builds with its images embedded as data URLs, but with no size limit; `Content-Disposition: attachment; filename=<page name>` |
+| `GET /p/{id}/export/html` | | the page as one self-contained HTML file, the same document `kapi publish` builds with its images embedded as data URLs, but with no size limit; `Content-Disposition: attachment; filename=<page name>`; 422 naming each image the page shows that is missing from its `.files` folder, and `kapi publish` refuses such a page the same way |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"...","files":["<name>"]}` | `{"seq":N}`; text may be empty when there is an image; 422 for an image that is not stored |
 | `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"files":["<name>"],"text":"..."}],"text":"optional message","files":["<name>"]}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
 | `POST /p/{id}/files` | the image bytes, `Content-Type: image/...` | `{"name":"<32 hex>.png","mime":"image/png","size":N}`; the type is read from the bytes, and only PNG, JPEG, GIF and WebP up to 10 MB are kept; 415 for any other type, SVG included, 413 when too big, 507 when the disk cap is full |
@@ -381,10 +381,11 @@ on the whole page rather than a block. Export HTML downloads
 `GET /p/{id}/export/html` under the page's file name. Export PDF opens the
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
-stylesheet leaves out the panel, the site header, fold arrows and note
-marks, and prints folded sections in full. Copy path copies `data-path`.
+stylesheet leaves out the panel, the site header, fold arrows, note
+marks and the undo note, and prints folded sections in full. Copy path copies `data-path`.
 Escape closes the menu and returns focus to its button; the arrow keys,
-Home and End move between items.
+Home and End move between items, Tab closes it, and no other key reaches
+the page's shortcuts while it has focus.
 
 ### Events stream
 
