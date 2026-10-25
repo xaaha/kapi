@@ -26,7 +26,7 @@ import (
 	"github.com/xaaha/kapi/internal/client"
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
-	"github.com/xaaha/kapi/internal/page"
+	pkgpage "github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
 )
@@ -407,7 +407,7 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
-			dir := page.FilesDir(pg)
+			dir := pkgpage.FilesDir(pg)
 			_, existed := os.Stat(dir)
 			f, err := attach.Save(dir, data)
 			if err != nil {
@@ -438,7 +438,7 @@ func newPublishCmd(out io.Writer) *cli.Command {
 	return &cli.Command{
 		Name:  "publish",
 		Short: "Publish a read-only snapshot of a page to your hub and print its URL",
-		Long: "Render the page's current source into one self-contained HTML document, upload it to your hub\n" +
+		Long: "Render the page's current source into one self-contained HTML document, with its images embedded, upload it to your hub\n" +
 			"as a new revision, and print the page's hub URL. The hub comes from $KAPI_HOME/hub.json\n" +
 			`({"url":"https://...","token_file":"hub-token"}) or KAPI_HUB_URL and KAPI_HUB_TOKEN.` + "\n" +
 			"See hub/README.md to deploy a hub.",
@@ -462,7 +462,7 @@ func newPublishCmd(out io.Writer) *cli.Command {
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			url, err := c.Publish(ctx, publish.PageID(page), uint64(time.Now().UnixMilli()), filepath.Base(page), src)
+			url, err := c.Publish(ctx, publish.PageID(page), uint64(time.Now().UnixMilli()), filepath.Base(page), src, pkgpage.FilesDir(page))
 			if err != nil {
 				return err
 			}

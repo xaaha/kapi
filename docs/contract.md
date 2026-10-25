@@ -428,7 +428,10 @@ with no new command. A note prints its part and quote after the target:
 Each image on a note or message adds `[image <absolute path>]` after the
 text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image>`
 copies an image into the page's files folder and adds it with an `image` op
-logged under the reader's name. It refuses a page that is not `.html` or
+logged under the reader's name. `kapi publish` embeds each page image from the page's files
+folder into the published document as a `data:` URL, since the hub serves one
+self-contained file, and refuses a page that would pass the hub's 10 MB limit,
+naming its largest images. It refuses a page that is not `.html` or
 `.htm` or does not exist, and removes the copied image when the op fails. The
 browser's Undo cannot take back an agent's op, and, as with a file edit, it
 cannot undo a browser op made before one. Reader names cannot be empty, and
