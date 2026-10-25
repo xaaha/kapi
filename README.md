@@ -71,15 +71,17 @@ agent names it with `--seen` or `kapi seen`, runs `kapi pending`, or a kapi
 hook puts it in the agent's context. `kapi watch <page>`
 still streams one line per event for harnesses that deliver every line.
 
-The three-dot menu at the top of the chat panel exports the page as one HTML
+The three-dot menu at the top of the chat panel has Export, Copy path and End
+session. Export opens a submenu that saves the page as one HTML
 file with its images inside, as Markdown (a zip with an images folder when the
-page has images), or as a PDF through the browser's print dialog, and copies the
-page's path.
+page has images), or as a PDF through the browser's print dialog. Copy path copies the page's
+path.
 
 When you are done with a page, End session in that menu tells the agent to
 stop: `kapi watch` exits, `kapi wait` wakes with the end, the Stop hook no
 longer holds the agent, and `kapi` lists the page as `(ended)`. The page and
-its history stay, and your next message starts the session again.
+its history stay, and your next message starts the session again, marked in
+the chat with a "Session started again" line.
 
 ## Agent harnesses
 

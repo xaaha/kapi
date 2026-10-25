@@ -3220,8 +3220,20 @@ test("#30 an image from another site has no Download tool", async () => {
 const menuOpen = () => page.eval(`!document.querySelector(".kapi-menu").hidden`);
 const expanded = () => page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`);
 const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? document.activeElement.querySelector(".kapi-menu-label").textContent : document.activeElement.className`);
+const topLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].filter((b) => !b.closest(".kapi-submenu")).map((b) => b.querySelector(".kapi-menu-label").textContent)`);
+const submenuOpen = () => page.eval(`!document.querySelector(".kapi-submenu").hidden`);
+const exportExpanded = () => page.eval(`document.querySelector(".kapi-menu [data-menu=export]").getAttribute("aria-expanded")`);
 const menuButtonFocused = () => page.eval(`document.activeElement === document.querySelector(".kapi-menu-button")`);
 const menuItem = (label) => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].find((b) => b.textContent.startsWith(${JSON.stringify(label)})).click()`);
+const exportAs = async (label) => {
+  await click(".kapi-menu [data-menu=export]");
+  await until(submenuOpen);
+  await page.eval(`[...document.querySelectorAll(".kapi-submenu [role=menuitem]")].find((b) => b.textContent === ${JSON.stringify(label)}).click()`);
+};
+const mouseMove = async (selector) => {
+  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+};
 const pressKey = async (key) => {
   await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key });
   await page.call("Input.dispatchKeyEvent", { type: "keyUp", key, code: key });
@@ -3237,10 +3249,10 @@ test("#23 the three-dot menu opens on its button, steps with the arrow keys, and
   await page.key("Enter");
   await until(menuOpen);
   assert.equal(await expanded(), "true");
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`),
-    ["Export HTML", "Export Markdown", "Export PDF", "Copy path", "End session"]);
-  assert.equal(await focusedItem(), "Export HTML");
-  for (const [key, want] of [["ArrowDown", "Export Markdown"], ["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export HTML"], ["ArrowUp", "End session"], ["Home", "Export HTML"], ["End", "End session"]]) {
+  assert.deepEqual(await topLabels(), ["Export", "Copy path", "End session"]);
+  assert.equal(await submenuOpen(), false);
+  assert.equal(await focusedItem(), "Export");
+  for (const [key, want] of [["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export"], ["ArrowUp", "End session"], ["Home", "Export"], ["End", "End session"]]) {
     await pressKey(key);
     assert.equal(await focusedItem(), want, `after ${key}`);
   }
@@ -3272,9 +3284,13 @@ test("#23 keys pressed in the open menu do not reach the page's block shortcuts"
   await page.waitFor(`!!document.querySelector("[data-kapi-selected]")`);
   await click(".kapi-menu-button");
   await until(menuOpen);
-  for (const key of ["Delete", "Backspace", "e", "a", "j", "k"]) await page.key(key);
-  await page.key("z", { meta: true });
-  await page.key("z", { ctrl: true });
+  for (const inSubmenu of [false, true]) {
+    if (inSubmenu) await pressKey("ArrowRight");
+    for (const key of ["Delete", "Backspace", "e", "a", "j", "k"]) await page.key(key);
+    await page.key("z", { meta: true });
+    await page.key("z", { ctrl: true });
+  }
+  assert.equal(await submenuOpen(), true);
   await new Promise((r) => setTimeout(r, 200));
   assert.deepEqual(requests("POST", "/ops").map((r) => r.body.op.kind), []);
   assert.equal(await page.eval(`!!document.querySelector(".kapi-ask")?.checkVisibility()`), false);
@@ -3282,10 +3298,81 @@ test("#23 keys pressed in the open menu do not reach the page's block shortcuts"
   assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId`), "bbbbbbbb");
 });
 
+test("#23 Export opens a submenu of HTML, Markdown and PDF by keys, and ArrowLeft or Escape goes back to Export", async () => {
+  const exportItem = ".kapi-menu [data-menu=export]";
+  assert.deepEqual(await page.eval(`[document.querySelector(${JSON.stringify(exportItem)}).getAttribute("aria-haspopup"), document.querySelector(".kapi-submenu").getAttribute("role")]`), ["menu", "menu"]);
+  assert.equal(await exportExpanded(), "false");
+  await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
+  await page.key("Enter");
+  await until(menuOpen);
+  assert.equal(await focusedItem(), "Export");
+  await pressKey("ArrowRight");
+  assert.equal(await submenuOpen(), true);
+  assert.equal(await exportExpanded(), "true");
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-submenu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`), ["HTML", "Markdown", "PDF"]);
+  assert.equal(await focusedItem(), "HTML");
+  for (const [key, want] of [["ArrowDown", "Markdown"], ["ArrowDown", "PDF"], ["ArrowDown", "HTML"], ["ArrowUp", "PDF"], ["Home", "HTML"], ["End", "PDF"]]) {
+    await pressKey(key);
+    assert.equal(await focusedItem(), want, `after ${key}`);
+  }
+  await pressKey("ArrowLeft");
+  assert.equal(await submenuOpen(), false);
+  assert.equal(await exportExpanded(), "false");
+  assert.equal(await focusedItem(), "Export");
+  assert.equal(await menuOpen(), true);
+
+  await page.key("Enter");
+  assert.equal(await submenuOpen(), true);
+  assert.equal(await focusedItem(), "HTML");
+  await page.key("Escape");
+  assert.equal(await submenuOpen(), false);
+  assert.equal(await focusedItem(), "Export");
+  assert.equal(await menuOpen(), true);
+
+  await pressKey(" ");
+  assert.equal(await submenuOpen(), true);
+  assert.equal(await focusedItem(), "HTML");
+  await page.key("Escape");
+  await page.key("Escape");
+  assert.equal(await menuOpen(), false);
+  assert.equal(await menuButtonFocused(), true);
+
+  await page.key("Enter");
+  await until(menuOpen);
+  assert.equal(await submenuOpen(), false);
+  await pressKey("ArrowRight");
+  await page.key("Tab");
+  assert.equal(await menuOpen(), false);
+  assert.equal(await submenuOpen(), false);
+});
+
+test("#23 on a desktop the Export submenu opens on hover, stays open on the way into it, and stays inside the screen", async () => {
+  await mouseOn(".kapi-menu-button");
+  await until(menuOpen);
+  await mouseMove(".kapi-menu [data-menu=export]");
+  await until(submenuOpen);
+  assert.equal(await exportExpanded(), "true");
+  const box = await page.eval(`(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(document.querySelector(".kapi-submenu").getBoundingClientRect())`);
+  const menuBox = await page.eval(`(r => ({ left: r.left, right: r.right }))(document.querySelector(".kapi-menu").getBoundingClientRect())`);
+  assert.ok(box.left >= 0 && box.right <= 1280 && box.top >= 0 && box.bottom <= 800, JSON.stringify(box));
+  assert.ok(box.right <= menuBox.left + 8, JSON.stringify({ box, menuBox }));
+  const from = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))(document.querySelector(".kapi-menu [data-menu=export]").getBoundingClientRect())`);
+  await mouseClickAt(from.x, from.y);
+  assert.equal(await submenuOpen(), true);
+  const to = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))([...document.querySelectorAll(".kapi-submenu [role=menuitem]")][1].getBoundingClientRect())`);
+  for (let i = 1; i <= 20; i++) {
+    await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x + ((to.x - from.x) * i) / 20, y: from.y + ((to.y - from.y) * i) / 20 });
+    assert.equal(await submenuOpen(), true, `step ${i}`);
+  }
+  await mouseMove(".kapi-menu [data-menu=copy]");
+  await until(async () => !(await submenuOpen()));
+  assert.equal(await exportExpanded(), "false");
+});
+
 test("#23 Export HTML downloads the server's export under the page's file name, and says why when it fails", async () => {
   await page.eval(`window.downloads = []; HTMLAnchorElement.prototype.click = function () { const name = this.download; fetch(this.href).then((r) => r.text()).then((text) => downloads.push({ name, text })); }`);
   await click(".kapi-menu-button");
-  await menuItem("Export HTML");
+  await exportAs("HTML");
   await until(() => page.eval(`downloads.length === 1`));
   const [got] = await page.eval(`downloads`);
   assert.equal(got.name, "plan.html");
@@ -3295,18 +3382,18 @@ test("#23 Export HTML downloads the server's export under the page's file name, 
 
   server.state.nextExportError = "the page shows images that are missing from plan.files: 0123.png";
   await click(".kapi-menu-button");
-  await menuItem("Export HTML");
+  await exportAs("HTML");
   await until(async () => (await notice()) === "Could not export the page: the page shows images that are missing from plan.files: 0123.png");
 
   server.state.dropExport = true;
   await click(".kapi-menu-button");
-  await menuItem("Export HTML");
+  await exportAs("HTML");
   await until(async () => /Could not reach kapi/.test(await notice()));
   server.state.dropExport = false;
 
   server.state.restarted = "kapi open plan.html";
   await click(".kapi-menu-button");
-  await menuItem("Export HTML");
+  await exportAs("HTML");
   await until(() => page.eval(`!document.querySelector(".kapi-restart").hidden`));
   assert.equal(await page.eval(`downloads.length`), 1);
 });
@@ -3314,7 +3401,7 @@ test("#23 Export HTML downloads the server's export under the page's file name, 
 test("#23 Export Markdown downloads plan.md, or plan.zip when the page has images, gives focus back, and says why when it fails", async () => {
   await page.eval(`window.downloads = []; HTMLAnchorElement.prototype.click = function () { const name = this.download; fetch(this.href).then((r) => r.text()).then((text) => downloads.push({ name, text })); }`);
   await click(".kapi-menu-button");
-  await menuItem("Export Markdown");
+  await exportAs("Markdown");
   await until(() => page.eval(`downloads.length === 1`));
   assert.deepEqual(await page.eval(`downloads[0]`), { name: "plan.md", text: "# Plan\n" });
   assert.equal(requests("GET", "/export/markdown").length, 1);
@@ -3323,25 +3410,25 @@ test("#23 Export Markdown downloads plan.md, or plan.zip when the page has image
 
   server.state.markdownZip = true;
   await click(".kapi-menu-button");
-  await menuItem("Export Markdown");
+  await exportAs("Markdown");
   await until(() => page.eval(`downloads.length === 2`));
   assert.deepEqual(await page.eval(`downloads[1]`), { name: "plan.zip", text: "PK zip of plan.md and images/" });
   server.state.markdownZip = false;
 
   server.state.nextExportError = "render page: boom";
   await click(".kapi-menu-button");
-  await menuItem("Export Markdown");
+  await exportAs("Markdown");
   await until(async () => (await notice()) === "Could not export the page: render page: boom");
 
   server.state.dropExport = true;
   await click(".kapi-menu-button");
-  await menuItem("Export Markdown");
+  await exportAs("Markdown");
   await until(async () => /Could not reach kapi/.test(await notice()));
   server.state.dropExport = false;
 
   server.state.restarted = "kapi open plan.html";
   await click(".kapi-menu-button");
-  await menuItem("Export Markdown");
+  await exportAs("Markdown");
   await until(() => page.eval(`!document.querySelector(".kapi-restart").hidden`));
   assert.equal(await page.eval(`downloads.length`), 2);
 });
@@ -3350,7 +3437,7 @@ test("#23 Export PDF calls the browser's print and gives focus back to the menu 
   await page.eval(`window.printCalls = 0; window.print = () => { printCalls++; }`);
   await click(".kapi-menu-button");
   await until(menuOpen);
-  await menuItem("Export PDF");
+  await exportAs("PDF");
   assert.equal(await page.eval(`printCalls`), 1);
   assert.equal(await menuOpen(), false);
   assert.equal(await menuButtonFocused(), true);
@@ -3431,15 +3518,75 @@ test("#23 on a phone the menu opens under the top bar inside the screen and leav
     const head = await p.eval(`Math.max(...[".kapi-panel-head", ".kapi-site-head"].map((s) => document.querySelector(s).getBoundingClientRect().bottom))`);
     assert.ok(box.left >= 0 && box.right <= 390 && box.top >= head && box.bottom < 844 / 2, JSON.stringify({ ...box, head }));
     assert.equal(await p.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
-    assert.equal(await p.eval(`document.elementFromPoint(${(box.left + box.right) / 2}, ${box.top + 20}).closest("[role=menuitem]")?.querySelector(".kapi-menu-label").textContent`), "Export HTML");
+    assert.equal(await p.eval(`document.elementFromPoint(${(box.left + box.right) / 2}, ${box.top + 20}).closest("[role=menuitem]")?.querySelector(".kapi-menu-label").textContent`), "Export");
     assert.deepEqual(p.errors, []);
   } finally {
     await p.close();
   }
 });
 
+test("#23 on a phone a tap on Export opens HTML, Markdown and PDF under it inside the screen, and a second tap closes them", async () => {
+  const p = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await p.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await p.call("Emulation.setTouchEmulationEnabled", { enabled: true });
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+    const rect = (sel) => p.eval(`(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }))(document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect())`);
+    const tap = async (sel) => {
+      const r = await rect(sel);
+      const point = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+      await p.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+      await p.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    };
+    await tap(".kapi-menu [data-menu=export]");
+    await p.waitFor(`!document.querySelector(".kapi-submenu").hidden`);
+    assert.equal(await p.eval(`document.querySelector(".kapi-menu [data-menu=export]").getAttribute("aria-expanded")`), "true");
+    const [sub, item, menu, next] = [await rect(".kapi-submenu"), await rect(".kapi-menu [data-menu=export]"), await rect(".kapi-menu"), await rect(".kapi-menu [data-menu=copy]")];
+    assert.ok(sub.left >= menu.left && sub.right <= menu.right && sub.right <= 390 && sub.top >= item.bottom - 1 && next.top >= sub.bottom - 1 && menu.bottom <= 800, JSON.stringify({ sub, item, menu, next }));
+    await tap(".kapi-menu [data-menu=export]");
+    await p.waitFor(`document.querySelector(".kapi-submenu").hidden`);
+    assert.equal(await p.eval(`!document.querySelector(".kapi-menu").hidden`), true);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("#26 End session in the menu is red like the block Delete action, in light and dark", async () => {
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await click(".kapi-menu-button");
+  await until(menuOpen);
+  for (const theme of ["light", "dark"]) {
+    await page.eval(`document.documentElement.dataset.theme = "${theme}"`);
+    const [del, end, copy] = await page.eval(`[document.querySelector('.kapi-bar [data-action="delete"]'), document.querySelector(".kapi-menu [data-menu=end]"), document.querySelector(".kapi-menu [data-menu=copy]")].map((b) => getComputedStyle(b).color)`);
+    assert.equal(end, del, theme);
+    assert.notEqual(end, copy, theme);
+  }
+});
+
+test("#26 a human message, note or answer after an end shows Session started again before it, also after a reload", async () => {
+  const lines = () => page.eval(`[...document.querySelectorAll(".kapi-log > li")].map((li) => li.classList.contains("kapi-msg") ? li.querySelector(".kapi-msg-text").textContent : li.className + ": " + li.textContent.replace(/ \u00b7 .*/, ""))`);
+  const want = ["first", "kapi-end: You ended the session", "bye", "kapi-again: Session started again", "and another", "kapi-end: You ended the session", "kapi-again: Session started again", "Sent form answer: yes", "kapi-end: You ended the session", "kapi-again: Session started again", "on it"];
+  server.push({ author: "human", kind: "message", text: "first" });
+  server.push({ author: "human", kind: "end" });
+  server.push({ author: "agent", kind: "message", text: "bye" });
+  server.push({ author: "human", kind: "message", text: "and another" });
+  server.push({ author: "human", kind: "end" });
+  server.push({ author: "human", kind: "answer", text: "yes" });
+  server.push({ author: "human", kind: "end" });
+  server.push({ ...sessionNote, text: "on it" });
+  await until(async () => (await lines()).length === want.length);
+  assert.deepEqual(await lines(), want);
+  assert.match(await page.eval(`document.querySelector(".kapi-again").textContent`), /^Session started again \u00b7 \d/);
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && document.querySelectorAll(".kapi-log > li").length === ${want.length}`);
+  assert.deepEqual(await lines(), want);
+});
+
 test("#26 End session in the menu posts an end, and the item is gone while the session is ended", async () => {
-  const labels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].map((b) => b.querySelector(".kapi-menu-label").textContent)`);
+  const labels = topLabels;
   await mouseOn(".kapi-menu-button");
   await until(menuOpen);
   await mouseOn(".kapi-menu [data-menu=end]");
@@ -3451,7 +3598,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
   await page.key("Enter");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export HTML", "Export Markdown", "Export PDF", "Copy path"]);
+  assert.deepEqual(await labels(), ["Export", "Copy path"]);
   await pressKey("End");
   assert.equal(await focusedItem(), "Copy path");
   await page.key("Escape");
@@ -3460,7 +3607,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.waitFor(`document.querySelector(".kapi-status").textContent !== "Session ended. Send a message to start again."`);
   await mouseOn(".kapi-menu-button");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export HTML", "Export Markdown", "Export PDF", "Copy path", "End session"]);
+  assert.deepEqual(await labels(), ["Export", "Copy path", "End session"]);
   await page.key("Escape");
 });
 

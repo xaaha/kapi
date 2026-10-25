@@ -379,17 +379,22 @@ marks where each one is. On a phone a strip above the message box counts
 the notes and opens the list as a sheet.
 
 The three-dot button in the panel header opens the page menu, for actions
-on the whole page rather than a block. Export HTML downloads
-`GET /p/{id}/export/html` under the page's file name. Export Markdown downloads
+on the whole page rather than a block. Its items are Export, Copy path and
+End session. Export opens a submenu of HTML, Markdown and PDF: on hover, on
+ArrowRight, Enter or Space, or on a tap, where on a phone it expands under
+the item. ArrowLeft or Escape closes the submenu and goes back to Export.
+HTML downloads
+`GET /p/{id}/export/html` under the page's file name. Markdown downloads
 `GET /p/{id}/export/markdown` as `<page>.md`, or `<page>.zip` when the server
 answers with a zip. Both say the server's error in the notice when the export
-fails. Export PDF opens the
+fails. PDF opens the
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
 stylesheet leaves out the panel, the site header, fold arrows, note
 marks and the undo note, and prints folded sections in full. Copy path copies `data-path`. End session
 posts `POST /p/{id}/end` with no confirm step, since the next message starts
-the session again; the item is hidden while the session is ended.
+the session again; the item is red like the block Delete action and hidden
+while the session is ended.
 Escape closes the menu and returns focus to its button; the arrow keys,
 Home and End move between items, Tab closes it, and no other key reaches
 the page's shortcuts while it has focus.
@@ -418,7 +423,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it, `rev` the page revision it was written on; with `re`, a reply to those notes | append to the chat panel with its quote, and pin it on the page |
 | `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
-| `end` | the human ended the session; it stays ended until the next human `message`, `note` or `answer` | add an "ended" line to the chat and show "Session ended. Send a message to start again." as the status until then |
+| `end` | the human ended the session; it stays ended until the next human `message`, `note` or `answer` | add an "ended" line to the chat and show "Session ended. Send a message to start again." as the status until then; the human event that lifts it gets a "Session started again" line before it |
 | `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 

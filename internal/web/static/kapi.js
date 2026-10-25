@@ -67,6 +67,7 @@
     light: "M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
+    caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
     dark: "M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z",
@@ -148,17 +149,23 @@
   const pagePath = main.dataset.path || "";
   const pageName = pagePath.split(/[\\/]/).pop() || document.title;
   const menuButton = h("button", { type: "button", class: "kapi-menu-button", "aria-label": "Page menu", title: "Page menu", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("dots"));
+  const EXPORTS = [
+    { glyph: "download", label: "HTML", run: () => exportFile("html", () => pageName) },
+    { glyph: "download", label: "Markdown", run: () => exportFile("markdown", (type) => pageName.replace(/\.html?$/i, "") + (type === "application/zip" ? ".zip" : ".md")) },
+    { glyph: "printer", label: "PDF", run: () => print() },
+  ];
   const MENU = [
-    { glyph: "download", label: "Export HTML", run: () => exportFile("html", () => pageName) },
-    { glyph: "download", label: "Export Markdown", run: () => exportFile("markdown", (type) => pageName.replace(/\.html?$/i, "") + (type === "application/zip" ? ".zip" : ".md")) },
-    { glyph: "printer", label: "Export PDF", run: () => print() },
-    { glyph: "copy", label: "Copy path", detail: pagePath, run: copyPath },
+    { glyph: "copy", id: "copy", label: "Copy path", detail: pagePath, run: copyPath },
     { id: "end", glyph: "stop", label: "End session", run: endSession },
   ];
-  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
-    ...MENU.map(({ id, glyph, label, detail, run }) =>
-      h("button", { type: "button", role: "menuitem", tabindex: "-1", ...(id && { "data-menu": id }), onclick: () => (closeMenu(true), run()) },
-        icon(glyph), h("span", { class: "kapi-menu-label", text: label }), ...(detail ? [h("code", { class: "kapi-menu-detail", title: detail, text: `\u200e${detail}` })] : []))));
+  const menuEntry = ({ id, glyph, label, detail, run }) =>
+    h("button", { type: "button", role: "menuitem", tabindex: "-1", ...(id && { "data-menu": id }), onclick: () => (closeMenu(true), run()) },
+      icon(glyph), h("span", { class: "kapi-menu-label", text: label }), ...(detail ? [h("code", { class: "kapi-menu-detail", title: detail, text: `\u200e${detail}` })] : []));
+  const exportButton = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": "export", "aria-haspopup": "menu", "aria-expanded": "false" },
+    icon("download"), h("span", { class: "kapi-menu-label", text: "Export" }), h("span", { class: "kapi-menu-caret" }, icon("caret")));
+  const submenu = h("div", { class: "kapi-submenu", role: "menu", "aria-label": "Export", hidden: "" }, ...EXPORTS.map(menuEntry));
+  const exportGroup = h("div", { class: "kapi-menu-group", role: "none" }, exportButton, submenu);
+  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" }, exportGroup, ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle(), menuButton, menu), tabs,
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), notesView,
@@ -445,30 +452,71 @@
     return true;
   }
 
-  const menuItems = () => [...menu.querySelectorAll('[role="menuitem"]:not([hidden])')];
+  const menuItems = (within) => [...within.querySelectorAll(':scope > [role="menuitem"]:not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
+  let hoverOpened = false;
+  let submenuTimer;
+
+  function openSubmenu(focusFirst) {
+    submenu.hidden = false;
+    exportButton.setAttribute("aria-expanded", "true");
+    if (focusFirst) menuItems(submenu)[0].focus();
+  }
+
+  function closeSubmenu(refocus) {
+    hoverOpened = false;
+    clearTimeout(submenuTimer);
+    if (submenu.hidden) return;
+    submenu.hidden = true;
+    exportButton.setAttribute("aria-expanded", "false");
+    if (refocus) exportButton.focus();
+  }
 
   function openMenu() {
     menu.hidden = false;
     menuButton.setAttribute("aria-expanded", "true");
-    menuItems()[0].focus();
+    menuItems(menu)[0].focus();
   }
 
   function closeMenu(refocus) {
     if (menu.hidden) return;
+    closeSubmenu(false);
     menu.hidden = true;
     menuButton.setAttribute("aria-expanded", "false");
     if (refocus) menuButton.focus();
   }
 
   menuButton.addEventListener("click", () => (menu.hidden ? openMenu() : closeMenu(true)));
+  exportButton.addEventListener("click", () => {
+    if (hoverOpened) hoverOpened = false;
+    else if (submenu.hidden) openSubmenu(false);
+    else closeSubmenu(true);
+  });
+  exportGroup.addEventListener("pointerenter", (e) => {
+    if (e.pointerType !== "mouse") return;
+    clearTimeout(submenuTimer);
+    if (!submenu.hidden) return;
+    openSubmenu(false);
+    hoverOpened = true;
+  });
+  exportGroup.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "mouse") submenuTimer = setTimeout(() => closeSubmenu(submenu.contains(document.activeElement)), 300);
+  });
   menu.addEventListener("keydown", (e) => {
     if (e.key !== "Tab") e.stopPropagation();
-    const items = menuItems();
+    const inSubmenu = submenu.contains(e.target);
+    const items = menuItems(inSubmenu ? submenu : menu);
     const at = items.indexOf(document.activeElement);
     const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
     if (to !== undefined) {
       e.preventDefault();
+      if (!inSubmenu) closeSubmenu(false);
       items[(to + items.length) % items.length].focus();
+    } else if (e.target === exportButton && ["ArrowRight", "Enter", " "].includes(e.key)) {
+      e.preventDefault();
+      openSubmenu(true);
+    } else if (inSubmenu && (e.key === "ArrowLeft" || e.key === "Escape")) {
+      e.preventDefault();
+      closeSubmenu(true);
     } else if (e.key === "Escape") {
       e.preventDefault();
       closeMenu(true);
@@ -1917,6 +1965,11 @@
     held.forEach(onRevision);
   }
 
+  function clock(time) {
+    const t = time && new Date(time);
+    return t && !isNaN(t) ? ` \u00b7 ${t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  }
+
   function onEvent(ev) {
     if (ev.kind === "read" || ev.kind === "queued") {
       if (typeof ev.seq !== "number") return;
@@ -1932,6 +1985,7 @@
       lastSeq = ev.seq;
     }
     trackNote(ev);
+    if (ended && ev.author === "human" && ["message", "answer", "note"].includes(ev.kind)) log.append(h("li", { class: "kapi-again", "data-seq": ev.seq, text: `Session started again${clock(ev.time)}` }));
     if (ev.kind === "message") addEntry(ev, h("div", {}, h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
     else if (ev.kind === "note") {
@@ -1940,8 +1994,7 @@
     }
     if (ev.kind === "end") {
       setEnded(true);
-      const t = ev.time && new Date(ev.time);
-      log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `You ended the session${t && !isNaN(t) ? ` \u00b7 ${t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}` }));
+      log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `You ended the session${clock(ev.time)}` }));
       empty.hidden = true;
       setStatus(agentState());
     } else if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {

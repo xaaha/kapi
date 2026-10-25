@@ -507,7 +507,7 @@ func (m *mdWriter) badge(n *html.Node) string {
 	switch label := stateLabel(n); {
 	case label == "":
 		return codeSpan(text)
-	case text == "":
+	case text == "" || strings.EqualFold(strings.TrimSpace(text), label):
 		return codeSpan(label)
 	default:
 		return codeSpan(label + ": " + text)
