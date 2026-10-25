@@ -342,10 +342,8 @@ Sent notes stay on the page. The browser works out each note's state from
 the event log it replays, so nothing new is stored: waiting after the note
 or a human reply to it, answered after a message whose `re` names it or one
 of its replies,
-changed after a `revision` not by `human` whose `target` lists one of its
-blocks or a block around one, or that has no `target` while the note's text
-differs from what the tab last saw (or, on a fresh load, from the note's
-`rev`), and resolved after a `resolve` that names it, which is final. The
+changed after a `revision` not by `human` whose `changed` (or, on older
+events, `target`) lists one of its blocks or a block around one, and resolved after a `resolve` that names it, which is final. The
 latest of the first three wins. Each note shows a numbered pin after its
 quote, found again with `prefix` and `suffix`, or on its block when the
 quote is gone, and its quote is underlined in the state's colour through
@@ -383,7 +381,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it, `rev` the page revision it was written on; with `re`, a reply to those notes | append to the chat panel with its quote, and pin it on the page |
 | `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
-| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
+| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
 Read receipts are not in the event log. Each reader has two positions:

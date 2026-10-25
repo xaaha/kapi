@@ -322,12 +322,12 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       for (const res of state.streams) res.destroy();
       state.streams.clear();
     },
-    agentEdit(id, html, { author = "agent", target = id } = {}) {
+    agentEdit(id, html, { author = "agent", target = id, changed } = {}) {
       snapshot();
       state.blocks.find((x) => x.id === id).html = html;
       state.rev++;
       snapshot();
-      return push({ author, kind: "revision", rev: state.rev, target, text: "edited" });
+      return push({ author, kind: "revision", rev: state.rev, target, ...(changed && { changed }), text: "edited" });
     },
     agentDelete(id) {
       snapshot();

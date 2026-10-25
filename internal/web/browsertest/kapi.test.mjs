@@ -2815,16 +2815,16 @@ async function withPage(blocks, fn) {
   }
 }
 
-test("#39 a file edit with no target marks only the notes whose text changed", async () => {
+test("#39 a file edit that adds or removes blocks still marks the notes on the blocks it changed", async () => {
   server.push(sessionNote);
   server.push({ author: "human", kind: "note", target: "dddddddd", quote: "before starting", rev: 1, text: "keep?" });
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
-  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in one step.</p>', { author: "file", target: "" });
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in one step.</p>', { author: "file", target: "", changed: "bbbbbbbb" });
   await until(async () => (await pinStates()) === "1:changed 2:waiting");
   await until(async () => (await highlighted("kapi-changed")).join() === "one step.");
   await hoverPin(1);
   assert.match(await page.eval(`document.querySelector(".kapi-note-pop").innerText`), /Edited in the file/);
-  server.agentEdit("dddddddd", '<p data-kapi-id="dddddddd">See <a href="#bbbbbbbb">the summary</a> before starting, twice.</p>', { author: "file", target: "" });
+  server.agentEdit("dddddddd", '<p data-kapi-id="dddddddd">See <a href="#bbbbbbbb">the summary</a> before starting, twice.</p>', { author: "file", target: "", changed: "dddddddd" });
   await until(async () => (await pinStates()) === "1:changed 2:changed");
 });
 
@@ -2888,4 +2888,17 @@ test("#39 a note whose block was deleted stays in the list and says the block is
   await click('.kapi-note-item[data-note="1"]');
   await page.waitFor(`!!document.querySelector(".kapi-note-pop")`);
   assert.match(await page.eval(`document.querySelector(".kapi-note-pop").innerText`), /no longer on the page/);
+});
+
+test("#39 a file edit while you edit another block still marks the note it changed", async () => {
+  server.push({ author: "human", kind: "note", target: "dddddddd", quote: "before starting", rev: 1, text: "keep?" });
+  await until(async () => (await pinStates()) === "1:waiting");
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  server.agentEdit("dddddddd", '<p data-kapi-id="dddddddd">See <a href="#bbbbbbbb">the summary</a> first.</p>', { author: "file", target: "", changed: "dddddddd" });
+  await until(async () => (await pinStates()) === "1:changed");
+  await page.key("Escape");
+  await until(async () => (await highlighted("kapi-changed")).join() === "first.");
+  assert.equal(await pinStates(), "1:changed");
 });

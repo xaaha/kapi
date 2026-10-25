@@ -15,18 +15,19 @@ import (
 )
 
 type Event struct {
-	Seq    uint64    `json:"seq"`
-	Time   time.Time `json:"time"`
-	Author string    `json:"author"`
-	Kind   string    `json:"kind"`
-	Target string    `json:"target,omitempty"`
-	Part   string    `json:"part,omitempty"`
-	Quote  string    `json:"quote,omitempty"`
-	Prefix string    `json:"prefix,omitempty"`
-	Suffix string    `json:"suffix,omitempty"`
-	Rev    uint64    `json:"rev,omitempty"`
-	Re     []uint64  `json:"re,omitempty"`
-	Text   string    `json:"text"`
+	Seq     uint64    `json:"seq"`
+	Time    time.Time `json:"time"`
+	Author  string    `json:"author"`
+	Kind    string    `json:"kind"`
+	Target  string    `json:"target,omitempty"`
+	Part    string    `json:"part,omitempty"`
+	Quote   string    `json:"quote,omitempty"`
+	Prefix  string    `json:"prefix,omitempty"`
+	Suffix  string    `json:"suffix,omitempty"`
+	Rev     uint64    `json:"rev,omitempty"`
+	Re      []uint64  `json:"re,omitempty"`
+	Changed string    `json:"changed,omitempty"`
+	Text    string    `json:"text"`
 }
 
 const (

@@ -1016,7 +1016,7 @@
     const re = Array.isArray(ev.re) ? ev.re : [];
     if (ev.kind === "note" && !re.length && ev.author === "human") {
       const n = { seq: ev.seq, num: notes.length + 1, target: ev.target || "", part: ev.part || "", quote: ev.quote || "", prefix: ev.prefix || "",
-        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", lastSeq: ev.seq, touched: 0, changedTime: "", resolved: false };
+        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false };
       notes.push(n);
       noteBySeq.set(ev.seq, n);
     } else if ((ev.kind === "note" || ev.kind === "message") && re.length) {
@@ -1026,16 +1026,16 @@
         n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time });
         if (ev.kind === "note" && !noteBySeq.has(ev.seq)) noteBySeq.set(ev.seq, n);
         n.last = ev.author === "human" ? "waiting" : "answered";
-        n.lastSeq = ev.seq;
       }
     } else if (ev.kind === "revision" && ev.author !== "human") {
-      const ids = (ev.target || "").split(",").map((s) => s.trim()).filter(Boolean);
-      const mark = { seq: ev.seq, rev: ev.rev || 0, time: ev.time || "", by: ev.author };
+      const ids = (ev.changed || ev.target || "").split(",").map((s) => s.trim()).filter(Boolean);
       const within = (t) => ids.includes(t) || ids.some((id) => !!find(t) && !!find(id)?.contains(find(t)));
       for (const n of notes) {
-        if (n.resolved || n.seq > ev.seq) continue;
-        if (!ids.length) n.recheck = mark;
-        else if (targetsOf(n).some(within)) touch(n, mark);
+        if (n.resolved || n.seq > ev.seq || !targetsOf(n).some(within)) continue;
+        n.touched = ev.seq;
+        n.changedTime = ev.time || "";
+        n.changedBy = ev.author;
+        n.last = "changed";
       }
     } else if (ev.kind === "resolve") {
       for (const seq of re) {
@@ -1044,32 +1044,6 @@
       }
     } else return;
     schedulePaint();
-  }
-
-  function touch(n, mark) {
-    n.touched = mark.seq;
-    n.changedTime = mark.time;
-    n.changedBy = mark.by;
-    if (mark.seq < (n.lastSeq || 0)) return;
-    n.last = "changed";
-    n.lastSeq = mark.seq;
-  }
-
-  function settle(n, text) {
-    const r = n.recheck;
-    if (r && Number(main.dataset.rev) >= r.rev) {
-      let prior = n.seenText;
-      if (prior === undefined && n.rev) {
-        loadBefore(n);
-        const old = targetsOf(n).map((id) => befores.get(`${id}@${n.rev}`));
-        if (!old.some((el) => el === undefined)) prior = textMap(old.filter(Boolean)).text;
-      }
-      if (prior !== undefined) {
-        n.recheck = null;
-        if (prior !== text) touch(n, r);
-      }
-    }
-    if (!n.recheck) n.seenText = text;
   }
 
   function schedulePaint() {
@@ -1242,10 +1216,10 @@
   function locate(n) {
     const blocks = targetsOf(n).map(find);
     const first = blocks.find(Boolean) ?? null;
-    if (!first) return { blocks, first, range: null, gone: true, text: "" };
+    if (!first) return { blocks, first, range: null, gone: true };
     const visible = !first.hasAttribute("data-kapi-hidden") && first.getAttribute("data-kapi-state") !== "archived";
-    const map = textMap(blocks.filter(Boolean));
-    return { blocks, first, range: visible ? findQuote(map, n) : null, gone: false, visible, text: map.text };
+    const range = visible ? findQuote(textMap(blocks.filter(Boolean)), n) : null;
+    return { blocks, first, range, gone: false, visible };
   }
 
   function paintNotes() {
@@ -1255,7 +1229,6 @@
     for (const n of notes) {
       const where = locate(n);
       n.where = where;
-      if (!n.resolved) settle(n, where.text);
       n.change = changeOf(n, where.blocks);
       if (!where.range && where.visible && n.change?.marks.length) where.range = n.change.marks[0];
       n.section = where.first ? sectionOf(where.first) : n.section || "";

@@ -1541,3 +1541,23 @@ func TestTheTopLevelCheckCountsBlocksWithoutIDs(t *testing.T) {
 		t.Error("a page that lost a top-level block without an id passed")
 	}
 }
+
+func TestAFileEditThatAddsABlockStillNamesTheBlocksItChanged(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<ul data-kapi-id=\"bbbbbbbb\"><li data-kapi-id=\"cccccccc\">c</li><li data-kapi-id=\"dddddddd\">d</li></ul>\n<p data-kapi-id=\"eeeeeeee\">e</p>\n"
+	home, path := newPage(t, src)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := "<p data-kapi-id=\"ffffffff\">new</p>\n" + strings.Replace(strings.Replace(src, ">c<", ">c2<", 1), "<p data-kapi-id=\"eeeeeeee\">e</p>\n", "", 1)
+	externalWrite(t, path, next)
+	sum, _, err := s.Refresh()
+	if err != nil || len(sum.IDs) != 0 {
+		t.Fatalf("summary %+v, %v: a new block list still means no target", sum, err)
+	}
+	events, _ := l.After(0)
+	if e := events[len(events)-1]; e.Kind != "revision" || e.Target != "" || e.Changed != "bbbbbbbb,cccccccc,eeeeeeee" {
+		t.Errorf("revision = %+v, want changed bbbbbbbb,cccccccc,eeeeeeee", e)
+	}
+}
