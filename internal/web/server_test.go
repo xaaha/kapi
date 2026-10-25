@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
@@ -37,11 +39,21 @@ type fakePages struct {
 	paths map[string]string
 	logs  map[string]*eventlog.Log
 	pages map[string]*page.Store
+	files *attach.Store
 }
 
 func (f *fakePages) Viewing(string) func() { return func() {} }
 
 func (f *fakePages) Reopened(string) bool { return false }
+
+func (f *fakePages) Attachments() *attach.Store {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.files == nil {
+		f.files = attach.New(filepath.Join(f.home, "pages"))
+	}
+	return f.files
+}
 
 func (f *fakePages) PagePath(id string) (string, error) {
 	f.mu.Lock()
@@ -177,6 +189,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -1028,5 +1041,88 @@ func TestResolveNamesANoteAndBlocksComeBackAtAPastRevision(t *testing.T) {
 		if got := s.get("/p/" + s.id + "/blocks/aaaaaaaa?rev=" + q); got.code != want {
 			t.Errorf("rev=%s: %d, want %d", q, got.code, want)
 		}
+	}
+}
+
+var onePixel, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+func (s *site) upload(body []byte, contentType, origin string) (int, map[string]any) {
+	s.t.Helper()
+	r, err := http.NewRequest("POST", s.srv.URL+"/"+token+"/p/"+s.id+"/files", bytes.NewReader(body))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	r.Header.Set("Origin", origin)
+	r.Header.Set("Content-Type", contentType)
+	resp, err := s.client.Do(r)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+func TestImagesUploadServeAndRideOnNotesAndMessages(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	code, out := s.upload(onePixel, "image/png", s.srv.URL)
+	name, _ := out["name"].(string)
+	if code != http.StatusOK || out["mime"] != "image/png" || !strings.HasSuffix(name, ".png") {
+		t.Fatalf("upload: %d %v", code, out)
+	}
+	got := s.get("/p/" + s.id + "/files/" + name)
+	if got.code != http.StatusOK || got.body != string(onePixel) || got.header.Get("Content-Type") != "image/png" || got.header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("serve: %d %q %v", got.code, got.header.Get("Content-Type"), got.header)
+	}
+	for _, bad := range []struct {
+		body        []byte
+		contentType string
+		origin      string
+		want        int
+	}{
+		{[]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`), "image/svg+xml", s.srv.URL, http.StatusUnsupportedMediaType},
+		{[]byte("hello"), "image/png", s.srv.URL, http.StatusUnsupportedMediaType},
+		{onePixel, "image/png", "http://evil.example", http.StatusForbidden},
+		{onePixel, "text/plain", s.srv.URL, http.StatusForbidden},
+		{bytes.Repeat([]byte{0x89}, attach.MaxBytes+1), "image/png", s.srv.URL, http.StatusRequestEntityTooLarge},
+	} {
+		if code, _ := s.upload(bad.body, bad.contentType, bad.origin); code != bad.want {
+			t.Errorf("upload %s from %s: %d, want %d", bad.contentType, bad.origin, code, bad.want)
+		}
+	}
+	for _, p := range []string{"/files/../page.txt", "/files/page.txt", "/files/00000000000000000000000000000000.png"} {
+		if got := s.get("/p/" + s.id + p); got.code == http.StatusOK {
+			t.Errorf("GET %s served %q", p, got.body)
+		}
+	}
+
+	if code, out := s.post("/notes", `{"notes":[{"target":"aaaaaaaa","files":["`+name+`"],"text":""}],"files":["`+name+`"],"text":""}`); code != http.StatusOK {
+		t.Fatalf("image-only note and message: %d %v", code, out)
+	}
+	if code, out := s.post("/messages", `{"kind":"message","files":["`+name+`"],"text":""}`); code != http.StatusOK {
+		t.Fatalf("image-only message: %d %v", code, out)
+	}
+	path, _ := s.pages.Attachments().Path(s.id, name)
+	for i, e := range s.events() {
+		if len(e.Files) != 1 || e.Files[0] != path {
+			t.Errorf("event %d files = %v, want [%s]", i+1, e.Files, path)
+		}
+	}
+	for _, bad := range []string{
+		`{"notes":[{"target":"aaaaaaaa","files":["ffffffffffffffffffffffffffffffff.png"],"text":"x"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","files":["../../page.txt"],"text":"x"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","files":["` + strings.Repeat(name+`","`, 4) + name + `"],"text":"x"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","text":" "}]}`,
+	} {
+		if code, _ := s.post("/notes", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /notes %s: %d, want 422", bad, code)
+		}
+	}
+	if code, _ := s.post("/messages", `{"kind":"message","files":["ffffffffffffffffffffffffffffffff.png"],"text":"x"}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("message with a missing image: %d, want 422", code)
+	}
+	if n := len(s.events()); n != 3 {
+		t.Errorf("refused sends appended events: %d, want 3", n)
 	}
 }

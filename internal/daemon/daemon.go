@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/web"
@@ -74,7 +75,8 @@ type ReaderStatus struct {
 }
 
 type Server struct {
-	home string
+	home  string
+	files *attach.Store
 
 	Browser      func(url string) error
 	ReopenExcept string
@@ -98,6 +100,7 @@ type Server struct {
 func New(home string) *Server {
 	return &Server{
 		home:     home,
+		files:    attach.New(filepath.Join(home, "pages")),
 		pages:    map[string]*eventlog.Log{},
 		stores:   map[string]*page.Store{},
 		attached: map[string]map[string]time.Time{},
@@ -105,6 +108,23 @@ func New(home string) *Server {
 		viewers:  map[string]int{},
 		presence: map[string]map[string]string{},
 		watchers: map[string]map[string]int{},
+	}
+}
+
+func (s *Server) Attachments() *attach.Store { return s.files }
+
+func (s *Server) sweepFiles(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if err := s.files.Sweep(); err != nil {
+			log.Printf("sweep attachments: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
 }
 
@@ -264,6 +284,7 @@ func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
 	}()
 	pollCtx, stopPoll := context.WithCancel(ctx)
 	go h.Poll(pollCtx, 300*time.Millisecond)
+	go s.sweepFiles(pollCtx, time.Hour)
 	urlFile := HTTPURLPath(s.home)
 	if err := writeAtomic(urlFile, []byte(s.baseURL+"\n")); err != nil {
 		stopPoll()

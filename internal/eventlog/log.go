@@ -27,6 +27,7 @@ type Event struct {
 	Rev     uint64    `json:"rev,omitempty"`
 	Re      []uint64  `json:"re,omitempty"`
 	Changed string    `json:"changed,omitempty"`
+	Files   []string  `json:"files,omitempty"`
 	Text    string    `json:"text"`
 }
 

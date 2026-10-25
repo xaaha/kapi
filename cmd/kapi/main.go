@@ -771,7 +771,11 @@ func eventLine(e *eventlog.Event) string {
 	if e.Quote != "" {
 		target += fmt.Sprintf(" %q", e.Quote)
 	}
-	line := fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, kind, target, e.Text)
+	body := e.Text
+	for _, f := range e.Files {
+		body = strings.TrimPrefix(body+" [image "+f+"]", " ")
+	}
+	line := fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, kind, target, body)
 	if e.Kind == eventlog.KindNote && e.Author == "human" {
 		answer := []uint64{e.Seq}
 		if len(e.Re) > 0 {
