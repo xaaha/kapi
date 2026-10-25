@@ -57,6 +57,7 @@
     chat: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM84,116a12,12,0,1,0,12,12A12,12,0,0,0,84,116Zm88,0a12,12,0,1,0,12,12A12,12,0,0,0,172,116Zm60,12A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z",
     x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
+    image: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
     system: "M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z",
@@ -88,6 +89,10 @@
     sync();
     return [h("div", { class: "kapi-theme", role: "group", "aria-label": "Theme" }, ...buttons)];
   }
+
+  const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  const MAX_IMAGES = 4;
+  const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
 
   const button = (label, action, title = label) =>
     h("button", { type: "button", "data-action": action, title, text: label });
@@ -121,10 +126,14 @@
     h("button", { type: "button", class: "kapi-btn kapi-primary", text: "Notes", onclick: () => setSheet(!sheetOpen) }));
   const pins = h("div", { class: "kapi-pins" });
   const rail = h("nav", { class: "kapi-rail", "aria-label": "Where the notes are on the page", hidden: "" });
+  let sendsInFlight = 0;
+  const syncSend = () => (sendButton.disabled = sending || sendsInFlight > 0 || !!composerTray.blocked());
+  const composerTray = imageTray(() => syncSend());
   const composer = h("form", { class: "kapi-composer" },
-    input,
+    input, composerTray.row,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
-      hint, sendButton));
+      composerTray.pick, composerTray.picker, hint, sendButton));
+  acceptImages(composer, composerTray);
   const undoButton = button("Undo", "undo", "Undo the last change");
   const showUndo = (can) => {
     undoButton.hidden = String(can) !== "true";
@@ -836,6 +845,120 @@
     }
   }
 
+  function thumb(nameOrPath) {
+    const img = h("img", { src: fileURL(nameOrPath), alt: "Attached image", loading: "lazy" });
+    const link = h("a", { class: "kapi-thumb", href: fileURL(nameOrPath), target: "_blank", rel: "noopener", "aria-label": "Open image" }, img);
+    img.addEventListener("error", () => link.replaceWith(h("span", { class: "kapi-thumb kapi-expired", text: "Image expired" })));
+    return link;
+  }
+
+  const thumbs = (files) => (Array.isArray(files) && files.length ? [h("div", { class: "kapi-thumbs" }, ...files.map(thumb))] : []);
+
+  function imageTray(onChange) {
+    let items = [];
+    let away = 0;
+    const row = h("div", { class: "kapi-tray", hidden: "" });
+    const picker = h("input", { type: "file", accept: IMAGE_TYPES.join(","), multiple: "", hidden: "", "aria-hidden": "true" });
+    const pick = h("button", { type: "button", class: "kapi-attach", "aria-label": "Attach image", "data-tip": "Attach image", onclick: () => picker.click() }, icon("image"));
+    const changed = () => {
+      render();
+      onChange();
+    };
+    function render() {
+      const focused = row.contains(document.activeElement) ? document.activeElement : null;
+      const keep = focused && { item: items[[...row.children].indexOf(focused.closest(".kapi-chip"))], cls: focused.className };
+      row.hidden = !items.length;
+      row.replaceChildren(...items.map((it) => h("div", { class: "kapi-chip", "data-state": it.state },
+        it.name ? h("img", { src: fileURL(it.name), alt: "" }) : h("span", { class: "kapi-chip-label", text: it.state === "uploading" ? "Uploading…" : it.label }),
+        ...(it.state === "error" ? [h("span", { class: "kapi-chip-error", text: it.error }),
+          h("button", { type: "button", class: "kapi-chip-retry", text: "Retry", onclick: () => upload(it) })] : []),
+        h("button", { type: "button", class: "kapi-chip-remove", "aria-label": "Remove image", onclick: () => {
+          items = items.filter((x) => x !== it);
+          changed();
+        } }, icon("x")))));
+      const chip = keep && row.children[items.indexOf(keep.item)];
+      const again = chip && (chip.querySelector(`.${keep.cls.split(" ")[0]}`) ?? chip.querySelector(".kapi-chip-remove"));
+      if (again) again.focus();
+      else if (focused) (row.querySelector(".kapi-chip-remove") ?? pick).focus();
+    }
+    async function upload(it) {
+      it.state = "uploading";
+      changed();
+      let res = null;
+      try {
+        res = await fetch(`${base}/files`, { method: "POST", headers: { "Content-Type": it.file.type }, body: it.file });
+      } catch {}
+      if (res && (await restartedReply(res))) return;
+      const data = res ? await res.json().catch(() => ({})) : {};
+      if (!items.includes(it)) return;
+      if (res?.ok && data.name) Object.assign(it, { name: data.name, state: "ready" });
+      else Object.assign(it, { state: "error", error: data.error || (res ? `Not uploaded (HTTP ${res.status})` : "Could not reach kapi") });
+      changed();
+    }
+    function add(files) {
+      for (const file of files) {
+        if (!IMAGE_TYPES.includes(file.type)) {
+          say("Only PNG, JPEG, GIF and WebP images can be attached.", "error");
+          continue;
+        }
+        if (items.length + away >= MAX_IMAGES) {
+          say(`At most ${MAX_IMAGES} images per note or message.`, "error");
+          break;
+        }
+        const it = { file, label: file.name || "image", state: "uploading" };
+        items.push(it);
+        upload(it);
+      }
+    }
+    picker.addEventListener("change", () => {
+      add([...picker.files]);
+      picker.value = "";
+    });
+    return {
+      row, pick, picker, add,
+      names: () => items.filter((i) => i.state === "ready").map((i) => i.name),
+      count: () => items.length,
+      blocked() {
+        if (items.some((i) => i.state === "uploading")) return "Wait for the images to finish uploading.";
+        if (items.some((i) => i.state === "error")) return "Retry or remove the image that did not upload.";
+        return "";
+      },
+      take(names) {
+        items = items.filter((i) => !names.includes(i.name));
+        away += names.length;
+        changed();
+      },
+      settle(names, sent) {
+        away -= names.length;
+        if (!sent) items = [...names.map((name) => ({ name, state: "ready", label: "" })), ...items];
+        changed();
+      },
+    };
+  }
+
+  function acceptImages(el, tray) {
+    const files = (list) => [...(list || [])].filter((f) => f.kind === undefined || f.kind === "file");
+    el.addEventListener("paste", (e) => {
+      const found = files(e.clipboardData?.files);
+      if (!found.length || e.clipboardData.getData("text/plain")) return;
+      e.preventDefault();
+      tray.add(found);
+    });
+    el.addEventListener("dragover", (e) => {
+      if (![...(e.dataTransfer?.types || [])].includes("Files")) return;
+      e.preventDefault();
+      el.setAttribute("data-drop", "");
+    });
+    el.addEventListener("dragleave", () => el.removeAttribute("data-drop"));
+    el.addEventListener("drop", (e) => {
+      const found = files(e.dataTransfer?.files);
+      el.removeAttribute("data-drop");
+      if (!found.length) return;
+      e.preventDefault();
+      tray.add(found);
+    });
+  }
+
   function showAsk(anchor, range, restore) {
     closeAsk();
     const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
@@ -855,16 +978,15 @@
     const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${SHORTCUT})`, onclick: () => sendAsk() },
       "Send", h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
     const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: "Cancel (Escape)", text: "Cancel", onclick: () => closeAsk(true) });
+    const tray = imageTray(() => sync());
     const sync = () => {
-      queueButton.disabled = sendNow.disabled = !text.value.trim() || sending;
+      queueButton.disabled = sendNow.disabled = (!text.value.trim() && !tray.count()) || !!tray.blocked() || sending;
     };
     text.addEventListener("input", sync);
     text.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        closeAsk(true);
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (e.key === "Escape") return;
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         sendAsk();
       } else if (e.key === "Enter" && !e.shiftKey) {
@@ -872,10 +994,16 @@
         queueAsk();
       }
     });
-    const box = h("div", { class: "kapi-ask", role: "dialog", "aria-label": "Note for the agent" }, head, text,
-      h("div", { class: "kapi-ask-row" }, cancel, queueButton, sendNow));
+    const box = h("div", { class: "kapi-ask", role: "dialog", "aria-label": "Note for the agent" }, head, text, tray.row,
+      h("div", { class: "kapi-ask-row" }, tray.pick, tray.picker, cancel, queueButton, sendNow));
+    acceptImages(box, tray);
+    box.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      e.stopPropagation();
+      closeAsk(true);
+    });
     root.append(box);
-    asking = { box, anchor, range, restore, text, sync, at: (range ?? selected)?.getBoundingClientRect() };
+    asking = { box, anchor, range, restore, text, tray, sync, at: (range ?? selected)?.getBoundingClientRect() };
     sync();
     highlight(range);
     renderBar();
@@ -912,12 +1040,13 @@
   }
 
   function queueAsk() {
-    const text = asking?.text.value.trim();
-    if (!text || sending) return false;
+    const text = asking?.text.value.trim() ?? "";
+    const files = asking?.tray.names() ?? [];
+    if ((!text && !files.length) || asking.tray.blocked() || sending) return false;
     const { target, part, quote, prefix, suffix, re = [] } = asking.anchor;
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     closeAsk();
-    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, re, text }]);
+    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, re, ...(files.length ? { files } : {}), text }]);
     return true;
   }
 
@@ -929,17 +1058,22 @@
     if (sending) return;
     const text = input.value.trim();
     if (!drafts.length) return send();
+    if (composerTray.blocked()) return say(composerTray.blocked());
+    const files = composerTray.names();
     const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
     sending = true;
-    sendButton.disabled = true;
     renderQueue();
     input.value = "";
-    const res = await request("/notes", { rev: Number(main.dataset.rev), notes: batch.map(({ target, part, quote, prefix, suffix, re, text: t }) => ({ target, part, quote, prefix, suffix, ...(Array.isArray(re) && re.length ? { re } : {}), text: t })), text });
+    composerTray.take(files);
+    const res = await request("/notes", { rev: Number(main.dataset.rev), notes: batch.map(({ target, part, quote, prefix, suffix, re, files: f, text: t }) => ({ target, part, quote, prefix, suffix,
+      ...(Array.isArray(re) && re.length ? { re } : {}), ...(Array.isArray(f) && f.length ? { files: f } : {}), text: t })), text, ...(files.length ? { files } : {}) });
     sending = false;
-    sendButton.disabled = false;
+    composerTray.settle(files, !!res?.ok);
     asking?.sync();
-    if (res?.ok) return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
+    if (res?.ok) {
+      return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
+    }
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
     renderQueue();
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
@@ -953,7 +1087,7 @@
       if (finished) return;
       finished = true;
       const next = area.value.trim();
-      if (save && next && next !== d.text) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
+      if (save && (next || d.files?.length) && next !== d.text) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
       else renderQueue();
       if (takeOverLater) {
         takeOverLater = false;
@@ -984,6 +1118,7 @@
         const item = h("div", { class: "kapi-queued-note", "data-draft": d.id },
           h("button", { type: "button", class: "kapi-ref kapi-queued-about", "data-ref": d.target.split(",")[0], text: aboutText(d) }),
           h("div", { class: "kapi-queued-text", text: d.text }),
+          ...thumbs(d.files),
           h("div", { class: "kapi-queued-tools" },
             h("button", { type: "button", "aria-label": "Edit note", "data-tip": "Edit", onclick: () => editDraft(item, d) }, icon("pencil")),
             h("button", { type: "button", "aria-label": "Remove note", "data-tip": "Remove", onclick: () => {
@@ -1016,14 +1151,14 @@
     const re = Array.isArray(ev.re) ? ev.re : [];
     if (ev.kind === "note" && !re.length && ev.author === "human") {
       const n = { seq: ev.seq, num: notes.length + 1, target: ev.target || "", part: ev.part || "", quote: ev.quote || "", prefix: ev.prefix || "",
-        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false };
+        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false, files: ev.files || [] };
       notes.push(n);
       noteBySeq.set(ev.seq, n);
     } else if ((ev.kind === "note" || ev.kind === "message") && re.length) {
       for (const seq of re) {
         const n = noteBySeq.get(seq);
         if (!n) continue;
-        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time });
+        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time, files: ev.files || [] });
         if (ev.kind === "note" && !noteBySeq.has(ev.seq)) noteBySeq.set(ev.seq, n);
         n.last = ev.author === "human" ? "waiting" : "answered";
       }
@@ -1357,9 +1492,9 @@
         ...(c.before ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Before" }), h("span", { class: "kapi-diff-old", text: clip(c.before, 400) }))] : []),
         ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
     }
-    const msg = (who, text) => h("div", { class: "kapi-pop-msg" }, h("span", { class: "kapi-pop-who", text: who }), h("span", { class: "kapi-pop-text", text }));
-    kids.push(msg("You", n.text));
-    for (const r of n.replies) kids.push(msg(r.author === "human" ? "You" : r.author, r.text));
+    const msg = (who, text, files) => h("div", { class: "kapi-pop-msg" }, h("span", { class: "kapi-pop-who", text: who }), h("span", { class: "kapi-pop-text", text }), ...thumbs(files));
+    kids.push(msg("You", n.text, n.files));
+    for (const r of n.replies) kids.push(msg(r.author === "human" ? "You" : r.author, r.text, r.files));
     if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
     const foot = h("div", { class: "kapi-pop-foot" }, h("span", { class: "kapi-pop-hint", text: matchMedia("(hover: hover)").matches ? "Move away to close" : "Tap outside to close" }));
     if (!n.resolved) {
@@ -1664,11 +1799,11 @@
       lastSeq = ev.seq;
     }
     trackNote(ev);
-    if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
+    if (ev.kind === "message") addEntry(ev, h("div", {}, h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
     else if (ev.kind === "note") {
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
-        h("div", { class: "kapi-msg-text", text: ev.text })));
+        h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
     }
     if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {
       if (ev.author === "human") lastHuman = ev.seq;
@@ -1718,11 +1853,15 @@
 
   async function send() {
     const text = input.value.trim();
-    if (!text) return;
+    const files = composerTray.names();
+    if (composerTray.blocked()) return say(composerTray.blocked());
+    if (!text && !files.length) return;
     input.value = "";
-    sendButton.disabled = true;
-    const res = await request("/messages", { kind: "message", text });
-    sendButton.disabled = false;
+    sendsInFlight++;
+    composerTray.take(files);
+    const res = await request("/messages", { kind: "message", text, ...(files.length ? { files } : {}) });
+    sendsInFlight--;
+    composerTray.settle(files, !!res?.ok);
     if (res?.ok) return;
     input.value = input.value ? `${text}\n${input.value}` : text;
     if (res) say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
@@ -2052,6 +2191,11 @@
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
+  for (const type of ["dragover", "drop"]) {
+    document.addEventListener(type, (e) => {
+      if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault();
+    });
+  }
   addEventListener("resize", () => schedulePaint());
   phone.addEventListener("change", () => {
     setSheet(false);

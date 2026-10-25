@@ -2913,3 +2913,222 @@ test("#39 an edit to one list item leaves a note on its sibling waiting", async 
     assert.equal(await tab.eval(`document.querySelector(".kapi-pins .kapi-pin").dataset.state`), "waiting");
   });
 });
+
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const giveImage = (how, selector, { type = "image/png", tag = "a", count = 1 } = {}) => page.eval(`(() => {
+  const bytes = Uint8Array.from(atob(${JSON.stringify(PNG)}), (c) => c.charCodeAt(0));
+  const dt = new DataTransfer();
+  for (let i = 0; i < ${count}; i++) dt.items.add(new File([bytes, ${JSON.stringify(tag)} + i], ${JSON.stringify(tag)} + i + ".png", { type: ${JSON.stringify(type)} }));
+  const el = document.querySelector(${JSON.stringify(selector)});
+  if (${JSON.stringify(how)} === "paste") el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  else if (${JSON.stringify(how)} === "drop") {
+    el.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    el.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  } else {
+    el.files = dt.files;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+})()`);
+const chips = (scope) => page.eval(`[...document.querySelectorAll(${JSON.stringify(scope + " .kapi-chip")})].map((c) => c.dataset.state)`);
+
+test("#30 an image pasted into a note uploads, queues with the note and goes out with it", async () => {
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await giveImage("paste", ".kapi-ask textarea");
+  await until(async () => (await chips(".kapi-ask")).join() === "ready");
+  assert.equal(requests("POST", "/files").length, 1);
+  assert.equal(requests("POST", "/files")[0].headers["content-type"], "image/png");
+  assert.equal(await page.eval(`document.querySelector(".kapi-ask .kapi-ask-queue").disabled`), false, "an image alone can be queued");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  const name = Object.keys(server.state.files)[0];
+  assert.equal(await page.eval(`document.querySelector(".kapi-queued-note .kapi-thumb img").getAttribute("src").endsWith("/files/${name}")`), true);
+  await click('button.kapi-primary[type="submit"]');
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.deepEqual(requests("POST", "/notes")[0].body.notes[0].files, [name]);
+  await page.waitFor(`!!document.querySelector(".kapi-msg .kapi-thumb img")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg .kapi-thumb").getAttribute("href").endsWith("/files/${name}")`), true);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await hoverPin(1);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop .kapi-thumb img")`), true, "the popover shows the note's image");
+});
+
+test("#30 images dropped or picked in the message box go out with the message, even with no text", async () => {
+  await giveImage("drop", ".kapi-composer");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 1);
+  const name = Object.keys(server.state.files)[0];
+  assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", text: "", files: [name] });
+  await until(async () => (await chips(".kapi-composer")).length === 0);
+
+  await giveImage("pick", ".kapi-composer input[type=file]", { tag: "b" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "see this"`);
+  await page.key("Enter");
+  await until(() => requests("POST", "/messages").length === 2);
+  assert.equal(requests("POST", "/messages")[1].body.text, "see this");
+  assert.equal(requests("POST", "/messages")[1].body.files.length, 1);
+  await page.waitFor(`document.querySelectorAll(".kapi-msg .kapi-thumb img").length === 2`);
+});
+
+test("#30 a failed upload can be retried or removed, and nothing sends while an image uploads", async () => {
+  server.state.nextUploadError = "only PNG, JPEG, GIF and WebP images can be attached";
+  await giveImage("paste", ".kapi-composer textarea");
+  await until(async () => (await chips(".kapi-composer")).join() === "error");
+  assert.match(await page.eval(`document.querySelector(".kapi-composer .kapi-chip-error").textContent`), /only PNG/);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-primary").disabled`), true);
+  server.state.uploadDelay = 400;
+  await click(".kapi-composer .kapi-chip-retry");
+  await until(async () => (await chips(".kapi-composer")).join() === "uploading");
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "wait"`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/messages").length, 0, "nothing is sent while an image is still uploading");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  await click(".kapi-composer .kapi-chip-remove");
+  assert.deepEqual(await chips(".kapi-composer"), []);
+
+  await giveImage("paste", ".kapi-composer textarea", { count: 5 });
+  await until(async () => (await notice()).includes("At most 4 images"));
+  await until(async () => (await chips(".kapi-composer")).length === 4);
+  await giveImage("paste", ".kapi-composer textarea", { type: "image/svg+xml", tag: "s" });
+  await until(async () => (await notice()).includes("Only PNG, JPEG, GIF and WebP"));
+});
+
+test("#30 an image that expired shows as a placeholder", async () => {
+  server.push({ author: "human", kind: "message", text: "old one", files: ["/home/.kapi/pages/x/files/ffffffffffffffffffffffffffffffff.png"] });
+  await page.waitFor(`!!document.querySelector(".kapi-msg .kapi-expired")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg .kapi-expired").textContent`), "Image expired");
+});
+
+test("#30 a second Enter while a message sends does not send its images again, and an image added meanwhile stays", async () => {
+  await giveImage("paste", ".kapi-composer textarea");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  server.state.messageDelay = 400;
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "hi"`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await page.key("Enter");
+  await giveImage("paste", ".kapi-composer textarea", { tag: "later" });
+  await until(() => requests("POST", "/messages").length === 1);
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(requests("POST", "/messages").length, 1, "the second Enter sent nothing");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  const later = Object.keys(server.state.files).at(-1);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-chip img").getAttribute("src").endsWith("/files/${later}")`), true, "the image pasted during the send is still there");
+});
+
+test("#30 a failed image blocks sending with a reason, and text pasted with an image stays text", async () => {
+  server.state.nextUploadError = "nope";
+  await giveImage("paste", ".kapi-composer textarea");
+  await until(async () => (await chips(".kapi-composer")).join() === "error");
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "x"`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await until(async () => (await notice()).includes("Retry or remove"));
+  assert.equal(requests("POST", "/messages").length, 0);
+  await click(".kapi-composer .kapi-chip-remove");
+  const before = requests("POST", "/files").length;
+  await page.eval(`(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "A1 B1");
+    dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], "cells.png", { type: "image/png" }));
+    document.querySelector(".kapi-composer textarea").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  })()`);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(requests("POST", "/files").length, before, "a paste that carries text does not upload its picture");
+});
+
+test("#30 keyboard focus stays on a chip's button when another upload finishes, and Escape there closes the note box", async () => {
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await giveImage("paste", ".kapi-ask textarea");
+  await until(async () => (await chips(".kapi-ask")).join() === "ready");
+  server.state.uploadDelay = 300;
+  await giveImage("paste", ".kapi-ask textarea", { tag: "second" });
+  assert.equal(await page.eval(`document.querySelector(".kapi-ask .kapi-ask-queue").disabled`), true, "Queue waits for the upload");
+  await page.eval(`document.querySelector(".kapi-ask .kapi-chip:nth-child(2) .kapi-chip-remove").focus()`);
+  await until(async () => (await chips(".kapi-ask")).join() === "ready,ready");
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-ask .kapi-chip:nth-child(2) .kapi-chip-remove")`), true);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-ask")`);
+});
+
+test("#30 composer images go out on the message when notes are queued, in the order attached", async () => {
+  server.push({ author: "agent", kind: "message", text: "hello" });
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("note");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  await giveImage("paste", ".kapi-composer textarea", { tag: "first" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  await giveImage("paste", ".kapi-composer textarea", { tag: "second" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,ready");
+  const names = Object.keys(server.state.files);
+  await click('button.kapi-primary[type="submit"]');
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.deepEqual(requests("POST", "/notes")[0].body.files, names);
+  await until(async () => (await chips(".kapi-composer")).length === 0);
+});
+
+test("#30 a file dropped outside the note box and message box does not replace the page", async () => {
+  const prevented = await page.eval(`(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(["x"], "a.png", { type: "image/png" }));
+    const over = new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true });
+    const drop = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(over);
+    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(drop);
+    return over.defaultPrevented && drop.defaultPrevented;
+  })()`);
+  assert.equal(prevented, true);
+});
+
+test("#30 a message that fails to send keeps its images", async () => {
+  await giveImage("paste", ".kapi-composer textarea");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready");
+  await page.eval(`window.fetch = ((orig) => (url, opts) => (String(url).endsWith("/messages") ? Promise.reject(new TypeError("offline")) : orig(url, opts)))(window.fetch)`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "x"`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await until(async () => (await notice()).includes("Could not reach kapi"));
+  assert.deepEqual(await chips(".kapi-composer"), ["ready"]);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "x");
+});
+
+test("#30 Send stays off while notes send, images out in a send count toward the limit, and Retry keeps focus on its chip", async () => {
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("note");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  await giveImage("paste", ".kapi-composer textarea", { count: 2 });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,ready");
+  server.state.notesDelay = 400;
+  server.state.nextNotesError = "busy";
+  await click('button.kapi-primary[type="submit"]');
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-primary").disabled`), true, "Send is off while notes send");
+  await giveImage("paste", ".kapi-composer textarea", { count: 3, tag: "during" });
+  await until(async () => (await notice()).includes("At most 4 images"));
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,ready,ready,ready");
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-primary").disabled`), false);
+
+  for (const _ of [0, 1, 2]) await click(".kapi-composer .kapi-chip-remove");
+  server.state.nextUploadError = "nope";
+  await giveImage("paste", ".kapi-composer textarea", { tag: "bad" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,error");
+  server.state.uploadDelay = 200;
+  await page.eval(`document.querySelector(".kapi-composer .kapi-chip:nth-child(2) .kapi-chip-retry").focus()`);
+  await page.key("Enter");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,uploading");
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-composer .kapi-chip:nth-child(2) .kapi-chip-remove")`), true);
+});
