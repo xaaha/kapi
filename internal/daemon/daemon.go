@@ -509,8 +509,13 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		_, rev := st.Source()
-		_, sum, err := st.ApplyBy(req.Author, rev, &page.Op{Kind: "image", ID: req.Target, Src: req.Text})
+		var sum page.Summary
+		for range 3 {
+			_, rev := st.Source()
+			if _, sum, err = st.ApplyBy(req.Author, rev, &page.Op{Kind: "image", ID: req.Target, Src: req.Text}); !errors.Is(err, page.ErrStale) {
+				break
+			}
+		}
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return

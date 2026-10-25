@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -396,22 +397,41 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 			if err := eventlog.CheckReader(*reader); err != nil {
 				return err
 			}
+			if ext := strings.ToLower(filepath.Ext(pg)); ext != ".html" && ext != ".htm" {
+				return fmt.Errorf("%s is not an HTML page", pg)
+			}
+			if _, err := os.Stat(pg); err != nil {
+				return err
+			}
 			data, err := os.ReadFile(args[1])
 			if err != nil {
 				return err
 			}
-			f, err := attach.Save(page.FilesDir(pg), data)
+			dir := page.FilesDir(pg)
+			_, existed := os.Stat(dir)
+			f, err := attach.Save(dir, data)
 			if err != nil {
 				return fmt.Errorf("%s: %w", args[1], err)
 			}
 			resp, err := c.Do(&daemon.Request{Op: "image", Page: pg, Author: *reader, Target: *after, Text: f.Name})
 			if err != nil {
+				if !referenced(pg, f.Name) {
+					os.Remove(filepath.Join(dir, f.Name))
+					if existed != nil {
+						os.Remove(dir)
+					}
+				}
 				return err
 			}
 			_, err = fmt.Fprintf(out, "added #%s (%s)\n", resp.Event.Target, resp.Event.Text)
 			return err
 		},
 	}
+}
+
+func referenced(page, name string) bool {
+	src, err := os.ReadFile(page)
+	return err != nil || bytes.Contains(src, []byte(name))
 }
 
 func newPublishCmd(out io.Writer) *cli.Command {

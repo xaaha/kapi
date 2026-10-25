@@ -408,7 +408,10 @@ func Printable(s string) string {
 
 // CheckReader refuses the author names the browser, file edits and kapi itself write events as.
 func CheckReader(name string) error {
-	if name == "human" || name == "kapi" || name == "file" {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("the reader name cannot be empty; use a name such as agent or codex")
+	}
+	if l := strings.ToLower(strings.TrimSpace(name)); l == "human" || l == "kapi" || l == "file" {
 		return fmt.Errorf("reader %q is reserved; pick another name, such as agent or codex", name)
 	}
 	return nil

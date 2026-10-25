@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -625,5 +626,46 @@ func TestAttachAddsAnImageBlockAsTheAgent(t *testing.T) {
 	cmd.Env = e.env
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "only PNG, JPEG, GIF and WebP") {
 		t.Errorf("attaching a text file: %v %s", err, out)
+	}
+}
+
+func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">Text</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+	img := filepath.Join(t.TempDir(), "chart.png")
+	if err := os.WriteFile(img, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(e.page)
+	notes := filepath.Join(dir, "notes.md")
+	if err := os.WriteFile(notes, []byte("# notes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, "no such file"},
+		{[]string{"attach", "--after", "zzzzzzzz", e.page, img}, "no such element"},
+		{[]string{"attach", notes, img}, "not an HTML page"},
+		{[]string{"attach", "--reader", "", e.page, img}, "cannot be empty"},
+		{[]string{"attach", "--reader", "Human", e.page, img}, "reserved"},
+	} {
+		cmd := exec.Command(e.bin, c.args...) //nolint:gosec // runs the kapi binary this test just built
+		cmd.Env = e.env
+		if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), c.want) {
+			t.Errorf("kapi %v: %v %s, want %q", c.args, err, out, c.want)
+		}
+	}
+	for _, left := range []string{"typo.files", "plan.files", "notes.files"} {
+		if _, err := os.Stat(filepath.Join(dir, left)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s was left behind: %v", left, err)
+		}
+	}
+	if pages, _ := os.ReadDir(filepath.Join(e.home, "pages")); len(pages) > 1 {
+		t.Errorf("a missing page was registered: %d pages", len(pages))
 	}
 }

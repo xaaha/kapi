@@ -31,7 +31,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrNoImage       = errors.New("that image is not in the page's files folder")
-	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrUndoConflict  = errors.New("the page changed outside the browser after that op, by the agent or in the file, so it cannot be undone from here")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
