@@ -532,8 +532,8 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 		if _, err := os.Stat(filepath.Join(FilesDir(s.path), op.Src)); err != nil {
 			return s.rev, Summary{}, fmt.Errorf("%w: %s", ErrNoImage, op.Src)
 		}
-		src := url.PathEscape(filesName(s.path)) + "/" + op.Src
-		op = &Op{Kind: op.Kind, ID: op.ID, HTML: `<figure><img src="` + html.EscapeString(src) + `" alt=""></figure>`}
+		src := "./" + url.PathEscape(filesName(s.path)) + "/" + op.Src
+		op = &Op{Kind: op.Kind, ID: op.ID, HTML: `<img src="` + html.EscapeString(src) + `" alt="">`}
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
@@ -1072,25 +1072,44 @@ func filesName(path string) string {
 }
 
 func insertImage(src []byte, els []element, op *Op) ([]byte, Summary, error) {
+	taken := map[string]bool{}
+	body := -1
+	for i := range els {
+		if els[i].id != "" {
+			taken[els[i].id] = true
+		}
+		if els[i].name == "body" && body < 0 {
+			body = i
+		}
+	}
+	id := newID(taken)
+	fig := `<figure data-kapi-id="` + id + `">` + op.HTML + `</figure>`
+	sum := Summary{IDs: []string{id}}
 	if op.ID == "" {
-		ins := op.HTML + "\n"
-		if len(src) > 0 && src[len(src)-1] != '\n' {
+		at := len(src)
+		if body >= 0 {
+			at = els[body].closeStart
+		}
+		ins := fig + "\n"
+		if at > 0 && src[at-1] != '\n' {
 			ins = "\n" + ins
 		}
-		return slices.Concat(src, []byte(ins)), Summary{Text: "added an image at the end"}, nil
+		sum.Text = "added an image at the end"
+		return slices.Concat(src[:at], []byte(ins), src[at:]), sum, nil
 	}
 	e, err := find(els, op.ID)
 	if err != nil {
 		return nil, Summary{}, err
 	}
-	for e.parent >= 0 {
+	for e.parent >= 0 && !transparent(els[e.parent].name) {
 		e = &els[e.parent]
 	}
-	ins := op.HTML
+	ins := fig
 	if ls, ownLine := lineStart(src, e.start); ownLine {
-		ins = "\n" + string(src[ls:e.start]) + op.HTML
+		ins = "\n" + string(src[ls:e.start]) + fig
 	}
-	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), Summary{Text: "added an image after " + describe(src, e)}, nil
+	sum.Text = "added an image after " + describe(src, e)
+	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), sum, nil
 }
 
 func apply(src []byte, op *Op) ([]byte, Summary, error) {

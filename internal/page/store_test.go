@@ -1590,7 +1590,7 @@ func TestAnImageOpAddsAFigureAfterTheTopLevelBlockOrAtTheEnd(t *testing.T) {
 	}
 	sum := mustApply(t, s, &Op{Kind: "image", ID: "cccccccc", Src: name})
 	got := onDisk(t, path)
-	want := regexp.MustCompile(`</ul>\n<figure data-kapi-id="[a-z2-7]{8}"><img src="plan.files/` + name + `" alt=""></figure>\n$`)
+	want := regexp.MustCompile(`</ul>\n<figure data-kapi-id="[a-z2-7]{8}"><img src="\./plan\.files/` + name + `" alt=""></figure>\n$`)
 	if !want.MatchString(got) || !strings.Contains(sum.Text, "added an image after") {
 		t.Fatalf("after a nested block: %q, summary %q", got, sum.Text)
 	}
@@ -1602,5 +1602,41 @@ func TestAnImageOpAddsAFigureAfterTheTopLevelBlockOrAtTheEnd(t *testing.T) {
 	mustApply(t, s, &Op{Kind: "undo"})
 	if got := onDisk(t, path); got != src {
 		t.Errorf("after two undos: %q, want the original", got)
+	}
+}
+
+func TestImagesGoInsideTheBodyAndSurviveAColonInThePageName(t *testing.T) {
+	const src = "<!doctype html>\n<html><head><title>t</title></head><body>\n<p data-kapi-id=\"aaaaaaaa\">a</p>\n</body></html>\n"
+	dir := t.TempDir()
+	home, path := filepath.Join(dir, "home"), filepath.Join(dir, "notes 10:30.html")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := open(t, home, path)
+	name := "0123456789abcdef0123456789abcdef.png"
+	if err := os.MkdirAll(FilesDir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(FilesDir(path), name), []byte("png"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after := mustApply(t, s, &Op{Kind: "image", ID: "aaaaaaaa", Src: name})
+	end := mustApply(t, s, &Op{Kind: "image", Src: name})
+	got := onDisk(t, path)
+	if i := strings.LastIndex(got, "<figure"); i < 0 || i > strings.Index(got, "</body>") {
+		t.Errorf("an image landed outside the body: %q", got)
+	}
+	if strings.Count(got, `<img src="./notes%2010:30.files/`+name+`"`) != 2 {
+		t.Errorf("src: %q", got)
+	}
+	for _, sum := range []Summary{after, end} {
+		if len(sum.IDs) != 1 || !strings.Contains(got, `<figure data-kapi-id="`+sum.IDs[0]+`">`) {
+			t.Errorf("summary %+v does not name the new figure in %q", sum, got)
+		}
+	}
+	src2, _ := s.Source()
+	out, err := render.Render(src2)
+	if err != nil || strings.Count(string(out), `src="./notes%2010:30.files/`) != 2 {
+		t.Errorf("rendered: %s, %v", out, err)
 	}
 }

@@ -1189,7 +1189,7 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 		t.Fatalf("image op: %d %v", code, out)
 	}
 	page := s.get("/p/" + s.id + "/")
-	if !strings.Contains(page.body, `<img src="plan.files/`+name+`"`) {
+	if !strings.Contains(page.body, `<img src="./plan.files/`+name+`"`) {
 		t.Errorf("the page does not show the image: %s", page.body)
 	}
 	got := s.get("/p/" + s.id + "/plan.files/" + name)
