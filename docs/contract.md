@@ -334,7 +334,7 @@ when it was last used: when it was uploaded or an event referenced it. The
 daemon deletes images unused for 7 days, on start and every hour, and keeps
 all of them under 512 MB by deleting the least recently used first, but never
 one used in the last hour; an upload that still does not fit is refused.
-| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
+| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S,"ids":[...]}`, where `seq` is the revision event the op logged and `ids` names the blocks it changed, the new one for an `image` op, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 

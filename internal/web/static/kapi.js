@@ -299,7 +299,8 @@
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
-      const picture = !archived && selected.matches("figure") && selected.querySelector(":scope > img[src]");
+      const shown = selected.matches("figure") && selected.querySelector(":scope > img[src]");
+      const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
       bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
@@ -972,11 +973,9 @@
 
   async function addImages(files, after) {
     const images = files.filter((f) => IMAGE_TYPES.includes(f.type));
-    if (!images.length) return say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
-    if (images.length < files.length) say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
     let anchor = after;
     for (const file of images) {
-      say(`Adding ${file.name || "the image"}\u2026`);
+      say(`Adding ${file.name || "the image"}…`);
       let res = null;
       try {
         res = await fetch(`${base}/images`, { method: "POST", headers: { "Content-Type": file.type }, body: file });
@@ -984,16 +983,18 @@
       if (res && (await restartedReply(res))) return;
       const data = res ? await res.json().catch(() => ({})) : {};
       if (!res?.ok || !data.name) return say(data.error || (res ? `Image not added (HTTP ${res.status}).` : "Could not reach kapi."), "error");
-      const done = await op("image", { id: anchor, src: data.name });
+      let done = await op("image", { id: anchor, src: data.name });
+      if (done?.status === 409) done = await op("image", { id: anchor && find(anchor) ? anchor : "", src: data.name });
       if (!done?.ok) return;
       await refresh(null);
       notice.hidden = true;
-      const fig = [...main.querySelectorAll("figure > img")].filter((img) => img.getAttribute("src").endsWith(`/${data.name}`)).at(-1)?.parentElement;
+      const fig = done.data.ids?.[0] && find(done.data.ids[0]);
       if (fig) {
         anchor = idOf(fig);
         flash(fig);
       }
     }
+    if (images.length < files.length) say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
   }
 
   function showAsk(anchor, range, restore) {

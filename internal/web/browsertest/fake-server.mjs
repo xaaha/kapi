@@ -167,7 +167,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       state.blocks.splice(at, 0, fig);
       state.rev++;
       const ev = push({ author: "human", kind: "revision", target: id, text: "added an image" });
-      return { status: 200, body: { rev: state.rev, undo: true, seq: ev.seq } };
+      return { status: 200, body: { rev: state.rev, undo: true, seq: ev.seq, ids: [id] } };
     }
     if (op.kind === "check") {
       const b = findTask(op.id);

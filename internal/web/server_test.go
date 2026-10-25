@@ -1185,11 +1185,13 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 	if info, err := os.Stat(stored); err != nil || info.Mode().Perm() != 0o644 {
 		t.Fatalf("stored next to the page: %v %v", info, err)
 	}
-	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`); code != http.StatusOK {
-		t.Fatalf("image op: %d %v", code, out)
+	code, out = s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`)
+	ids, _ := out["ids"].([]any)
+	if code != http.StatusOK || len(ids) != 1 {
+		t.Fatalf("image op: %d %v, want the new figure's id", code, out)
 	}
 	page := s.get("/p/" + s.id + "/")
-	if !strings.Contains(page.body, `<img src="./plan.files/`+name+`"`) {
+	if !regexp.MustCompile(`<figure data-kapi-id="` + ids[0].(string) + `"[^>]*><img src="\./plan\.files/` + name + `"`).MatchString(page.body) {
 		t.Errorf("the page does not show the image: %s", page.body)
 	}
 	got := s.get("/p/" + s.id + "/plan.files/" + name)

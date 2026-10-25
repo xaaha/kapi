@@ -3180,3 +3180,39 @@ test("#30 a page image that is not a supported type, or fails to upload, says so
   assert.equal(requests("POST", "/ops").length, 0);
   assert.deepEqual(await figures(), []);
 });
+
+test("#30 the same image dropped twice selects the new copy, and a page that changed meanwhile still gets the image", async () => {
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await figures()).length === 1);
+  const first = await page.eval(`document.querySelector("#kapi-page > figure:has(> img)").dataset.kapiId`);
+  await giveImage("drop", '[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await figures()).length === 2);
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.matches("figure") && document.querySelector("[data-kapi-selected]").dataset.kapiId !== ${JSON.stringify(first)}`);
+  assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]").previousElementSibling.dataset.kapiId`), "bbbbbbbb");
+
+  server.bumpBehindBrowser("dddddddd", '<p data-kapi-id="dddddddd">Changed by the agent.</p>');
+  await giveImage("drop", '[data-kapi-id="cccccccc"]', { tag: "late" });
+  await until(async () => (await figures()).length === 3);
+  const tries = requests("POST", "/ops").slice(-2).map((r) => r.body.op.id);
+  assert.deepEqual(tries, ["cccccccc", "cccccccc"], "the image op is tried again after a stale refusal");
+});
+
+test("#30 a drop of an image and a file that is not one adds the image and says what was skipped", async () => {
+  await page.eval(`(() => {
+    const bytes = Uint8Array.from(atob(${JSON.stringify(PNG)}), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], "a.png", { type: "image/png" }));
+    dt.items.add(new File(["%PDF"], "b.pdf", { type: "application/pdf" }));
+    document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  })()`);
+  await until(async () => (await figures()).length === 1);
+  await until(async () => (await notice()).includes("Only PNG, JPEG, GIF and WebP"));
+});
+
+test("#30 an image from another site has no Download tool", async () => {
+  await withPage([{ id: "eeeeeeef", html: '<figure data-kapi-id="eeeeeeef"><img src="data:image/png;base64,' + PNG + '" alt=""></figure>' }], async (own, tab) => {
+    await tab.eval(`document.querySelector('[data-kapi-id="eeeeeeef"]').click()`);
+    await tab.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "archive", "delete"]);
+  });
+});
