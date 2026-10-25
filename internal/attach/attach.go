@@ -59,7 +59,7 @@ func (s *Store) dir(page string) string {
 	return filepath.Join(s.root, page, dirName)
 }
 
-func (s *Store) Put(page string, data []byte) (File, error) {
+func sniff(data []byte) (File, error) {
 	if len(data) > MaxBytes {
 		return File{}, ErrTooBig
 	}
@@ -69,7 +69,42 @@ func (s *Store) Put(page string, data []byte) (File, error) {
 		return File{}, ErrType
 	}
 	sum := sha256.Sum256(data)
-	f := File{Name: hex.EncodeToString(sum[:16]) + ext, Mime: mime, Size: int64(len(data))}
+	return File{Name: hex.EncodeToString(sum[:16]) + ext, Mime: mime, Size: int64(len(data))}, nil
+}
+
+func ValidName(name string) bool { return namePattern.MatchString(name) }
+
+func Save(dir string, data []byte) (File, error) {
+	f, err := sniff(data)
+	if err != nil {
+		return File{}, err
+	}
+	path := filepath.Join(dir, f.Name)
+	if _, err := os.Stat(path); err == nil {
+		return f, nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return File{}, err
+	}
+	tmp, err := writeTemp(dir, data)
+	if err != nil {
+		return File{}, err
+	}
+	defer os.Remove(tmp)
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return File{}, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return File{}, err
+	}
+	return f, syncDir(dir)
+}
+
+func (s *Store) Put(page string, data []byte) (File, error) {
+	f, err := sniff(data)
+	if err != nil {
+		return File{}, err
+	}
 	dir := s.dir(page)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return File{}, err

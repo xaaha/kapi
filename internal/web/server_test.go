@@ -191,6 +191,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/images", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -1049,7 +1050,12 @@ var onePixel, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAA
 
 func (s *site) upload(body []byte, contentType, origin string) (int, map[string]any) {
 	s.t.Helper()
-	r, err := http.NewRequest("POST", s.srv.URL+"/"+token+"/p/"+s.id+"/files", bytes.NewReader(body))
+	return s.uploadTo("/files", body, contentType, origin)
+}
+
+func (s *site) uploadTo(route string, body []byte, contentType, origin string) (int, map[string]any) {
+	s.t.Helper()
+	r, err := http.NewRequest("POST", s.srv.URL+"/"+token+"/p/"+s.id+route, bytes.NewReader(body))
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -1165,5 +1171,43 @@ func TestEachNoteAndTheMessageKeepTheirOwnImages(t *testing.T) {
 	}
 	if code, _ := s.post("/messages", `{"kind":"message","files":`+list(names[0:5]...)+`,"text":"c"}`); code != http.StatusUnprocessableEntity {
 		t.Errorf("five images on a message: %d, want 422", code)
+	}
+}
+
+func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	code, out := s.uploadTo("/images", onePixel, "image/png", s.srv.URL)
+	name, _ := out["name"].(string)
+	if code != http.StatusOK || !strings.HasSuffix(name, ".png") {
+		t.Fatalf("upload: %d %v", code, out)
+	}
+	stored := filepath.Join(filepath.Dir(s.path), "plan.files", name)
+	if info, err := os.Stat(stored); err != nil || info.Mode().Perm() != 0o644 {
+		t.Fatalf("stored next to the page: %v %v", info, err)
+	}
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`); code != http.StatusOK {
+		t.Fatalf("image op: %d %v", code, out)
+	}
+	page := s.get("/p/" + s.id + "/")
+	if !strings.Contains(page.body, `<img src="./plan.files/`+name+`"`) {
+		t.Errorf("the page does not show the image: %s", page.body)
+	}
+	got := s.get("/p/" + s.id + "/plan.files/" + name)
+	if got.code != http.StatusOK || got.body != string(onePixel) || got.header.Get("Content-Type") != "image/png" {
+		t.Errorf("serve: %d %q", got.code, got.header.Get("Content-Type"))
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(s.path), "plan.files", "secret.png"), onePixel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"/other.files/" + name, "/plan.files/secret.png", "/plan.files/" + strings.TrimSuffix(name, ".png") + ".svg", "/plan.html/x"} {
+		if got := s.get("/p/" + s.id + p); got.code != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", p, got.code)
+		}
+	}
+	if code, _ := s.uploadTo("/images", []byte("<svg/>"), "image/svg+xml", s.srv.URL); code != http.StatusUnsupportedMediaType {
+		t.Errorf("svg page image: %d", code)
+	}
+	if code, _ := s.uploadTo("/images", onePixel, "image/png", "http://evil.example"); code != http.StatusForbidden {
+		t.Errorf("cross-site page image: %d", code)
 	}
 }
