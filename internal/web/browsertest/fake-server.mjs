@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -129,6 +130,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     queued: {},
     textAt: {},
     snapshots: {},
+    files: {},
   };
   const snapshot = () => (state.snapshots[state.rev] ??= state.blocks.map((b) => ({ ...b })));
 
@@ -201,8 +203,11 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const raw = Buffer.concat(chunks);
+    const image = String(req.headers["content-type"] || "").startsWith("image/");
+    const body = image ? "" : raw.toString();
     const parsed = body ? JSON.parse(body) : null;
     state.requests.push({ method: req.method, path: url.pathname, search: url.search, headers: req.headers, body: parsed });
 
@@ -212,7 +217,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return json(res, 403, { error: "kapi restarted", reopen: state.restarted, ...(state.reopened && { reopened: true }) });
     }
     const path = url.pathname.slice(prefix.length - 1);
-    if (req.method === "POST" && (req.headers["content-type"] !== "application/json" || req.headers.origin !== `http://${req.headers.host}`)) {
+    const upload = image && path.endsWith("/files");
+    if (req.method === "POST" && ((req.headers["content-type"] !== "application/json" && !upload) || req.headers.origin !== `http://${req.headers.host}`)) {
       return json(res, 403, { error: "cross-site request" });
     }
     if (path.startsWith("/static/")) {
@@ -265,7 +271,8 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     }
     if (req.method === "POST" && rest === "messages") {
       if (state.messageDelay) await new Promise((r) => setTimeout(r, state.messageDelay));
-      const ev = push({ author: "human", kind: "message", target: parsed.target, text: parsed.text });
+      const ev = push({ author: "human", kind: "message", target: parsed.target, text: parsed.text,
+        ...(parsed.files?.length ? { files: parsed.files.map((n) => `/home/.kapi/pages/${PAGE_ID}/files/${n}`) } : {}) });
       return json(res, 200, { seq: ev.seq });
     }
     if (req.method === "POST" && rest === "notes") {
@@ -276,9 +283,27 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
         return json(res, 500, { error });
       }
       let ev;
-      for (const n of parsed.notes) ev = push({ author: "human", kind: "note", rev: parsed.rev, ...n });
-      if (parsed.text?.trim()) ev = push({ author: "human", kind: "message", text: parsed.text });
+      const paths = (names) => (names?.length ? { files: names.map((n) => `/home/.kapi/pages/${PAGE_ID}/files/${n}`) } : {});
+      for (const { files, ...n } of parsed.notes) ev = push({ author: "human", kind: "note", rev: parsed.rev, ...n, ...paths(files) });
+      if (parsed.text?.trim() || parsed.files?.length) ev = push({ author: "human", kind: "message", text: parsed.text, ...paths(parsed.files) });
       return json(res, 200, { seq: ev.seq });
+    }
+    if (req.method === "POST" && rest === "files") {
+      if (state.uploadDelay) await new Promise((r) => setTimeout(r, state.uploadDelay));
+      if (state.nextUploadError) {
+        const error = state.nextUploadError;
+        state.nextUploadError = null;
+        return json(res, 415, { error });
+      }
+      const name = `${createHash("sha256").update(raw).digest("hex").slice(0, 32)}.png`;
+      state.files[name] = raw;
+      return json(res, 200, { name, mime: req.headers["content-type"], size: raw.length });
+    }
+    if (req.method === "GET" && rest.startsWith("files/")) {
+      const data = state.files[rest.slice(6)];
+      if (!data) return json(res, 404, { error: "expired" });
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(data);
     }
     if (req.method === "POST" && rest === "resolve") {
       if (state.events[parsed.note - 1]?.kind !== "note") return json(res, 422, { error: `#${parsed.note} is not a note on this page` });
