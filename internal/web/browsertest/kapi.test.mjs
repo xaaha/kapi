@@ -3102,3 +3102,33 @@ test("#30 a message that fails to send keeps its images", async () => {
   assert.deepEqual(await chips(".kapi-composer"), ["ready"]);
   assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "x");
 });
+
+test("#30 Send stays off while notes send, images out in a send count toward the limit, and Retry keeps focus on its chip", async () => {
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("note");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  await giveImage("paste", ".kapi-composer textarea", { count: 2 });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,ready");
+  server.state.notesDelay = 400;
+  server.state.nextNotesError = "busy";
+  await click('button.kapi-primary[type="submit"]');
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-primary").disabled`), true, "Send is off while notes send");
+  await giveImage("paste", ".kapi-composer textarea", { count: 3, tag: "during" });
+  await until(async () => (await notice()).includes("At most 4 images"));
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,ready,ready,ready");
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer .kapi-primary").disabled`), false);
+
+  for (const _ of [0, 1, 2]) await click(".kapi-composer .kapi-chip-remove");
+  server.state.nextUploadError = "nope";
+  await giveImage("paste", ".kapi-composer textarea", { tag: "bad" });
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,error");
+  server.state.uploadDelay = 200;
+  await page.eval(`document.querySelector(".kapi-composer .kapi-chip:nth-child(2) .kapi-chip-retry").focus()`);
+  await page.key("Enter");
+  await until(async () => (await chips(".kapi-composer")).join() === "ready,uploading");
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-composer .kapi-chip:nth-child(2) .kapi-chip-remove")`), true);
+});

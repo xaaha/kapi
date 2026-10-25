@@ -126,7 +126,9 @@
     h("button", { type: "button", class: "kapi-btn kapi-primary", text: "Notes", onclick: () => setSheet(!sheetOpen) }));
   const pins = h("div", { class: "kapi-pins" });
   const rail = h("nav", { class: "kapi-rail", "aria-label": "Where the notes are on the page", hidden: "" });
-  const composerTray = imageTray(() => (sendButton.disabled = !!composerTray.blocked()));
+  let sendsInFlight = 0;
+  const syncSend = () => (sendButton.disabled = sending || sendsInFlight > 0 || !!composerTray.blocked());
+  const composerTray = imageTray(() => syncSend());
   const composer = h("form", { class: "kapi-composer" },
     input, composerTray.row,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
@@ -854,6 +856,7 @@
 
   function imageTray(onChange) {
     let items = [];
+    let away = 0;
     const row = h("div", { class: "kapi-tray", hidden: "" });
     const picker = h("input", { type: "file", accept: IMAGE_TYPES.join(","), multiple: "", hidden: "", "aria-hidden": "true" });
     const pick = h("button", { type: "button", class: "kapi-attach", "aria-label": "Attach image", "data-tip": "Attach image", onclick: () => picker.click() }, icon("image"));
@@ -873,7 +876,8 @@
           items = items.filter((x) => x !== it);
           changed();
         } }, icon("x")))));
-      const again = keep && row.children[items.indexOf(keep.item)]?.querySelector(`.${keep.cls.split(" ")[0]}`);
+      const chip = keep && row.children[items.indexOf(keep.item)];
+      const again = chip && (chip.querySelector(`.${keep.cls.split(" ")[0]}`) ?? chip.querySelector(".kapi-chip-remove"));
       if (again) again.focus();
       else if (focused) (row.querySelector(".kapi-chip-remove") ?? pick).focus();
     }
@@ -897,7 +901,7 @@
           say("Only PNG, JPEG, GIF and WebP images can be attached.", "error");
           continue;
         }
-        if (items.length >= MAX_IMAGES) {
+        if (items.length + away >= MAX_IMAGES) {
           say(`At most ${MAX_IMAGES} images per note or message.`, "error");
           break;
         }
@@ -919,12 +923,14 @@
         if (items.some((i) => i.state === "error")) return "Retry or remove the image that did not upload.";
         return "";
       },
-      drop(names) {
+      take(names) {
         items = items.filter((i) => !names.includes(i.name));
+        away += names.length;
         changed();
       },
-      restore(names) {
-        items = [...names.map((name) => ({ name, state: "ready", label: "" })), ...items].slice(0, MAX_IMAGES);
+      settle(names, sent) {
+        away -= names.length;
+        if (!sent) items = [...names.map((name) => ({ name, state: "ready", label: "" })), ...items];
         changed();
       },
     };
@@ -1057,20 +1063,18 @@
     const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
     sending = true;
-    sendButton.disabled = true;
     renderQueue();
     input.value = "";
-    composerTray.drop(files);
+    composerTray.take(files);
     const res = await request("/notes", { rev: Number(main.dataset.rev), notes: batch.map(({ target, part, quote, prefix, suffix, re, files: f, text: t }) => ({ target, part, quote, prefix, suffix,
       ...(Array.isArray(re) && re.length ? { re } : {}), ...(Array.isArray(f) && f.length ? { files: f } : {}), text: t })), text, ...(files.length ? { files } : {}) });
     sending = false;
-    sendButton.disabled = false;
+    composerTray.settle(files, !!res?.ok);
     asking?.sync();
     if (res?.ok) {
       return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
     }
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
-    composerTray.restore(files);
     renderQueue();
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
   }
@@ -1853,12 +1857,12 @@
     if (composerTray.blocked()) return say(composerTray.blocked());
     if (!text && !files.length) return;
     input.value = "";
-    composerTray.drop(files);
-    sendButton.disabled = true;
+    sendsInFlight++;
+    composerTray.take(files);
     const res = await request("/messages", { kind: "message", text, ...(files.length ? { files } : {}) });
-    sendButton.disabled = !!composerTray.blocked();
+    sendsInFlight--;
+    composerTray.settle(files, !!res?.ok);
     if (res?.ok) return;
-    composerTray.restore(files);
     input.value = input.value ? `${text}\n${input.value}` : text;
     if (res) say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
   }
