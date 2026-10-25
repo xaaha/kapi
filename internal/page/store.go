@@ -119,8 +119,8 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 	}
 	s := &Store{path: path, dir: filepath.Join(home, "pages", ID(path)), log: l}
 	events, _ := l.After(0)
-	for _, e := range events {
-		if e.Kind == "revision" {
+	for i := range events {
+		if e := &events[i]; e.Kind == "revision" {
 			s.logged = max(s.logged, e.Rev)
 		}
 	}

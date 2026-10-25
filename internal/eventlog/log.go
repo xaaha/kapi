@@ -20,6 +20,10 @@ type Event struct {
 	Author string    `json:"author"`
 	Kind   string    `json:"kind"`
 	Target string    `json:"target,omitempty"`
+	Part   string    `json:"part,omitempty"`
+	Quote  string    `json:"quote,omitempty"`
+	Prefix string    `json:"prefix,omitempty"`
+	Suffix string    `json:"suffix,omitempty"`
 	Rev    uint64    `json:"rev,omitempty"`
 	Text   string    `json:"text"`
 }
@@ -110,32 +114,46 @@ func (l *Log) Close() error {
 }
 
 func (l *Log) Append(in *Event) (Event, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.broken != nil {
-		return Event{}, l.broken
-	}
-	e := *in
-	e.Seq = uint64(len(l.events)) + 1
-	if e.Time.IsZero() {
-		e.Time = time.Now().UTC()
-	}
-	line, err := json.Marshal(e)
+	out, err := l.AppendAll([]Event{*in})
 	if err != nil {
 		return Event{}, err
 	}
-	line = append(line, '\n')
-	if _, err := writeLine(l.file, line); err != nil {
-		return Event{}, errors.Join(err, l.undoAppend())
+	return out[0], nil
+}
+
+func (l *Log) AppendAll(in []Event) ([]Event, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.broken != nil {
+		return nil, l.broken
+	}
+	now := time.Now().UTC()
+	out := make([]Event, len(in))
+	var lines []byte
+	for i := range in {
+		e := in[i]
+		e.Seq = uint64(len(l.events) + i + 1)
+		if e.Time.IsZero() {
+			e.Time = now
+		}
+		line, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		lines = append(append(lines, line...), '\n')
+		out[i] = e
+	}
+	if _, err := writeLine(l.file, lines); err != nil {
+		return nil, errors.Join(err, l.undoAppend())
 	}
 	if err := syncFile(l.file); err != nil {
-		return Event{}, errors.Join(err, l.undoAppend())
+		return nil, errors.Join(err, l.undoAppend())
 	}
-	l.size += int64(len(line))
-	l.events = append(l.events, e)
+	l.size += int64(len(lines))
+	l.events = append(l.events, out...)
 	close(l.changed)
 	l.changed = make(chan struct{})
-	return e, nil
+	return out, nil
 }
 
 func (l *Log) undoAppend() error {

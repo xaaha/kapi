@@ -262,6 +262,18 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       const ev = push({ author: "human", kind: "message", target: parsed.target, text: parsed.text });
       return json(res, 200, { seq: ev.seq });
     }
+    if (req.method === "POST" && rest === "notes") {
+      if (state.notesDelay) await new Promise((r) => setTimeout(r, state.notesDelay));
+      if (state.nextNotesError) {
+        const error = state.nextNotesError;
+        state.nextNotesError = null;
+        return json(res, 500, { error });
+      }
+      let ev;
+      for (const n of parsed.notes) ev = push({ author: "human", kind: "note", ...n });
+      if (parsed.text?.trim()) ev = push({ author: "human", kind: "message", text: parsed.text });
+      return json(res, 200, { seq: ev.seq });
+    }
     if (req.method === "POST" && rest === "answers") {
       const ev = push({ author: "human", kind: "answer", text: `${parsed.form} ${JSON.stringify(parsed.values)}` });
       return json(res, 200, { seq: ev.seq });

@@ -238,3 +238,64 @@ func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testi
 		t.Errorf("append after reopen = %+v, %v; want seq 2", e, err)
 	}
 }
+
+func TestAppendAllWritesTheWholeBatchOrNothing(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	batch := func(texts ...string) ([]Event, error) {
+		in := make([]Event, len(texts))
+		for i, text := range texts {
+			in[i] = Event{Author: "human", Kind: "note", Text: text}
+		}
+		return l.AppendAll(in)
+	}
+	if _, err := batch("one"); err != nil {
+		t.Fatal(err)
+	}
+	full := errors.New("no space left on device")
+	write0, sync0 := writeLine, syncFile
+	defer func() { writeLine, syncFile = write0, sync0 }()
+	writeLine = func(f *os.File, b []byte) (int, error) {
+		n, err := write0(f, b[:len(b)*3/4])
+		return n, errors.Join(full, err)
+	}
+	if _, err := batch("lost a", "lost b"); !errors.Is(err, full) {
+		t.Fatalf("batch with a full disk = %v, want %v", err, full)
+	}
+	writeLine = write0
+	if events, _ := l.After(0); len(events) != 1 {
+		t.Fatalf("after a failed batch the log holds %d events, want 1", len(events))
+	}
+	syncs := 0
+	syncFile = func(f *os.File) error {
+		syncs++
+		return sync0(f)
+	}
+	out, err := batch("two", "three")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if syncs != 1 {
+		t.Errorf("a batch of 2 synced %d times, want 1", syncs)
+	}
+	if out[0].Seq != 2 || out[1].Seq != 3 {
+		t.Errorf("batch seqs %d, %d, want 2, 3", out[0].Seq, out[1].Seq)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	events, _ := reopened.After(0)
+	var got []string
+	for _, e := range events {
+		got = append(got, e.Text)
+	}
+	if want := []string{"one", "two", "three"}; !slices.Equal(got, want) {
+		t.Errorf("events after a failed batch %q, want %q", got, want)
+	}
+}

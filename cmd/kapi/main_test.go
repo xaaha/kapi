@@ -346,6 +346,13 @@ func TestEventLinesCarryNoTerminalControls(t *testing.T) {
 	}
 }
 
+func TestNoteLinesNameThePartAndQuote(t *testing.T) {
+	e := &eventlog.Event{Seq: 12, Author: "human", Kind: "note", Target: "k3f9a2bq", Part: "row 2, Owner", Quote: "said \"no\"\nthen\x1b[2J", Text: "why?"}
+	if got, want := eventLine(e), `#12 human note on #k3f9a2bq (row 2, Owner) "said \"no\"\nthen\x1b[2J": why?`; got != want {
+		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
 func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{{Seq: 2, Author: "human", Kind: "message", Text: "one"}, {Seq: 5, Author: "human", Kind: "answer", Text: "two"}}}}
 	out, err := run(t, f, "wait", "--reader", "codex", "plan.html")

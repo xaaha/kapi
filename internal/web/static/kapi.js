@@ -32,6 +32,12 @@
   let noticeTimer = 0;
   let note = null;
   let retryDelay = 1000;
+  let asking = null;
+  let lastPoint = null;
+  let textRange = null;
+  let textBackward = false;
+  let pointerDown = false;
+  let sending = false;
 
   function h(tag, props = {}, ...kids) {
     const el = document.createElement(tag);
@@ -48,8 +54,8 @@
   const ICONS = {
     archive: "M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z",
     unarchive: "M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40ZM90.34,109.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,91.31V152a8,8,0,0,1-16,0V91.31l-18.34,18.35A8,8,0,0,1,90.34,109.66Z",
-    up: "M205.66,117.66a8,8,0,0,1-11.32,0L136,59.31V216a8,8,0,0,1-16,0V59.31L61.66,117.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0l72,72A8,8,0,0,1,205.66,117.66Z",
-    down: "M205.66,149.66l-72,72a8,8,0,0,1-11.32,0l-72-72a8,8,0,0,1,11.32-11.32L120,196.69V40a8,8,0,0,1,16,0V196.69l58.34-58.35a8,8,0,0,1,11.32,11.32Z",
+    robot: "M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16Zm-52-56H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Z",
+    x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
@@ -86,8 +92,9 @@
   const button = (label, action, title = label) =>
     h("button", { type: "button", "data-action": action, title, text: label });
 
-  const tool = (glyph, label, action) =>
-    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": label }, icon(glyph), h("span", { class: "kapi-tool-label", text: label }));
+  const tool = (glyph, label, action, key = "", shortcut = key) =>
+    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": key ? `${label} ${key}` : label, ...(shortcut && { "aria-keyshortcuts": shortcut }) },
+      icon(glyph), h("span", { class: "kapi-tool-label", text: label }));
 
   const iconTool = (glyph, label, action) =>
     h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": label }, icon(glyph));
@@ -99,13 +106,15 @@
   const restartBox = h("div", { class: "kapi-restart", role: "alert", hidden: "" });
   const log = h("ol", { class: "kapi-log", "aria-live": "polite" });
   const empty = h("p", { class: "kapi-empty", text: "Messages with the agent show up here." });
-  const targetChip = h("button", { type: "button", class: "kapi-target", hidden: "", title: "Stop targeting this block" });
   const input = h("textarea", { rows: "3", placeholder: "Message the agent", "aria-label": "Message" });
   const sendButton = h("button", { type: "submit", class: "kapi-primary", text: "Send" });
+  const HINT = "Enter to send, Shift+Enter for a new line";
+  const hint = h("span", { class: "kapi-hint", text: HINT });
+  const queueBox = h("section", { class: "kapi-queue", "aria-label": "Queued notes", hidden: "" });
   const composer = h("form", { class: "kapi-composer" },
-    targetChip, input,
+    input,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
-      h("span", { class: "kapi-hint", text: "Enter to send, Shift+Enter for a new line" }), sendButton));
+      hint, sendButton));
   const undoButton = button("Undo", "undo", "Undo the last change");
   const showUndo = (can) => {
     undoButton.hidden = String(can) !== "true";
@@ -114,20 +123,24 @@
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle()),
     restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log),
-    h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, composer);
+    h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const root = h("div", { id: "kapi-chrome" }, ring, panel, copyButton);
   const phone = matchMedia("(max-width: 760px)");
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
+  const POINT_PAD = 10;
+  const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
   const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
+  const DELETE_KEY = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u232b" : "Del";
   document.body.append(root);
   showUndo(main.dataset.undo);
   main.before(h("header", { class: "kapi-site-head" },
     h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
 
+  const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
@@ -244,14 +257,12 @@
     if (el !== selected) selectedAt = performance.now();
     selected = el;
     el?.setAttribute("data-kapi-selected", "");
-    targetChip.hidden = !el;
-    targetChip.textContent = el ? `About: ${describe(idOf(el))}  ×` : "";
-    targetChip.title = el ? `#${idOf(el)}` : "";
     renderBar();
   }
 
   function renderBar() {
-    if (!selected || !selected.isConnected) {
+    const text = !editing && !!textRange;
+    if (asking || (!text && (!selected || !selected.isConnected))) {
       bar.hidden = true;
       return placeRing();
     }
@@ -262,20 +273,17 @@
       primary.append(h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
       bar.replaceChildren(primary,
         ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
+    } else if (text) {
+      bar.replaceChildren(tool("robot", "Ask AI", "ask", "A"));
     } else {
-      const list = peers(selected);
-      const i = list.indexOf(selected);
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
-      bar.replaceChildren(...(archived ? [tool("unarchive", "Unarchive", "unarchive")] : [
+      bar.replaceChildren(tool("robot", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
-        tool("archive", "Archive", "archive")]),
-        iconTool("up", "Move up", "up"), iconTool("down", "Move down", "down"),
-        tool("trash", "Delete", "delete"));
-      bar.querySelector('[data-action="up"]').disabled = i <= 0;
-      bar.querySelector('[data-action="down"]').disabled = i >= list.length - 1;
+        tool("archive", "Archive", "archive", "E")]),
+        tool("trash", "Delete", "delete", DELETE_KEY, "Delete"));
     }
     for (const b of bar.querySelectorAll("button")) b.disabled ||= busy;
     bar.hidden = false;
@@ -306,20 +314,42 @@
     return hit(new DOMRect(t.x - 4, t.y - 4, t.width + 8, t.height + 8)) || within(main);
   }
 
+  function pointRect() {
+    if (editing) return null;
+    if (textRange) {
+      const rects = [...textRange.getClientRects()].filter((r) => r.width || r.height);
+      return (textBackward ? rects[0] : rects.at(-1)) ?? null;
+    }
+    if (lastPoint?.el !== selected) return null;
+    const r = selected.getBoundingClientRect();
+    return new DOMRect(r.left + lastPoint.dx, r.top + lastPoint.dy - POINT_PAD, 0, 2 * POINT_PAD);
+  }
+
   function placeBar() {
     const target = editing?.box || selected;
-    if (phone.matches || bar.hidden || !target?.isConnected) return dockBar(false);
+    const text = !editing && !!textRange;
+    if (phone.matches || bar.hidden || (!text && !target?.isConnected)) return dockBar(false);
     dockBar(true);
     const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
-    const r = target.getBoundingClientRect();
     const { width, height } = bar.getBoundingClientRect();
-    const left = Math.min(r.right, areaRight - 4) - width;
-    const spot = [
-      ["outside", r.right + BAR_GAP, Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)],
-      ["above", left, r.top - BAR_GAP - height],
-      ["below", left, r.bottom + BAR_GAP],
-    ].find(([, x, y]) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight &&
-      !coversContent(new DOMRect(x, y, width, height), target));
+    const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight;
+    const p = pointRect();
+    const py = p && Math.min(Math.max(p.top + p.height / 2 - height / 2, 4), innerHeight - height - 4);
+    const right = p && ["point", p.right + POINT_GAP, py];
+    const left = p && ["point", p.left - POINT_GAP - width, py];
+    const above = p && ["point", Math.min(Math.max(p.right - width / 2, 4), areaRight - 4 - width), p.top - BAR_GAP - height];
+    const under = p && ["point", above[1], p.bottom + BAR_GAP];
+    const near = !p ? [] : text ? (textBackward ? [above, under, left, right] : [above, under, right, left]) : [right, left];
+    let spot = near.find(([, x, y]) => fits(x, y));
+    if (!spot && target?.isConnected && !text) {
+      const r = target.getBoundingClientRect();
+      const left = Math.min(r.right, areaRight - 4) - width;
+      spot = [
+        ["outside", r.right + BAR_GAP, Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)],
+        ["above", left, r.top - BAR_GAP - height],
+        ["below", left, r.bottom + BAR_GAP],
+      ].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height), target));
+    }
     if (!spot) return dockBar(false);
     bar.dataset.place = spot[0];
     bar.style.left = `${spot[1]}px`;
@@ -328,7 +358,7 @@
 
   function placeRing() {
     placeBar();
-    ring.hidden = bar.hidden || !selected || !!editing?.area;
+    ring.hidden = (bar.hidden && !asking) || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
       ring.style.left = `${r.left - 4}px`;
@@ -350,6 +380,7 @@
     setStatus("disconnected");
     statusText.textContent = "Kapi restarted";
     restartBox.hidden = false;
+    handOff();
     if (reopened) return restartBox.replaceChildren(h("p", { text: "Kapi restarted and reopened this page in a new tab. You can close this one." }));
     const copy = h("button", { type: "button", class: "kapi-copy", text: "Copy" });
     copy.addEventListener("click", () =>
@@ -592,6 +623,7 @@
     }
     if (name === "save") return saveEdit();
     if (name === "cancel") return cancelEdit();
+    if (name === "ask") return openAsk();
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
@@ -606,12 +638,341 @@
       await refresh(null);
       return showNote(spot);
     }
-    const list = peers(selected);
-    const i = list.indexOf(selected);
-    const before = name === "up" ? list[i - 1] : list[i + 2];
-    if (name === "up" && !before) return;
-    if (name === "down" && i >= list.length - 1) return;
-    if ((await op("move", { id, before: before ? idOf(before) : "" }))?.ok) await refresh(null);
+  }
+
+  const QUOTE_MAX = 1000;
+  const CONTEXT = 32;
+  const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1).trimEnd()}\u2026` : text);
+  const draftsKey = `kapi-drafts:${base.split("/").pop()}`;
+  let drafts = loadDrafts();
+
+  function loadDrafts() {
+    try {
+      const list = JSON.parse(sessionStorage.getItem(draftsKey) || "[]");
+      return Array.isArray(list) ? list.filter((d) => d && typeof d.target === "string" && typeof d.text === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const handoffKey = `kapi-handoff:${base.split("/").pop()}`;
+
+  const handoffList = () => {
+    const list = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+    return Array.isArray(list) ? list.filter((d) => d && typeof d.target === "string" && typeof d.text === "string") : [];
+  };
+
+  function handOff() {
+    if (!drafts.length) return;
+    try {
+      const left = handoffList();
+      const known = new Set(left.map((d) => d.id));
+      localStorage.setItem(handoffKey, JSON.stringify([...left, ...drafts.filter((d) => !known.has(d.id))]));
+    } catch {
+      return;
+    }
+    const n = drafts.length;
+    changeDrafts(() => []);
+    say(n === 1 ? "Your queued note moves to this page's next tab." : `Your ${n} queued notes move to this page's next tab.`);
+  }
+
+  let takeOverLater = false;
+
+  function takeOver() {
+    if (restarted) return;
+    if (queueBox.querySelector("textarea")) return void (takeOverLater = true);
+    let left = [];
+    try {
+      left = handoffList();
+      localStorage.removeItem(handoffKey);
+    } catch {}
+    const known = new Set(drafts.map((d) => d.id));
+    const fresh = left.filter((d) => !known.has(d.id));
+    if (!fresh.length) return;
+    changeDrafts((list) => [...list, ...fresh]);
+    say(fresh.length === 1 ? "Brought over a queued note from the tab kapi restarted." : `Brought over ${fresh.length} queued notes from the tab kapi restarted.`);
+  }
+
+  function changeDrafts(change) {
+    drafts = change(drafts);
+    saveDrafts();
+  }
+
+  function saveDrafts() {
+    try {
+      if (drafts.length) sessionStorage.setItem(draftsKey, JSON.stringify(drafts));
+      else sessionStorage.removeItem(draftsKey);
+    } catch {}
+    renderQueue();
+  }
+
+  function cellPart(cell) {
+    const table = cell.closest("table");
+    const all = rowsOf(table);
+    const head = table.tHead?.rows[0] ?? all.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+    const header = (tr) => tr.parentElement === table.tHead || tr === head;
+    if (header(cell.parentElement)) return `column ${cell.textContent.trim()}`;
+    const rows = all.filter((tr) => !header(tr));
+    const row = `row ${rows.indexOf(cell.parentElement) + 1}`;
+    const label = cell.getAttribute("data-kapi-label");
+    return label ? `${row}, ${label}` : row;
+  }
+
+  function linePart(pre, range) {
+    const lineAt = (node, offset) => {
+      const r = document.createRange();
+      r.setStart(pre, 0);
+      r.setEnd(node, offset);
+      return r.toString().split("\n").length;
+    };
+    const first = lineAt(range.startContainer, range.startOffset);
+    const last = lineAt(range.endContainer, range.endOffset);
+    return first === last ? `line ${first}` : `lines ${first} to ${last}`;
+  }
+
+  function within(range, el) {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    if (range.compareBoundaryPoints(Range.START_TO_START, r) > 0) r.setStart(range.startContainer, range.startOffset);
+    if (range.compareBoundaryPoints(Range.END_TO_END, r) < 0) r.setEnd(range.endContainer, range.endOffset);
+    return r;
+  }
+
+  function rangeText(range) {
+    const box = document.createElement("div");
+    box.append(range.cloneContents());
+    return textOf(box);
+  }
+
+  function context(first, last, range) {
+    const before = document.createRange();
+    before.setStart(first, 0);
+    before.setEnd(range.startContainer, range.startOffset);
+    const after = document.createRange();
+    after.setStart(range.endContainer, range.endOffset);
+    after.setEnd(last, last.childNodes.length);
+    return { prefix: rangeText(before).slice(-CONTEXT), suffix: rangeText(after).slice(0, CONTEXT) };
+  }
+
+  function rangeAnchor(range) {
+    const common = range.commonAncestorContainer;
+    const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
+    const blocks = host && main.contains(host) ? [host]
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (textOf(b) ? rangeText(within(range, b)) : !b.childNodes.length || !within(range, b).collapsed));
+    if (!blocks.length) return null;
+    const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+    const both = (selector) => {
+      const a = closest(at(range.startContainer), selector);
+      return a && a === closest(at(range.endContainer), selector) && blocks[0].contains(a) ? a : null;
+    };
+    let part = "";
+    if (blocks.length === 1) {
+      const cell = both("td, th");
+      const pre = both("pre");
+      if (cell) part = cellPart(cell);
+      else if (pre) part = linePart(pre, range);
+      else if (both('[data-kapi-preset="badge"]')) part = "badge";
+    }
+    return {
+      target: blocks.map(idOf).join(","),
+      part,
+      quote: clip(rangeText(range), QUOTE_MAX),
+      ...context(blocks[0], blocks.at(-1), range),
+    };
+  }
+
+  function blockAnchor(el) {
+    const cell = lastPoint?.el === el && lastPoint.cell?.isConnected && el.contains(lastPoint.cell) ? lastPoint.cell : null;
+    if (!cell) return { target: idOf(el), part: "", quote: "", prefix: "", suffix: "" };
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    return { target: idOf(el), part: cellPart(cell), quote: clip(rangeText(range), QUOTE_MAX), ...context(el, el, range) };
+  }
+
+  function aboutText(anchor) {
+    const quote = anchor.quote && `\u201c${clip(anchor.quote, 60)}\u201d`;
+    if (anchor.part) return quote ? `${anchor.part}: ${quote}` : anchor.part;
+    return quote || describe(anchor.target.split(",")[0]);
+  }
+
+  function highlight(range) {
+    if (!window.Highlight || !CSS.highlights) return;
+    if (range) CSS.highlights.set("kapi-ask", new Highlight(range));
+    else CSS.highlights.delete("kapi-ask");
+  }
+
+  function openAsk() {
+    if (editing) return;
+    if (textRange) {
+      const anchor = rangeAnchor(textRange);
+      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange());
+    } else if (selected) {
+      const anchor = blockAnchor(selected);
+      let range = null;
+      if (anchor.part) {
+        range = document.createRange();
+        range.selectNodeContents(lastPoint.cell);
+      }
+      showAsk(anchor, range, null);
+    }
+  }
+
+  function showAsk(anchor, range, restore) {
+    closeAsk();
+    const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
+    const head = h("div", { class: "kapi-ask-head" }, about);
+    if (anchor.part && !anchor.target.includes(",")) {
+      head.append(h("button", { type: "button", class: "kapi-ask-widen", "aria-label": "Ask about the whole block", title: "Ask about the whole block", onclick: () => {
+        asking.anchor = { target: anchor.target.split(",")[0], part: "", quote: "", prefix: "", suffix: "" };
+        about.textContent = `About: ${aboutText(asking.anchor)}`;
+        head.lastChild.remove();
+        highlight(null);
+        asking.text.focus();
+      } }, icon("x")));
+    }
+    const text = h("textarea", { rows: "3", placeholder: "Ask the agent about this", "aria-label": "Note for the agent" });
+    const queueButton = h("button", { type: "button", class: "kapi-ask-queue", title: "Queue (Enter)", onclick: () => queueAsk() },
+      "Queue", h("span", { class: "kapi-key", text: " \u21b5" }));
+    const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${SHORTCUT})`, onclick: () => sendAsk() },
+      "Send", h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
+    const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: "Cancel (Escape)", text: "Cancel", onclick: () => closeAsk(true) });
+    const sync = () => {
+      queueButton.disabled = sendNow.disabled = !text.value.trim() || sending;
+    };
+    text.addEventListener("input", sync);
+    text.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeAsk(true);
+      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        sendAsk();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        queueAsk();
+      }
+    });
+    const box = h("div", { class: "kapi-ask", role: "dialog", "aria-label": "Note for the agent" }, head, text,
+      h("div", { class: "kapi-ask-row" }, cancel, queueButton, sendNow));
+    root.append(box);
+    asking = { box, anchor, range, restore, text, sync, at: (range ?? selected)?.getBoundingClientRect() };
+    sync();
+    highlight(range);
+    renderBar();
+    placeAsk();
+    text.focus({ preventScroll: true });
+  }
+
+  function placeAsk() {
+    if (!asking || phone.matches) return;
+    const live = asking.range?.getClientRects().length ? asking.range : find(asking.anchor.target.split(",")[0]);
+    const r = live?.isConnected === false ? asking.at : (live?.getBoundingClientRect() ?? asking.at);
+    asking.at = r;
+    const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    const { width, height } = asking.box.getBoundingClientRect();
+    const x = Math.min(Math.max(r.left, 8), areaRight - width - 8);
+    const below = r.bottom + BAR_GAP;
+    const y = below + height <= innerHeight - 8 ? below : Math.max(8, r.top - BAR_GAP - height);
+    asking.box.style.left = `${Math.max(8, x)}px`;
+    asking.box.style.top = `${y}px`;
+  }
+
+  function closeAsk(restore = false) {
+    if (!asking) return;
+    const { box, restore: range } = asking;
+    asking = null;
+    box.remove();
+    highlight(null);
+    renderBar();
+    if (restore && range && main.contains(range.startContainer) && !range.collapsed && range.startContainer.isConnected) {
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      trackSelection();
+    }
+  }
+
+  function queueAsk() {
+    const text = asking?.text.value.trim();
+    if (!text || sending) return false;
+    const { target, part, quote, prefix, suffix } = asking.anchor;
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    closeAsk();
+    changeDrafts((list) => [...list, { id, target, part, quote, prefix, suffix, text }]);
+    return true;
+  }
+
+  function sendAsk() {
+    if (queueAsk()) sendNotes();
+  }
+
+  async function sendNotes() {
+    if (sending) return;
+    const text = input.value.trim();
+    if (!drafts.length) return send();
+    const batch = drafts.slice();
+    const ids = new Set(batch.map((d) => d.id));
+    sending = true;
+    sendButton.disabled = true;
+    renderQueue();
+    input.value = "";
+    const res = await request("/notes", { notes: batch.map(({ target, part, quote, prefix, suffix, text: t }) => ({ target, part, quote, prefix, suffix, text: t })), text });
+    sending = false;
+    sendButton.disabled = false;
+    asking?.sync();
+    if (res?.ok) return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
+    if (text) input.value = input.value ? `${text}\n${input.value}` : text;
+    renderQueue();
+    if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
+  }
+
+  function editDraft(item, d) {
+    const area = h("textarea", { rows: "2", "aria-label": "Edit queued note" });
+    area.value = d.text;
+    let finished = false;
+    const done = (save) => {
+      if (finished) return;
+      finished = true;
+      const next = area.value.trim();
+      if (save && next && next !== d.text) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
+      else renderQueue();
+      if (takeOverLater) {
+        takeOverLater = false;
+        takeOver();
+      }
+    };
+    area.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        done(false);
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        done(true);
+      }
+    });
+    area.addEventListener("blur", () => done(true));
+    item.querySelector(".kapi-queued-text").replaceWith(area);
+    area.focus();
+  }
+
+  function renderQueue() {
+    const n = drafts.length;
+    queueBox.hidden = !n;
+    hint.textContent = n ? `Enter sends ${n === 1 ? "the note" : `the ${n} notes`}` : HINT;
+    queueBox.replaceChildren(h("h2", { class: "kapi-queue-head", text: n === 1 ? "1 note queued" : `${n} notes queued` }),
+      ...drafts.map((d) => {
+        const item = h("div", { class: "kapi-queued-note", "data-draft": d.id },
+          h("button", { type: "button", class: "kapi-ref kapi-queued-about", "data-ref": d.target.split(",")[0], text: aboutText(d) }),
+          h("div", { class: "kapi-queued-text", text: d.text }),
+          h("div", { class: "kapi-queued-tools" },
+            h("button", { type: "button", "aria-label": "Edit note", "data-tip": "Edit", onclick: () => editDraft(item, d) }, icon("pencil")),
+            h("button", { type: "button", "aria-label": "Remove note", "data-tip": "Remove", onclick: () => {
+              changeDrafts((list) => list.filter((x) => x.id !== d.id));
+            } }, icon("x"))));
+        return item;
+      }));
+    for (const b of queueBox.querySelectorAll(".kapi-queued-tools button")) b.disabled = sending;
   }
 
   function refresh(ids) {
@@ -703,7 +1064,9 @@
       if (!isNaN(t)) meta.append(h("time", { datetime: ev.time, text: t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }));
     }
     if (ev.target) {
-      meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": ev.target, title: `#${ev.target}`, text: describe(ev.target) }));
+      const first = ev.target.split(",")[0].trim();
+      const where = ev.part ? `${describe(first)}, ${ev.part}` : describe(first);
+      meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": first, title: `#${ev.target}`, text: where }));
     }
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
     empty.hidden = true;
@@ -763,7 +1126,11 @@
     }
     if (ev.kind === "message") addEntry(ev, h("div", { class: "kapi-msg-text", text: ev.text }));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
-    if (ev.kind === "message" || ev.kind === "answer") {
+    else if (ev.kind === "note") {
+      addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
+        h("div", { class: "kapi-msg-text", text: ev.text })));
+    }
+    if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {
       if (ev.author === "human") lastHuman = ev.seq;
       else lastReply = ev.seq;
       markRead();
@@ -814,7 +1181,7 @@
     if (!text) return;
     input.value = "";
     sendButton.disabled = true;
-    const res = await request("/messages", { kind: "message", target: selected ? idOf(selected) : "", text });
+    const res = await request("/messages", { kind: "message", text });
     sendButton.disabled = false;
     if (res?.ok) return;
     input.value = input.value ? `${text}\n${input.value}` : text;
@@ -841,7 +1208,6 @@
       else say("That block is no longer on the page.");
       return;
     }
-    if (e.target === targetChip) return select(null);
     if (e.detail > 1 && bar.contains(e.target) && performance.now() - selectedAt < 600) return startEdit();
     const b = e.target.closest("[data-action]");
     if (b && !b.disabled) action(b.dataset.action);
@@ -993,7 +1359,46 @@
     const th = labelTapped(e) ?? closest(e.target, ".kapi-table th");
     if (th && main.contains(th)) sortTable(th);
     const el = closest(e.target, BLOCK);
-    if (el && main.contains(el)) select(el);
+    if (!el || !main.contains(el)) return;
+    if (e.isTrusted) {
+      const r = el.getBoundingClientRect();
+      lastPoint = { el, dx: e.clientX - r.left, dy: e.clientY - r.top, cell: closest(e.target, "td, th") };
+    } else lastPoint = null;
+    select(el);
+  });
+
+  function trackSelection() {
+    const sel = getSelection();
+    const r = !editing && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
+    const next = r && main.contains(r.startContainer) && main.contains(r.endContainer) && r.toString().trim() ? r : null;
+    const had = !!textRange;
+    textRange = next;
+    textBackward = !!next && sel.anchorNode !== null && (sel.anchorNode === sel.focusNode ? sel.focusOffset < sel.anchorOffset
+      : !!(sel.anchorNode.compareDocumentPosition(sel.focusNode) & Node.DOCUMENT_POSITION_PRECEDING));
+    if (had !== !!next) renderBar();
+    else placeRing();
+  }
+
+  document.addEventListener("selectionchange", () => {
+    if (!pointerDown) trackSelection();
+  });
+  document.addEventListener("pointerdown", (e) => {
+    pointerDown = e.button === 0 && !root.contains(e.target);
+  }, true);
+  document.addEventListener("pointermove", (e) => {
+    if (!pointerDown || e.buttons) return;
+    pointerDown = false;
+    trackSelection();
+  }, true);
+  for (const type of ["pointerup", "pointercancel"]) {
+    document.addEventListener(type, () => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      trackSelection();
+    }, true);
+  }
+  bar.addEventListener("mousedown", (e) => {
+    if (textRange && !editing) e.preventDefault();
   });
 
   document.addEventListener("click", (e) => {
@@ -1029,13 +1434,13 @@
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
-    send();
+    sendNotes();
   });
 
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
-    send();
+    sendNotes();
   });
 
   document.addEventListener("keydown", (e) => {
@@ -1043,6 +1448,24 @@
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
+    if (!editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey && !e.shiftKey) {
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && key === "z") {
+        if (undoButton.hidden || busy) return;
+        e.preventDefault();
+        return action("undo");
+      }
+      if (!e.metaKey && !e.ctrlKey && (textRange || selected)) {
+        const block = !textRange && !busy && selected;
+        const name = key === "a" ? "ask"
+          : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
+            : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
+        if (name) {
+          e.preventDefault();
+          return action(name);
+        }
+      }
+    }
     if (e.key === "Escape") {
       dismissNote();
       if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
@@ -1069,6 +1492,8 @@
   }
 
   addEventListener("scroll", placeRing, { passive: true });
+  addEventListener("scroll", placeAsk, { passive: true });
+  addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("resize", placeRing);
   const ZWSP = "\u200b";
@@ -1110,5 +1535,10 @@
   labelArchived(main);
   numberRows(main);
   applyFolds();
+  renderQueue();
+  takeOver();
+  addEventListener("storage", (e) => {
+    if (e.key === handoffKey && e.newValue) takeOver();
+  });
   connect();
 })();

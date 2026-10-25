@@ -62,6 +62,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/source/{block}", s.withPage(s.handleSource))
 	s.mux.HandleFunc("GET /p/{id}/events", s.withPage(s.handleEvents))
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
+	s.mux.HandleFunc("POST /p/{id}/notes", s.withPage(s.handleNotes))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
 	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
@@ -101,7 +102,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|ops|answers)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|ops|answers)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -293,12 +294,13 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	defer s.pages.Viewing(r.PathValue("id"))()
 	for {
 		events, changed := l.After(after)
-		for _, e := range events {
+		for i := range events {
+			e := &events[i]
 			data, err := json.Marshal(e)
 			if err != nil {
 				return
 			}
-			if _, err := fmt.Fprintf(w, "id: %d\ndata: %s\n\n", e.Seq, data); err != nil {
+			if _, err := fmt.Fprintf(w, "id: %d\ndata: %s\n\n", e.Seq, data); err != nil { //nolint:gosec // text/event-stream of JSON, not HTML
 				return
 			}
 			after = e.Seq
@@ -360,6 +362,45 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+}
+
+func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+	var in struct {
+		Notes []struct {
+			Target string `json:"target"`
+			Part   string `json:"part"`
+			Quote  string `json:"quote"`
+			Prefix string `json:"prefix"`
+			Suffix string `json:"suffix"`
+			Text   string `json:"text"`
+		} `json:"notes"`
+		Text string `json:"text"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	events := make([]eventlog.Event, 0, len(in.Notes)+1)
+	for _, n := range in.Notes {
+		if strings.TrimSpace(n.Text) == "" || n.Target == "" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "every note needs a target and non-empty text"})
+			return
+		}
+		events = append(events, eventlog.Event{Author: "human", Kind: "note", Target: n.Target, Part: n.Part,
+			Quote: n.Quote, Prefix: n.Prefix, Suffix: n.Suffix, Text: n.Text})
+	}
+	if strings.TrimSpace(in.Text) != "" {
+		events = append(events, eventlog.Event{Author: "human", Kind: "message", Text: in.Text})
+	}
+	if len(events) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note or a message"})
+		return
+	}
+	out, err := l.AppendAll(events)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
 }
 
 type opResult struct {

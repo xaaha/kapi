@@ -12,8 +12,8 @@ import (
 
 func texts(r *Response) []string {
 	var out []string
-	for _, e := range r.Events {
-		out = append(out, e.Text)
+	for i := range r.Events {
+		out = append(out, r.Events[i].Text)
 	}
 	return out
 }

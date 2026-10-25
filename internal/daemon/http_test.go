@@ -148,8 +148,8 @@ func TestDaemonServesPagesOverHTTPAndWritesTheURL(t *testing.T) {
 func presence(l *eventlog.Log) []string {
 	events, _ := l.After(0)
 	var out []string
-	for _, e := range events {
-		if e.Kind == eventlog.KindPresence {
+	for i := range events {
+		if e := &events[i]; e.Kind == eventlog.KindPresence {
 			out = append(out, e.Author+" "+e.Text)
 		}
 	}

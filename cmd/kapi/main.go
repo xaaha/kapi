@@ -736,5 +736,11 @@ func eventLine(e *eventlog.Event) string {
 	if e.Target != "" {
 		target = " on #" + e.Target
 	}
+	if e.Part != "" {
+		target += " (" + e.Part + ")"
+	}
+	if e.Quote != "" {
+		target += fmt.Sprintf(" %q", e.Quote)
+	}
 	return eventlog.Printable(fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, e.Kind, target, e.Text))
 }

@@ -175,6 +175,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 	for _, tc := range []struct{ path, reopen string }{
 		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -705,6 +706,46 @@ func TestMessagesAndAnswersAppendEvents(t *testing.T) {
 	}
 	if ev[1].Kind != "answer" || ev[1].Target != "ffffffff" || ev[1].Text != `{"form":"env","values":{"where":["prod"]}}` {
 		t.Errorf("answer event = %+v", ev[1])
+	}
+}
+
+func TestNotesAppendAsOneBatchWithTheirQuotes(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p><p data-kapi-id="bbbbbbbb">Two</p>`)
+	body := `{"notes":[{"target":"aaaaaaaa","quote":"One","prefix":"","suffix":"","text":"why?"},` +
+		`{"target":"aaaaaaaa,bbbbbbbb","part":"row 2, Owner","quote":"One Two","prefix":"x","suffix":"y","text":"merge these"}],"text":"and tidy up"}`
+	if code, out := s.post("/notes", body); code != http.StatusOK || out["seq"] != 3.0 {
+		t.Fatalf("notes: %d %v", code, out)
+	}
+	ev := s.events()
+	if len(ev) != 3 {
+		t.Fatalf("events = %+v", ev)
+	}
+	if e := ev[1]; e.Kind != "note" || e.Author != "human" || e.Target != "aaaaaaaa,bbbbbbbb" || e.Part != "row 2, Owner" ||
+		e.Quote != "One Two" || e.Prefix != "x" || e.Suffix != "y" || e.Text != "merge these" {
+		t.Errorf("second note = %+v", e)
+	}
+	if e := ev[2]; e.Kind != "message" || e.Target != "" || e.Text != "and tidy up" {
+		t.Errorf("trailing message = %+v", e)
+	}
+	for _, bad := range []string{
+		`{"notes":[]}`,
+		`{"notes":[],"text":"  "}`,
+		`{"notes":[{"target":"aaaaaaaa","text":" "}]}`,
+		`{"notes":[{"target":"","text":"no target"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","text":"ok"},{"target":"aaaaaaaa","text":""}]}`,
+	} {
+		if code, _ := s.post("/notes", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /notes %s: %d, want 422", bad, code)
+		}
+	}
+	if n := len(s.events()); n != 3 {
+		t.Errorf("rejected batches appended events: %d, want 3", n)
+	}
+	if code, out := s.post("/notes", `{"notes":[],"text":"just a message"}`); code != http.StatusOK || out["seq"] != 4.0 {
+		t.Errorf("message without notes: %d %v", code, out)
+	}
+	if e := s.events()[3]; e.Kind != "message" || e.Text != "just a message" {
+		t.Errorf("message without notes = %+v", e)
 	}
 }
 

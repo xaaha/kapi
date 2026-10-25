@@ -257,7 +257,7 @@ On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
-`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/ops` or
+`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/ops` or
 `p/{id}/answers` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
@@ -318,12 +318,24 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
+| `POST /p/{id}/notes` | `{"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","text":"..."}],"text":"optional message"}` | `{"seq":N}` of the last event; every note becomes a `note` event and a non-blank `text` a trailing `message`, all appended in one write; 422 when a note has no target or blank text, or there is nothing to append |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 
 `{id}` is the same 16-hex page id the daemon already uses for
 `pages/<id>/`.
+
+Ask AI writes the notes: on any text selection, across blocks too, it
+targets the blocks the selection touches, and on a selected block it targets
+the block, or the table cell last clicked in it. Queued notes stay in the
+tab's `sessionStorage` under `kapi-drafts:<page id>`, editable and
+removable, until one Send posts them, with any typed message, to
+`POST /p/{id}/notes`. A tab that learns kapi restarted can no longer send,
+so it hands its queued notes to `localStorage` under
+`kapi-handoff:<page id>`; the next tab of that page to load, or one already
+open that is still connected, takes them, clears the key and says so. The
+chat box sends plain messages with no target.
 
 ### Events stream
 
@@ -346,6 +358,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `kind` | Meaning | Browser does |
 |---|---|---|
 | `message` | chat message from `human` or an agent | append to the chat panel |
+| `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it | append to the chat panel with its quote |
 | `answer` | form answer | show as sent |
 | `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
@@ -371,7 +384,8 @@ The browser keeps nothing: after any reconnect it refetches the page.
 
 Ops reach the agent through the existing event log, so `kapi watch` shows
 `#12 human revision on #k3f9a2bq: deleted "Move the session store to the new…"`
-with no new command. A revision's `text` quotes the block: its text with
+with no new command. A note prints its part and quote after the target:
+`#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her?`. A revision's `text` quotes the block: its text with
 whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
 the preset name without `kapi-` for a preset (`archived callout "Freeze
 writes."`). An edit quotes the new text. A file edit that changed several

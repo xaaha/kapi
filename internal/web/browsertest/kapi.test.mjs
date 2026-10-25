@@ -245,7 +245,7 @@ test("the delete notice goes away after a few seconds", async () => {
 test("the delete notice goes away on the next op", async () => {
   await deleteBlock("cccccccc");
   await select("dddddddd");
-  await click('.kapi-bar [data-action="up"]');
+  await click('.kapi-bar [data-action="archive"]');
   await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
 });
 
@@ -324,26 +324,31 @@ test("the delete notice fits the 390px phone layout", async () => {
   }
 });
 
-test("sends a chat message with Enter, targeted at the selected block", async () => {
+test("sends a chat message with Enter, never targeted at the selected block", async () => {
   assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter to send, Shift+Enter for a new line");
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("Looks good");
   await page.key("Enter");
   await page.waitFor(`document.querySelector(".kapi-msg .kapi-msg-text")?.textContent === "Looks good"`);
-  assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", target: "", text: "Looks good" });
+  assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", text: "Looks good" });
   await page.waitFor(`document.querySelector(".kapi-composer textarea").value === "" && !document.querySelector(".kapi-composer .kapi-primary").disabled`);
 
   await select("bbbbbbbb");
-  assert.equal(await page.eval(`document.querySelector(".kapi-target").textContent`), "About: Move the session store to the new clust…  ×");
-  assert.equal(await page.eval(`document.querySelector(".kapi-target").title`), "#bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-composer .kapi-target").length`), 0);
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("Why two steps?");
   await click(".kapi-composer .kapi-primary");
   await until(() => requests("POST", "/messages").length === 2);
-  assert.deepEqual(requests("POST", "/messages")[1].body, { kind: "message", target: "bbbbbbbb", text: "Why two steps?" });
+  assert.deepEqual(requests("POST", "/messages")[1].body, { kind: "message", text: "Why two steps?" });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
-  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").textContent`), "Move the session store to the new clust…");
-  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").title`), "#bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref")`), null);
+});
+
+test("an agent message targeted at a block links to it", async () => {
+  server.push({ author: "agent", kind: "message", target: "bbbbbbbb", text: "Done." });
+  await page.waitFor(`!!document.querySelector(".kapi-msg .kapi-ref")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg .kapi-ref").textContent`), "Move the session store to the new clust…");
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg .kapi-ref").title`), "#bbbbbbbb");
 });
 
 test("Shift+Enter in the composer adds a new line and Enter sends both lines", async () => {
@@ -673,24 +678,12 @@ test("Escape cancels an edit without posting", async () => {
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
-test("moves blocks up and down and undoes", async () => {
+test("the toolbar is Ask AI, Archive and Delete, with their keys, and no move buttons", async () => {
   await select("cccccccc");
-  await click('.kapi-bar [data-action="up"]');
-  await until(() => requests("POST", "/ops").length === 1);
-  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "move", id: "cccccccc", before: "bbbbbbbb" });
-  const order = () => page.eval(`[...document.querySelectorAll("#kapi-page > [data-kapi-id]")].map(e => e.dataset.kapiId).join(",")`);
-  await until(async () => (await order()).startsWith("aaaaaaaa,cccccccc,bbbbbbbb"));
-
-  await page.waitFor(`!document.querySelector('.kapi-bar [data-action="down"]').disabled`);
-  await click('.kapi-bar [data-action="down"]');
-  await until(() => requests("POST", "/ops").length === 2);
-  assert.deepEqual(requests("POST", "/ops")[1].body, { rev: 2, op: { kind: "move", id: "cccccccc", before: "dddddddd" } });
-
-  await page.waitFor(`document.getElementById("kapi-page").dataset.rev === "3"`);
-  await click('.kapi-panel [data-action="undo"]');
-  await until(() => requests("POST", "/ops").length === 3);
-  assert.deepEqual(requests("POST", "/ops")[2].body, { rev: 3, op: { kind: "undo", id: "" } });
-  await until(async () => (await order()).startsWith("aaaaaaaa,cccccccc,bbbbbbbb"));
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.dataset.tip, b.getAttribute("aria-keyshortcuts")])`);
+  const del = (await page.eval(`/Mac/.test(navigator.platform)`)) ? "\u232b" : "Del";
+  assert.deepEqual(tools, [["ask", "Ask AI A", "A"], ["archive", "Archive E", "E"], ["delete", `Delete ${del}`, "Delete"]]);
 });
 
 test("Undo shows only when there is something to undo, on the left so the theme toggle never moves", async () => {
@@ -1663,7 +1656,7 @@ test("a box ticked while another op is in flight sends nothing and stays as it w
   await until(() => requests("POST", "/ops").length === 1);
   await mouseClick('[data-kapi-id="tttttttt"] input');
   await new Promise((r) => setTimeout(r, 100));
-  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="up"]').disabled`), true);
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="delete"]').disabled`), true);
   await new Promise((r) => setTimeout(r, 600));
   assert.equal(requests("POST", "/ops").length, 1);
   assert.equal(await checked("tttttttt"), false);
@@ -1865,20 +1858,19 @@ test("the floating toolbar shows icons only, each named by an instant tooltip, a
   const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.getAttribute("aria-label"), b.hasAttribute("title"), !!b.querySelector("svg"),
     [...b.childNodes].filter((n) => n.nodeType === 3 ? n.data.trim() : n.checkVisibility?.() && n.tagName !== "svg").length])`);
   assert.deepEqual(tools, [
+    ["ask", "Ask AI", false, true, 0],
     ["archive", "Archive", false, true, 0],
-    ["up", "Move up", false, true, 0],
-    ["down", "Move down", false, true, 0],
     ["delete", "Delete", false, true, 0],
   ]);
   const tip = () => page.eval(`(b => getComputedStyle(b, "::after").content)(document.querySelector('.kapi-bar [data-action="delete"]'))`);
   assert.equal(await tip(), "none");
   const [x, y] = await page.eval(`(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.kapi-bar [data-action="delete"]').getBoundingClientRect())`);
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
-  assert.equal(await tip(), '"Delete"');
+  assert.equal(await tip(), `"Delete ${(await page.eval(`/Mac/.test(navigator.platform)`)) ? "\u232b" : "Del"}"`);
   assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-bar [data-action="delete"]'), "::after").transitionDuration`), "0s");
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 5 });
   await page.eval(`document.querySelector('.kapi-bar [data-action="archive"]').focus()`);
-  assert.equal(await page.eval(`(b => b.matches(":focus-visible") ? getComputedStyle(b, "::after").content : "not focus-visible")(document.querySelector('.kapi-bar [data-action="archive"]'))`), '"Archive"');
+  assert.equal(await page.eval(`(b => b.matches(":focus-visible") ? getComputedStyle(b, "::after").content : "not focus-visible")(document.querySelector('.kapi-bar [data-action="archive"]'))`), '"Archive E"');
   const [del, red, icon] = await page.eval(`(() => {
     const probe = document.createElement("span");
     probe.style.color = "var(--kapi-red-text)";
@@ -2084,4 +2076,543 @@ test("Option-click on the only h1 folds it, a plain click folds one heading, and
   await arrowClick("h2aaaaaa", ALT);
   assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected]")`), false);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").hidden`), true);
+});
+
+const selectText = (from, fromAt, to, toAt) => page.eval(`(() => {
+  const at = (q, n) => {
+    const w = document.createTreeWalker(document.querySelector(q), NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = w.nextNode()) && n > node.data.length) n -= node.data.length;
+    return [node, n];
+  };
+  const r = document.createRange();
+  r.setStart(...at(${JSON.stringify(from)}, ${fromAt}));
+  r.setEnd(...at(${JSON.stringify(to)}, ${toAt}));
+  const changed = new Promise((done) => document.addEventListener("selectionchange", () => setTimeout(done), { once: true }));
+  getSelection().removeAllRanges();
+  getSelection().addRange(r);
+  return changed;
+})()`);
+const asking = () => page.eval(`(b => b ? b.querySelector(".kapi-ask-about").textContent : null)(document.querySelector(".kapi-ask"))`);
+const queued = () => page.eval(`[...document.querySelectorAll(".kapi-queued-note")].map((n) => [n.querySelector(".kapi-queued-about").textContent, n.querySelector(".kapi-queued-text, textarea").textContent || n.querySelector("textarea")?.value])`);
+const barActions = () => page.eval(`document.querySelector(".kapi-bar").hidden ? null : [...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`);
+const modifier = async () => ((await page.eval(`/Mac/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true });
+
+test("#39 selected text copies with the keyboard as usual, and the toolbar only offers Ask AI", async () => {
+  const [x1, x2, y] = await page.eval(`(() => {
+    const p = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
+    const r = document.createRange();
+    r.setStart(p, 9); r.setEnd(p, 10);
+    const a = r.getBoundingClientRect();
+    r.setStart(p, 21); r.setEnd(p, 22);
+    const b = r.getBoundingClientRect();
+    return [a.left + 1, b.right - 1, a.top + a.height / 2];
+  })()`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x: x1, y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: x2, y, button: "left", buttons: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: x2, y, button: "left", clickCount: 1 });
+  assert.equal(await page.eval(`getSelection().toString()`), "session store");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask"]);
+  const line = await page.eval(`(r => r.top)([...getSelection().getRangeAt(0).getClientRects()].at(-1))`);
+  assert.ok((await barBox()).bottom <= line, "the toolbar sits above the selected line");
+  await page.eval(`window.copyPrevented = null; addEventListener("copy", (e) => (window.copyPrevented = e.defaultPrevented))`);
+  await page.key("c", { ...(await modifier()), commands: ["copy"] });
+  assert.equal(await page.eval(`window.copyPrevented`), false);
+  assert.equal(await page.eval(`getSelection().toString()`), "session store");
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("v", { ...(await modifier()), commands: ["paste"] });
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "session store");
+});
+
+test("#39 notes on a text selection across blocks and on a table cell queue, edit, cancel and go out as one batch", async () => {
+  await selectText('[data-kapi-id="bbbbbbbb"]', 45, '[data-kapi-id="dddddddd"]', 3);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-ask textarea")`);
+  assert.equal(await barActions(), null);
+  assert.equal(await asking(), "About: “two steps. Copy data Flip reads See”");
+  await page.type("first note");
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector(".kapi-ask")`);
+  assert.deepEqual(await queued(), [["“two steps. Copy data Flip reads See”", "first note"]]);
+
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-selected")`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 2, Shard: “Alpha”");
+  await page.type("second");
+  await page.key("Enter");
+
+  await select("cccccccc");
+  await click('.kapi-bar [data-action="ask"]');
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: Copy data Flip reads");
+  await page.type("third");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 3`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-queue-head").textContent`), "3 notes queued");
+
+  await click('.kapi-queued-note[data-draft]:nth-of-type(1) [aria-label="Edit note"]');
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+  assert.equal(await page.eval(`document.activeElement.value`), "first note");
+  await page.eval(`document.activeElement.value = "first note, edited"`);
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector(".kapi-queued-note textarea")`);
+  await click('.kapi-queued-note:nth-of-type(3) [aria-label="Remove note"]');
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 2`);
+  assert.equal(requests("POST", "/notes").length, 0);
+
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("and tidy up");
+  await page.key("Enter");
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.deepEqual(requests("POST", "/notes")[0].body, {
+    notes: [
+      { target: "bbbbbbbb,cccccccc,dddddddd", part: "", quote: "two steps. Copy data Flip reads See", prefix: "sion store to the new cluster in", suffix: "the summary before starting.", text: "first note, edited" },
+      { target: "gggggggg", part: "row 2, Shard", quote: "Alpha", prefix: "Shard Rows beta 10", suffix: "9 gamma 1,200", text: "second" },
+    ],
+    text: "and tidy up",
+  });
+  assert.equal(requests("POST", "/messages").length, 0);
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 3 && document.querySelector(".kapi-queue").hidden`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "");
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg .kapi-msg-quote").textContent`), "two steps. Copy data Flip reads See");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg")[1].querySelector(".kapi-ref").textContent`), "table: Shard Rows beta 10 Alpha 9 gamma 1,200, row 2, Shard");
+  assert.equal(await page.eval(`sessionStorage.length`), 0);
+});
+
+test("#39 Cmd/Ctrl+Enter in a note sends it with everything queued, and Escape cancels and gives the selection back", async () => {
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("queued first");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+
+  await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 4);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-ask .kapi-ask-send").disabled`), true);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-ask")`);
+  assert.equal(await page.eval(`getSelection().toString()`), "Move");
+  assert.equal(await page.eval(`!!document.querySelector('[data-kapi-id="cccccccc"]')`), true);
+
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("send now");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.deepEqual(requests("POST", "/notes")[0].body.notes.map((n) => [n.target, n.quote, n.text]), [["cccccccc", "", "queued first"], ["bbbbbbbb", "Move", "send now"]]);
+  assert.equal(requests("POST", "/notes")[0].body.text, "");
+  await page.waitFor(`document.querySelector(".kapi-queue").hidden && !document.querySelector(".kapi-ask")`);
+});
+
+test("#39 queued notes survive a reload and stay queued when sending fails", async () => {
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("keep me");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && document.querySelectorAll(".kapi-queued-note").length === 1`, 5000);
+  assert.deepEqual(await queued(), [["Copy data Flip reads", "keep me"]]);
+  assert.equal(await page.eval(`document.querySelector(".kapi-hint").textContent`), "Enter sends the note");
+
+  assert.deepEqual(await page.eval(`Object.keys(sessionStorage)`), [`kapi-drafts:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`]);
+  server.state.nextNotesError = "disk full";
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = "and this"`);
+  await click(".kapi-composer .kapi-primary");
+  await until(() => requests("POST", "/notes").length === 1);
+  await page.waitFor(`/disk full/.test(document.querySelector(".kapi-notice").textContent)`);
+  assert.deepEqual(await queued(), [["Copy data Flip reads", "keep me"]]);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "and this");
+  server.state.notesDelay = 300;
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("Enter");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelector(".kapi-queue").hidden`);
+  assert.equal(requests("POST", "/notes").length, 2);
+});
+
+test("#39 A asks, E archives and Delete deletes only while a block is selected and nothing else has the keys", async () => {
+  await page.key("z", await modifier());
+  await select("cccccccc");
+  await page.key("a", await modifier());
+  await page.key("e", { shift: true });
+  await page.key("e", { alt: true });
+  await page.key("e", { ime: true });
+  await page.key("Backspace", { ime: true });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-ask")`), false);
+  assert.equal(requests("POST", "/ops").length, 0);
+
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.key("e");
+  await page.key("Backspace");
+  await page.eval(`document.querySelector(".kapi-composer textarea").blur()`);
+  assert.equal(requests("POST", "/ops").length, 0);
+
+  await selectText('[data-kapi-id="cccccccc"] li', 0, '[data-kapi-id="cccccccc"] li', 4);
+  await page.waitFor(`document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.key("e");
+  await page.key("Delete");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(requests("POST", "/ops").length, 0);
+  await page.eval(`getSelection().removeAllRanges()`);
+
+  await select("cccccccc");
+  await page.key("e");
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "archive", id: "cccccccc" });
+  await page.waitFor(`document.querySelector('[data-kapi-id="cccccccc"]')?.getAttribute("data-kapi-state") === "archived"`);
+  await select("cccccccc");
+  await page.key("e");
+  await until(() => requests("POST", "/ops").length === 2);
+  assert.deepEqual(requests("POST", "/ops")[1].body.op, { kind: "unarchive", id: "cccccccc" });
+  await page.waitFor(`!document.querySelector('[data-kapi-id="cccccccc"]')?.hasAttribute("data-kapi-state")`);
+  await select("dddddddd");
+  await page.key("Backspace");
+  await until(() => requests("POST", "/ops").length === 3);
+  assert.deepEqual(requests("POST", "/ops")[2].body.op, { kind: "delete", id: "dddddddd" });
+  await page.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
+  await page.key("z", await modifier());
+  await until(() => requests("POST", "/ops").length === 4);
+  assert.deepEqual(requests("POST", "/ops")[3].body.op, { kind: "undo", id: "" });
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="dddddddd"]')`);
+  await select("bbbbbbbb");
+  await page.key("Delete");
+  await until(() => requests("POST", "/ops").length === 5);
+  assert.deepEqual(requests("POST", "/ops")[4].body.op, { kind: "delete", id: "bbbbbbbb" });
+});
+
+test("#39 a note on code names its lines and a note on a badge names the badge", async () => {
+  await reopenWith([
+    { id: "pppppppp", html: '<p data-kapi-id="pppppppp">PR #19 is <span class="kapi-badge kapi-tone-green" data-kapi-preset="badge" data-kapi-id="bbbbbbbb">merged</span>.</p>' },
+    { id: "jjjjjjjj", html: '<figure class="kapi-code" data-kapi-preset="code" data-kapi-id="jjjjjjjj"><pre><code>if a {\n\tswap()\n}\n</code></pre></figure>' },
+  ]);
+  await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 6);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: badge: “merged”");
+  await page.key("Escape");
+  await selectText('[data-kapi-id="jjjjjjjj"] code', 8, '[data-kapi-id="jjjjjjjj"] code', 12);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: line 2: “swap”");
+  await page.key("Escape");
+  await selectText('[data-kapi-id="jjjjjjjj"] code', 0, '[data-kapi-id="jjjjjjjj"] code', 12);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.match(await asking(), /^About: lines 1 to 2: /);
+});
+
+test("#39 the x on a cell note widens it to the whole table", async () => {
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(1) td');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask-widen")`);
+  await click(".kapi-ask-widen");
+  await page.waitFor(`!document.querySelector(".kapi-ask-widen")`);
+  assert.equal(await asking(), "About: table: Shard Rows beta 10 Alpha 9 gamma 1,200");
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-ask textarea")`), true);
+  await page.type("whole table");
+  await page.key("Enter");
+  await click(".kapi-composer .kapi-primary");
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.deepEqual(requests("POST", "/notes")[0].body.notes[0], { target: "gggggggg", part: "", quote: "", prefix: "", suffix: "", text: "whole table" });
+});
+
+test("#39 a real click opens the toolbar beside the pointer, on the clicked line", async () => {
+  const { x, y } = await page.eval(`(r => ({ x: r.left + 40, y: r.top + r.height / 2 }))(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "point"`);
+  const b = await barBox();
+  assert.ok(b.left >= x + 8 && b.left <= x + 24, `bar left ${b.left} for a click at ${x}`);
+  assert.ok(Math.abs((b.top + b.bottom) / 2 - y) <= 2, `bar centre ${(b.top + b.bottom) / 2} for a click at ${y}`);
+});
+
+test("#39 on a phone the docked toolbar offers Ask AI and the note opens at the bottom", async () => {
+  const phone = await browser.open(server.url, { width: 390, height: 800 });
+  try {
+    await phone.call("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
+    await phone.waitFor(`matchMedia("(max-width: 760px)").matches`);
+    await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`);
+    assert.deepEqual(await phone.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "edit", "archive", "delete"]);
+    await phone.eval(`document.querySelector('.kapi-bar [data-action="ask"]').click()`);
+    await phone.waitFor(`!!document.querySelector(".kapi-ask")`);
+    assert.equal(await phone.eval(`Math.round(document.querySelector(".kapi-ask").getBoundingClientRect().bottom) === innerHeight`), true);
+  } finally {
+    await phone.close();
+  }
+});
+
+test("#39 Escape cancels an edit to a queued note and clicking away keeps it", async () => {
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("original");
+  await page.key("Enter");
+  await click('.kapi-queued-note [aria-label="Edit note"]');
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+  await page.eval(`document.activeElement.value = "changed"`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-queued-note textarea")`);
+  assert.deepEqual(await queued(), [["Copy data Flip reads", "original"]]);
+  await click('.kapi-queued-note [aria-label="Edit note"]');
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+  await page.eval(`document.activeElement.value = "kept"; document.activeElement.blur()`);
+  await page.waitFor(`!document.querySelector(".kapi-queued-note textarea")`);
+  assert.deepEqual(await queued(), [["Copy data Flip reads", "kept"]]);
+});
+
+test("#39 Escape after asking about a clicked cell leaves no text selected and the toolbar whole", async () => {
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-ask")`);
+  assert.equal(await page.eval(`getSelection().toString()`), "");
+  assert.deepEqual(await barActions(), ["ask", "archive", "delete"]);
+});
+
+test("#39 a selection that ends at the start of the next block targets only the blocks with selected text", async () => {
+  await page.eval(`(() => {
+    const r = document.createRange();
+    r.setStart(document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild, 0);
+    r.setEnd(document.querySelector('[data-kapi-id="cccccccc"] li').firstChild, 0);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+  })()`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("just this");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "bbbbbbbb");
+});
+
+test("#39 a cell in a table with no header row is named by its row", async () => {
+  await reopenWith([
+    { id: "gggggggg", html: '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table><tbody><tr><td>Ann</td><td>1</td></tr><tr><td>Bob</td><td>2</td></tr></tbody></table></div>' },
+  ]);
+  await mouseClick('[data-kapi-id="gggggggg"] tr:nth-child(2) td');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 2: “Bob”");
+});
+
+test("#39 a selection across a block with no text keeps that block in the note", async () => {
+  await reopenWith([
+    { id: "aaaaaaaa", html: '<p data-kapi-id="aaaaaaaa">Before the picture.</p>' },
+    { id: "mmmmmmmm", html: '<figure data-kapi-id="mmmmmmmm"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></figure>' },
+    { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">After the picture.</p>' },
+  ]);
+  await selectText('[data-kapi-id="aaaaaaaa"]', 7, '[data-kapi-id="bbbbbbbb"]', 5);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("about the picture");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,mmmmmmmm,bbbbbbbb");
+  await page.eval(`(() => {
+    const fig = document.querySelector('[data-kapi-id="mmmmmmmm"]');
+    const r = document.createRange();
+    r.setStart(document.querySelector('[data-kapi-id="aaaaaaaa"]').firstChild, 7);
+    r.setEnd(fig, fig.childNodes.length);
+    const changed = new Promise((done) => document.addEventListener("selectionchange", () => setTimeout(done), { once: true }));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    return changed;
+  })()`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("ends in the picture");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 2);
+  assert.equal(requests("POST", "/notes")[1].body.notes[0].target, "aaaaaaaa,mmmmmmmm");
+  await page.waitFor(`!document.querySelector(".kapi-composer .kapi-primary").disabled`);
+  await page.eval(`(() => {
+    const r = document.createRange();
+    r.setStart(document.querySelector('[data-kapi-id="aaaaaaaa"]').firstChild, 0);
+    r.setEnd(document.querySelector('[data-kapi-id="mmmmmmmm"]'), 0);
+    const changed = new Promise((done) => document.addEventListener("selectionchange", () => setTimeout(done), { once: true }));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    return changed;
+  })()`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("only the text");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 3);
+  assert.equal(requests("POST", "/notes")[2].body.notes[0].target, "aaaaaaaa");
+});
+
+test("#39 a cancelled pointer never stops the toolbar following the selection", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "touch" }))`);
+  await page.eval(`document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }))`);
+  await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 4);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask"]);
+});
+
+test("#39 a section row inside the body is a row, not a column", async () => {
+  await reopenWith([
+    { id: "gggggggg", html: '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><th colspan="2">Group A</th></tr><tr><td>Ann</td><td>1</td></tr></tbody></table></div>' },
+  ]);
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(1) th');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 1, Name: “Group A”");
+  await page.key("Escape");
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 2, Name: “Ann”");
+});
+
+
+test("#39 queued notes belong to their tab", async () => {
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("this tab only");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  const other = await browser.open(server.url);
+  try {
+    await other.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    assert.equal(await other.eval(`document.querySelector(".kapi-queue").hidden`), true);
+    await other.eval(`document.querySelector(".kapi-composer textarea").value = "hello"`);
+    await other.eval(`document.querySelector(".kapi-composer .kapi-primary").click()`);
+    await until(() => requests("POST", "/messages").length === 1);
+    assert.equal(requests("POST", "/notes").length, 0);
+    assert.deepEqual(await queued(), [["Copy data Flip reads", "this tab only"]]);
+  } finally {
+    await other.close();
+  }
+});
+
+test("#39 a note box opened while a send is in flight can queue once the send ends", async () => {
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("first");
+  await page.key("Enter");
+  server.state.notesDelay = 300;
+  await click(".kapi-composer .kapi-primary");
+  await select("bbbbbbbb");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("second");
+  assert.equal(await page.eval(`document.querySelector(".kapi-ask .kapi-ask-queue").disabled`), true);
+  await page.waitFor(`!document.querySelector(".kapi-ask .kapi-ask-queue").disabled`);
+  await page.key("Enter");
+  await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+  assert.deepEqual(await queued(), [["Move the session store to the new clust…", "second"]]);
+});
+
+async function queueOn(tab, id, text) {
+  await tab.eval(`document.querySelector('[data-kapi-id="${id}"]').click()`);
+  await tab.key("a");
+  await tab.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await tab.type(text);
+  await tab.key("Enter");
+  await tab.waitFor(`!document.querySelector(".kapi-ask")`);
+}
+
+test("#39 notes queued in a tab kapi restarted move to the page's next tab, once", async () => {
+  await queueOn(page, "cccccccc", "carry me");
+  server.state.restarted = "kapi open plan.html";
+  server.state.reopened = true;
+  server.dropStreams();
+  await until(async () => (await restartText()) === REOPENED);
+  server.state.restarted = "";
+  server.state.reopened = false;
+  const next = await browser.open(server.url);
+  const late = await browser.open(server.url);
+  try {
+    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    assert.equal(await next.eval(`document.querySelector(".kapi-queued-note .kapi-queued-text").textContent`), "carry me");
+    assert.match(await next.eval(`document.querySelector(".kapi-notice").textContent`), /Brought over a queued note/);
+    assert.equal(await late.eval(`document.querySelector(".kapi-queue").hidden`), true);
+    assert.equal(await next.eval(`localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith("kapi-handoff:")) ?? "") === null`), true);
+    assert.equal(await page.eval(`document.querySelector(".kapi-queue").hidden`), true);
+    await next.eval(`document.querySelector('.kapi-queued-note [aria-label="Remove note"]').click()`);
+    await next.waitFor(`document.querySelector(".kapi-queue").hidden`);
+    await page.eval(`document.querySelector(".kapi-composer textarea").value = "after the restart"`);
+    await click(".kapi-composer .kapi-primary");
+    await until(() => requests("POST", "/messages").length === 1);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(await next.eval(`document.querySelector(".kapi-queue").hidden`), true);
+  } finally {
+    await next.close();
+    await late.close();
+  }
+});
+
+test("#39 a tab that is already open takes the notes when the restarted tab notices late, after an open edit", async () => {
+  const next = await browser.open(server.url);
+  try {
+    await next.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await queueOn(next, "bbbbbbbb", "mine");
+    await next.eval(`document.querySelector('.kapi-queued-note [aria-label="Edit note"]').click()`);
+    await next.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+    await next.eval(`document.activeElement.value = "mine, edited"`);
+    const key = `kapi-handoff:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`;
+    await page.eval(`localStorage.setItem(${JSON.stringify(key)}, JSON.stringify([{ id: "x1", target: "cccccccc", part: "", quote: "", prefix: "", suffix: "", text: "late carry" }]))`);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(await next.eval(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`), true);
+    await next.key("Enter");
+    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 2`);
+    assert.deepEqual(await next.eval(`[...document.querySelectorAll(".kapi-queued-text")].map((n) => n.textContent)`), ["mine, edited", "late carry"]);
+    assert.equal(await page.eval(`localStorage.getItem(${JSON.stringify(key)})`), null);
+    assert.equal(await page.eval(`document.querySelector(".kapi-queue").hidden`), true);
+  } finally {
+    await next.close();
+  }
+});
+
+test("#39 a bare picture or divider that a selection crosses stays in the note", async () => {
+  await reopenWith([
+    { id: "aaaaaaaa", html: '<p data-kapi-id="aaaaaaaa">Before.</p>' },
+    { id: "hhhhhhhh", html: '<hr data-kapi-id="hhhhhhhh">' },
+    { id: "iiiiiiii", html: '<img data-kapi-id="iiiiiiii" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40">' },
+    { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">After.</p>' },
+  ]);
+  await selectText('[data-kapi-id="aaaaaaaa"]', 2, '[data-kapi-id="bbbbbbbb"]', 3);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("all four");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,hhhhhhhh,iiiiiiii,bbbbbbbb");
+});
+
+test("#39 a broken handoff is ignored", async () => {
+  const key = `kapi-handoff:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`;
+  for (const value of ["{}", "[null, 3]", "not json"]) {
+    await page.eval(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)})`);
+    const next = await browser.open(server.url);
+    try {
+      await next.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+      assert.equal(await next.eval(`document.querySelector(".kapi-queue").hidden`), true);
+      assert.deepEqual(next.errors, []);
+    } finally {
+      await next.close();
+    }
+  }
 });
