@@ -12,7 +12,7 @@ D20 a fixed preset set with one design system, D21 four parallel tracks.
 |---|---|---|
 | A server | `internal/page`, `internal/web/*.go`, `kapi open`, daemon wiring | `internal/web/static`, `internal/render` |
 | B browser | `internal/web/static/kapi.js`, `internal/web/static/chrome.css` | Go code |
-| C presets | `internal/render`, `kapi preset` command | `internal/web`, `internal/page` |
+| C presets | `internal/render`, `internal/export`, `kapi preset` and `kapi export` commands | `internal/web`, `internal/page` |
 | D hub | `hub/` (Worker), `internal/publish`, `kapi publish` command | everything else |
 
 `cmd/kapi/main.go` is shared: each track adds its own subcommand in its own
@@ -431,12 +431,16 @@ text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <p
 copies an image into the page's files folder and adds it with an `image` op
 logged under the reader's name. `kapi export --md [--out <folder>|-] [--force] <page>` writes the
 same Markdown export as the browser into the folder (default `.`) and prints its path, or prints the
-Markdown with `--out -`; it refuses to replace an existing file without `--force`. Each preset has a
-Markdown form: callouts become GitHub alerts (`> [!NOTE]`), code and diffs fenced code with their
-language, diagrams fenced code tagged `kapi-diagram type=...` holding their source, tables GitHub
-tables, checklists and form options task lists, plans a numbered list with risks and questions as bullets,
-key and value lists `- **Key**: value`, details `<details>`, badges code spans with an emoji for a state.
-An element that is unknown or fails to render keeps its text. `kapi publish` embeds each page image from the page's files
+Markdown with `--out -`, which it refuses for a zip when stdout is a terminal. It writes a temporary
+file and moves it into place, and refuses to replace an existing file without `--force`. Each preset
+has a Markdown form: note and warning callouts become GitHub alerts (`> [!NOTE]`) and the others a
+quote led by their label (`> **Success:** ...`), code and diffs fenced code with their language,
+diagrams fenced code tagged `kapi-diagram type=...` holding their source, tables GitHub tables (code in
+a cell becomes inline code per line), checklists and form options task lists, plans a numbered list with
+risks and questions as bullets, key and value lists `- **Key**: value`, details `<details>`, badges code
+spans led by their state's label (`Done: merged`). A label before block content gets its own line. An
+image is packed only when its `src` names this page's files folder. An element that is unknown or fails
+to render keeps its text. `kapi publish` embeds each page image from the page's files
 folder into the published document as a `data:` URL, since the hub serves one
 self-contained file, and refuses a page that would pass the hub's 10 MB limit,
 naming its largest images. It refuses a page that is not `.html` or

@@ -101,8 +101,13 @@ type site struct {
 
 func newSite(t *testing.T, src string) *site {
 	t.Helper()
+	return newSiteNamed(t, "plan.html", src)
+}
+
+func newSiteNamed(t *testing.T, name, src string) *site {
+	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plan.html")
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1216,10 +1221,10 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 }
 
 func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.T) {
-	s := newSite(t, `<h1 data-kapi-id="aaaaaaaa">Plan</h1>`)
+	s := newSiteNamed(t, "my plan.html", `<h1 data-kapi-id="aaaaaaaa">Plan</h1>`)
 	got := s.get("/p/" + s.id + "/export/markdown")
 	if got.code != http.StatusOK || got.body != "# Plan\n" || got.header.Get("Content-Type") != "text/markdown; charset=utf-8" ||
-		got.header.Get("Content-Disposition") != `attachment; filename=plan.md` {
+		got.header.Get("Content-Disposition") != `attachment; filename="my plan.md"` || got.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("plain export: %d %q %v", got.code, got.body, got.header)
 	}
 	_, out := s.uploadTo("/images", onePixel, "image/png", s.srv.URL)
@@ -1228,12 +1233,23 @@ func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.
 		t.Fatalf("image op: %d %v", code, out)
 	}
 	got = s.get("/p/" + s.id + "/export/markdown")
-	if got.code != http.StatusOK || got.header.Get("Content-Type") != "application/zip" || got.header.Get("Content-Disposition") != `attachment; filename=plan.zip` {
+	if got.code != http.StatusOK || got.header.Get("Content-Type") != "application/zip" || got.header.Get("Content-Disposition") != `attachment; filename="my plan.zip"` {
 		t.Fatalf("export with an image: %d %v", got.code, got.header)
 	}
 	z, err := zip.NewReader(strings.NewReader(got.body), int64(len(got.body)))
-	if err != nil || len(z.File) != 2 || z.File[0].Name != "plan.md" || z.File[1].Name != "images/"+name {
+	if err != nil || len(z.File) != 2 || z.File[0].Name != "my plan.md" || z.File[1].Name != "images/"+name {
 		t.Fatalf("zip: %v %v", z, err)
+	}
+	for i, want := range []string{"# Plan\n\n![](images/" + name + ")\n", string(onePixel)} {
+		rc, err := z.File[i].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil || string(b) != want {
+			t.Errorf("%s = %q, want %q", z.File[i].Name, b, want)
+		}
 	}
 	if got := s.raw("GET", "/p/"+s.id+"/export/markdown", nil); got.code != http.StatusForbidden {
 		t.Errorf("export without the token: %d", got.code)

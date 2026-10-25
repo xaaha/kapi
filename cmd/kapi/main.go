@@ -76,7 +76,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			daemonCmd(),
 			newPresetCmd(out),
 			newPublishCmd(out),
-			exportCmd(out),
+			newExportCmd(out),
 			attachCmd(c, out),
 			newOpenCmd(c, out),
 		},
@@ -474,7 +474,16 @@ func newPublishCmd(out io.Writer) *cli.Command {
 	}
 }
 
-func exportCmd(out io.Writer) *cli.Command {
+var stdoutIsTerminal = func(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func newExportCmd(out io.Writer) *cli.Command {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	md := fs.Bool("md", false, "Export as Markdown")
 	dir := fs.String("out", ".", "Folder to write the file into, or - to print it")
@@ -507,32 +516,47 @@ func exportCmd(out io.Writer) *cli.Command {
 				return err
 			}
 			if *dir == "-" {
+				if f.Type == "application/zip" && stdoutIsTerminal(out) {
+					return fmt.Errorf("the page shows images, so its export is a zip; redirect it to a file or pass --out <folder>")
+				}
 				_, err = out.Write(f.Data)
 				return err
 			}
 			path := filepath.Join(*dir, f.Name)
-			mode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-			if !*force {
-				mode |= os.O_EXCL
-			}
-			w, err := os.OpenFile(path, mode, 0o644) //nolint:gosec // the user names the folder
-			if errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("%s already exists; pass --force to replace it", path)
-			}
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write(f.Data); err != nil {
-				w.Close()
-				return err
-			}
-			if err := w.Close(); err != nil {
+			if err := writeExport(path, f.Data, *force); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintln(out, path)
 			return err
 		},
 	}
+}
+
+func writeExport(path string, data []byte, replace bool) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".kapi-export-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Chmod(0o644)
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if replace {
+		return os.Rename(tmp.Name(), path)
+	}
+	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("%s already exists; pass --force to replace it", path)
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 var openBrowser = func(url string) error {
