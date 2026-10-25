@@ -2523,3 +2523,49 @@ test("#39 a note box opened while a send is in flight can queue once the send en
   await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
   assert.deepEqual(await queued(), [["Move the session store to the new clust…", "second"]]);
 });
+
+async function queueOn(tab, id, text) {
+  await tab.eval(`document.querySelector('[data-kapi-id="${id}"]').click()`);
+  await tab.key("a");
+  await tab.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await tab.type(text);
+  await tab.key("Enter");
+  await tab.waitFor(`!document.querySelector(".kapi-ask")`);
+}
+
+test("#39 notes queued in a tab kapi restarted move to the page's next tab, once", async () => {
+  await queueOn(page, "cccccccc", "carry me");
+  server.state.restarted = "kapi open plan.html";
+  server.state.reopened = true;
+  server.dropStreams();
+  await until(async () => (await restartText()) === REOPENED);
+  server.state.restarted = "";
+  server.state.reopened = false;
+  const next = await browser.open(server.url);
+  const late = await browser.open(server.url);
+  try {
+    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    assert.equal(await next.eval(`document.querySelector(".kapi-queued-note .kapi-queued-text").textContent`), "carry me");
+    assert.match(await next.eval(`document.querySelector(".kapi-notice").textContent`), /Brought over a queued note/);
+    assert.equal(await late.eval(`document.querySelector(".kapi-queue").hidden`), true);
+    assert.equal(await next.eval(`localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith("kapi-handoff:")) ?? "") === null`), true);
+  } finally {
+    await next.close();
+    await late.close();
+  }
+});
+
+test("#39 a tab that is already open takes the notes when the restarted tab notices late", async () => {
+  const next = await browser.open(server.url);
+  try {
+    await next.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    const key = `kapi-handoff:${new URL(server.url).pathname.split("/").filter(Boolean).pop()}`;
+    await page.eval(`localStorage.setItem(${JSON.stringify(key)}, JSON.stringify([{ id: "x1", target: "cccccccc", part: "", quote: "", prefix: "", suffix: "", text: "late carry" }]))`);
+    await next.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    assert.equal(await next.eval(`document.querySelector(".kapi-queued-note .kapi-queued-text").textContent`), "late carry");
+    assert.equal(await page.eval(`localStorage.getItem(${JSON.stringify(key)})`), null);
+    assert.equal(await page.eval(`document.querySelector(".kapi-queue").hidden`), true);
+  } finally {
+    await next.close();
+  }
+});

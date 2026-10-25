@@ -380,6 +380,7 @@
     setStatus("disconnected");
     statusText.textContent = "Kapi restarted";
     restartBox.hidden = false;
+    handOff();
     if (reopened) return restartBox.replaceChildren(h("p", { text: "Kapi restarted and reopened this page in a new tab. You can close this one." }));
     const copy = h("button", { type: "button", class: "kapi-copy", text: "Copy" });
     copy.addEventListener("click", () =>
@@ -652,6 +653,31 @@
     } catch {
       return [];
     }
+  }
+
+  const handoffKey = `kapi-handoff:${base.split("/").pop()}`;
+
+  function handOff() {
+    if (!drafts.length) return;
+    try {
+      const left = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+      const known = new Set(left.map((d) => d.id));
+      localStorage.setItem(handoffKey, JSON.stringify([...left, ...drafts.filter((d) => !known.has(d.id))]));
+    } catch {}
+  }
+
+  function takeOver() {
+    if (restarted) return;
+    let left = [];
+    try {
+      left = JSON.parse(localStorage.getItem(handoffKey) || "[]");
+      localStorage.removeItem(handoffKey);
+    } catch {}
+    const known = new Set(drafts.map((d) => d.id));
+    const fresh = Array.isArray(left) ? left.filter((d) => d && typeof d.target === "string" && typeof d.text === "string" && !known.has(d.id)) : [];
+    if (!fresh.length) return;
+    changeDrafts((list) => [...list, ...fresh]);
+    say(fresh.length === 1 ? "Brought over a queued note from the tab kapi restarted." : `Brought over ${fresh.length} queued notes from the tab kapi restarted.`);
   }
 
   function changeDrafts(change) {
@@ -1493,5 +1519,9 @@
   numberRows(main);
   applyFolds();
   renderQueue();
+  takeOver();
+  addEventListener("storage", (e) => {
+    if (e.key === handoffKey && e.newValue) takeOver();
+  });
   connect();
 })();

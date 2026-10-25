@@ -331,7 +331,11 @@ targets the blocks the selection touches, and on a selected block it targets
 the block, or the table cell last clicked in it. Queued notes stay in the
 tab's `sessionStorage` under `kapi-drafts:<page id>`, editable and
 removable, until one Send posts them, with any typed message, to
-`POST /p/{id}/notes`. The chat box sends plain messages with no target.
+`POST /p/{id}/notes`. A tab that learns kapi restarted can no longer send,
+so it hands its queued notes to `localStorage` under
+`kapi-handoff:<page id>`; the next tab of that page to load, or one already
+open that is still connected, takes them, clears the key and says so. The
+chat box sends plain messages with no target.
 
 ### Events stream
 
