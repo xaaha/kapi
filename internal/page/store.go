@@ -1074,6 +1074,18 @@ func FilesDir(path string) string {
 	return filepath.Join(filepath.Dir(path), filesName(path))
 }
 
+func ImageName(filesDir, src string) (string, bool) {
+	rest, ok := strings.CutPrefix(src, "./")
+	dir, name, cut := strings.Cut(rest, "/")
+	if !ok || !cut || !attach.ValidName(name) {
+		return "", false
+	}
+	if d, err := url.PathUnescape(dir); err != nil || d != filepath.Base(filesDir) {
+		return "", false
+	}
+	return name, true
+}
+
 func filesName(path string) string {
 	base := filepath.Base(path)
 	return strings.TrimSuffix(base, filepath.Ext(base)) + ".files"

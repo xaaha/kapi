@@ -277,6 +277,21 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Disposition": "attachment; filename=plan.html" });
       return res.end(`<!doctype html><title>plan.html</title><main id="kapi-page">${state.blocks.map((b) => b.html).join("\n")}</main>`);
     }
+    if (req.method === "GET" && rest === "export/markdown") {
+      if (state.dropExport) return req.socket.destroy();
+      if (state.nextExportError) {
+        const error = state.nextExportError;
+        state.nextExportError = null;
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end(error + "\n");
+      }
+      if (state.markdownZip) {
+        res.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": "attachment; filename=plan.zip" });
+        return res.end("PK zip of plan.md and images/");
+      }
+      res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": "attachment; filename=plan.md" });
+      return res.end("# Plan\n");
+    }
     if (req.method === "GET" && rest.startsWith("source/")) {
       const b = state.blocks.find((x) => x.id === rest.slice(7));
       if (!b) return json(res, 404, { error: "no block" });

@@ -15,6 +15,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/export"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/render"
@@ -74,6 +76,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/files/{name}", s.withPage(s.handleFile))
 	s.mux.HandleFunc("POST /p/{id}/images", s.withPage(s.handleImageUpload))
 	s.mux.HandleFunc("GET /p/{id}/{dir}/{name}", s.withPage(s.handlePageImage))
+	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
 	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
@@ -113,7 +116,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|end|files|images|ops|answers|export/html)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|end|files|images|ops|answers|export/html|export/markdown)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -532,14 +535,33 @@ func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, _ *pa
 
 func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
 	path, err := s.pages.PagePath(r.PathValue("id"))
-	name := r.PathValue("name")
-	if err != nil || r.PathValue("dir") != filepath.Base(page.FilesDir(path)) || !attach.ValidName(name) {
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	name, ok := page.ImageName(page.FilesDir(path), "./"+url.PathEscape(r.PathValue("dir"))+"/"+r.PathValue("name"))
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Set("Content-Disposition", "inline")
 	http.ServeFile(w, r, filepath.Join(page.FilesDir(path), name))
+}
+
+func (s *Server) handleMarkdown(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
+	src, _ := st.Source()
+	f, err := export.Markdown(filepath.Base(st.Path()), src, page.FilesDir(st.Path()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", f.Type)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.Name}))
+	w.Header().Set("Cache-Control", "no-store")
+	if _, err := w.Write(f.Data); err != nil {
+		log.Printf("write export: %v", err)
+	}
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request, save func([]byte) (attach.File, error)) {

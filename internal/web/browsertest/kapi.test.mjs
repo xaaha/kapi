@@ -3238,9 +3238,9 @@ test("#23 the three-dot menu opens on its button, steps with the arrow keys, and
   await until(menuOpen);
   assert.equal(await expanded(), "true");
   assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`),
-    ["Export HTML", "Export PDF", "Copy path", "End session"]);
+    ["Export HTML", "Export Markdown", "Export PDF", "Copy path", "End session"]);
   assert.equal(await focusedItem(), "Export HTML");
-  for (const [key, want] of [["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export HTML"], ["ArrowUp", "End session"], ["Home", "Export HTML"], ["End", "End session"]]) {
+  for (const [key, want] of [["ArrowDown", "Export Markdown"], ["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export HTML"], ["ArrowUp", "End session"], ["Home", "Export HTML"], ["End", "End session"]]) {
     await pressKey(key);
     assert.equal(await focusedItem(), want, `after ${key}`);
   }
@@ -3309,6 +3309,41 @@ test("#23 Export HTML downloads the server's export under the page's file name, 
   await menuItem("Export HTML");
   await until(() => page.eval(`!document.querySelector(".kapi-restart").hidden`));
   assert.equal(await page.eval(`downloads.length`), 1);
+});
+
+test("#23 Export Markdown downloads plan.md, or plan.zip when the page has images, gives focus back, and says why when it fails", async () => {
+  await page.eval(`window.downloads = []; HTMLAnchorElement.prototype.click = function () { const name = this.download; fetch(this.href).then((r) => r.text()).then((text) => downloads.push({ name, text })); }`);
+  await click(".kapi-menu-button");
+  await menuItem("Export Markdown");
+  await until(() => page.eval(`downloads.length === 1`));
+  assert.deepEqual(await page.eval(`downloads[0]`), { name: "plan.md", text: "# Plan\n" });
+  assert.equal(requests("GET", "/export/markdown").length, 1);
+  assert.equal(await menuOpen(), false);
+  assert.equal(await menuButtonFocused(), true);
+
+  server.state.markdownZip = true;
+  await click(".kapi-menu-button");
+  await menuItem("Export Markdown");
+  await until(() => page.eval(`downloads.length === 2`));
+  assert.deepEqual(await page.eval(`downloads[1]`), { name: "plan.zip", text: "PK zip of plan.md and images/" });
+  server.state.markdownZip = false;
+
+  server.state.nextExportError = "render page: boom";
+  await click(".kapi-menu-button");
+  await menuItem("Export Markdown");
+  await until(async () => (await notice()) === "Could not export the page: render page: boom");
+
+  server.state.dropExport = true;
+  await click(".kapi-menu-button");
+  await menuItem("Export Markdown");
+  await until(async () => /Could not reach kapi/.test(await notice()));
+  server.state.dropExport = false;
+
+  server.state.restarted = "kapi open plan.html";
+  await click(".kapi-menu-button");
+  await menuItem("Export Markdown");
+  await until(() => page.eval(`!document.querySelector(".kapi-restart").hidden`));
+  assert.equal(await page.eval(`downloads.length`), 2);
 });
 
 test("#23 Export PDF calls the browser's print and gives focus back to the menu button", async () => {
@@ -3416,7 +3451,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
   await page.key("Enter");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export HTML", "Export PDF", "Copy path"]);
+  assert.deepEqual(await labels(), ["Export HTML", "Export Markdown", "Export PDF", "Copy path"]);
   await pressKey("End");
   assert.equal(await focusedItem(), "Copy path");
   await page.key("Escape");
@@ -3425,7 +3460,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.waitFor(`document.querySelector(".kapi-status").textContent !== "Session ended. Send a message to start again."`);
   await mouseOn(".kapi-menu-button");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export HTML", "Export PDF", "Copy path", "End session"]);
+  assert.deepEqual(await labels(), ["Export HTML", "Export Markdown", "Export PDF", "Copy path", "End session"]);
   await page.key("Escape");
 });
 
