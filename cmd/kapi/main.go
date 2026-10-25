@@ -213,9 +213,11 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	on := fs.String("on", "", "Element id the message is about")
 	reader := &author
 	seen := new(string)
+	replyTo := new(string)
 	if author == "" {
 		reader = fs.String("reader", "agent", "Reader name to send as; readers with other names see the message")
 		seen = fs.String("seen", "", "Number of the last event you read, as printed: #12 or 12; the page shows the human you read it")
+		replyTo = fs.String("reply", "", "Notes this message answers, as printed: #12 or 12,13; the page marks them answered")
 	}
 	return &cli.Command{
 		Name:       name,
@@ -249,7 +251,17 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 					return err
 				}
 			}
-			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: *reader, Kind: "message", Target: *on, Text: strings.Join(args[1:], " "), Seq: seq})
+			var re []uint64
+			if *replyTo != "" {
+				for _, w := range strings.Split(*replyTo, ",") {
+					n, err := parseSeq(strings.TrimSpace(w))
+					if err != nil {
+						return err
+					}
+					re = append(re, n)
+				}
+			}
+			resp, err := c.Do(&daemon.Request{Op: "append", Page: page, Author: *reader, Kind: "message", Target: *on, Re: re, Text: strings.Join(args[1:], " "), Seq: seq})
 			if err != nil {
 				return err
 			}
@@ -492,6 +504,7 @@ func homeView(c api, out io.Writer) error {
 	b.WriteString(`next:
   kapi wait <page>                   wait for the next event, print every unseen one and exit; run it in the background, again after each exit
   kapi say --seen <n> <page> <text>  reply; n is the number of the last event you read, so the page shows you read it
+  kapi say --reply <n> <page> <text> answer note #n; the page marks it answered
   kapi seen <page> <n>               show you read every event through #n, without replying
   kapi pending <page>                list unseen events and mark them seen
   kapi --help                        every command
@@ -611,7 +624,7 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		}
 	}
 	text, handed := hookText(resp.Pages, hook.Event == "UserPromptSubmit")
-	if text == "" || (hook.Event == "Stop" && len(handed) == 0) {
+	if text == "" || (hook.Event == "Stop" && (len(handed) == 0 || !wakes(resp.Pages))) {
 		return nil
 	}
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
@@ -629,6 +642,15 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func wakes(pages []daemon.PageStatus) bool {
+	for _, p := range pages {
+		if slices.ContainsFunc(p.Events, func(e eventlog.Event) bool { return e.Seq > p.Hooked && !e.Quiet() }) {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -732,6 +754,13 @@ func pagePath(args []string, want int, command string) (string, error) {
 }
 
 func eventLine(e *eventlog.Event) string {
+	if e.Kind == eventlog.KindResolve {
+		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
+	}
+	kind := e.Kind
+	if len(e.Re) > 0 {
+		kind = "reply to note " + seqList(e.Re, "#", ", ")
+	}
 	target := ""
 	if e.Target != "" {
 		target = " on #" + e.Target
@@ -742,5 +771,21 @@ func eventLine(e *eventlog.Event) string {
 	if e.Quote != "" {
 		target += fmt.Sprintf(" %q", e.Quote)
 	}
-	return eventlog.Printable(fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, e.Kind, target, e.Text))
+	line := fmt.Sprintf("#%d %s %s%s: %s", e.Seq, e.Author, kind, target, e.Text)
+	if e.Kind == eventlog.KindNote && e.Author == "human" {
+		answer := []uint64{e.Seq}
+		if len(e.Re) > 0 {
+			answer = e.Re
+		}
+		line += " (answer with kapi say --reply " + seqList(answer, "", ",") + ")"
+	}
+	return eventlog.Printable(line)
+}
+
+func seqList(seqs []uint64, prefix, sep string) string {
+	out := make([]string, len(seqs))
+	for i, n := range seqs {
+		out[i] = prefix + strconv.FormatUint(n, 10)
+	}
+	return strings.Join(out, sep)
 }

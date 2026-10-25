@@ -535,9 +535,16 @@ func TestOpenNoticesAnEditMadeWhileClosed(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	open(t, home, path)
 	externalWrite(t, path, `<p data-kapi-id="aaaaaaaa">changed</p>`)
-	s := open(t, home, path)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, rev := s.Source(); rev != 2 {
 		t.Fatalf("rev = %d, want 2", rev)
+	}
+	if events, _ := l.After(0); len(events) != 1 || events[0].Author != "file" || events[0].Kind != "revision" || events[0].Changed != "aaaaaaaa" || events[0].Rev != 2 {
+		t.Errorf("events = %+v, want one file revision naming aaaaaaaa", events)
 	}
 	if _, _, err := s.Apply(2, &Op{Kind: "undo"}); !errors.Is(err, ErrNothingToUndo) {
 		t.Errorf("undo of an edit made while closed: err = %v, want ErrNothingToUndo", err)
@@ -1539,5 +1546,25 @@ func TestTheTopLevelCheckCountsBlocksWithoutIDs(t *testing.T) {
 	}
 	if sameTopLevel(before, []byte(`<div data-kapi-id="aaaaaaaa">a<hr></div>`), "aaaaaaaa") {
 		t.Error("a page that lost a top-level block without an id passed")
+	}
+}
+
+func TestAFileEditThatAddsABlockStillNamesTheBlocksItChanged(t *testing.T) {
+	const src = "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<ul data-kapi-id=\"bbbbbbbb\"><li data-kapi-id=\"cccccccc\">c</li><li data-kapi-id=\"dddddddd\">d</li></ul>\n<p data-kapi-id=\"eeeeeeee\">e</p>\n"
+	home, path := newPage(t, src)
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := "<p data-kapi-id=\"ffffffff\">new</p>\n" + strings.Replace(strings.Replace(src, ">c<", ">c2<", 1), "<p data-kapi-id=\"eeeeeeee\">e</p>\n", "", 1)
+	externalWrite(t, path, next)
+	sum, _, err := s.Refresh()
+	if err != nil || len(sum.IDs) != 0 {
+		t.Fatalf("summary %+v, %v: a new block list still means no target", sum, err)
+	}
+	events, _ := l.After(0)
+	if e := events[len(events)-1]; e.Kind != "revision" || e.Target != "" || e.Changed != "bbbbbbbb,cccccccc,eeeeeeee" {
+		t.Errorf("revision = %+v, want changed bbbbbbbb,cccccccc,eeeeeeee", e)
 	}
 }

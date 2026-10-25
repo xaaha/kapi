@@ -241,8 +241,8 @@ event in the log, and appends the event only when the log does not have it
 yet. So a kill between the commit and the append logs the event once on the
 next open, an append that failed is retried by the next op or refresh, and a
 reopen with nothing lost logs nothing. A commit that logs no
-event, such as the first load or a file edit made while kapi was down,
-records none.
+event, such as the first load, records none. A file edit made while kapi was
+down is logged on the next open like any file edit, with author `file`.
 
 ## HTTP
 
@@ -257,7 +257,7 @@ On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
-`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/ops` or
+`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/ops` or
 `p/{id}/answers` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
@@ -314,11 +314,12 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | Method and path | Body | Response |
 |---|---|---|
 | `GET /p/{id}/` | | full HTML: `render.CSS()`, `chrome.css`, the rendered body inside `<main id="kapi-page" data-rev="N" data-undo="bool">`, `kapi.js` |
-| `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone) |
+| `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone); with `?rev=N`, the block as it was at revision `N`, read from the kept revision files, 404 when that revision or the block in it does not exist |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
 | `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
-| `POST /p/{id}/notes` | `{"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","text":"..."}],"text":"optional message"}` | `{"seq":N}` of the last event; every note becomes a `note` event and a non-blank `text` a trailing `message`, all appended in one write; 422 when a note has no target or blank text, or there is nothing to append |
+| `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"text":"..."}],"text":"optional message"}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
+| `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
@@ -336,6 +337,25 @@ so it hands its queued notes to `localStorage` under
 `kapi-handoff:<page id>`; the next tab of that page to load, or one already
 open that is still connected, takes them, clears the key and says so. The
 chat box sends plain messages with no target.
+
+Sent notes stay on the page. The browser works out each note's state from
+the event log it replays, so nothing new is stored: waiting after the note
+or a human reply to it, answered after a message whose `re` names it or one
+of its replies,
+changed after a `revision` not by `human` whose `changed` (or, on older
+events, `target`) lists one of its blocks or a block around one, and resolved after a `resolve` that names it, which is final. The
+latest of the first three wins. Each note shows a numbered pin after its
+quote, found again with `prefix` and `suffix`, or on its block when the
+quote is gone, and its quote is underlined in the state's colour through
+the CSS highlight API, so nothing is inserted into the page and copy never
+picks up a pin. For a changed note the browser fetches its blocks at the
+note's `rev` and diffs their words against the page: new words are marked
+green in place, and hovering or tapping the pin shows Before and Now, the
+note, its replies, Reply and Resolve. The panel's Notes tab lists open
+notes in page order under their section heading, with resolved ones apart;
+J and K move to the next and previous note, and a rail beside the page
+marks where each one is. On a phone a strip above the message box counts
+the notes and opens the list as a sheet.
 
 ### Events stream
 
@@ -358,9 +378,10 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `kind` | Meaning | Browser does |
 |---|---|---|
 | `message` | chat message from `human` or an agent | append to the chat panel |
-| `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it | append to the chat panel with its quote |
+| `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it, `rev` the page revision it was written on; with `re`, a reply to those notes | append to the chat panel with its quote, and pin it on the page |
+| `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
-| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
+| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
 Read receipts are not in the event log. Each reader has two positions:
@@ -385,7 +406,14 @@ The browser keeps nothing: after any reconnect it refetches the page.
 Ops reach the agent through the existing event log, so `kapi watch` shows
 `#12 human revision on #k3f9a2bq: deleted "Move the session store to the new…"`
 with no new command. A note prints its part and quote after the target:
-`#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her?`. A revision's `text` quotes the block: its text with
+`#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her? (answer with kapi say --reply 13)`.
+`kapi say --reply 13,14` writes a message with `re` set to those notes, and
+the daemon refuses a number that is not a note on the page; other readers see
+`#15 agent reply to note #13, #14: ...`, and a human reply to a note prints
+as `#16 human reply to note #13 on #k3f9a2bq: ...`. Resolve prints as
+`#17 human resolved note #13`. A `resolve` event never wakes a reader: `kapi
+wait` and the `Stop` hook ignore it, and `kapi watch` holds it until the next
+event, so it reaches the agent with whatever comes next. A revision's `text` quotes the block: its text with
 whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
 the preset name without `kapi-` for a preset (`archived callout "Freeze
 writes."`). An edit quotes the new text. A file edit that changed several

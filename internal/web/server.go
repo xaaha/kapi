@@ -63,6 +63,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/events", s.withPage(s.handleEvents))
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/notes", s.withPage(s.handleNotes))
+	s.mux.HandleFunc("POST /p/{id}/resolve", s.withPage(s.handleResolve))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
 	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
@@ -102,7 +103,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|ops|answers)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|ops|answers)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -231,6 +232,22 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 
 func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, rev := st.Source()
+	if q := r.URL.Query().Get("rev"); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			http.Error(w, "rev must be a revision number", http.StatusBadRequest)
+			return
+		}
+		if src, err = st.SourceAt(n); err != nil {
+			if errors.Is(err, page.ErrNoRev) {
+				http.NotFound(w, r)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		rev = n
+	}
 	id := r.PathValue("block")
 	if _, err := page.Outer(src, id); err != nil {
 		http.NotFound(w, r)
@@ -364,20 +381,26 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
-func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
 	var in struct {
 		Notes []struct {
-			Target string `json:"target"`
-			Part   string `json:"part"`
-			Quote  string `json:"quote"`
-			Prefix string `json:"prefix"`
-			Suffix string `json:"suffix"`
-			Text   string `json:"text"`
+			Target string   `json:"target"`
+			Part   string   `json:"part"`
+			Quote  string   `json:"quote"`
+			Prefix string   `json:"prefix"`
+			Suffix string   `json:"suffix"`
+			Re     []uint64 `json:"re"`
+			Text   string   `json:"text"`
 		} `json:"notes"`
+		Rev  uint64 `json:"rev"`
 		Text string `json:"text"`
 	}
 	if !decode(w, r, &in) {
 		return
+	}
+	rev := in.Rev
+	if _, cur := st.Source(); rev == 0 || rev > cur {
+		rev = cur
 	}
 	events := make([]eventlog.Event, 0, len(in.Notes)+1)
 	for _, n := range in.Notes {
@@ -385,8 +408,12 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, _ *page.Sto
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "every note needs a target and non-empty text"})
 			return
 		}
-		events = append(events, eventlog.Event{Author: "human", Kind: "note", Target: n.Target, Part: n.Part,
-			Quote: n.Quote, Prefix: n.Prefix, Suffix: n.Suffix, Text: n.Text})
+		if err := l.CheckNotes(n.Re); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		events = append(events, eventlog.Event{Author: "human", Kind: eventlog.KindNote, Target: n.Target, Part: n.Part,
+			Quote: n.Quote, Prefix: n.Prefix, Suffix: n.Suffix, Rev: rev, Re: n.Re, Text: n.Text})
 	}
 	if strings.TrimSpace(in.Text) != "" {
 		events = append(events, eventlog.Event{Author: "human", Kind: "message", Text: in.Text})
@@ -401,6 +428,25 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, _ *page.Sto
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
+}
+
+func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+	var in struct {
+		Note uint64 `json:"note"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := l.CheckNotes([]uint64{in.Note}); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindResolve, Re: []uint64{in.Note}})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 type opResult struct {

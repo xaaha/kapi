@@ -243,6 +243,7 @@ pages[2]:
 next:
   kapi wait <page>                   wait for the next event, print every unseen one and exit; run it in the background, again after each exit
   kapi say --seen <n> <page> <text>  reply; n is the number of the last event you read, so the page shows you read it
+  kapi say --reply <n> <page> <text> answer note #n; the page marks it answered
   kapi seen <page> <n>               show you read every event through #n, without replying
   kapi pending <page>                list unseen events and mark them seen
   kapi --help                        every command
@@ -348,8 +349,24 @@ func TestEventLinesCarryNoTerminalControls(t *testing.T) {
 
 func TestNoteLinesNameThePartAndQuote(t *testing.T) {
 	e := &eventlog.Event{Seq: 12, Author: "human", Kind: "note", Target: "k3f9a2bq", Part: "row 2, Owner", Quote: "said \"no\"\nthen\x1b[2J", Text: "why?"}
-	if got, want := eventLine(e), `#12 human note on #k3f9a2bq (row 2, Owner) "said \"no\"\nthen\x1b[2J": why?`; got != want {
+	if got, want := eventLine(e), `#12 human note on #k3f9a2bq (row 2, Owner) "said \"no\"\nthen\x1b[2J": why? (answer with kapi say --reply 12)`; got != want {
 		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
+func TestRepliesAndResolvesNameTheirNotes(t *testing.T) {
+	for _, c := range []struct {
+		e    eventlog.Event
+		want string
+	}{
+		{eventlog.Event{Seq: 14, Author: "human", Kind: "note", Target: "k3f9a2bq", Re: []uint64{12}, Text: "and Bob?"}, `#14 human reply to note #12 on #k3f9a2bq: and Bob? (answer with kapi say --reply 12)`},
+		{eventlog.Event{Seq: 17, Author: "human", Kind: "note", Target: "a", Re: []uint64{12, 14}, Text: "both?"}, `#17 human reply to note #12, #14 on #a: both? (answer with kapi say --reply 12,14)`},
+		{eventlog.Event{Seq: 15, Author: "codex", Kind: "message", Re: []uint64{12, 14}, Text: "fixed"}, `#15 codex reply to note #12, #14: fixed`},
+		{eventlog.Event{Seq: 16, Author: "human", Kind: "resolve", Re: []uint64{12}}, `#16 human resolved note #12`},
+	} {
+		if got := eventLine(&c.e); got != c.want {
+			t.Errorf("eventLine = %q, want %q", got, c.want)
+		}
 	}
 }
 
@@ -437,5 +454,47 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
 		}
+	}
+}
+
+func TestSayWithReplyNamesTheNotes(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Event: &eventlog.Event{Seq: 7}}}
+	if _, err := run(t, f, "say", "--reply", "#5, 6", "plan.html", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.requests[0].Re; !reflect.DeepEqual(got, []uint64{5, 6}) {
+		t.Errorf("re = %v, want [5 6]", got)
+	}
+	for _, bad := range []string{"0", "5,x", ","} {
+		if _, err := run(t, &fakeAPI{}, "say", "--reply", bad, "plan.html", "ok"); err == nil {
+			t.Errorf("--reply %q accepted", bad)
+		}
+	}
+	if _, err := run(t, &fakeAPI{}, "send", "--reply", "3", "plan.html", "hi"); err == nil {
+		t.Error("send accepted --reply, which only a reader can give")
+	}
+}
+
+func TestTheStopHookLetsAResolveWaitForTheNextEvent(t *testing.T) {
+	resolve := eventlog.Event{Seq: 4, Author: "human", Kind: "resolve", Re: []uint64{2}}
+	quiet := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve}}}}
+	f := &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
+		t.Fatalf("Stop on a resolve alone: out %q, err %v, requests %+v", out, err, f.requests)
+	}
+	f = &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
+	if out, _ := run(t, f, "hook-messages"); !strings.Contains(out, "#4 human resolved note #2") {
+		t.Errorf("PostToolUse did not carry the resolve along: %s", out)
+	}
+	seen := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{{Seq: 3, Author: "human", Kind: "message", Text: "go"}, resolve}}}}
+	f = &fakeAPI{resp: seen, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
+		t.Fatalf("Stop on an already shown message and a resolve: out %q, err %v", out, err)
+	}
+	loud := quiet
+	loud.Pages = []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve, {Seq: 5, Author: "human", Kind: "message", Text: "go"}}}}
+	f = &fakeAPI{resp: loud, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	if out, _ := run(t, f, "hook-messages"); !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "resolved note #2") {
+		t.Errorf("Stop with a message after the resolve: %s", out)
 	}
 }

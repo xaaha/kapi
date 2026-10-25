@@ -78,10 +78,11 @@ type state struct {
 }
 
 type revEvent struct {
-	Rev    uint64   `json:"rev"`
-	Author string   `json:"author"`
-	Text   string   `json:"text"`
-	IDs    []string `json:"ids,omitempty"`
+	Rev     uint64   `json:"rev"`
+	Author  string   `json:"author"`
+	Text    string   `json:"text"`
+	IDs     []string `json:"ids,omitempty"`
+	Changed []string `json:"changed,omitempty"`
 }
 
 type heldFile struct {
@@ -183,7 +184,9 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 			return s, nil
 		}
 		var ev *revEvent
-		if text != "" {
+		if s.rev > 0 && !bytes.Equal(raw, s.src) {
+			ev = fileEvent(s.src, src, text)
+		} else if text != "" {
 			ev = &revEvent{Author: "kapi", Text: text}
 		}
 		_, err = s.commit(src, raw, s.rev+1, s.undo, ev)
@@ -191,7 +194,11 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 			continue
 		}
 		if errors.Is(err, errFileChanged) {
-			_, err = s.commit(raw, raw, s.rev+1, s.undo, nil)
+			var last *revEvent
+			if s.rev > 0 && !bytes.Equal(raw, s.src) {
+				last = fileEvent(s.src, raw, "")
+			}
+			_, err = s.commit(raw, raw, s.rev+1, s.undo, last)
 		}
 		if err != nil {
 			return nil, err
@@ -411,6 +418,24 @@ func (s *Store) Source() ([]byte, uint64) {
 	return slices.Clone(s.src), s.rev
 }
 
+var ErrNoRev = errors.New("no such revision")
+
+func (s *Store) SourceAt(rev uint64) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case rev == s.rev:
+		return slices.Clone(s.src), nil
+	case rev == 0 || rev > s.rev:
+		return nil, ErrNoRev
+	}
+	src, err := s.readRev(rev)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNoRev
+	}
+	return src, err
+}
+
 func (s *Store) CanUndo() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -441,22 +466,15 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		if err != nil {
 			return Summary{}, false, err
 		}
-		ids := changedBlocks(s.src, src)
-		summary := "edited in the file"
-		if len(ids) > 0 {
-			summary += ": " + describeIDs(src, ids)
-		}
-		if text != "" {
-			summary += "; " + text
-		}
-		seq, err := s.commit(src, raw, s.rev+1, s.undo, &revEvent{Author: "file", Text: summary, IDs: ids})
+		ev := fileEvent(s.src, src, text)
+		seq, err := s.commit(src, raw, s.rev+1, s.undo, ev)
 		if errors.Is(err, errFileChanged) {
 			continue
 		}
 		if err != nil {
 			return Summary{}, false, err
 		}
-		return Summary{Text: summary, IDs: ids, Seq: seq}, true, nil
+		return Summary{Text: ev.Text, IDs: ev.IDs, Seq: seq}, true, nil
 	}
 	return Summary{}, false, nil
 }
@@ -624,7 +642,7 @@ func (s *Store) logEvent() (uint64, error) {
 	if s.event == nil || s.event.Rev <= s.logged {
 		return 0, nil
 	}
-	e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Text: s.event.Text})
+	e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Changed: strings.Join(s.event.Changed, ","), Text: s.event.Text})
 	if err != nil {
 		return 0, err
 	}
@@ -1216,35 +1234,54 @@ func move(src []byte, els []element, e *element, before string) ([]byte, error) 
 	return slices.Concat(src[:at], []byte(ins), src[at:rs], src[re:]), nil
 }
 
-func changedBlocks(old, cur []byte) []string {
-	blocks := func(src []byte) ([]string, map[string]string) {
-		var ids []string
-		outer := map[string]string{}
+func fileEvent(old, cur []byte, conversion string) *revEvent {
+	ids, changed := changedBlocks(old, cur)
+	summary := "edited in the file"
+	if len(ids) > 0 {
+		summary += ": " + describeIDs(cur, ids)
+	}
+	if conversion != "" {
+		summary += "; " + conversion
+	}
+	return &revEvent{Author: "file", Text: summary, IDs: ids, Changed: changed}
+}
+
+func changedBlocks(old, cur []byte) (ids, changed []string) {
+	blocks := func(src []byte) (top, all []string, outer map[string]string) {
+		outer = map[string]string{}
 		for _, e := range parse(src) {
-			if e.parent < 0 && e.id != "" {
-				ids = append(ids, e.id)
-				outer[e.id] = string(src[e.start:e.end])
+			if e.id == "" {
+				continue
+			}
+			all = append(all, e.id)
+			outer[e.id] = string(src[e.start:e.end])
+			if e.parent < 0 {
+				top = append(top, e.id)
 			}
 		}
-		return ids, outer
+		return top, all, outer
 	}
 	old, errOld := render.Canonical(old)
 	cur, errCur := render.Canonical(cur)
 	if errOld != nil || errCur != nil {
-		return nil
+		return nil, nil
 	}
-	oldIDs, oldOuter := blocks(old)
-	curIDs, curOuter := blocks(cur)
-	if !slices.Equal(oldIDs, curIDs) {
-		return nil
-	}
-	var changed []string
-	for _, id := range curIDs {
-		if oldOuter[id] != curOuter[id] {
+	oldTop, oldAll, oldOuter := blocks(old)
+	curTop, _, curOuter := blocks(cur)
+	for _, id := range oldAll {
+		if now, ok := curOuter[id]; !ok || now != oldOuter[id] {
 			changed = append(changed, id)
 		}
 	}
-	return changed
+	if !slices.Equal(oldTop, curTop) {
+		return nil, changed
+	}
+	for _, id := range curTop {
+		if oldOuter[id] != curOuter[id] {
+			ids = append(ids, id)
+		}
+	}
+	return ids, changed
 }
 
 const (

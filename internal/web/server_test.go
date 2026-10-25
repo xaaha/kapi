@@ -176,6 +176,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -968,5 +969,64 @@ func TestPollStreamsAFileEditAsARevision(t *testing.T) {
 	}
 	if page := s.get("/p/" + s.id + "/").body; !strings.Contains(page, `data-rev="2"`) {
 		t.Errorf("page after the edit:\n%s", page)
+	}
+}
+
+func TestNotesRecordTheirRevisionAndRepliesNameNotes(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	if code, out := s.post("/notes", `{"rev":1,"notes":[{"target":"aaaaaaaa","text":"why?"}],"text":"hi"}`); code != http.StatusOK || out["seq"] != 2.0 {
+		t.Fatalf("notes: %d %v", code, out)
+	}
+	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"Uno"}}`); code != http.StatusOK {
+		t.Fatalf("edit: %d", code)
+	}
+	for _, bad := range []string{
+		`{"notes":[{"target":"aaaaaaaa","re":[2],"text":"a message is not a note"}]}`,
+		`{"notes":[{"target":"aaaaaaaa","re":[1,99],"text":"no such note"}]}`,
+	} {
+		if code, _ := s.post("/notes", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /notes %s: %d, want 422", bad, code)
+		}
+	}
+	if code, _ := s.post("/notes", `{"rev":9,"notes":[{"target":"aaaaaaaa","re":[1],"text":"and now?"}]}`); code != http.StatusOK {
+		t.Fatalf("reply note: %d", code)
+	}
+	ev := s.events()
+	if e := ev[0]; e.Rev != 1 {
+		t.Errorf("note rev = %d, want 1", e.Rev)
+	}
+	if e := ev[len(ev)-1]; e.Kind != "note" || e.Rev != 2 || len(e.Re) != 1 || e.Re[0] != 1 {
+		t.Errorf("reply note = %+v, want rev 2, the current one, and re [1]", e)
+	}
+}
+
+func TestResolveNamesANoteAndBlocksComeBackAtAPastRevision(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	s.post("/notes", `{"notes":[{"target":"aaaaaaaa","text":"why?"}],"text":"hi"}`)
+	for _, bad := range []string{`{"note":2}`, `{"note":0}`, `{"note":7}`} {
+		if code, _ := s.post("/resolve", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /resolve %s: %d, want 422", bad, code)
+		}
+	}
+	if code, out := s.post("/resolve", `{"note":1}`); code != http.StatusOK || out["seq"] != 3.0 {
+		t.Fatalf("resolve: %d %v", code, out)
+	}
+	if e := s.events()[2]; e.Kind != "resolve" || e.Author != "human" || len(e.Re) != 1 || e.Re[0] != 1 {
+		t.Errorf("resolve = %+v", e)
+	}
+	if code, _ := s.post("/ops", `{"rev":1,"op":{"kind":"edit","id":"aaaaaaaa","inner":"Uno"}}`); code != http.StatusOK {
+		t.Fatalf("edit: %d", code)
+	}
+	old := s.get("/p/" + s.id + "/blocks/aaaaaaaa?rev=1")
+	if old.code != http.StatusOK || !strings.Contains(old.body, ">One<") || old.header.Get("Kapi-Rev") != "1" {
+		t.Errorf("block at rev 1: %d %q rev %q", old.code, old.body, old.header.Get("Kapi-Rev"))
+	}
+	if now := s.get("/p/" + s.id + "/blocks/aaaaaaaa?rev=2"); !strings.Contains(now.body, ">Uno<") {
+		t.Errorf("block at rev 2: %q", now.body)
+	}
+	for q, want := range map[string]int{"0": http.StatusNotFound, "3": http.StatusNotFound, "x": http.StatusBadRequest} {
+		if got := s.get("/p/" + s.id + "/blocks/aaaaaaaa?rev=" + q); got.code != want {
+			t.Errorf("rev=%s: %d, want %d", q, got.code, want)
+		}
 	}
 }
