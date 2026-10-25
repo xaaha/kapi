@@ -1258,7 +1258,7 @@ func TestExportRefusesAPageWithMissingImagesAndHasNoHubLimit(t *testing.T) {
 		t.Errorf("export with a missing image: %d %q %v", got.code, got.body, got.header)
 	}
 	big := "0123456789abcdef0123456789abcdef.png"
-	data := append(append([]byte{}, onePixel...), bytes.Repeat([]byte{0}, 9<<20)...)
+	data := append(append([]byte{}, onePixel...), make([]byte, 9<<20)...)
 	if err := os.MkdirAll(filepath.Join(filepath.Dir(s.path), "plan.files"), 0o755); err != nil {
 		t.Fatal(err)
 	}
