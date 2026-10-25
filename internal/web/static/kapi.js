@@ -57,6 +57,7 @@
     chat: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM84,116a12,12,0,1,0,12,12A12,12,0,0,0,84,116Zm88,0a12,12,0,1,0,12,12A12,12,0,0,0,172,116Zm60,12A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z",
     x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
+    download: "M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z",
     image: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
@@ -298,8 +299,10 @@
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
+      const picture = !archived && selected.matches("figure") && selected.querySelector(":scope > img[src]");
       bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
+        ...(picture ? [tool("download", "Download", "download")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         tool("archive", "Archive", "archive", "E")]),
         tool("trash", "Delete", "delete", DELETE_KEY, "Delete"));
@@ -654,6 +657,14 @@
     const id = idOf(selected);
     if (name === "edit") return startEdit();
     if (name === "archive" || name === "unarchive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "download") {
+      const img = selected.querySelector(":scope > img[src]");
+      if (!img) return;
+      const a = h("a", { href: img.src, download: img.src.split("/").pop() });
+      root.append(a);
+      a.click();
+      return a.remove();
+    }
     if (name === "flip") {
       const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
       return (await op("orient", { id, dir }))?.ok && refresh([id]);
@@ -869,7 +880,7 @@
       const keep = focused && { item: items[[...row.children].indexOf(focused.closest(".kapi-chip"))], cls: focused.className };
       row.hidden = !items.length;
       row.replaceChildren(...items.map((it) => h("div", { class: "kapi-chip", "data-state": it.state },
-        it.name ? h("img", { src: fileURL(it.name), alt: "" }) : h("span", { class: "kapi-chip-label", text: it.state === "uploading" ? "Uploading…" : it.label }),
+        it.name ? h("img", { src: fileURL(it.name), alt: "" }) : h("span", { class: "kapi-chip-label", text: it.state === "uploading" ? "Uploading\u2026" : it.label }),
         ...(it.state === "error" ? [h("span", { class: "kapi-chip-error", text: it.error }),
           h("button", { type: "button", class: "kapi-chip-retry", text: "Retry", onclick: () => upload(it) })] : []),
         h("button", { type: "button", class: "kapi-chip-remove", "aria-label": "Remove image", onclick: () => {
@@ -957,6 +968,32 @@
       e.preventDefault();
       tray.add(found);
     });
+  }
+
+  async function addImages(files, after) {
+    const images = files.filter((f) => IMAGE_TYPES.includes(f.type));
+    if (!images.length) return say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
+    if (images.length < files.length) say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
+    let anchor = after;
+    for (const file of images) {
+      say(`Adding ${file.name || "the image"}\u2026`);
+      let res = null;
+      try {
+        res = await fetch(`${base}/images`, { method: "POST", headers: { "Content-Type": file.type }, body: file });
+      } catch {}
+      if (res && (await restartedReply(res))) return;
+      const data = res ? await res.json().catch(() => ({})) : {};
+      if (!res?.ok || !data.name) return say(data.error || (res ? `Image not added (HTTP ${res.status}).` : "Could not reach kapi."), "error");
+      const done = await op("image", { id: anchor, src: data.name });
+      if (!done?.ok) return;
+      await refresh(null);
+      notice.hidden = true;
+      const fig = [...main.querySelectorAll("figure > img")].filter((img) => img.getAttribute("src").endsWith(`/${data.name}`)).at(-1)?.parentElement;
+      if (fig) {
+        anchor = idOf(fig);
+        flash(fig);
+      }
+    }
   }
 
   function showAsk(anchor, range, restore) {
@@ -2193,9 +2230,20 @@
   addEventListener("scroll", () => placePop(), { passive: true });
   for (const type of ["dragover", "drop"]) {
     document.addEventListener(type, (e) => {
-      if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault();
+      if (![...(e.dataTransfer?.types || [])].includes("Files")) return;
+      e.preventDefault();
+      if (type !== "drop" || editing || !main.contains(e.target)) return;
+      const at = closest(e.target, BLOCK);
+      addImages([...e.dataTransfer.files], at && main.contains(at) ? idOf(at) : "");
     });
   }
+  document.addEventListener("paste", (e) => {
+    if (e.defaultPrevented || editing || asking || root.contains(e.target) || typing(document.activeElement) || root.contains(document.activeElement)) return;
+    const files = [...(e.clipboardData?.files || [])];
+    if (!files.length || e.clipboardData.getData("text/plain")) return;
+    e.preventDefault();
+    addImages(files, selected ? idOf(selected) : "");
+  });
   addEventListener("resize", () => schedulePaint());
   phone.addEventListener("change", () => {
     setSheet(false);

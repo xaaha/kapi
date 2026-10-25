@@ -350,7 +350,11 @@ removable, until one Send posts them, with any typed message, to
 so it hands its queued notes to `localStorage` under
 `kapi-handoff:<page id>`; the next tab of that page to load, or one already
 open that is still connected, takes them, clears the key and says so. The
-chat box sends plain messages with no target.
+chat box sends plain messages with no target. Dropping an image on a block, or pasting one while
+nothing is being typed, uploads it to `POST /p/{id}/images` and adds it with
+an `image` op after that block, or after the selected block on a paste, or at
+the end; a selected image block offers Download. A paste that carries text,
+or one inside the note box or the message box, attaches there instead.
 
 Sent notes stay on the page. The browser works out each note's state from
 the event log it replays, so nothing new is stored: waiting after the note

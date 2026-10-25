@@ -131,6 +131,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
     textAt: {},
     snapshots: {},
     files: {},
+    pageFiles: {},
   };
   const snapshot = () => (state.snapshots[state.rev] ??= state.blocks.map((b) => ({ ...b })));
 
@@ -152,6 +153,22 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
 
   function apply(op) {
     snapshot();
+    if (op.kind === "image") {
+      if (!state.pageFiles[op.src]) return { status: 422, body: { error: "that image is not in the page's files folder" } };
+      const id = `fig${state.rev}`.padEnd(8, "x");
+      const fig = { id, html: `<figure data-kapi-id="${id}"><img src="./plan.files/${op.src}" alt=""></figure>` };
+      let at = state.blocks.length;
+      if (op.id) {
+        const i = state.blocks.findIndex((b) => b.id === op.id);
+        if (i < 0) return { status: 422, body: { error: `no element #${op.id}` } };
+        at = i + 1;
+      }
+      state.history.push(state.blocks.map((b) => ({ ...b })));
+      state.blocks.splice(at, 0, fig);
+      state.rev++;
+      const ev = push({ author: "human", kind: "revision", target: id, text: "added an image" });
+      return { status: 200, body: { rev: state.rev, undo: true, seq: ev.seq } };
+    }
     if (op.kind === "check") {
       const b = findTask(op.id);
       if (!b) return { status: 422, body: { error: `#${op.id} is not a kapi-task` } };
@@ -217,7 +234,7 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       return json(res, 403, { error: "kapi restarted", reopen: state.restarted, ...(state.reopened && { reopened: true }) });
     }
     const path = url.pathname.slice(prefix.length - 1);
-    const upload = image && path.endsWith("/files");
+    const upload = image && (path.endsWith("/files") || path.endsWith("/images"));
     if (req.method === "POST" && ((req.headers["content-type"] !== "application/json" && !upload) || req.headers.origin !== `http://${req.headers.host}`)) {
       return json(res, 403, { error: "cross-site request" });
     }
@@ -287,6 +304,22 @@ export async function startFakeServer({ blocks = SAMPLE } = {}) {
       for (const { files, ...n } of parsed.notes) ev = push({ author: "human", kind: "note", rev: parsed.rev, ...n, ...paths(files) });
       if (parsed.text?.trim() || parsed.files?.length) ev = push({ author: "human", kind: "message", text: parsed.text, ...paths(parsed.files) });
       return json(res, 200, { seq: ev.seq });
+    }
+    if (req.method === "POST" && rest === "images") {
+      if (state.nextUploadError) {
+        const error = state.nextUploadError;
+        state.nextUploadError = null;
+        return json(res, 415, { error });
+      }
+      const name = `${createHash("sha256").update(raw).digest("hex").slice(0, 32)}.png`;
+      state.pageFiles[name] = raw;
+      return json(res, 200, { name, mime: req.headers["content-type"], size: raw.length });
+    }
+    if (req.method === "GET" && rest.startsWith("plan.files/")) {
+      const data = state.pageFiles[rest.slice(11)];
+      if (!data) return json(res, 404, { error: "no image" });
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(data);
     }
     if (req.method === "POST" && rest === "files") {
       if (state.uploadDelay) await new Promise((r) => setTimeout(r, state.uploadDelay));
