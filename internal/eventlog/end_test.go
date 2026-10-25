@@ -83,3 +83,35 @@ func TestD25ConcurrentEndsAppendOnlyOne(t *testing.T) {
 		t.Fatalf("%d ends appended, %d refused, %d events; want 1, 19, 1", ok.Load(), refused.Load(), len(events))
 	}
 }
+
+func TestD25ALiftedEndIsNeverUnread(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.AppendAll([]Event{{Author: "human", Kind: "message", Text: "a"}, {Author: "human", Kind: KindEnd}, {Author: "human", Kind: "message", Text: "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	seqs := func(events []Event) []uint64 {
+		var out []uint64
+		for _, e := range events {
+			out = append(out, e.Seq)
+		}
+		return out
+	}
+	unseen, _, _ := l.Unseen("agent")
+	inbox, _, _ := l.Inbox("agent")
+	_, pending, _, err := Summary(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, got := range map[string][]uint64{"Unseen": seqs(unseen), "Pending": seqs(l.Pending("agent")), "Inbox": seqs(inbox)} {
+		if len(got) != 2 || got[0] != 1 || got[1] != 3 {
+			t.Errorf("%s = %v, want [1 3] without the lifted end", name, got)
+		}
+	}
+	if n := pending("agent"); n != 2 {
+		t.Errorf("Summary pending = %d, want 2", n)
+	}
+}

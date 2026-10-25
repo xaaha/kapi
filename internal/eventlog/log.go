@@ -130,7 +130,7 @@ func Summary(dir string) (map[string]uint64, func(reader string) int, uint64, er
 		if c >= uint64(len(events)) {
 			return 0
 		}
-		return len(unread(events[c:], reader))
+		return len(unread(events[c:], reader, Ended(events)))
 	}
 	return pos.Seen, pending, Ended(events), nil
 }
@@ -330,27 +330,26 @@ func (l *Log) Pending(reader string) []Event {
 	return events
 }
 
-// Inbox returns the events a reader has not acknowledged, without ends a later human message lifted, and the end in force.
 func (l *Log) Inbox(reader string) (events []Event, queued, ended uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ended = Ended(l.events)
-	events = unread(l.events[min(l.pos.Seen[reader], uint64(len(l.events))):], reader)
-	events = slices.DeleteFunc(events, func(e Event) bool { return e.Kind == KindEnd && e.Seq != ended })
-	return events, max(l.pos.Queued[reader], l.pos.Seen[reader]), ended
+	return unread(l.events[min(l.pos.Seen[reader], uint64(len(l.events))):], reader, ended), max(l.pos.Queued[reader], l.pos.Seen[reader]), ended
 }
 
 func (l *Log) Unseen(reader string) (events []Event, through, queued uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	through = uint64(len(l.events))
-	return unread(l.events[min(l.pos.Seen[reader], through):], reader), through, max(l.pos.Queued[reader], l.pos.Seen[reader])
+	return unread(l.events[min(l.pos.Seen[reader], through):], reader, Ended(l.events)), through, max(l.pos.Queued[reader], l.pos.Seen[reader])
 }
 
 const KindPresence = "presence"
 
-func unread(events []Event, reader string) []Event {
-	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
+func unread(events []Event, reader string, ended uint64) []Event {
+	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool {
+		return e.Kind == KindPresence || e.Author == reader || (e.Kind == KindEnd && e.Seq != ended)
+	})
 }
 
 func readEvents(path string) ([]Event, int64, error) {

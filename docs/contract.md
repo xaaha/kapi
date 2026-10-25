@@ -463,10 +463,11 @@ again`. `kapi watch` prints it, after any held resolves, and exits 0; `kapi
 wait` wakes for it like any message. While the page is ended the `Stop` hook
 lets the agent stop, even with unseen notes or messages from before the end,
 and `kapi` lists the page with `(ended)`. A watch started on an ended page
-prints the end again and exits, and a `kapi wait` returns it at once. `kapi
-wait` and the hooks leave out an end that a later human message lifted. The next human message, note or answer lifts
-the end: the hooks hand it over as usual and a new watch skips the old end. A revision's `text` quotes the block: its text with
-whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
+prints the end again and exits, and a `kapi wait` returns it at once. The
+next human message, note or answer lifts the end: the hooks hand it over as
+usual, and `kapi watch`, `kapi wait`, `kapi pending`, the hooks and the unread
+counts all leave out an end that was lifted. A revision's `text` quotes the
+block: its text with whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
 the preset name without `kapi-` for a preset (`archived callout "Freeze
 writes."`). An edit quotes the new text. A file edit that changed several
 blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",

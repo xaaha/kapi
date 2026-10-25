@@ -141,6 +141,9 @@ func TestD25EndingASessionStopsTheAgentAndANewMessageStartsItAgain(t *testing.T)
 		t.Errorf("home view still marks the page ended after a message:\n%s", got)
 	}
 	e.post(url, "unread")
+	if got := e.kapi("pending", "--reader", "codex", e.page); !strings.Contains(got, "human message: back again") || strings.Contains(got, "ended the session") {
+		t.Errorf("kapi pending after a lifted end printed %q, want the messages and no end", got)
+	}
 	if got := wait(); !strings.Contains(got, "human message: back again") || strings.Contains(got, "ended the session") {
 		t.Errorf("kapi wait after a new message printed %q, want the message and no lifted end", got)
 	}
