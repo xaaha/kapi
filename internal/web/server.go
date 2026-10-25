@@ -576,8 +576,8 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request, _ *page.S
 }
 
 type opResult struct {
-	Rev  uint64 `json:"rev"`
-	Undo bool   `json:"undo"`
+	Rev  uint64   `json:"rev"`
+	Undo bool     `json:"undo"`
 	Seq  uint64   `json:"seq,omitempty"`
 	IDs  []string `json:"ids,omitempty"`
 }
