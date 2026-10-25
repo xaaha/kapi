@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,7 +12,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -61,8 +65,8 @@ func (c *Client) PageURL(pageID string) string {
 	return c.cfg.URL + "/p/" + pageID + "/"
 }
 
-func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title string, src []byte) (string, error) {
-	doc, err := Document(title, src)
+func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title string, src []byte, filesDir string) (string, error) {
+	doc, err := Document(title, src, filesDir)
 	if err != nil {
 		return "", err
 	}
@@ -72,11 +76,58 @@ func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title s
 	return c.PageURL(pageID), nil
 }
 
-func Document(title string, src []byte) ([]byte, error) {
+const MaxDocBytes = 10 << 20
+
+var (
+	imgTag    = regexp.MustCompile(`<img\b[^>]*>`)
+	pageImage = regexp.MustCompile(`\bsrc="\./[^"/]+\.files/([0-9a-f]{32}\.(png|jpg|gif|webp))"`)
+)
+
+var imageTypes = map[string]string{"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+
+type embedded struct {
+	name string
+	size int
+}
+
+func embedImages(body []byte, filesDir string) ([]byte, []embedded, bool) {
+	urls := map[string][]byte{}
+	var used []embedded
+	total := 0
+	over := false
+	out := imgTag.ReplaceAllFunc(body, func(tag []byte) []byte {
+		return pageImage.ReplaceAllFunc(tag, func(attr []byte) []byte {
+			sub := pageImage.FindSubmatch(attr)
+			name := string(sub[1])
+			url, seen := urls[name]
+			if !seen {
+				path := filepath.Join(filesDir, name)
+				if info, err := os.Stat(path); err == nil && len(body)+total+base64.StdEncoding.EncodedLen(int(info.Size())) > MaxDocBytes {
+					used = append(used, embedded{name, int(info.Size())})
+					total += base64.StdEncoding.EncodedLen(int(info.Size()))
+					over = true
+				} else if data, err := os.ReadFile(path); err == nil {
+					url = []byte(`src="data:` + imageTypes[string(sub[2])] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
+					used = append(used, embedded{name, len(data)})
+					total += len(url)
+				}
+				urls[name] = url
+			}
+			if url == nil {
+				return attr
+			}
+			return url
+		})
+	})
+	return out, used, over
+}
+
+func Document(title string, src []byte, filesDir string) ([]byte, error) {
 	body, err := render.Render(src)
 	if err != nil {
 		return nil, fmt.Errorf("render page: %w", err)
 	}
+	body, images, over := embedImages(body, filesDir)
 	var b bytes.Buffer
 	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
@@ -85,6 +136,18 @@ func Document(title string, src []byte) ([]byte, error) {
 	b.WriteString("\n</style>\n</head>\n<body>\n<main id=\"kapi-page\">\n")
 	b.Write(body)
 	b.WriteString("\n</main>\n</body>\n</html>\n")
+	if over || b.Len() > MaxDocBytes {
+		slices.SortFunc(images, func(a, b embedded) int { return b.size - a.size })
+		var big []string
+		for _, im := range images[:min(3, len(images))] {
+			big = append(big, fmt.Sprintf("%s (%.1f MB)", im.name, float64(im.size)/(1<<20)))
+		}
+		msg := fmt.Sprintf("the published page would be over the hub's %d MB limit", MaxDocBytes>>20)
+		if len(big) > 0 {
+			msg += "; the largest images are " + strings.Join(big, ", ")
+		}
+		return nil, errors.New(msg)
+	}
 	return b.Bytes(), nil
 }
 

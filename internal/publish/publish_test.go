@@ -1,7 +1,9 @@
 package publish
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -77,7 +79,7 @@ const pageID = "0123456789abcdef"
 func TestPublishPutsTheRenderedDocument(t *testing.T) {
 	h := &hub{}
 	c, _ := newClient(t, h)
-	got, err := c.Publish(context.Background(), pageID, 42, "plan <v2>.html", []byte("<p>hello</p>"))
+	got, err := c.Publish(context.Background(), pageID, 42, "plan <v2>.html", []byte("<p>hello</p>"), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,14 +102,14 @@ func TestPublishPutsTheRenderedDocument(t *testing.T) {
 	if got := r.Header.Get("Kapi-Title"); got != "plan%20%3Cv2%3E.html" {
 		t.Errorf("Kapi-Title = %q", got)
 	}
-	doc, _ := Document("plan <v2>.html", []byte("<p>hello</p>"))
+	doc, _ := Document("plan <v2>.html", []byte("<p>hello</p>"), t.TempDir())
 	if h.bodies[0] != string(doc) {
 		t.Errorf("body = %q, want %q", h.bodies[0], doc)
 	}
 }
 
 func TestDocumentIsSelfContained(t *testing.T) {
-	doc, err := Document("a <b> & c", []byte("<p>hi</p>"))
+	doc, err := Document("a <b> & c", []byte("<p>hi</p>"), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,4 +381,54 @@ func write(t *testing.T, path, content string) {
 
 func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
+}
+
+func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing.T) {
+	dir := t.TempDir()
+	files := filepath.Join(dir, "plan.files")
+	if err := os.MkdirAll(files, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	png := "0123456789abcdef0123456789abcdef.png"
+	if err := os.WriteFile(filepath.Join(files, png), []byte("PNGDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := `<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/` + png + `" alt=""></figure>` +
+		`<figure data-kapi-id="bbbbbbbb"><img src="./plan.files/ffffffffffffffffffffffffffffffff.png" alt=""></figure>` +
+		`<p data-kapi-id="cccccccc"><img src="https://example.com/x.png" alt=""></p>`
+	doc, err := Document("plan.html", []byte(src), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `src="data:image/png;base64,` + base64.StdEncoding.EncodeToString([]byte("PNGDATA")) + `"`
+	if !strings.Contains(string(doc), want) {
+		t.Errorf("the page image was not embedded:\n%s", doc)
+	}
+	if !strings.Contains(string(doc), `src="./plan.files/ffffffffffffffffffffffffffffffff.png"`) || !strings.Contains(string(doc), `src="https://example.com/x.png"`) {
+		t.Errorf("a missing or outside image changed:\n%s", doc)
+	}
+	big := "fedcba9876543210fedcba9876543210.jpg"
+	if err := os.WriteFile(filepath.Join(files, big), bytes.Repeat([]byte{0xff}, 9<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src += `<figure data-kapi-id="dddddddd"><img src="./plan.files/` + big + `" alt=""></figure>`
+	src += `<figure data-kapi-id="eeeeeeee"><img src="./plan.files/` + big + `" alt=""></figure>`
+	_, err = Document("plan.html", []byte(src), files)
+	if err == nil || !strings.Contains(err.Error(), "over the hub's 10 MB limit") || strings.Count(err.Error(), big) != 1 || !strings.Contains(err.Error(), big+" (9.0 MB)") {
+		t.Errorf("an oversized page with the image twice: %v", err)
+	}
+
+	code := `<pre data-kapi-id="ffffffff"><code>&lt;img src="./plan.files/` + png + `"&gt;</code></pre>` +
+		`<p data-kapi-id="gggggggg">Write src="./plan.files/` + png + `" in the tag.</p>`
+	doc, err = Document("plan.html", []byte(code), files)
+	if err != nil || strings.Contains(string(doc), "data:image") {
+		t.Errorf("text that looks like an image src was embedded: %v\n%s", err, doc)
+	}
+	notDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(notDir, "plan.files"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Document("plan.html", []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+png+`" alt=""></figure>`), filepath.Join(notDir, "plan.files")); err != nil {
+		t.Errorf("an unreadable files folder stopped publishing: %v", err)
+	}
 }
