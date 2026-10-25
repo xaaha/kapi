@@ -1,6 +1,11 @@
 package eventlog
 
-import "testing"
+import (
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+)
 
 func TestD25OnlyAHumanMessageNoteOrAnswerLiftsAnEnd(t *testing.T) {
 	end := Event{Seq: 2, Author: "human", Kind: KindEnd}
@@ -46,5 +51,31 @@ func TestD25SummaryReportsTheEndInForce(t *testing.T) {
 	}
 	if _, _, ended, _ := Summary(dir); ended != 0 || l.Ended() != 0 {
 		t.Errorf("after a new message: Summary %d, Ended %d; want 0", ended, l.Ended())
+	}
+}
+
+func TestD25ConcurrentEndsAppendOnlyOne(t *testing.T) {
+	l, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	var ok, refused atomic.Int32
+	for range 20 {
+		wg.Go(func() {
+			_, err := l.End("human")
+			switch {
+			case err == nil:
+				ok.Add(1)
+			case errors.Is(err, ErrEnded):
+				refused.Add(1)
+			default:
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if events, _ := l.After(0); ok.Load() != 1 || refused.Load() != 19 || len(events) != 1 {
+		t.Fatalf("%d ends appended, %d refused, %d events; want 1, 19, 1", ok.Load(), refused.Load(), len(events))
 	}
 }

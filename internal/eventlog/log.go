@@ -152,6 +152,25 @@ func (l *Log) Append(in *Event) (Event, error) {
 func (l *Log) AppendAll(in []Event) ([]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.appendLocked(in)
+}
+
+var ErrEnded = errors.New("the session has already ended; send a message to start it again")
+
+func (l *Log) End(author string) (Event, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if Ended(l.events) > 0 {
+		return Event{}, ErrEnded
+	}
+	out, err := l.appendLocked([]Event{{Author: author, Kind: KindEnd}})
+	if err != nil {
+		return Event{}, err
+	}
+	return out[0], nil
+}
+
+func (l *Log) appendLocked(in []Event) ([]Event, error) {
 	if l.broken != nil {
 		return nil, l.broken
 	}

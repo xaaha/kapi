@@ -603,11 +603,11 @@ func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request, _ *page.Store
 	if !decode(w, r, &in) {
 		return
 	}
-	if l.Ended() > 0 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "the session has already ended; send a message to start it again"})
+	e, err := l.End("human")
+	if errors.Is(err, eventlog.ErrEnded) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindEnd})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
