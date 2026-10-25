@@ -69,6 +69,12 @@ func TestMarkdownEscapesTextAndKeepsEachConstructApart(t *testing.T) {
 			"`a <img src=x onerror=alert(1)>`\n\n```\nx\n```\n\n`b <iframe>`\n\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\n<details>\n<summary>s &lt;b&gt;x&lt;/b&gt;</summary>\n\ny\n\n</details>"},
 		{"an option value cannot start a block", `<kapi-form name="f"><kapi-choice name="c">Q<kapi-opt value="a&#10;&#10;# H"></kapi-opt></kapi-choice></kapi-form>`,
 			"Q\n\n- [ ] a # H"},
+		{"blocks inside inline wrappers become blocks", `<div><span>x<pre>a</pre>y</span></div><div><a href="https://e.com">l<ul><li>i</li></ul>t</a></div><div><em>e<blockquote>q</blockquote></em></div><p>after</p>`,
+			"x\n\n```\na\n```\n\ny\n\nl\n\n- i\n\nt\n\ne\n\n> q\n\nafter"},
+		{"a block inside a heading stays on its line", `<h2>H<span><pre>c  d</pre></span></h2><h3>I<span><details><summary>s</summary>d</details></span></h3>`,
+			"## H `c d`\n\n### I s d"},
+		{"an option value is escaped", `<kapi-form name="f"><kapi-choice name="c">Q<kapi-opt value="<img src=x onerror=alert(1)>"></kapi-opt></kapi-choice></kapi-form>`,
+			"Q\n\n- [ ] \\<img src=x onerror=alert(1)>"},
 		{"links keep newlines out", `<p><a href="https://e.com/a&#10;&#10;~~~">x</a> <img src="https://e.com/b&#9;c.png" alt="i"></p>`,
 			"[x](https://e.com/a%0A%0A~~~) ![i](https://e.com/b%09c.png)"},
 		{"code in a table cell", "<table><tr><th>c</th></tr><tr><td><kapi-code lang=\"go\">a := 1\nb | 2</kapi-code></td></tr></table>",
@@ -91,6 +97,22 @@ func TestMarkdownEscapesTextAndKeepsEachConstructApart(t *testing.T) {
 				t.Errorf("got\n%s\nwant\n%s", got, c.want)
 			}
 		})
+	}
+}
+
+func TestAParagraphLineCannotOpenAFenceOrAnHTMLBlock(t *testing.T) {
+	for in, want := range map[string]string{
+		"```go":        "\\```go",
+		"~~~":          "\\~~~",
+		"<details>":    "\\<details>",
+		"a\\\n```x":    "a\\\n\\```x",
+		"a ``` b":      "a ``` b",
+		"</div>":       "\\</div>",
+		"<em>(b)</em>": "<em>(b)</em>",
+	} {
+		if got := paragraph(in); got != want {
+			t.Errorf("paragraph(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

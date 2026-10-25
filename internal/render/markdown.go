@@ -102,18 +102,33 @@ func (m *mdWriter) blocksExcept(n *html.Node, tag string) []string {
 		}
 		run = nil
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		switch {
-		case skipped(c), c.Type == html.ElementNode && c.Data == tag:
-		case mdBlock(c):
-			flush()
-			out = append(out, m.block(c)...)
-		default:
-			run = append(run, m.inline(c, false))
+	var visit func(*html.Node)
+	visit = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			switch {
+			case skipped(c), c.Type == html.ElementNode && c.Data == tag:
+			case mdBlock(c):
+				flush()
+				out = append(out, m.block(c)...)
+			case holdsBlock(c):
+				visit(c)
+			default:
+				run = append(run, m.inline(c, false))
+			}
 		}
 	}
+	visit(n)
 	flush()
 	return out
+}
+
+func holdsBlock(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if !skipped(c) && (mdBlock(c) || (c.Type == html.ElementNode && !rawPresets[c.Data] && holdsBlock(c))) {
+			return true
+		}
+	}
+	return false
 }
 
 func summaryText(n *html.Node) string {
@@ -429,7 +444,13 @@ func (m *mdWriter) inline(n *html.Node, cell bool) string {
 		return ""
 	}
 	if mdBlock(n) {
-		return " " + strings.Join(m.block(n), " ") + " "
+		switch {
+		case n.Data == "pre":
+			return " " + codeSpan(collapse(plainText(n))) + " "
+		case rawPresets[n.Data]:
+			return " " + codeSpan(collapse(rawText(n))) + " "
+		}
+		return " " + m.inlines(n, cell) + " "
 	}
 	switch n.Data {
 	case "kapi-badge":
@@ -766,13 +787,24 @@ func escapeMD(s string) string {
 
 var leadingDigits = regexp.MustCompile(`^\d+`)
 
-var blockStart = regexp.MustCompile(`^(#{1,6}(?:\s|$)|[-+=>|]|\d+[.)](?:\s|$))`)
+var blockStart = regexp.MustCompile("^(#{1,6}(?:\\s|$)|[-+=>|]|\\d+[.)](?:\\s|$)|```|~~~)")
+
+var htmlStart = regexp.MustCompile(`^</?([A-Za-z][A-Za-z0-9-]*)`)
+
+var inlineHTML = set("em", "strong", "del", "br")
+
+func opensBlock(l string) bool {
+	if m := htmlStart.FindStringSubmatch(l); m != nil {
+		return !inlineHTML[m[1]]
+	}
+	return blockStart.MatchString(l)
+}
 
 func paragraph(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
 		l = collapse(l)
-		if blockStart.MatchString(l) {
+		if opensBlock(l) {
 			if m := leadingDigits.FindString(l); m != "" {
 				l = m + `\` + l[len(m):]
 			} else {
