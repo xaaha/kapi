@@ -380,11 +380,11 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": `want kind "message" and non-empty text or an image`})
 		return
 	}
-	files, ok := s.useFiles(w, r, in.Files)
+	files, ok := s.useFiles(w, r, [][]string{in.Files})
 	if !ok {
 		return
 	}
-	e, err := l.Append(&eventlog.Event{Author: "human", Kind: "message", Target: in.Target, Files: files, Text: in.Text})
+	e, err := l.Append(&eventlog.Event{Author: "human", Kind: "message", Target: in.Target, Files: files[0], Text: in.Text})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -422,23 +422,30 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "every note needs a target and text or an image"})
 			return
 		}
-		files, ok := s.useFiles(w, r, n.Files)
-		if !ok {
-			return
-		}
 		if err := l.CheckNotes(n.Re); err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
 		events = append(events, eventlog.Event{Author: "human", Kind: eventlog.KindNote, Target: n.Target, Part: n.Part,
-			Quote: n.Quote, Prefix: n.Prefix, Suffix: n.Suffix, Rev: rev, Re: n.Re, Files: files, Text: n.Text})
+			Quote: n.Quote, Prefix: n.Prefix, Suffix: n.Suffix, Rev: rev, Re: n.Re, Text: n.Text})
 	}
-	if strings.TrimSpace(in.Text) != "" || len(in.Files) > 0 {
-		files, ok := s.useFiles(w, r, in.Files)
-		if !ok {
-			return
-		}
-		events = append(events, eventlog.Event{Author: "human", Kind: "message", Files: files, Text: in.Text})
+	groups := make([][]string, 0, len(in.Notes)+1)
+	for i := range in.Notes {
+		groups = append(groups, in.Notes[i].Files)
+	}
+	message := strings.TrimSpace(in.Text) != "" || len(in.Files) > 0
+	if message {
+		groups = append(groups, in.Files)
+	}
+	files, ok := s.useFiles(w, r, groups)
+	if !ok {
+		return
+	}
+	for i := range in.Notes {
+		events[i].Files = files[i]
+	}
+	if message {
+		events = append(events, eventlog.Event{Author: "human", Kind: "message", Files: files[len(files)-1], Text: in.Text})
 	}
 	if len(events) == 0 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note or a message"})
@@ -452,22 +459,43 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 	writeJSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
 }
 
-func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, names []string) ([]string, bool) {
-	if len(names) == 0 {
-		return nil, true
+func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]string) ([][]string, bool) {
+	var all []string
+	for _, names := range groups {
+		if len(names) > attach.MaxPerSend {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": fmt.Sprintf("at most %d images per note or message", attach.MaxPerSend)})
+			return nil, false
+		}
+		all = append(all, names...)
 	}
-	paths, err := s.pages.Attachments().Use(r.PathValue("id"), names)
+	out := make([][]string, len(groups))
+	if len(all) == 0 {
+		return out, true
+	}
+	paths, err := s.pages.Attachments().Use(r.PathValue("id"), all)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return nil, false
 	}
-	return paths, true
+	for i, names := range groups {
+		for _, name := range names {
+			if !slices.Contains(out[i], paths[name]) {
+				out[i] = append(out[i], paths[name])
+			}
+		}
+	}
+	return out, true
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, attach.MaxBytes))
-	if err != nil {
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": attach.ErrTooBig.Error()})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read the image: " + err.Error()})
 		return
 	}
 	f, err := s.pages.Attachments().Put(r.PathValue("id"), data)

@@ -90,40 +90,95 @@ func TestPathRefusesNamesThatAreNotStoredImages(t *testing.T) {
 	}
 }
 
-func TestUseMarksImagesUsedAndKeepsThePerSendLimits(t *testing.T) {
+func TestUseMarksEveryImageUsedAndRefusesAMissingOne(t *testing.T) {
 	s, c := newStore(t)
 	var names []string
-	for i := range MaxPerSend + 1 {
-		f, err := s.Put(page, image(t, "png", 50+i))
+	for i := range 3 {
+		f, err := s.Put(page, image(t, "png", 100+i))
 		if err != nil {
 			t.Fatal(err)
 		}
 		names = append(names, f.Name)
 	}
-	if _, err := s.Use(page, names); err == nil {
-		t.Error("five images on one note were accepted")
-	}
 	c.t = c.t.Add(time.Hour)
-	paths, err := s.Use(page, names[:2])
-	if err != nil || len(paths) != 2 {
+	paths, err := s.Use(page, append(names, names[0]))
+	if err != nil || len(paths) != 3 {
 		t.Fatalf("Use: %v, %v", paths, err)
 	}
-	if info, _ := os.Stat(paths[0]); !info.ModTime().Equal(c.t) {
-		t.Errorf("used at %v, want %v", info.ModTime(), c.t)
+	for name, path := range paths {
+		if info, _ := os.Stat(path); !info.ModTime().Equal(c.t) {
+			t.Errorf("%s used at %v, want %v", name, info.ModTime(), c.t)
+		}
 	}
-	if _, err := s.Use(page, []string{names[0], "ffffffffffffffffffffffffffffffff.png"}); !errors.Is(err, ErrMissing) {
+	c.t = c.t.Add(time.Hour)
+	if _, err := s.Use(page, []string{names[1], "ffffffffffffffffffffffffffffffff.png"}); !errors.Is(err, ErrMissing) {
 		t.Errorf("a missing image: %v", err)
 	}
-	big := []string{}
-	for i := range 3 {
-		f, err := s.Put(page, image(t, "jpeg", MaxBytes-i))
-		if err != nil {
-			t.Fatal(err)
-		}
-		big = append(big, f.Name)
+	if info, _ := os.Stat(paths[names[1]]); info.ModTime().Equal(c.t) {
+		t.Error("a refused Use still marked the other image used")
 	}
-	if _, err := s.Use(page, big); err == nil {
-		t.Error("30 MB of images on one note was accepted")
+}
+
+func TestUploadingTheSameImageAgainMarksItUsed(t *testing.T) {
+	s, c := newStore(t)
+	f, _ := s.Put(page, image(t, "png", 10))
+	c.t = c.t.Add(3 * time.Hour)
+	if _, err := s.Put(page, image(t, "png", 10)); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := s.Path(page, f.Name)
+	if info, _ := os.Stat(path); !info.ModTime().Equal(c.t) {
+		t.Errorf("used at %v, want %v", info.ModTime(), c.t)
+	}
+}
+
+func TestTheStoreSurvivesUnreadableFoldersStrayTempFilesAndFutureDates(t *testing.T) {
+	s, c := newStore(t)
+	if err := os.MkdirAll(filepath.Join(s.root, "0000000000000000"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.root, "0000000000000000", dirName), []byte("not a folder"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stale, _ := s.Put(page, image(t, "jpeg", 10))
+	c.t = c.t.Add(8 * 24 * time.Hour)
+	if err := s.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Path(page, stale.Name); !errors.Is(err, ErrMissing) {
+		t.Error("an unreadable folder on another page stopped the sweep")
+	}
+	f, err := s.Put(page, image(t, "png", 10))
+	if err != nil {
+		t.Fatalf("Put with a stray files entry on another page: %v", err)
+	}
+	stray := filepath.Join(s.dir(page), tempPrefix+"123")
+	if err := os.WriteFile(stray, []byte("half an upload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := c.t.Add(-2 * time.Hour)
+	if err := os.Chtimes(stray, old, old); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := s.Path(page, f.Name)
+	future := c.t.Add(30 * 24 * time.Hour)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(7*24*time.Hour + 2*time.Hour)
+	if err := s.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stray); !errors.Is(err, os.ErrNotExist) {
+		t.Error("a stale temp file was left behind")
+	}
+	if _, err := s.Path(page, f.Name); err != nil {
+		t.Errorf("a future-dated image counts as used now, so it should stay: %v", err)
+	}
+	s.maxDisk = 10
+	c.t = c.t.Add(2 * time.Hour)
+	if _, err := s.Put(page, image(t, "gif", 6)); err != nil {
+		t.Errorf("a future-dated image blocked the cap from making room: %v", err)
 	}
 }
 
@@ -158,7 +213,7 @@ func TestSweepDeletesImagesUnusedForAWeek(t *testing.T) {
 func TestADiskCapEvictsTheOldestButNeverAFreshImage(t *testing.T) {
 	s, c := newStore(t)
 	s.maxDisk = 300
-	a, _ := s.Put(page, image(t, "png", 100))
+	a, _ := s.Put("fedcba9876543210", image(t, "png", 100))
 	c.t = c.t.Add(2 * time.Hour)
 	b, _ := s.Put(page, image(t, "gif", 100))
 	c.t = c.t.Add(2 * time.Hour)
@@ -168,8 +223,8 @@ func TestADiskCapEvictsTheOldestButNeverAFreshImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an upload that fits once the oldest goes: %v", err)
 	}
-	if _, err := s.Path(page, a.Name); !errors.Is(err, ErrMissing) {
-		t.Error("the oldest image was not evicted")
+	if _, err := s.Path("fedcba9876543210", a.Name); !errors.Is(err, ErrMissing) {
+		t.Error("the oldest image, on another page, was not evicted")
 	}
 	for _, f := range []File{b, d, e} {
 		if _, err := s.Path(page, f.Name); err != nil {

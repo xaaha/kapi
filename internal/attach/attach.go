@@ -6,20 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	MaxBytes     = 10 << 20
-	MaxPerSend   = 4
-	MaxSendBytes = 25 << 20
-	dirName      = "files"
+	MaxBytes   = 10 << 20
+	MaxPerSend = 4
+	dirName    = "files"
+	tempPrefix = ".upload-"
 )
 
 var (
@@ -68,38 +70,62 @@ func (s *Store) Put(page string, data []byte) (File, error) {
 	}
 	sum := sha256.Sum256(data)
 	f := File{Name: hex.EncodeToString(sum[:16]) + ext, Mime: mime, Size: int64(len(data))}
+	dir := s.dir(page)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return File{}, err
+	}
+	tmp, err := writeTemp(dir, data)
+	if err != nil {
+		return File{}, err
+	}
+	defer os.Remove(tmp)
+	if err := s.touch(tmp); err != nil {
+		return File{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	path := filepath.Join(s.dir(page), f.Name)
+	path := filepath.Join(dir, f.Name)
 	if _, err := os.Stat(path); err == nil {
 		return f, s.touch(path)
 	}
 	if err := s.makeRoom(f.Size); err != nil {
 		return File{}, err
 	}
-	if err := os.MkdirAll(s.dir(page), 0o700); err != nil {
+	if err := os.Rename(tmp, path); err != nil {
 		return File{}, err
 	}
-	tmp, err := os.CreateTemp(s.dir(page), ".upload-*")
-	if err != nil {
-		return File{}, err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return File{}, err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return File{}, err
-	}
-	if err := tmp.Close(); err != nil {
-		return File{}, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := syncDir(dir); err != nil {
 		return File{}, err
 	}
 	return f, s.touch(path)
+}
+
+func writeTemp(dir string, data []byte) (string, error) {
+	tmp, err := os.CreateTemp(dir, tempPrefix+"*")
+	if err != nil {
+		return "", err
+	}
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 func (s *Store) Path(page, name string) (string, error) {
@@ -113,28 +139,16 @@ func (s *Store) Path(page, name string) (string, error) {
 	return path, nil
 }
 
-func (s *Store) Use(page string, names []string) ([]string, error) {
-	if len(names) > MaxPerSend {
-		return nil, fmt.Errorf("at most %d images per note or message", MaxPerSend)
-	}
+func (s *Store) Use(page string, names []string) (map[string]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	paths := make([]string, 0, len(names))
-	var total int64
+	paths := make(map[string]string, len(names))
 	for _, name := range names {
 		path, err := s.Path(page, name)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, err
-		}
-		total += info.Size()
-		paths = append(paths, path)
-	}
-	if total > MaxSendBytes {
-		return nil, fmt.Errorf("images on one note or message can be at most %d MB together", MaxSendBytes>>20)
+		paths[name] = path
 	}
 	for _, path := range paths {
 		if err := s.touch(path); err != nil {
@@ -155,33 +169,41 @@ type stored struct {
 	used time.Time
 }
 
-func (s *Store) all() ([]stored, error) {
-	dirs, err := filepath.Glob(filepath.Join(s.root, "*", dirName))
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) all() []stored {
+	dirs, _ := filepath.Glob(filepath.Join(s.root, "*", dirName))
+	now := s.now()
 	var out []stored
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
+			if !errors.Is(err, fs.ErrNotExist) {
+				log.Printf("attachments: skipping %s: %v", dir, err)
 			}
-			return nil, err
+			continue
 		}
 		for _, e := range entries {
-			if !namePattern.MatchString(e.Name()) {
-				continue
-			}
 			info, err := e.Info()
 			if err != nil {
 				continue
 			}
-			out = append(out, stored{filepath.Join(dir, e.Name()), info.Size(), info.ModTime()})
+			path := filepath.Join(dir, e.Name())
+			if strings.HasPrefix(e.Name(), tempPrefix) && now.Sub(info.ModTime()) > s.grace {
+				os.Remove(path)
+				continue
+			}
+			if !namePattern.MatchString(e.Name()) {
+				continue
+			}
+			if info.ModTime().After(now) {
+				if err := os.Chtimes(path, now, now); err != nil {
+					log.Printf("attachments: %v", err)
+				}
+			}
+			out = append(out, stored{path, info.Size(), info.ModTime()})
 		}
 	}
 	slices.SortFunc(out, func(a, b stored) int { return a.used.Compare(b.used) })
-	return out, nil
+	return out
 }
 
 func (s *Store) Sweep() error {
@@ -194,10 +216,7 @@ func (s *Store) Sweep() error {
 }
 
 func (s *Store) makeRoom(need int64) error {
-	files, err := s.all()
-	if err != nil {
-		return err
-	}
+	files := s.all()
 	now := s.now()
 	var total int64
 	kept := files[:0]

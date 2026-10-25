@@ -1119,6 +1119,16 @@ func TestImagesUploadServeAndRideOnNotesAndMessages(t *testing.T) {
 			t.Errorf("POST /notes %s: %d, want 422", bad, code)
 		}
 	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := s.post("/notes", `{"notes":[{"target":"aaaaaaaa","files":["`+name+`"],"text":"ok"},{"target":"aaaaaaaa","files":["ffffffffffffffffffffffffffffffff.png"],"text":"x"}]}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("a batch with one missing image: %d, want 422", code)
+	}
+	if info, _ := os.Stat(path); !info.ModTime().Equal(old) {
+		t.Error("a refused batch still marked its other images used")
+	}
 	if code, _ := s.post("/messages", `{"kind":"message","files":["ffffffffffffffffffffffffffffffff.png"],"text":"x"}`); code != http.StatusUnprocessableEntity {
 		t.Errorf("message with a missing image: %d, want 422", code)
 	}

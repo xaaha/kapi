@@ -772,6 +772,9 @@ func eventLine(e *eventlog.Event) string {
 		target += fmt.Sprintf(" %q", e.Quote)
 	}
 	body := e.Text
+	if len(e.Files) > 0 {
+		body = strings.TrimSpace(body)
+	}
 	for _, f := range e.Files {
 		body = strings.TrimPrefix(body+" [image "+f+"]", " ")
 	}

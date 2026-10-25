@@ -504,6 +504,7 @@ func TestNoteAndMessageLinesGiveEachImagesPath(t *testing.T) {
 		e    eventlog.Event
 		want string
 	}{
+		{eventlog.Event{Seq: 5, Author: "human", Kind: "message", Text: "  ", Files: []string{"/h/a.png"}}, `#5 human message: [image /h/a.png]`},
 		{eventlog.Event{Seq: 3, Author: "human", Kind: "message", Files: []string{"/h/pages/p/files/a.png", "/h/pages/p/files/b.jpg"}}, `#3 human message: [image /h/pages/p/files/a.png] [image /h/pages/p/files/b.jpg]`},
 		{eventlog.Event{Seq: 4, Author: "human", Kind: "note", Target: "k3f9a2bq", Files: []string{"/h/pages/p/files/a.png"}, Text: "this chart?"}, `#4 human note on #k3f9a2bq: this chart? [image /h/pages/p/files/a.png] (answer with kapi say --reply 4)`},
 	} {

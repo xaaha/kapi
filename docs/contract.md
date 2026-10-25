@@ -325,7 +325,8 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 
 Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
 named by their content hash, and never in the page source. A note or message
-may carry up to 4 of them, 25 MB together, and may have no text. The event
+may carry up to 4 of them and may have no text; every image named in one
+request is checked before any is marked used. The event
 records each image's absolute path in `files`. A file's modification time is
 when it was last used: when it was uploaded or an event referenced it. The
 daemon deletes images unused for 7 days, on start and every hour, and keeps
