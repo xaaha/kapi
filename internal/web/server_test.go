@@ -191,6 +191,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/end", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/images", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/export/html", "kapi open " + s.path},

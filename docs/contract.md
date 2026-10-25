@@ -383,7 +383,9 @@ on the whole page rather than a block. Export HTML downloads
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
 stylesheet leaves out the panel, the site header, fold arrows, note
-marks and the undo note, and prints folded sections in full. Copy path copies `data-path`.
+marks and the undo note, and prints folded sections in full. Copy path copies `data-path`. End session
+posts `POST /p/{id}/end` with no confirm step, since the next message starts
+the session again; the item is hidden while the session is ended.
 Escape closes the menu and returns focus to its button; the arrow keys,
 Home and End move between items, Tab closes it, and no other key reaches
 the page's shortcuts while it has focus.

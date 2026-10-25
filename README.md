@@ -74,6 +74,11 @@ The three-dot menu at the top of the chat panel exports the page as one HTML
 file with its images inside, or as a PDF through the browser's print dialog,
 and copies the page's path.
 
+When you are done with a page, End session in that menu tells the agent to
+stop: `kapi watch` exits, `kapi wait` wakes with the end, the Stop hook no
+longer holds the agent, and `kapi` lists the page as `(ended)`. The page and
+its history stay, and your next message starts the session again.
+
 ## Agent harnesses
 
 Run `kapi` with no arguments to see every page and what is waiting on it.

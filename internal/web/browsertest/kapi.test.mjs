@@ -3238,9 +3238,9 @@ test("#23 the three-dot menu opens on its button, steps with the arrow keys, and
   await until(menuOpen);
   assert.equal(await expanded(), "true");
   assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`),
-    ["Export HTML", "Export PDF", "Copy path"]);
+    ["Export HTML", "Export PDF", "Copy path", "End session"]);
   assert.equal(await focusedItem(), "Export HTML");
-  for (const [key, want] of [["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "Export HTML"], ["ArrowUp", "Copy path"], ["Home", "Export HTML"], ["End", "Copy path"]]) {
+  for (const [key, want] of [["ArrowDown", "Export PDF"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export HTML"], ["ArrowUp", "End session"], ["Home", "Export HTML"], ["End", "End session"]]) {
     await pressKey(key);
     assert.equal(await focusedItem(), want, `after ${key}`);
   }
@@ -3401,6 +3401,32 @@ test("#23 on a phone the menu opens under the top bar inside the screen and leav
   } finally {
     await p.close();
   }
+});
+
+test("#26 End session in the menu posts an end, and the item is gone while the session is ended", async () => {
+  const labels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].map((b) => b.querySelector(".kapi-menu-label").textContent)`);
+  await mouseOn(".kapi-menu-button");
+  await until(menuOpen);
+  await mouseOn(".kapi-menu [data-menu=end]");
+  await until(() => requests("POST", "/end").length === 1);
+  assert.deepEqual(requests("POST", "/end")[0].body, {});
+  await page.waitFor(`document.querySelector(".kapi-status").textContent === "Session ended. Send a message to start again."`);
+  assert.equal(await menuOpen(), false);
+
+  await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
+  await page.key("Enter");
+  await until(menuOpen);
+  assert.deepEqual(await labels(), ["Export HTML", "Export PDF", "Copy path"]);
+  await pressKey("End");
+  assert.equal(await focusedItem(), "Copy path");
+  await page.key("Escape");
+
+  server.push({ author: "human", kind: "message", text: "back" });
+  await page.waitFor(`document.querySelector(".kapi-status").textContent !== "Session ended. Send a message to start again."`);
+  await mouseOn(".kapi-menu-button");
+  await until(menuOpen);
+  assert.deepEqual(await labels(), ["Export HTML", "Export PDF", "Copy path", "End session"]);
+  await page.key("Escape");
 });
 
 test("#26 an ended session shows in the chat until the human sends a new message", async () => {
