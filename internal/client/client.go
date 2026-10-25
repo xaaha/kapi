@@ -22,6 +22,7 @@ import (
 var (
 	ErrConnectionLost = errors.New("daemon connection lost")
 	ErrNotRunning     = errors.New("daemon not running")
+	ErrStopWatch      = errors.New("stop watching")
 )
 
 const noStartDeadline = time.Second
@@ -158,7 +159,7 @@ func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
 	return resp, nil
 }
 
-// Watch streams events to fn and marks each one queued after fn returns nil.
+// Watch streams events to fn and marks each one queued after fn returns nil or ErrStopWatch, which also ends the watch.
 func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error {
 	conn, err := c.dial("")
 	if err != nil {
@@ -178,11 +179,15 @@ func (c Client) Watch(page, reader string, fn func(daemon.Response) error) error
 		if resp.Error != "" {
 			return fmt.Errorf("%s", resp.Error)
 		}
-		if err := fn(resp); err != nil {
-			return err
+		stop := fn(resp)
+		if stop != nil && !errors.Is(stop, ErrStopWatch) {
+			return stop
 		}
 		if err := enc.Encode(daemon.Request{Op: "queue", Seq: resp.Event.Seq}); err != nil {
 			return err
+		}
+		if stop != nil {
+			return stop
 		}
 	}
 }

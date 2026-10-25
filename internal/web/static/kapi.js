@@ -11,6 +11,7 @@
     queued: "Queued for the agent",
     busy: "Agent is working",
     none: "No agent connected",
+    ended: "Session ended. Send a message to start again.",
     disconnected: "Disconnected. Reconnecting\u2026",
   };
 
@@ -24,6 +25,7 @@
   let queuedUpTo = 0;
   let lastHuman = 0;
   let lastReply = 0;
+  let ended = false;
   let opened = false;
   let busy = false;
   let pending = null;
@@ -1879,6 +1881,7 @@
   }
 
   function agentState() {
+    if (ended) return "ended";
     if (lastHuman > lastReply && lastHuman <= readUpTo) return "busy";
     if (lastHuman > lastReply && lastHuman <= queuedUpTo) return "queued";
     return presence;
@@ -1921,9 +1924,17 @@
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
         h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
     }
-    if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {
-      if (ev.author === "human") lastHuman = ev.seq;
-      else lastReply = ev.seq;
+    if (ev.kind === "end") {
+      ended = true;
+      const t = ev.time && new Date(ev.time);
+      log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `You ended the session${t && !isNaN(t) ? ` \u00b7 ${t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}` }));
+      empty.hidden = true;
+      setStatus(agentState());
+    } else if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {
+      if (ev.author === "human") {
+        lastHuman = ev.seq;
+        ended = false;
+      } else lastReply = ev.seq;
       markRead();
     } else if (ev.kind === "revision") onRevision(ev);
     else if (ev.kind === "presence") {

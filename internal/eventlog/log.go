@@ -34,9 +34,27 @@ type Event struct {
 const (
 	KindNote    = "note"
 	KindResolve = "resolve"
+	KindEnd     = "end"
 )
 
 func (e *Event) Quiet() bool { return e.Kind == KindResolve }
+
+func (e *Event) restarts() bool {
+	return e.Author == "human" && (e.Kind == "message" || e.Kind == KindNote || e.Kind == "answer")
+}
+
+// Ended returns the seq of the end event still in force: the last one with no human message, note or answer after it.
+func Ended(events []Event) uint64 {
+	for i := len(events) - 1; i >= 0; i-- {
+		switch e := &events[i]; {
+		case e.Kind == KindEnd:
+			return e.Seq
+		case e.restarts():
+			return 0
+		}
+	}
+	return 0
+}
 
 type Log struct {
 	mu      sync.Mutex
@@ -97,15 +115,15 @@ func Open(dir string) (*Log, error) {
 	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
-// Summary reads a log's reader cursors and unread counts without opening it for writing.
-func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
+// Summary reads a log's reader cursors, unread counts and end in force without opening it for writing.
+func Summary(dir string) (map[string]uint64, func(reader string) int, uint64, error) {
 	events, _, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	pos, err := readPositions(dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	pending := func(reader string) int {
 		c := pos.Seen[reader]
@@ -114,7 +132,7 @@ func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
 		}
 		return len(unread(events[c:], reader))
 	}
-	return pos.Seen, pending, nil
+	return pos.Seen, pending, Ended(events), nil
 }
 
 func (l *Log) Close() error {
@@ -181,6 +199,12 @@ func (l *Log) Get(seq uint64) (Event, bool) {
 		return Event{}, false
 	}
 	return l.events[seq-1], true
+}
+
+func (l *Log) Ended() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return Ended(l.events)
 }
 
 func (l *Log) CheckNotes(seqs []uint64) error {

@@ -3402,3 +3402,32 @@ test("#23 on a phone the menu opens under the top bar inside the screen and leav
     await p.close();
   }
 });
+
+test("#26 an ended session shows in the chat until the human sends a new message", async () => {
+  const status = () => page.eval(`document.querySelector(".kapi-status").textContent`);
+  const dot = () => page.eval(`document.querySelector(".kapi-panel .kapi-dot").dataset.state`);
+  server.push({ kind: "presence", text: "watching" });
+  server.push({ author: "human", kind: "message", text: "thanks" });
+  server.push({ author: "human", kind: "end" });
+  await page.waitFor(`!!document.querySelector(".kapi-log .kapi-end")`);
+  assert.match(await page.eval(`document.querySelector(".kapi-end").textContent`), /^You ended the session · \d/);
+  assert.equal(await status(), "Session ended. Send a message to start again.");
+  assert.equal(await dot(), "ended");
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-msg").length`), 1);
+
+  server.push({ author: "agent", kind: "message", text: "bye" });
+  server.push({ kind: "presence", text: "none" });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
+  assert.equal(await status(), "Session ended. Send a message to start again.");
+
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-end")`);
+  assert.equal(await status(), "Session ended. Send a message to start again.");
+
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("one more thing");
+  await page.key("Enter");
+  await until(async () => (await status()) === "No agent connected");
+  assert.equal(await dot(), "none");
+  assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", text: "one more thing" });
+});

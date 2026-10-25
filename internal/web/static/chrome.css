@@ -474,6 +474,20 @@
   box-shadow: inset 0 0 0 1.5px var(--kapi-red-text);
 }
 
+#kapi-chrome .kapi-dot[data-state="ended"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-end {
+  align-self: stretch;
+  padding: 4px 0;
+  border-top: 1px solid var(--kapi-border);
+  font-size: 11.5px;
+  color: var(--kapi-muted);
+  text-align: center;
+}
+
 #kapi-chrome .kapi-dot[data-state="connecting"] {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--kapi-faint);

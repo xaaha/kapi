@@ -193,7 +193,7 @@ func TestAnUnreadablePositionsFileFallsBackInsteadOfFailingToOpen(t *testing.T) 
 				t.Fatal(err)
 			}
 		}
-		if _, pending, err := Summary(dir); err != nil || pending("agent") != c.pending {
+		if _, pending, _, err := Summary(dir); err != nil || pending("agent") != c.pending {
 			t.Errorf("%s: Summary err = %v", c.name, err)
 		}
 		l, err := Open(dir)
@@ -217,7 +217,7 @@ func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, eventsFile), []byte(whole+`{"seq":2,"time":"2026-01`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, pending, err := Summary(dir); err != nil || pending("agent") != 1 {
+	if _, pending, _, err := Summary(dir); err != nil || pending("agent") != 1 {
 		t.Fatalf("Summary of a log with a torn last line: err = %v", err)
 	}
 	l, err := Open(dir)
@@ -288,7 +288,7 @@ func TestPresenceIsNeverPending(t *testing.T) {
 	if p := l.Pending("agent"); len(p) != 1 || p[0].Seq != 2 {
 		t.Errorf("Pending = %+v, want only the message", p)
 	}
-	_, pending, err := Summary(dir)
+	_, pending, _, err := Summary(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -64,6 +64,7 @@ type PageStatus struct {
 	Queued  uint64           `json:"queued,omitempty"`
 	Hooked  uint64           `json:"hooked,omitempty"`
 	Cut     []uint64         `json:"cut,omitempty"`
+	Ended   bool             `json:"ended,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -653,7 +654,7 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 				}
 				continue
 			}
-			if e.Kind == eventlog.KindPresence {
+			if e.Kind == eventlog.KindPresence || (e.Kind == eventlog.KindEnd && e.Seq != l.Ended()) {
 				continue
 			}
 			if e.Quiet() {
@@ -747,7 +748,7 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			continue
 		}
 		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader)})
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader), Ended: l.Ended() > 0})
 		}
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
@@ -849,9 +850,9 @@ func (s *Server) pageStatus(path, dir string) PageStatus {
 	if open {
 		readers := s.status(path, l)
 		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
-		return PageStatus{Path: path, Readers: readers}
+		return PageStatus{Path: path, Readers: readers, Ended: l.Ended() > 0}
 	}
-	cursors, pending, err := eventlog.Summary(dir)
+	cursors, pending, ended, err := eventlog.Summary(dir)
 	if err != nil {
 		return PageStatus{Path: path, Error: err.Error()}
 	}
@@ -868,5 +869,5 @@ func (s *Server) pageStatus(path, dir string) PageStatus {
 		readers = append(readers, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: cursors[r], Pending: pending(r)})
 	}
 	slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
-	return PageStatus{Path: path, Readers: readers}
+	return PageStatus{Path: path, Readers: readers, Ended: ended > 0}
 }
