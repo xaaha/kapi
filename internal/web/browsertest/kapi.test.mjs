@@ -2569,3 +2569,20 @@ test("#39 a tab that is already open takes the notes when the restarted tab noti
     await next.close();
   }
 });
+
+test("#39 a bare picture or divider that a selection crosses stays in the note", async () => {
+  await reopenWith([
+    { id: "aaaaaaaa", html: '<p data-kapi-id="aaaaaaaa">Before.</p>' },
+    { id: "hhhhhhhh", html: '<hr data-kapi-id="hhhhhhhh">' },
+    { id: "iiiiiiii", html: '<img data-kapi-id="iiiiiiii" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40">' },
+    { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">After.</p>' },
+  ]);
+  await selectText('[data-kapi-id="aaaaaaaa"]', 2, '[data-kapi-id="bbbbbbbb"]', 3);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("all four");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,hhhhhhhh,iiiiiiii,bbbbbbbb");
+});

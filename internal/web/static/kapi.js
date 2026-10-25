@@ -745,7 +745,7 @@
     const common = range.commonAncestorContainer;
     const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
     const blocks = host && main.contains(host) ? [host]
-      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (textOf(b) ? rangeText(within(range, b)) : !within(range, b).collapsed));
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (textOf(b) ? rangeText(within(range, b)) : !b.childNodes.length || !within(range, b).collapsed));
     if (!blocks.length) return null;
     const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
     const both = (selector) => {
