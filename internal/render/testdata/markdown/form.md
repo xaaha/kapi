@@ -10,7 +10,7 @@ Ship it?
 - [ ] ui
 - [ ] API
 
-Notes *(free text)*
+Notes (*free text*)
 
 No options
 
@@ -20,7 +20,7 @@ x
 
 no name
 
-a *(free text)*
+a (*free text*)
 
 Orphan
 

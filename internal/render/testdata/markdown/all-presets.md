@@ -12,8 +12,7 @@ This page walks through moving page state into the Go daemon. It uses every kapi
 > [!WARNING]
 > The cutover drops writes for about **30 seconds**. Schedule it outside business hours.
 
-> [!IMPORTANT]
-> Go owns all state. The browser keeps nothing and refetches after any reconnect.
+> **Key point:** Go owns all state. The browser keeps nothing and refetches after any reconnect.
 
 ## Where the state lives
 
@@ -144,7 +143,7 @@ Who needs a heads-up?
 - [ ] Sales
 - [ ] The on-call engineer
 
-Anything else? *(free text)*
+Anything else? (*free text*)
 
 ## Mistakes render visibly
 
@@ -156,5 +155,4 @@ This paragraph had an `onclick` and a `style` in its source; both are gone.
 
 1. First
 2. Second, with a nested list
-
    - Nested item

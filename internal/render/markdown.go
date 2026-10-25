@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 )
@@ -83,7 +85,7 @@ func (m *mdWriter) block(n *html.Node) []string {
 	case "table":
 		return m.table(n)
 	case "figcaption", "caption", "summary", "dt":
-		return nonEmpty(paragraph(emphasis("*", m.inlines(n, false))))
+		return nonEmpty(paragraph(emphasis("*", "em", m.inlines(n, false))))
 	case "details":
 		return m.details(summaryText(n), m.blocksExcept(n, "summary"))
 	case "dl":
@@ -124,7 +126,7 @@ func summaryText(n *html.Node) string {
 }
 
 func (m *mdWriter) details(summary string, body []string) []string {
-	out := []string{"<details>\n<summary>" + escText(summary) + "</summary>"}
+	out := []string{"<details>\n<summary>" + escText(collapse(summary)) + "</summary>"}
 	out = append(out, body...)
 	return append(out, "</details>")
 }
@@ -133,7 +135,7 @@ func (m *mdWriter) list(n *html.Node) string {
 	ordered := n.Data == "ol"
 	num := 1
 	if v, err := strconv.Atoi(attrVal(n, "start")); ordered && err == nil {
-		num = v
+		num = listNumber(v)
 	}
 	var items []string
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -145,7 +147,7 @@ func (m *mdWriter) list(n *html.Node) string {
 		case c.Type == html.ElementNode && c.Data == "li":
 			body = m.blocks(c)
 			if v, err := strconv.Atoi(attrVal(c, "value")); ordered && err == nil {
-				num = v
+				num = listNumber(v)
 			}
 		case mdBlock(c):
 			body = m.block(c)
@@ -155,7 +157,7 @@ func (m *mdWriter) list(n *html.Node) string {
 		marker := "- "
 		if ordered {
 			marker = strconv.Itoa(num) + ". "
-			num++
+			num = listNumber(num + 1)
 		}
 		if item := listItem(marker, body); item != "" {
 			items = append(items, item)
@@ -164,12 +166,36 @@ func (m *mdWriter) list(n *html.Node) string {
 	return strings.Join(items, "\n")
 }
 
+func listNumber(n int) int {
+	return min(max(n, 0), 999999999)
+}
+
 func listItem(marker string, body []string) string {
-	text := joinBlocks(body)
-	if text == "" {
+	return indentedItem(marker, len(marker), body)
+}
+
+func indentedItem(marker string, width int, body []string) string {
+	var b strings.Builder
+	for i, blk := range body {
+		if i > 0 {
+			if canInterrupt(blk) && !mdStructural.MatchString(body[i-1]) {
+				b.WriteString("\n")
+			} else {
+				b.WriteString(separator(body[i-1], blk))
+			}
+		}
+		b.WriteString(blk)
+	}
+	if b.Len() == 0 {
 		return strings.TrimRight(marker, " ")
 	}
-	return prefixLines(text, marker, strings.Repeat(" ", len(marker)))
+	return prefixLines(b.String(), marker, strings.Repeat(" ", width))
+}
+
+var interrupting = regexp.MustCompile(`^([-*+]|1[.)]) \S`)
+
+func canInterrupt(blk string) bool {
+	return interrupting.MatchString(blk)
 }
 
 func quote(body []string) string {
@@ -202,14 +228,18 @@ func trailingListKind(blk string) string {
 	return ""
 }
 
+func separator(prev, next string) string {
+	if kind := listKind(next); kind != "" && kind == trailingListKind(prev) {
+		return "\n\n<!-- -->\n\n"
+	}
+	return "\n\n"
+}
+
 func joinBlocks(blocks []string) string {
 	var b strings.Builder
 	for i, blk := range blocks {
 		if i > 0 {
-			b.WriteString("\n\n")
-			if kind := listKind(blk); kind != "" && kind == trailingListKind(blocks[i-1]) {
-				b.WriteString("<!-- -->\n\n")
-			}
+			b.WriteString(separator(blocks[i-1], blk))
 		}
 		b.WriteString(blk)
 	}
@@ -276,7 +306,7 @@ func definition(term string, body []string) string {
 	return head + "\n\n" + prefixLines(joinBlocks(body), "  ", "  ")
 }
 
-var mdStructural = regexp.MustCompile("^(```|<details>|[-*+] |\\d+\\. |> |\\|)")
+var mdStructural = regexp.MustCompile("^(```|<details>|[-*+](?: |$)|\\d+[.)](?: |$)|>|\\||#{1,6} |---$)")
 
 func (m *mdWriter) table(n *html.Node) []string {
 	var rows [][]string
@@ -357,7 +387,7 @@ func (m *mdWriter) cell(n *html.Node) string {
 		case mdBlock(c):
 			flush()
 			for _, blk := range m.block(c) {
-				parts = append(parts, strings.ReplaceAll(blk, "\n", "<br>"))
+				parts = append(parts, cellBlock(blk))
 			}
 		default:
 			run = append(run, m.inline(c, true))
@@ -365,6 +395,18 @@ func (m *mdWriter) cell(n *html.Node) string {
 	}
 	flush()
 	return strings.ReplaceAll(strings.Join(parts, "<br>"), "|", `\|`)
+}
+
+func cellBlock(blk string) string {
+	lines := strings.Split(blk, "\n")
+	if len(lines) < 2 || !strings.HasPrefix(lines[0], "```") {
+		return strings.ReplaceAll(blk, "\n", "<br>")
+	}
+	var code []string
+	for _, l := range lines[1 : len(lines)-1] {
+		code = append(code, codeSpan(l))
+	}
+	return strings.Join(code, "<br>")
 }
 
 func (m *mdWriter) inlines(n *html.Node, cell bool) string {
@@ -393,11 +435,11 @@ func (m *mdWriter) inline(n *html.Node, cell bool) string {
 	case "kapi-badge":
 		return m.badge(n)
 	case "em", "i", "cite", "dfn", "var":
-		return emphasis("*", m.inlines(n, cell))
+		return emphasis("*", "em", m.inlines(n, cell))
 	case "strong", "b":
-		return emphasis("**", m.inlines(n, cell))
+		return emphasis("**", "strong", m.inlines(n, cell))
 	case "del", "s":
-		return emphasis("~~", m.inlines(n, cell))
+		return emphasis("~~", "del", m.inlines(n, cell))
 	case "code", "kbd", "samp":
 		return codeSpan(whitespace.ReplaceAllString(plainText(n), " "))
 	case "q":
@@ -435,25 +477,20 @@ func (m *mdWriter) img(n *html.Node) string {
 	return "![" + alt + "](" + mdURL(src) + ")"
 }
 
-var stateMarks = map[string]string{
-	"done":     "✅",
-	"failed":   "❌",
-	"blocked":  "⛔",
-	"progress": "\U0001f504",
-	"waiting":  "⏳",
-	"info":     "ℹ️",
+func stateLabel(n *html.Node) string {
+	return statusIcons[attrVal(n, "state")].label
 }
 
 func (m *mdWriter) badge(n *html.Node) string {
-	text := strings.TrimSpace(m.inlines(n, false))
-	mark := stateMarks[attrVal(n, "state")]
-	switch {
-	case mark == "":
-		return codeSpan(nodeText(n))
+	text := nodeText(n)
+	switch label := stateLabel(n); {
+	case label == "":
+		return codeSpan(text)
 	case text == "":
-		return mark
+		return codeSpan(label)
+	default:
+		return codeSpan(label + ": " + text)
 	}
-	return mark + " " + codeSpan(nodeText(n))
 }
 
 func (m *mdWriter) preset(n *html.Node) []string {
@@ -463,7 +500,10 @@ func (m *mdWriter) preset(n *html.Node) []string {
 		if kind == "" {
 			kind = "note"
 		}
-		return []string{prefixLines("[!"+alertKinds[kind]+"]\n"+joinBlocks(m.blocks(n)), "> ", "> ")}
+		if alert := alertKinds[kind]; alert != "" {
+			return []string{prefixLines("[!"+alert+"]\n"+joinBlocks(m.blocks(n)), "> ", "> ")}
+		}
+		return nonEmpty(quote(labelled(calloutKinds[kind].label, m.blocks(n))))
 	case "kapi-code":
 		var out []string
 		if label := codeLabel(attrVal(n, "file"), attrVal(n, "lines")); label != "" {
@@ -497,7 +537,7 @@ func (m *mdWriter) preset(n *html.Node) []string {
 	case "kapi-choice":
 		return m.choice(n)
 	case "kapi-text":
-		return nonEmpty(paragraph(strings.TrimSpace(m.inlines(n, false)) + " " + emphasis("*", "(free text)")))
+		return nonEmpty(paragraph(strings.TrimSpace(m.inlines(n, false)) + " (" + emphasis("*", "em", "free text") + ")"))
 	case "kapi-kv":
 		var items []string
 		for _, c := range elementChildren(n) {
@@ -513,14 +553,18 @@ func (m *mdWriter) preset(n *html.Node) []string {
 			if _, done := attr(c, "done"); done {
 				box = "- [x] "
 			}
-			items = append(items, listItem(box, m.blocks(c)))
+			body := m.blocks(c)
+			if len(body) == 0 || mdStructural.MatchString(body[0]) {
+				body = append([]string{"**Task**"}, body...)
+			}
+			items = append(items, indentedItem(box, 2, body))
 		}
 		return nonEmpty(strings.Join(items, "\n"))
 	}
 	return m.blocks(n)
 }
 
-var alertKinds = map[string]string{"note": "NOTE", "warning": "WARNING", "key": "IMPORTANT", "danger": "CAUTION", "success": "TIP"}
+var alertKinds = map[string]string{"note": "NOTE", "warning": "WARNING"}
 
 func (m *mdWriter) plan(n *html.Node) string {
 	var groups []string
@@ -529,12 +573,12 @@ func (m *mdWriter) plan(n *html.Node) string {
 	step := 1
 	for _, c := range elementChildren(n) {
 		body := m.blocks(c)
-		if mark := stateMarks[attrVal(c, "state")]; mark != "" && len(body) > 0 {
-			body[0] = mark + " " + body[0]
-		}
 		var item string
 		switch c.Data {
 		case "kapi-step":
+			if label := stateLabel(c); label != "" {
+				body = labelled(label, body)
+			}
 			item = listItem(strconv.Itoa(step)+". ", body)
 			step++
 		case "kapi-risk":
@@ -558,8 +602,8 @@ func (m *mdWriter) plan(n *html.Node) string {
 }
 
 func labelled(label string, body []string) []string {
-	if len(body) == 0 {
-		return []string{"**" + label + "**"}
+	if len(body) == 0 || mdStructural.MatchString(body[0]) {
+		return append([]string{"**" + label + "**"}, body...)
 	}
 	out := append([]string(nil), body...)
 	out[0] = "**" + label + ":** " + out[0]
@@ -573,7 +617,7 @@ func (m *mdWriter) choice(n *html.Node) []string {
 		if c.Type == html.ElementNode && c.Data == "kapi-opt" {
 			label := oneLine(m.inlines(c, false))
 			if label == "" {
-				label = escapeMD(attrVal(c, "value"))
+				label = escapeMD(collapse(attrVal(c, "value")))
 			}
 			opts = append(opts, "- [ ] "+label)
 			continue
@@ -586,11 +630,11 @@ func (m *mdWriter) choice(n *html.Node) []string {
 }
 
 func codeLabel(file, lines string) string {
-	if file == "" {
+	if collapse(file) == "" {
 		return ""
 	}
-	label := codeSpan(file)
-	if lines != "" {
+	label := codeSpan(collapse(file))
+	if lines = collapse(lines); lines != "" {
 		label += ", lines " + lines
 	}
 	return label
@@ -677,18 +721,29 @@ func plainText(n *html.Node) string {
 	return b.String()
 }
 
-func emphasis(mark, inner string) string {
+func emphasis(mark, tag, inner string) string {
 	trimmed := strings.TrimSpace(inner)
 	if trimmed == "" {
 		return inner
 	}
 	lead := inner[:len(inner)-len(strings.TrimLeft(inner, " \n"))]
 	trail := inner[len(strings.TrimRight(inner, " \n")):]
+	first, _ := utf8.DecodeRuneInString(trimmed)
+	last, _ := utf8.DecodeLastRuneInString(trimmed)
+	if punctuation(first) || punctuation(last) {
+		return lead + "<" + tag + ">" + trimmed + "</" + tag + ">" + trail
+	}
 	return lead + mark + trimmed + mark + trail
 }
 
+func punctuation(r rune) bool {
+	return unicode.IsPunct(r) || unicode.IsSymbol(r)
+}
+
+var urlControls = strings.NewReplacer("\n", "%0A", "\r", "%0D", "\t", "%09", "\f", "%0C")
+
 func mdURL(u string) string {
-	u = strings.TrimSpace(u)
+	u = urlControls.Replace(strings.TrimSpace(u))
 	if strings.ContainsAny(u, " ()<>") {
 		return "<" + strings.NewReplacer("<", "%3C", ">", "%3E").Replace(u) + ">"
 	}

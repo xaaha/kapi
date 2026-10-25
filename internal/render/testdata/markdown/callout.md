@@ -9,13 +9,10 @@
 >
 > - with a list
 
-> [!IMPORTANT]
-> The key point.
+> **Key point:** The key point.
 
 Bad kind.
 
-> [!CAUTION]
-> This drops the table.
+> **Danger:** This drops the table.
 
-> [!TIP]
-> All shards copied.
+> **Success:** All shards copied.
