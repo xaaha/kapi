@@ -257,7 +257,7 @@ On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
-`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/files`,
+`p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/end`, `p/{id}/files`,
 `p/{id}/images`, `p/{id}/ops`, `p/{id}/answers`, `p/{id}/export/html` or `p/{id}/export/markdown` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
@@ -326,6 +326,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/<page name>.files/{name}` | | a page image; 404 for any other folder or a name that is not a stored image's |
 | `GET /p/{id}/export/markdown` | | the page as Markdown, `Content-Disposition: attachment`: `<page>.md` (`text/markdown`), or `<page>.zip` (`application/zip`) holding `<page>.md` and `images/<name>` when the page shows its own images, linked as `images/<name>`; other images keep their links |
 | `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
+| `POST /p/{id}/end` | `{}` | `{"seq":N}`; appends an `end` event by `human`; 409 while the session is already ended |
 
 Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
 named by their content hash, and never in the page source. A note or message
@@ -386,7 +387,9 @@ fails. Export PDF opens the
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
 stylesheet leaves out the panel, the site header, fold arrows, note
-marks and the undo note, and prints folded sections in full. Copy path copies `data-path`.
+marks and the undo note, and prints folded sections in full. Copy path copies `data-path`. End session
+posts `POST /p/{id}/end` with no confirm step, since the next message starts
+the session again; the item is hidden while the session is ended.
 Escape closes the menu and returns focus to its button; the arrow keys,
 Home and End move between items, Tab closes it, and no other key reaches
 the page's shortcuts while it has focus.
@@ -415,6 +418,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it, `rev` the page revision it was written on; with `re`, a reply to those notes | append to the chat panel with its quote, and pin it on the page |
 | `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
+| `end` | the human ended the session; it stays ended until the next human `message`, `note` or `answer` | add an "ended" line to the chat and show "Session ended. Send a message to start again." as the status until then |
 | `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 
@@ -469,8 +473,18 @@ the daemon refuses a number that is not a note on the page; other readers see
 as `#16 human reply to note #13 on #k3f9a2bq: ...`. Resolve prints as
 `#17 human resolved note #13`. A `resolve` event never wakes a reader: `kapi
 wait` and the `Stop` hook ignore it, and `kapi watch` holds it until the next
-event, so it reaches the agent with whatever comes next. A revision's `text` quotes the block: its text with
-whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
+event, so it reaches the agent with whatever comes next. An end prints as
+`#18 human ended the session: stop working on this page and do not run kapi
+wait or kapi watch on it again; a new message from the human starts it
+again`. `kapi watch` prints it, after any held resolves, and exits 0; `kapi
+wait` wakes for it like any message. While the page is ended the `Stop` hook
+lets the agent stop, even with unseen notes or messages from before the end,
+and `kapi` lists the page with `(ended)`. A watch started on an ended page
+prints the end again and exits, and a `kapi wait` returns it at once. The
+next human message, note or answer lifts the end: the hooks hand it over as
+usual, and `kapi watch`, `kapi wait`, `kapi pending`, the hooks and the unread
+counts all leave out an end that was lifted. A revision's `text` quotes the
+block: its text with whitespace collapsed, cut to 60 characters at a word with an ellipsis, after
 the preset name without `kapi-` for a preset (`archived callout "Freeze
 writes."`). An edit quotes the new text. A file edit that changed several
 blocks quotes up to 3 of them and counts the rest (`edited in the file: "a",

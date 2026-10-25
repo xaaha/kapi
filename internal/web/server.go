@@ -71,6 +71,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("POST /p/{id}/messages", s.withPage(s.handleMessage))
 	s.mux.HandleFunc("POST /p/{id}/notes", s.withPage(s.handleNotes))
 	s.mux.HandleFunc("POST /p/{id}/resolve", s.withPage(s.handleResolve))
+	s.mux.HandleFunc("POST /p/{id}/end", s.withPage(s.handleEnd))
 	s.mux.HandleFunc("POST /p/{id}/files", s.withPage(s.handleUpload))
 	s.mux.HandleFunc("GET /p/{id}/files/{name}", s.withPage(s.handleFile))
 	s.mux.HandleFunc("POST /p/{id}/images", s.withPage(s.handleImageUpload))
@@ -115,7 +116,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|files|images|ops|answers|export/html|export/markdown)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|end|files|images|ops|answers|export/html|export/markdown)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -612,6 +613,23 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request, _ *page.S
 		return
 	}
 	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindResolve, Re: []uint64{in.Note}})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+}
+
+func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+	var in struct{}
+	if !decode(w, r, &in) {
+		return
+	}
+	e, err := l.End("human")
+	if errors.Is(err, eventlog.ErrEnded) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

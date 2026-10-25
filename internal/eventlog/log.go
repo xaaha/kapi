@@ -34,9 +34,27 @@ type Event struct {
 const (
 	KindNote    = "note"
 	KindResolve = "resolve"
+	KindEnd     = "end"
 )
 
 func (e *Event) Quiet() bool { return e.Kind == KindResolve }
+
+func (e *Event) restarts() bool {
+	return e.Author == "human" && (e.Kind == "message" || e.Kind == KindNote || e.Kind == "answer")
+}
+
+// Ended returns the seq of the end event still in force: the last one with no human message, note or answer after it.
+func Ended(events []Event) uint64 {
+	for i := len(events) - 1; i >= 0; i-- {
+		switch e := &events[i]; {
+		case e.Kind == KindEnd:
+			return e.Seq
+		case e.restarts():
+			return 0
+		}
+	}
+	return 0
+}
 
 type Log struct {
 	mu      sync.Mutex
@@ -97,24 +115,24 @@ func Open(dir string) (*Log, error) {
 	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
 }
 
-// Summary reads a log's reader cursors and unread counts without opening it for writing.
-func Summary(dir string) (map[string]uint64, func(reader string) int, error) {
+// Summary reads a log's reader cursors, unread counts and end in force without opening it for writing.
+func Summary(dir string) (map[string]uint64, func(reader string) int, uint64, error) {
 	events, _, err := readEvents(filepath.Join(dir, eventsFile))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	pos, err := readPositions(dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	pending := func(reader string) int {
 		c := pos.Seen[reader]
 		if c >= uint64(len(events)) {
 			return 0
 		}
-		return len(unread(events[c:], reader))
+		return len(unread(events[c:], reader, Ended(events)))
 	}
-	return pos.Seen, pending, nil
+	return pos.Seen, pending, Ended(events), nil
 }
 
 func (l *Log) Close() error {
@@ -134,6 +152,29 @@ func (l *Log) Append(in *Event) (Event, error) {
 func (l *Log) AppendAll(in []Event) ([]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.appendLocked(in)
+}
+
+var (
+	ErrEnded   = errors.New("the session has already ended; send a message to start it again")
+	endChecked = func() {}
+)
+
+func (l *Log) End(author string) (Event, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if Ended(l.events) > 0 {
+		return Event{}, ErrEnded
+	}
+	endChecked()
+	out, err := l.appendLocked([]Event{{Author: author, Kind: KindEnd}})
+	if err != nil {
+		return Event{}, err
+	}
+	return out[0], nil
+}
+
+func (l *Log) appendLocked(in []Event) ([]Event, error) {
 	if l.broken != nil {
 		return nil, l.broken
 	}
@@ -181,6 +222,12 @@ func (l *Log) Get(seq uint64) (Event, bool) {
 		return Event{}, false
 	}
 	return l.events[seq-1], true
+}
+
+func (l *Log) Ended() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return Ended(l.events)
 }
 
 func (l *Log) CheckNotes(seqs []uint64) error {
@@ -283,17 +330,26 @@ func (l *Log) Pending(reader string) []Event {
 	return events
 }
 
+func (l *Log) Inbox(reader string) (events []Event, queued, ended uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ended = Ended(l.events)
+	return unread(l.events[min(l.pos.Seen[reader], uint64(len(l.events))):], reader, ended), max(l.pos.Queued[reader], l.pos.Seen[reader]), ended
+}
+
 func (l *Log) Unseen(reader string) (events []Event, through, queued uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	through = uint64(len(l.events))
-	return unread(l.events[min(l.pos.Seen[reader], through):], reader), through, max(l.pos.Queued[reader], l.pos.Seen[reader])
+	return unread(l.events[min(l.pos.Seen[reader], through):], reader, Ended(l.events)), through, max(l.pos.Queued[reader], l.pos.Seen[reader])
 }
 
 const KindPresence = "presence"
 
-func unread(events []Event, reader string) []Event {
-	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool { return e.Kind == KindPresence || e.Author == reader })
+func unread(events []Event, reader string, ended uint64) []Event {
+	return slices.DeleteFunc(slices.Clone(events), func(e Event) bool {
+		return e.Kind == KindPresence || e.Author == reader || (e.Kind == KindEnd && e.Seq != ended)
+	})
 }
 
 func readEvents(path string) ([]Event, int64, error) {

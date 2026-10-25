@@ -116,9 +116,17 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 func watch(c api, page, reader string, out io.Writer, sleep func(time.Duration)) error {
 	for {
 		err := c.Watch(page, reader, func(r daemon.Response) error {
-			_, err := fmt.Fprintln(out, eventLine(r.Event))
-			return err
+			if _, err := fmt.Fprintln(out, eventLine(r.Event)); err != nil {
+				return err
+			}
+			if r.Event.Kind == eventlog.KindEnd {
+				return client.ErrStopWatch
+			}
+			return nil
 		})
+		if errors.Is(err, client.ErrStopWatch) {
+			return nil
+		}
 		if !errors.Is(err, client.ErrConnectionLost) {
 			return err
 		}
@@ -651,7 +659,8 @@ func homeView(c api, out io.Writer) error {
 		b.WriteString("pages: none yet\n")
 	} else {
 		fmt.Fprintf(&b, "pages[%d]:\n", len(resp.Pages))
-		for _, p := range resp.Pages {
+		for i := range resp.Pages {
+			p := &resp.Pages[i]
 			path := p.Path
 			if strings.ContainsAny(path, "\n\r\t") {
 				path = strconv.Quote(path)
@@ -667,6 +676,9 @@ func homeView(c api, out io.Writer) error {
 					s += " (watching)"
 				}
 				readers = append(readers, s)
+			}
+			if p.Ended {
+				path += " (ended)"
 			}
 			fmt.Fprintf(&b, "  %s: %s\n", path, strings.Join(readers, ", "))
 		}
@@ -788,8 +800,8 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	for _, p := range resp.Pages {
-		if p.Error != "" {
+	for i := range resp.Pages {
+		if p := &resp.Pages[i]; p.Error != "" {
 			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
 		}
 	}
@@ -815,8 +827,9 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 }
 
 func wakes(pages []daemon.PageStatus) bool {
-	for _, p := range pages {
-		if slices.ContainsFunc(p.Events, func(e eventlog.Event) bool { return e.Seq > p.Hooked && !e.Quiet() }) {
+	for i := range pages {
+		p := &pages[i]
+		if !p.Ended && slices.ContainsFunc(p.Events, func(e eventlog.Event) bool { return e.Seq > p.Hooked && !e.Quiet() }) {
 			return true
 		}
 	}
@@ -840,7 +853,8 @@ func hookText(pages []daemon.PageStatus, remind bool) (string, []hookHanded) {
 	var b strings.Builder
 	var handed []hookHanded
 	room := func(page *strings.Builder) int { return hookTextLimit - len(head) - b.Len() - page.Len() - 200 }
-	for _, p := range pages {
+	for i := range pages {
+		p := &pages[i]
 		if p.Error != "" || len(p.Events) == 0 {
 			continue
 		}
@@ -924,6 +938,9 @@ func pagePath(args []string, want int, command string) (string, error) {
 }
 
 func eventLine(e *eventlog.Event) string {
+	if e.Kind == eventlog.KindEnd {
+		return eventlog.Printable(fmt.Sprintf("#%d %s ended the session: stop working on this page and do not run kapi wait or kapi watch on it again; a new message from the human starts it again", e.Seq, e.Author))
+	}
 	if e.Kind == eventlog.KindResolve {
 		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
 	}

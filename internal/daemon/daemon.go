@@ -64,6 +64,7 @@ type PageStatus struct {
 	Queued  uint64           `json:"queued,omitempty"`
 	Hooked  uint64           `json:"hooked,omitempty"`
 	Cut     []uint64         `json:"cut,omitempty"`
+	Ended   bool             `json:"ended,omitempty"`
 }
 
 type ReaderStatus struct {
@@ -527,6 +528,10 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: fmt.Sprintf("--seen #%d was never handed to %s; the last event handed over is #%d, so nothing was sent", req.Seq, req.Author, queued)})
 			return
 		}
+		if req.Kind == eventlog.KindEnd {
+			reply(enc, &Response{Error: "an end comes only from End session in the browser, so nothing was sent"})
+			return
+		}
 		if err := l.CheckNotes(req.Re); err != nil {
 			reply(enc, &Response{Error: err.Error() + ", so nothing was sent"})
 			return
@@ -613,6 +618,11 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	sent := l.Cursor(req.Reader)
 	delivered, acked, ownAfter := sent, sent, uint64(0)
 	var held []eventlog.Event
+	if n := l.Ended(); n != 0 && n <= sent {
+		if e, ok := l.Get(n); ok && enc.Encode(Response{Event: &e}) != nil {
+			return
+		}
+	}
 
 	gone := make(chan struct{})
 	go func() {
@@ -653,7 +663,7 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 				}
 				continue
 			}
-			if e.Kind == eventlog.KindPresence {
+			if e.Kind == eventlog.KindPresence || (e.Kind == eventlog.KindEnd && e.Seq != l.Ended()) {
 				continue
 			}
 			if e.Quiet() {
@@ -710,8 +720,13 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 	}()
 	for {
 		_, changed := l.After(^uint64(0))
-		events, queued := unseenForAgent(l, req.Reader)
-		if slices.ContainsFunc(events, func(e eventlog.Event) bool { return e.Seq > queued && !e.Quiet() }) {
+		events, queued, ended := unseenForAgent(l, req.Reader)
+		if ended != 0 && !slices.ContainsFunc(events, func(e eventlog.Event) bool { return e.Seq == ended }) {
+			if e, ok := l.Get(ended); ok {
+				events = slices.Insert(events, 0, e)
+			}
+		}
+		if ended != 0 || slices.ContainsFunc(events, func(e eventlog.Event) bool { return e.Seq > queued && !e.Quiet() }) {
 			reply(enc, &Response{Events: events})
 			return
 		}
@@ -725,9 +740,9 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 	}
 }
 
-func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, queued uint64) {
-	events, _, queued = l.Unseen(reader)
-	return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Author == "file" || e.Author == "kapi" }), queued
+func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, queued, ended uint64) {
+	events, queued, ended = l.Inbox(reader)
+	return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Author == "file" || e.Author == "kapi" }), queued, ended
 }
 
 func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
@@ -746,8 +761,8 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 			out = append(out, PageStatus{Path: d.path, Error: err.Error()})
 			continue
 		}
-		if events, queued := unseenForAgent(l, reader); len(events) > 0 {
-			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader)})
+		if events, queued, ended := unseenForAgent(l, reader); len(events) > 0 {
+			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader), Ended: ended > 0})
 		}
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
@@ -849,9 +864,9 @@ func (s *Server) pageStatus(path, dir string) PageStatus {
 	if open {
 		readers := s.status(path, l)
 		slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
-		return PageStatus{Path: path, Readers: readers}
+		return PageStatus{Path: path, Readers: readers, Ended: l.Ended() > 0}
 	}
-	cursors, pending, err := eventlog.Summary(dir)
+	cursors, pending, ended, err := eventlog.Summary(dir)
 	if err != nil {
 		return PageStatus{Path: path, Error: err.Error()}
 	}
@@ -868,5 +883,5 @@ func (s *Server) pageStatus(path, dir string) PageStatus {
 		readers = append(readers, ReaderStatus{Reader: r, Attached: on, Since: since, Cursor: cursors[r], Pending: pending(r)})
 	}
 	slices.SortFunc(readers, func(a, b ReaderStatus) int { return strings.Compare(a.Reader, b.Reader) })
-	return PageStatus{Path: path, Readers: readers}
+	return PageStatus{Path: path, Readers: readers, Ended: ended > 0}
 }
