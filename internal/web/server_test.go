@@ -1,6 +1,7 @@
 package web
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -101,8 +102,13 @@ type site struct {
 
 func newSite(t *testing.T, src string) *site {
 	t.Helper()
+	return newSiteNamed(t, "plan.html", src)
+}
+
+func newSiteNamed(t *testing.T, name, src string) *site {
+	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plan.html")
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -194,6 +200,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/images", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/export/html", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/export/markdown", "kapi open " + s.path},
 		{"/" + old + "/p/0123456789abcdef/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/", "kapi open <page>"},
 		{"/" + never + "/p/" + s.id + "/events", "kapi open <page>"},
@@ -1213,6 +1220,42 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 	}
 	if code, _ := s.uploadTo("/images", onePixel, "image/png", "http://evil.example"); code != http.StatusForbidden {
 		t.Errorf("cross-site page image: %d", code)
+	}
+}
+
+func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.T) {
+	s := newSiteNamed(t, "my plan.html", `<h1 data-kapi-id="aaaaaaaa">Plan</h1>`)
+	got := s.get("/p/" + s.id + "/export/markdown")
+	if got.code != http.StatusOK || got.body != "# Plan\n" || got.header.Get("Content-Type") != "text/markdown; charset=utf-8" ||
+		got.header.Get("Content-Disposition") != `attachment; filename="my plan.md"` || got.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("plain export: %d %q %v", got.code, got.body, got.header)
+	}
+	_, out := s.uploadTo("/images", onePixel, "image/png", s.srv.URL)
+	name, _ := out["name"].(string)
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`); code != http.StatusOK {
+		t.Fatalf("image op: %d %v", code, out)
+	}
+	got = s.get("/p/" + s.id + "/export/markdown")
+	if got.code != http.StatusOK || got.header.Get("Content-Type") != "application/zip" || got.header.Get("Content-Disposition") != `attachment; filename="my plan.zip"` {
+		t.Fatalf("export with an image: %d %v", got.code, got.header)
+	}
+	z, err := zip.NewReader(strings.NewReader(got.body), int64(len(got.body)))
+	if err != nil || len(z.File) != 2 || z.File[0].Name != "my plan.md" || z.File[1].Name != "images/"+name {
+		t.Fatalf("zip: %v %v", z, err)
+	}
+	for i, want := range []string{"# Plan\n\n![](images/" + name + ")\n", string(onePixel)} {
+		rc, err := z.File[i].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil || string(b) != want {
+			t.Errorf("%s = %q, want %q", z.File[i].Name, b, want)
+		}
+	}
+	if got := s.raw("GET", "/p/"+s.id+"/export/markdown", nil); got.code != http.StatusForbidden {
+		t.Errorf("export without the token: %d", got.code)
 	}
 }
 

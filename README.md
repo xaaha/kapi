@@ -57,6 +57,7 @@ kapi wait plan.html                                        # as the agent: print
 kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
 kapi say --reply 5 plan.html "moved it to Track B"         # answer note #5, so its pin turns answered
 kapi attach --after k3f9a2bq plan.html chart.png           # add an image block, stored in plan.files/
+kapi export --md plan.html                                 # write plan.md, or plan.zip with its images
 kapi seen plan.html 4                                      # or say you read #4 without replying
 kapi status plan.html
 kapi version
@@ -71,8 +72,9 @@ hook puts it in the agent's context. `kapi watch <page>`
 still streams one line per event for harnesses that deliver every line.
 
 The three-dot menu at the top of the chat panel exports the page as one HTML
-file with its images inside, or as a PDF through the browser's print dialog,
-and copies the page's path.
+file with its images inside, as Markdown (a zip with an images folder when the
+page has images), or as a PDF through the browser's print dialog, and copies the
+page's path.
 
 ## Agent harnesses
 

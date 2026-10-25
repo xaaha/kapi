@@ -146,7 +146,8 @@
   const pageName = pagePath.split(/[\\/]/).pop() || document.title;
   const menuButton = h("button", { type: "button", class: "kapi-menu-button", "aria-label": "Page menu", title: "Page menu", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("dots"));
   const MENU = [
-    { glyph: "download", label: "Export HTML", run: exportHTML },
+    { glyph: "download", label: "Export HTML", run: () => exportFile("html", () => pageName) },
+    { glyph: "download", label: "Export Markdown", run: () => exportFile("markdown", (type) => pageName.replace(/\.html?$/i, "") + (type === "application/zip" ? ".zip" : ".md")) },
     { glyph: "printer", label: "Export PDF", run: () => print() },
     { glyph: "copy", label: "Copy path", detail: pagePath, run: copyPath },
   ];
@@ -473,17 +474,18 @@
     if (!menu.hidden && !menu.contains(e.target) && !menuButton.contains(e.target)) closeMenu(false);
   }, true);
 
-  async function exportHTML() {
+  async function exportFile(format, nameFor) {
     let res;
     try {
-      res = await fetch(`${base}/export/html`);
+      res = await fetch(`${base}/export/${format}`);
     } catch {
       return say("Could not reach kapi. Check that the daemon is running.", "error");
     }
     if (await restartedReply(res)) return;
     if (!res.ok) return say(`Could not export the page: ${(await res.text()).trim()}`, "error");
-    const url = URL.createObjectURL(await res.blob());
-    const link = h("a", { href: url, download: pageName, hidden: "" });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = h("a", { href: url, download: nameFor(blob.type), hidden: "" });
     document.body.append(link);
     link.click();
     link.remove();

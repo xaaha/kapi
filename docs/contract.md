@@ -12,7 +12,7 @@ D20 a fixed preset set with one design system, D21 four parallel tracks.
 |---|---|---|
 | A server | `internal/page`, `internal/web/*.go`, `kapi open`, daemon wiring | `internal/web/static`, `internal/render` |
 | B browser | `internal/web/static/kapi.js`, `internal/web/static/chrome.css` | Go code |
-| C presets | `internal/render`, `kapi preset` command | `internal/web`, `internal/page` |
+| C presets | `internal/render`, `internal/export`, `kapi preset` and `kapi export` commands | `internal/web`, `internal/page` |
 | D hub | `hub/` (Worker), `internal/publish`, `kapi publish` command | everything else |
 
 `cmd/kapi/main.go` is shared: each track adds its own subcommand in its own
@@ -258,7 +258,7 @@ port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
 old port and read a reconnecting tab's token. A request with a wrong token to
 `p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/files`,
-`p/{id}/images`, `p/{id}/ops`, `p/{id}/answers` or `p/{id}/export/html` gets 403 with
+`p/{id}/images`, `p/{id}/ops`, `p/{id}/answers`, `p/{id}/export/html` or `p/{id}/export/markdown` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
 is filled in only for a page id kapi knows and only when the segment is one of
 the last 3 tokens earlier runs issued (their SHA-256 hashes are kept in
@@ -324,6 +324,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/files/{name}` | | the image, or 404 once it expired |
 | `POST /p/{id}/images` | the image bytes, `Content-Type: image/...` | `{"name":...,"mime":...,"size":N}`, the same checks as `files`; the image is kept for good next to the page, in `<page name>.files/` (`plan.html` keeps `plan.files/`), readable by everyone so git and the agent see it |
 | `GET /p/{id}/<page name>.files/{name}` | | a page image; 404 for any other folder or a name that is not a stored image's |
+| `GET /p/{id}/export/markdown` | | the page as Markdown, `Content-Disposition: attachment`: `<page>.md` (`text/markdown`), or `<page>.zip` (`application/zip`) holding `<page>.md` and `images/<name>` when the page shows its own images, linked as `images/<name>`; other images keep their links |
 | `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
 
 Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
@@ -378,7 +379,10 @@ the notes and opens the list as a sheet.
 
 The three-dot button in the panel header opens the page menu, for actions
 on the whole page rather than a block. Export HTML downloads
-`GET /p/{id}/export/html` under the page's file name. Export PDF opens the
+`GET /p/{id}/export/html` under the page's file name. Export Markdown downloads
+`GET /p/{id}/export/markdown` as `<page>.md`, or `<page>.zip` when the server
+answers with a zip. Both say the server's error in the notice when the export
+fails. Export PDF opens the
 browser's print dialog, where Save as PDF makes the file; while printing,
 the document title is the page name without `.html`, and the print
 stylesheet leaves out the panel, the site header, fold arrows, note
@@ -440,7 +444,18 @@ with no new command. A note prints its part and quote after the target:
 Each image on a note or message adds `[image <absolute path>]` after the
 text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image>`
 copies an image into the page's files folder and adds it with an `image` op
-logged under the reader's name. `kapi publish` embeds each page image from the page's files
+logged under the reader's name. `kapi export --md [--out <folder>|-] [--force] <page>` writes the
+same Markdown export as the browser into the folder (default `.`) and prints its path, or prints the
+Markdown with `--out -`, which it refuses for a zip when stdout is a terminal. It writes a temporary
+file and moves it into place, and refuses to replace an existing file without `--force`. Each preset
+has a Markdown form: note and warning callouts become GitHub alerts (`> [!NOTE]`) and the others a
+quote led by their label (`> **Success:** ...`), code and diffs fenced code with their language,
+diagrams fenced code tagged `kapi-diagram type=...` holding their source, tables GitHub tables (code in
+a cell becomes inline code per line), checklists and form options task lists, plans a numbered list with
+risks and questions as bullets, key and value lists `- **Key**: value`, details `<details>`, badges code
+spans led by their state's label (`Done: merged`). A label before block content gets its own line. An
+image is packed only when its `src` names this page's files folder. An element that is unknown or fails
+to render keeps its text. `kapi publish` embeds each page image from the page's files
 folder into the published document as a `data:` URL, since the hub serves one
 self-contained file, and refuses a page that would pass the hub's 10 MB limit,
 naming its largest images. It refuses a page that is not `.html` or
