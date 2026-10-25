@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -95,5 +96,63 @@ func TestD23ExportOfAPageWithImagesWritesAZip(t *testing.T) {
 	stdoutIsTerminal = func(io.Writer) bool { return false }
 	if out, err := run(t, &fakeAPI{}, "export", "--md", "--out", "-", page); err != nil || !strings.HasPrefix(out, "PK") {
 		t.Errorf("a zip to a pipe: %v", err)
+	}
+}
+
+func exportPage(t *testing.T) string {
+	t.Helper()
+	page := filepath.Join(t.TempDir(), "plan.html")
+	if err := os.WriteFile(page, []byte(`<p data-kapi-id="aaaaaaaa">x</p>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return page
+}
+
+func TestD23AnExportFollowsTheUmask(t *testing.T) {
+	page := exportPage(t)
+	old := syscall.Umask(0o027)
+	t.Cleanup(func() { syscall.Umask(old) })
+	for _, force := range []bool{false, true} {
+		outDir := t.TempDir()
+		args := []string{"export", "--md", "--out", outDir, page}
+		if force {
+			args = []string{"export", "--md", "--force", "--out", outDir, page}
+		}
+		if _, err := run(t, &fakeAPI{}, args...); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(filepath.Join(outDir, "plan.md"))
+		if err != nil || info.Mode().Perm() != 0o640 {
+			t.Errorf("force=%v: mode %v (%v), want -rw-r----- under umask 027", force, info.Mode().Perm(), err)
+		}
+	}
+}
+
+func TestD23WithoutHardLinksAnExportStillNeverReplacesAFile(t *testing.T) {
+	page := exportPage(t)
+	link := linkFile
+	t.Cleanup(func() { linkFile = link })
+	linkFile = func(oldname, newname string) error {
+		return &os.LinkError{Op: "link", Old: oldname, New: newname, Err: syscall.ENOTSUP}
+	}
+	outDir := t.TempDir()
+	if _, err := run(t, &fakeAPI{}, "export", "--md", "--out", outDir, page); err != nil {
+		t.Fatalf("export on a folder without hard links: %v", err)
+	}
+	want := filepath.Join(outDir, "plan.md")
+	if b, _ := os.ReadFile(want); string(b) != "x\n" {
+		t.Errorf("plan.md = %q", b)
+	}
+	if entries, _ := os.ReadDir(outDir); len(entries) != 1 {
+		t.Errorf("the export left %d files, want only plan.md", len(entries))
+	}
+	if err := os.WriteFile(want, []byte("mine"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, &fakeAPI{}, "export", "--md", "--out", outDir, page); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Errorf("export over a file without hard links: %v", err)
+	}
+	if b, _ := os.ReadFile(want); string(b) != "mine" {
+		t.Errorf("the refused export changed the file: %q", b)
 	}
 }

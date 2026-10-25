@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -532,31 +533,50 @@ func newExportCmd(out io.Writer) *cli.Command {
 	}
 }
 
+var linkFile = os.Link
+
 func writeExport(path string, data []byte, replace bool) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".kapi-export-*")
+	tmp, err := createExport(filepath.Dir(path), data)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	_, err = tmp.Write(data)
-	if err == nil {
-		err = tmp.Chmod(0o644)
+	defer os.Remove(tmp)
+	if replace {
+		return os.Rename(tmp, path)
 	}
-	if closeErr := tmp.Close(); err == nil {
+	err = linkFile(tmp, path)
+	if err != nil && !errors.Is(err, os.ErrExist) {
+		err = writeNew(path, data)
+	}
+	if errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("%s already exists; pass --force to replace it", path)
+	}
+	return err
+}
+
+func createExport(dir string, data []byte) (string, error) {
+	for {
+		name := filepath.Join(dir, ".kapi-export-"+rand.Text())
+		err := writeNew(name, data)
+		if !errors.Is(err, os.ErrExist) {
+			return name, err
+		}
+	}
+}
+
+func writeNew(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // the user names the folder
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if closeErr := f.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		return err
+		os.Remove(path)
 	}
-	if replace {
-		return os.Rename(tmp.Name(), path)
-	}
-	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("%s already exists; pass --force to replace it", path)
-	} else if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 var openBrowser = func(url string) error {
