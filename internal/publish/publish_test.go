@@ -412,7 +412,23 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 		t.Fatal(err)
 	}
 	src += `<figure data-kapi-id="dddddddd"><img src="./plan.files/` + big + `" alt=""></figure>`
-	if _, err := Document("plan.html", []byte(src), files); err == nil || !strings.Contains(err.Error(), "over the hub's 10 MB limit") || !strings.Contains(err.Error(), big+" (9.0 MB)") {
-		t.Errorf("an oversized page: %v", err)
+	src += `<figure data-kapi-id="eeeeeeee"><img src="./plan.files/` + big + `" alt=""></figure>`
+	_, err = Document("plan.html", []byte(src), files)
+	if err == nil || !strings.Contains(err.Error(), "over the hub's 10 MB limit") || strings.Count(err.Error(), big) != 1 || !strings.Contains(err.Error(), big+" (9.0 MB)") {
+		t.Errorf("an oversized page with the image twice: %v", err)
+	}
+
+	code := `<pre data-kapi-id="ffffffff"><code>&lt;img src="./plan.files/` + png + `"&gt;</code></pre>` +
+		`<p data-kapi-id="gggggggg">Write src="./plan.files/` + png + `" in the tag.</p>`
+	doc, err = Document("plan.html", []byte(code), files)
+	if err != nil || strings.Contains(string(doc), "data:image") {
+		t.Errorf("text that looks like an image src was embedded: %v\n%s", err, doc)
+	}
+	notDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(notDir, "plan.files"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Document("plan.html", []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+png+`" alt=""></figure>`), filepath.Join(notDir, "plan.files")); err != nil {
+		t.Errorf("an unreadable files folder stopped publishing: %v", err)
 	}
 }

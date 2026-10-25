@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -79,7 +78,10 @@ func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title s
 
 const MaxDocBytes = 10 << 20
 
-var pageImage = regexp.MustCompile(`src="\./[^"/]+\.files/([0-9a-f]{32}\.(png|jpg|gif|webp))"`)
+var (
+	imgTag    = regexp.MustCompile(`<img\b[^>]*>`)
+	pageImage = regexp.MustCompile(`\bsrc="\./[^"/]+\.files/([0-9a-f]{32}\.(png|jpg|gif|webp))"`)
+)
 
 var imageTypes = map[string]string{"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
 
@@ -88,22 +90,36 @@ type embedded struct {
 	size int
 }
 
-func embedImages(body []byte, filesDir string) ([]byte, []embedded, error) {
+func embedImages(body []byte, filesDir string) ([]byte, []embedded, bool) {
+	urls := map[string][]byte{}
 	var used []embedded
-	var failed error
-	out := pageImage.ReplaceAllFunc(body, func(m []byte) []byte {
-		sub := pageImage.FindSubmatch(m)
-		data, err := os.ReadFile(filepath.Join(filesDir, string(sub[1])))
-		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) && failed == nil {
-				failed = err
+	total := 0
+	over := false
+	out := imgTag.ReplaceAllFunc(body, func(tag []byte) []byte {
+		return pageImage.ReplaceAllFunc(tag, func(attr []byte) []byte {
+			sub := pageImage.FindSubmatch(attr)
+			name := string(sub[1])
+			url, seen := urls[name]
+			if !seen {
+				path := filepath.Join(filesDir, name)
+				if info, err := os.Stat(path); err == nil && len(body)+total+base64.StdEncoding.EncodedLen(int(info.Size())) > MaxDocBytes {
+					used = append(used, embedded{name, int(info.Size())})
+					total += base64.StdEncoding.EncodedLen(int(info.Size()))
+					over = true
+				} else if data, err := os.ReadFile(path); err == nil {
+					url = []byte(`src="data:` + imageTypes[string(sub[2])] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
+					used = append(used, embedded{name, len(data)})
+					total += len(url)
+				}
+				urls[name] = url
 			}
-			return m
-		}
-		used = append(used, embedded{string(sub[1]), len(data)})
-		return []byte(`src="data:` + imageTypes[string(sub[2])] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
+			if url == nil {
+				return attr
+			}
+			return url
+		})
 	})
-	return out, used, failed
+	return out, used, over
 }
 
 func Document(title string, src []byte, filesDir string) ([]byte, error) {
@@ -111,10 +127,7 @@ func Document(title string, src []byte, filesDir string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("render page: %w", err)
 	}
-	body, images, err := embedImages(body, filesDir)
-	if err != nil {
-		return nil, fmt.Errorf("embed images: %w", err)
-	}
+	body, images, over := embedImages(body, filesDir)
 	var b bytes.Buffer
 	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
@@ -123,13 +136,13 @@ func Document(title string, src []byte, filesDir string) ([]byte, error) {
 	b.WriteString("\n</style>\n</head>\n<body>\n<main id=\"kapi-page\">\n")
 	b.Write(body)
 	b.WriteString("\n</main>\n</body>\n</html>\n")
-	if b.Len() > MaxDocBytes {
+	if over || b.Len() > MaxDocBytes {
 		slices.SortFunc(images, func(a, b embedded) int { return b.size - a.size })
 		var big []string
 		for _, im := range images[:min(3, len(images))] {
 			big = append(big, fmt.Sprintf("%s (%.1f MB)", im.name, float64(im.size)/(1<<20)))
 		}
-		msg := fmt.Sprintf("the published page would be %.1f MB, over the hub's %d MB limit", float64(b.Len())/(1<<20), MaxDocBytes>>20)
+		msg := fmt.Sprintf("the published page would be over the hub's %d MB limit", MaxDocBytes>>20)
 		if len(big) > 0 {
 			msg += "; the largest images are " + strings.Join(big, ", ")
 		}
