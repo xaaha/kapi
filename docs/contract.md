@@ -317,9 +317,21 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/blocks/{block}` | | `render.Block` output, headers `Kapi-Rev` and `Kapi-Undo` (`true` when the last browser op can still be undone); with `?rev=N`, the block as it was at revision `N`, read from the kept revision files, 404 when that revision or the block in it does not exist |
 | `GET /p/{id}/source/{block}` | | the element's source outer HTML, `text/plain`, header `Kapi-Rev`; with `?part=inner`, only the source between its start and end tags, byte for byte (`kapi-code` and `kapi-diff` bodies are raw); any other `part` is 400 |
 | `GET /p/{id}/events` | | `text/event-stream`, see below |
-| `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"..."}` | `{"seq":N}` |
-| `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"text":"..."}],"text":"optional message"}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
+| `POST /p/{id}/messages` | `{"kind":"message","target":"<block id or empty>","text":"...","files":["<name>"]}` | `{"seq":N}`; text may be empty when there is an image; 422 for an image that is not stored |
+| `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"files":["<name>"],"text":"..."}],"text":"optional message","files":["<name>"]}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
+| `POST /p/{id}/files` | the image bytes, `Content-Type: image/...` | `{"name":"<32 hex>.png","mime":"image/png","size":N}`; the type is read from the bytes, and only PNG, JPEG, GIF and WebP up to 10 MB are kept; 415 for any other type, SVG included, 413 when too big, 507 when the disk cap is full |
+| `GET /p/{id}/files/{name}` | | the image, or 404 once it expired |
 | `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
+
+Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
+named by their content hash, and never in the page source. A note or message
+may carry up to 4 of them and may have no text; every image named in one
+request is checked before any is marked used. The event
+records each image's absolute path in `files`. A file's modification time is
+when it was last used: when it was uploaded or an event referenced it. The
+daemon deletes images unused for 7 days, on start and every hour, and keeps
+all of them under 512 MB by deleting the least recently used first, but never
+one used in the last hour; an upload that still does not fit is refused.
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
@@ -407,6 +419,8 @@ Ops reach the agent through the existing event log, so `kapi watch` shows
 `#12 human revision on #k3f9a2bq: deleted "Move the session store to the new…"`
 with no new command. A note prints its part and quote after the target:
 `#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her? (answer with kapi say --reply 13)`.
+Each image on a note or message adds `[image <absolute path>]` after the
+text, so the agent can open it.
 `kapi say --reply 13,14` writes a message with `re` set to those notes, and
 the daemon refuses a number that is not a note on the page; other readers see
 `#15 agent reply to note #13, #14: ...`, and a human reply to a note prints

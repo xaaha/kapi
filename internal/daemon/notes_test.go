@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -140,5 +141,36 @@ func TestWaitDoesNotWakeForAResolveAlone(t *testing.T) {
 	}
 	if len(got.Events) != 2 || got.Events[0].Kind != eventlog.KindResolve || got.Events[1].Text != "next" {
 		t.Fatalf("wait returned %+v, want the resolve and the message", got.Events)
+	}
+}
+
+func TestTheDaemonSweepsStaleImagesWhenItStarts(t *testing.T) {
+	home, err := os.MkdirTemp("", "kd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	dir := filepath.Join(home, "pages", "0123456789abcdef", "files")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(dir, "0123456789abcdef0123456789abcdef.png")
+	fresh := filepath.Join(dir, "fedcba9876543210fedcba9876543210.png")
+	for _, p := range []string{stale, fresh} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	servingAt(t, home)
+	waitFor(t, "the stale image to be swept", func() bool {
+		_, err := os.Stat(stale)
+		return errors.Is(err, os.ErrNotExist)
+	})
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("a fresh image was swept: %v", err)
 	}
 }
