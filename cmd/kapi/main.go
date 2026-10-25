@@ -26,6 +26,7 @@ import (
 	"github.com/xaaha/kapi/internal/client"
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/export"
 	pkgpage "github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
@@ -75,6 +76,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			daemonCmd(),
 			newPresetCmd(out),
 			newPublishCmd(out),
+			exportCmd(out),
 			attachCmd(c, out),
 			newOpenCmd(c, out),
 		},
@@ -467,6 +469,67 @@ func newPublishCmd(out io.Writer) *cli.Command {
 				return err
 			}
 			_, err = fmt.Fprintln(out, url)
+			return err
+		},
+	}
+}
+
+func exportCmd(out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	md := fs.Bool("md", false, "Export as Markdown")
+	dir := fs.String("out", ".", "Folder to write the file into, or - to print it")
+	force := fs.Bool("force", false, "Replace a file of the same name")
+	return &cli.Command{
+		Name:  "export",
+		Short: "Export a page as a Markdown file",
+		Long: "Convert the page's source to Markdown and write <page>.md into the folder given by --out.\n" +
+			"When the page shows its own images, write <page>.zip instead: the .md and an images folder it links to.",
+		Flags: fs,
+		Args:  []cli.ArgDef{pageArg},
+		Examples: []cli.Example{
+			{Command: "kapi export --md plan.html", Description: "Write plan.md, or plan.zip when it has images, here"},
+			{Command: "kapi export --md --out - plan.html", Description: "Print the Markdown"},
+		},
+		Run: func(args []string) error {
+			if !*md {
+				return errors.New("pick a format: --md\nSee 'kapi export --help' for usage")
+			}
+			page, err := pagePath(args, 1, "export")
+			if err != nil {
+				return err
+			}
+			src, err := os.ReadFile(page)
+			if err != nil {
+				return err
+			}
+			f, err := export.Markdown(filepath.Base(page), src, pkgpage.FilesDir(page))
+			if err != nil {
+				return err
+			}
+			if *dir == "-" {
+				_, err = out.Write(f.Data)
+				return err
+			}
+			path := filepath.Join(*dir, f.Name)
+			mode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+			if !*force {
+				mode |= os.O_EXCL
+			}
+			w, err := os.OpenFile(path, mode, 0o644) //nolint:gosec // the user names the folder
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("%s already exists; pass --force to replace it", path)
+			}
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(f.Data); err != nil {
+				w.Close()
+				return err
+			}
+			if err := w.Close(); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(out, path)
 			return err
 		},
 	}

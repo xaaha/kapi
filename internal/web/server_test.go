@@ -1,6 +1,7 @@
 package web
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -1211,5 +1212,30 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 	}
 	if code, _ := s.uploadTo("/images", onePixel, "image/png", "http://evil.example"); code != http.StatusForbidden {
 		t.Errorf("cross-site page image: %d", code)
+	}
+}
+
+func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.T) {
+	s := newSite(t, `<h1 data-kapi-id="aaaaaaaa">Plan</h1>`)
+	got := s.get("/p/" + s.id + "/export/markdown")
+	if got.code != http.StatusOK || got.body != "# Plan\n" || got.header.Get("Content-Type") != "text/markdown; charset=utf-8" ||
+		got.header.Get("Content-Disposition") != `attachment; filename=plan.md` {
+		t.Fatalf("plain export: %d %q %v", got.code, got.body, got.header)
+	}
+	_, out := s.uploadTo("/images", onePixel, "image/png", s.srv.URL)
+	name, _ := out["name"].(string)
+	if code, out := s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`); code != http.StatusOK {
+		t.Fatalf("image op: %d %v", code, out)
+	}
+	got = s.get("/p/" + s.id + "/export/markdown")
+	if got.code != http.StatusOK || got.header.Get("Content-Type") != "application/zip" || got.header.Get("Content-Disposition") != `attachment; filename=plan.zip` {
+		t.Fatalf("export with an image: %d %v", got.code, got.header)
+	}
+	z, err := zip.NewReader(strings.NewReader(got.body), int64(len(got.body)))
+	if err != nil || len(z.File) != 2 || z.File[0].Name != "plan.md" || z.File[1].Name != "images/"+name {
+		t.Fatalf("zip: %v %v", z, err)
+	}
+	if got := s.raw("GET", "/p/"+s.id+"/export/markdown", nil); got.code != http.StatusForbidden {
+		t.Errorf("export without the token: %d", got.code)
 	}
 }

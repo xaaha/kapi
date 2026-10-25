@@ -1,0 +1,81 @@
+package render
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestMarkdownGolden(t *testing.T) {
+	inputs, err := filepath.Glob("testdata/cases/*.html")
+	if err != nil || len(inputs) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	inputs = append(inputs, "testdata/all-presets.src.html")
+	for _, in := range inputs {
+		name := strings.TrimSuffix(strings.TrimSuffix(filepath.Base(in), ".html"), ".src")
+		t.Run(name, func(t *testing.T) {
+			src, err := os.ReadFile(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := Markdown(src, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			golden(t, filepath.Join("testdata", "markdown", name+".md"), got)
+		})
+	}
+}
+
+func TestMarkdownEscapesTextAndKeepsEachConstructApart(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		{"markup in text", `<p>2 * 3 = 6, [not a link], <b>&lt;tag&gt;</b>, a_b _c_ &amp;amp; ~x~ and \ </p>`,
+			`2 \* 3 = 6, \[not a link\], **\<tag>**, a_b \_c\_ \&amp; \~x\~ and \\`},
+		{"line starts", `<p># not a heading</p><p>- not a list</p><p>12. not a list either</p><p>&gt; not a quote</p>`,
+			"\\# not a heading\n\n\\- not a list\n\n12\\. not a list either\n\n\\> not a quote"},
+		{"hard break", `<p>one<br>two<br></p>`, "one\\\ntwo"},
+		{"emphasis spaces move outside", `<p>a<em> b </em>c<strong></strong>d</p>`, "a *b* cd"},
+		{"code spans", "<p><code>a`b</code> <code>`x`</code></p>", "``a`b`` `` `x` ``"},
+		{"fence longer than the code's backticks", "<pre><code class=\"language-md\">```\nx\n```</code></pre>", "````md\n```\nx\n```\n````"},
+		{"links", `<p><a href="https://e.com/a b(c)">x</a> <a href="https://e.com/">  </a> <a>plain</a></p>`,
+			"[x](<https://e.com/a b(c)>) [https://e.com/](https://e.com/) plain"},
+		{"lists", `<ol start="4"><li>four<ul><li>nested<p>para</p></li></ul></li><li>five</li></ol><ol><li>again</li></ol>`,
+			"4. four\n\n   - nested\n\n     para\n5. five\n\n<!-- -->\n\n1. again"},
+		{"table cells", `<table><tr><th>a|b</th><th>c</th></tr><tr><td>1<br>2</td><td><p>x</p><p>y</p></td></tr></table>`,
+			"| a\\|b | c |\n| --- | --- |\n| 1<br>2 | x<br>y |"},
+		{"quote holds blocks", `<blockquote><p>a</p><ul><li>b</li></ul></blockquote>`, "> a\n>\n> - b"},
+		{"definition list", `<dl><dt>Term</dt><dd>Means this</dd><dt>Other</dt><dd><p>One</p><p>Two</p></dd></dl>`,
+			"- **Term**: Means this\n- **Other**\n\n  One\n\n  Two"},
+		{"badge states", `<p><kapi-badge state="done"></kapi-badge> <kapi-badge state="waiting">next</kapi-badge> <kapi-badge tone="red">x</kapi-badge></p>`,
+			"✅ ⏳ `next` `x`"},
+		{"plan states", `<kapi-plan><kapi-step state="done">a</kapi-step><kapi-step>b</kapi-step></kapi-plan>`, "1. ✅ a\n2. b"},
+		{"dropped content", `<p>keep<script>alert(1)</script></p><style>p{}</style><svg><text>no</text></svg>`, "keep"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := Markdown([]byte(c.src), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != c.want+"\n" {
+				t.Errorf("got\n%s\nwant\n%s", got, c.want)
+			}
+		})
+	}
+}
+
+func TestMarkdownPassesEveryImageSourceThroughTheCallback(t *testing.T) {
+	var seen []string
+	got, err := Markdown([]byte(`<p><img src="./a.files/x.png" alt="a]b"></p><figure><img src="https://e.com/y.png"><figcaption>Cap</figcaption></figure>`), func(src string) string {
+		seen = append(seen, src)
+		return "images/" + filepath.Base(src)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "![a\\]b](images/x.png)\n\n![](images/y.png)\n\n*Cap*\n"
+	if string(got) != want || len(seen) != 2 {
+		t.Errorf("got %q (callback saw %v), want %q", got, seen, want)
+	}
+}

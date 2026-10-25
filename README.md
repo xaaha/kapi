@@ -57,6 +57,7 @@ kapi wait plan.html                                        # as the agent: print
 kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
 kapi say --reply 5 plan.html "moved it to Track B"         # answer note #5, so its pin turns answered
 kapi attach --after k3f9a2bq plan.html chart.png           # add an image block, stored in plan.files/
+kapi export --md plan.html                                 # write plan.md, or plan.zip with its images
 kapi seen plan.html 4                                      # or say you read #4 without replying
 kapi status plan.html
 kapi version

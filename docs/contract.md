@@ -323,6 +323,7 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `GET /p/{id}/files/{name}` | | the image, or 404 once it expired |
 | `POST /p/{id}/images` | the image bytes, `Content-Type: image/...` | `{"name":...,"mime":...,"size":N}`, the same checks as `files`; the image is kept for good next to the page, in `<page name>.files/` (`plan.html` keeps `plan.files/`), readable by everyone so git and the agent see it |
 | `GET /p/{id}/<page name>.files/{name}` | | a page image; 404 for any other folder or a name that is not a stored image's |
+| `GET /p/{id}/export/markdown` | | the page as Markdown, `Content-Disposition: attachment`: `<page>.md` (`text/markdown`), or `<page>.zip` (`application/zip`) holding `<page>.md` and `images/<name>` when the page shows its own images, linked as `images/<name>`; other images keep their links |
 | `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
 
 Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
@@ -428,7 +429,14 @@ with no new command. A note prints its part and quote after the target:
 Each image on a note or message adds `[image <absolute path>]` after the
 text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image>`
 copies an image into the page's files folder and adds it with an `image` op
-logged under the reader's name. `kapi publish` embeds each page image from the page's files
+logged under the reader's name. `kapi export --md [--out <folder>|-] [--force] <page>` writes the
+same Markdown export as the browser into the folder (default `.`) and prints its path, or prints the
+Markdown with `--out -`; it refuses to replace an existing file without `--force`. Each preset has a
+Markdown form: callouts become GitHub alerts (`> [!NOTE]`), code and diffs fenced code with their
+language, diagrams fenced code tagged `kapi-diagram type=...` holding their source, tables GitHub
+tables, checklists and form options task lists, plans a numbered list with risks and questions as bullets,
+key and value lists `- **Key**: value`, details `<details>`, badges code spans with an emoji for a state.
+An element that is unknown or fails to render keeps its text. `kapi publish` embeds each page image from the page's files
 folder into the published document as a `data:` URL, since the hub serves one
 self-contained file, and refuses a page that would pass the hub's 10 MB limit,
 naming its largest images. It refuses a page that is not `.html` or
