@@ -400,7 +400,7 @@
 
 #kapi-chrome .kapi-panel-head .kapi-menu button {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
   width: 100%;
@@ -415,6 +415,55 @@
 #kapi-chrome .kapi-panel-head .kapi-menu button:is(:hover, :focus-visible) {
   background: var(--kapi-blue-fill);
   outline: none;
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="export"][aria-expanded="true"] {
+  background: var(--kapi-blue-fill);
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="end"] {
+  color: var(--kapi-red-text);
+}
+
+#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="end"]:is(:hover, :focus-visible) {
+  background: var(--kapi-red-tint);
+}
+
+#kapi-chrome .kapi-menu-caret {
+  display: inline-flex;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-menu-group {
+  position: relative;
+}
+
+#kapi-chrome .kapi-submenu {
+  position: absolute;
+  top: -5px;
+  right: calc(100% + 5px);
+  box-sizing: border-box;
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-shadow);
+}
+
+#kapi-chrome .kapi-submenu::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 6px;
+}
+
+#kapi-chrome .kapi-submenu[hidden] {
+  display: none;
 }
 
 #kapi-chrome .kapi-menu .kapi-menu-detail {
@@ -479,7 +528,7 @@
   box-shadow: inset 0 0 0 1.5px var(--kapi-muted);
 }
 
-#kapi-chrome .kapi-end {
+#kapi-chrome :is(.kapi-end, .kapi-again) {
   align-self: stretch;
   padding: 4px 0;
   border-top: 1px solid var(--kapi-border);
@@ -750,7 +799,7 @@
 
 #kapi-chrome .kapi-queued-tools svg,
 #kapi-chrome .kapi-ask-widen svg {
-  width: 14px;
+  width: 6px;
   height: 14px;
   fill: currentColor;
 }
@@ -1350,6 +1399,27 @@
 }
 
 @media screen and (max-width: 760px) {
+  #kapi-chrome .kapi-submenu {
+    position: static;
+    width: auto;
+    padding: 2px 0 2px 26px;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  #kapi-chrome .kapi-submenu::after {
+    content: none;
+  }
+
+  #kapi-chrome .kapi-menu-caret svg {
+    transform: rotate(-90deg);
+  }
+
+  #kapi-chrome [aria-expanded="true"] > .kapi-menu-caret svg {
+    transform: rotate(90deg);
+  }
+
   html {
     padding-bottom: var(--kapi-bar-height, 104px);
     scroll-padding-top: 46px;
