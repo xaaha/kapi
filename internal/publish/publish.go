@@ -78,6 +78,8 @@ func (c *Client) Publish(ctx context.Context, pageID string, rev uint64, title s
 
 const MaxDocBytes = 10 << 20
 
+var ErrMissingImages = errors.New("the page shows images that are missing")
+
 var (
 	imgTag    = regexp.MustCompile(`<img\b[^>]*>`)
 	pageImage = regexp.MustCompile(`\bsrc="\./[^"/]+\.files/([0-9a-f]{32}\.(png|jpg|gif|webp))"`)
@@ -90,9 +92,10 @@ type embedded struct {
 	size int
 }
 
-func embedImages(body []byte, filesDir string, limit int) ([]byte, []embedded, bool) {
+func embedImages(body []byte, filesDir string, limit int) ([]byte, []embedded, []string, bool) {
 	urls := map[string][]byte{}
 	var used []embedded
+	var missing []string
 	total := 0
 	over := false
 	out := imgTag.ReplaceAllFunc(body, func(tag []byte) []byte {
@@ -110,6 +113,8 @@ func embedImages(body []byte, filesDir string, limit int) ([]byte, []embedded, b
 					url = []byte(`src="data:` + imageTypes[string(sub[2])] + `;base64,` + base64.StdEncoding.EncodeToString(data) + `"`)
 					used = append(used, embedded{name, len(data)})
 					total += len(url)
+				} else {
+					missing = append(missing, name)
 				}
 				urls[name] = url
 			}
@@ -119,7 +124,7 @@ func embedImages(body []byte, filesDir string, limit int) ([]byte, []embedded, b
 			return url
 		})
 	})
-	return out, used, over
+	return out, used, missing, over
 }
 
 func Document(title string, src []byte, filesDir string) ([]byte, error) {
@@ -135,7 +140,10 @@ func document(title string, src []byte, filesDir string, limit int) ([]byte, err
 	if err != nil {
 		return nil, fmt.Errorf("render page: %w", err)
 	}
-	body, images, over := embedImages(body, filesDir, limit)
+	body, images, missing, over := embedImages(body, filesDir, limit)
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("%w from %s: %s", ErrMissingImages, filepath.Base(filesDir), strings.Join(missing, ", "))
+	}
 	var b bytes.Buffer
 	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")

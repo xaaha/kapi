@@ -69,3 +69,27 @@ func TestPublishMissingPageFails(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+func TestPublishRefusesAPageWhoseImagesAreMissing(t *testing.T) {
+	uploads := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		uploads++
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+	t.Setenv("KAPI_HOME", t.TempDir())
+	t.Setenv("KAPI_HUB_URL", srv.URL)
+	t.Setenv("KAPI_HUB_TOKEN", "cli-token")
+	page := filepath.Join(t.TempDir(), "plan.html")
+	name := "ffffffffffffffffffffffffffffffff.png"
+	if err := os.WriteFile(page, []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+name+`" alt=""></figure>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := run(t, &fakeAPI{}, "publish", page)
+	if err == nil || !strings.Contains(err.Error(), "missing from plan.files: "+name) {
+		t.Fatalf("err = %v, want the missing image named", err)
+	}
+	if uploads != 0 {
+		t.Errorf("uploaded %d times", uploads)
+	}
+}

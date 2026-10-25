@@ -1249,3 +1249,42 @@ func TestExportHTMLDownloadsTheRenderedPageWithItsImagesInside(t *testing.T) {
 		t.Errorf("export of an unknown page: %d", got.code)
 	}
 }
+
+func TestExportRefusesAPageWithMissingImagesAndHasNoHubLimit(t *testing.T) {
+	gone := "ffffffffffffffffffffffffffffffff.png"
+	s := newSite(t, `<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+gone+`" alt=""></figure>`)
+	got := s.get("/p/" + s.id + "/export/html")
+	if got.code != http.StatusUnprocessableEntity || strings.TrimSpace(got.body) != "the page shows images that are missing from plan.files: "+gone || got.header.Get("Content-Disposition") != "" {
+		t.Errorf("export with a missing image: %d %q %v", got.code, got.body, got.header)
+	}
+	big := "0123456789abcdef0123456789abcdef.png"
+	data := append(append([]byte{}, onePixel...), bytes.Repeat([]byte{0}, 9<<20)...)
+	if err := os.MkdirAll(filepath.Join(filepath.Dir(s.path), "plan.files"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(s.path), "plan.files", big), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.path, []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+big+`" alt=""></figure>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got = s.get("/p/" + s.id + "/export/html")
+	if got.code != http.StatusOK || len(got.body) <= 10<<20 || !strings.Contains(got.body, base64.StdEncoding.EncodeToString(data)) {
+		t.Errorf("export of a page over the hub limit: %d, %d bytes", got.code, len(got.body))
+	}
+}
+
+func TestThePagePathIsEscapedInItsAttribute(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	path := filepath.Join(filepath.Dir(s.path), `a"<b>&'.html`)
+	if err := os.WriteFile(path, []byte(`<p data-kapi-id="aaaaaaaa">a</p>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id := page.ID(path)
+	s.pages.paths[id] = path
+	got := s.get("/p/" + id + "/")
+	want := ` data-path="` + filepath.Dir(s.path) + `/a&#34;&lt;b&gt;&amp;&#39;.html">`
+	if got.code != http.StatusOK || !strings.Contains(got.body, want) {
+		t.Errorf("page %d, want %s in:\n%s", got.code, want, got.body)
+	}
+}

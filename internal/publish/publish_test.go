@@ -355,7 +355,6 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 		t.Fatal(err)
 	}
 	src := `<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/` + png + `" alt=""></figure>` +
-		`<figure data-kapi-id="bbbbbbbb"><img src="./plan.files/ffffffffffffffffffffffffffffffff.png" alt=""></figure>` +
 		`<p data-kapi-id="cccccccc"><img src="https://example.com/x.png" alt=""></p>`
 	doc, err := Document("plan.html", []byte(src), files)
 	if err != nil {
@@ -365,8 +364,8 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 	if !strings.Contains(string(doc), want) {
 		t.Errorf("the page image was not embedded:\n%s", doc)
 	}
-	if !strings.Contains(string(doc), `src="./plan.files/ffffffffffffffffffffffffffffffff.png"`) || !strings.Contains(string(doc), `src="https://example.com/x.png"`) {
-		t.Errorf("a missing or outside image changed:\n%s", doc)
+	if !strings.Contains(string(doc), `src="https://example.com/x.png"`) {
+		t.Errorf("an outside image changed:\n%s", doc)
 	}
 	big := "fedcba9876543210fedcba9876543210.jpg"
 	if err := os.WriteFile(filepath.Join(files, big), bytes.Repeat([]byte{0xff}, 9<<20), 0o600); err != nil {
@@ -389,8 +388,8 @@ func TestPublishingEmbedsThePagesImagesAndRefusesAPageOverTheHubLimit(t *testing
 	if err := os.WriteFile(filepath.Join(notDir, "plan.files"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Document("plan.html", []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+png+`" alt=""></figure>`), filepath.Join(notDir, "plan.files")); err != nil {
-		t.Errorf("an unreadable files folder stopped publishing: %v", err)
+	if _, err := Document("plan.html", []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/`+png+`" alt=""></figure>`), filepath.Join(notDir, "plan.files")); err == nil || !strings.Contains(err.Error(), png) {
+		t.Errorf("a files folder that is not a folder: %v, want the image named as missing", err)
 	}
 }
 
@@ -414,5 +413,33 @@ func TestExportEmbedsImagesPastTheHubLimit(t *testing.T) {
 	}
 	if len(doc) <= MaxDocBytes || !strings.Contains(string(doc), `src="data:image/jpeg;base64,`+base64.StdEncoding.EncodeToString(data)+`"`) {
 		t.Errorf("the export is %d bytes and does not carry the image", len(doc))
+	}
+}
+
+func TestAPageWithMissingImagesIsRefusedAndTheErrorNamesEachOnce(t *testing.T) {
+	files := filepath.Join(t.TempDir(), "plan.files")
+	if err := os.MkdirAll(files, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	here := "0123456789abcdef0123456789abcdef.png"
+	if err := os.WriteFile(filepath.Join(files, here), []byte("PNGDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gone := "ffffffffffffffffffffffffffffffff.png"
+	alsoGone := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.webp"
+	src := []byte(`<figure data-kapi-id="aaaaaaaa"><img src="./plan.files/` + here + `" alt=""></figure>` +
+		`<figure data-kapi-id="bbbbbbbb"><img src="./plan.files/` + gone + `" alt=""></figure>` +
+		`<figure data-kapi-id="cccccccc"><img src="./plan.files/` + alsoGone + `" alt=""></figure>` +
+		`<figure data-kapi-id="dddddddd"><img src="./plan.files/` + gone + `" alt=""></figure>`)
+	for name, build := range map[string]func(string, []byte, string) ([]byte, error){"Document": Document, "Export": Export} {
+		doc, err := build("plan.html", src, files)
+		if err == nil {
+			t.Errorf("%s left a relative image in the file:\n%s", name, doc)
+			continue
+		}
+		want := "the page shows images that are missing from plan.files: " + gone + ", " + alsoGone
+		if err.Error() != want || !errors.Is(err, ErrMissingImages) {
+			t.Errorf("%s: %q, want %q", name, err, want)
+		}
 	}
 }

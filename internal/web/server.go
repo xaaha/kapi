@@ -281,6 +281,10 @@ func (s *Server) handleExportHTML(w http.ResponseWriter, _ *http.Request, st *pa
 	src, _ := st.Source()
 	name := filepath.Base(st.Path())
 	doc, err := publish.Export(name, src, page.FilesDir(st.Path()))
+	if errors.Is(err, publish.ErrMissingImages) {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
