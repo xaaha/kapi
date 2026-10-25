@@ -199,7 +199,7 @@ func TestOpenServesThePageAndBrowserMessagesReachTheAgent(t *testing.T) {
 	}
 	page, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1" data-undo="false">`) {
+	if err != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `<main id="kapi-page" data-rev="1" data-undo="false" data-path=`) {
 		t.Fatalf("GET %s: %s %v\n%s", url, resp.Status, err, page)
 	}
 
@@ -385,12 +385,19 @@ func (e *e2e) post(url, text string) uint64 {
 
 func receipts(t *testing.T, url string) (read, queued uint64) {
 	t.Helper()
-	c := &http.Client{Timeout: 300 * time.Millisecond}
-	resp, err := c.Get(url + "events")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
+	stop := time.AfterFunc(300*time.Millisecond, cancel)
+	defer stop.Stop()
 	sc := bufio.NewScanner(resp.Body)
 	for sc.Scan() {
 		var r struct {

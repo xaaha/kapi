@@ -71,6 +71,10 @@ agent names it with `--seen` or `kapi seen`, runs `kapi pending`, or a kapi
 hook puts it in the agent's context. `kapi watch <page>`
 still streams one line per event for harnesses that deliver every line.
 
+The three-dot menu at the top of the chat panel exports the page as one HTML
+file with its images inside, or as a PDF through the browser's print dialog,
+and copies the page's path.
+
 ## Agent harnesses
 
 Run `kapi` with no arguments to see every page and what is waiting on it.
