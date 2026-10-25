@@ -321,6 +321,8 @@ exactly `http://127.0.0.1:<port>` or `Content-Type` is not `application/json`
 | `POST /p/{id}/notes` | `{"rev":N,"notes":[{"target":"<ids, comma-separated>","part":"row 2, Owner","quote":"...","prefix":"...","suffix":"...","re":[12],"files":["<name>"],"text":"..."}],"text":"optional message","files":["<name>"]}` | `{"seq":N}` of the last event; every note becomes a `note` event carrying `rev` (the page revision it was written on, or the current one when missing or newer) and a non-blank `text` a trailing `message`, all appended in one write; a note with `re` replies to those notes; 422 when a note has no target or blank text, `re` names an event that is not a note, or there is nothing to append |
 | `POST /p/{id}/files` | the image bytes, `Content-Type: image/...` | `{"name":"<32 hex>.png","mime":"image/png","size":N}`; the type is read from the bytes, and only PNG, JPEG, GIF and WebP up to 10 MB are kept; 415 for any other type, SVG included, 413 when too big, 507 when the disk cap is full |
 | `GET /p/{id}/files/{name}` | | the image, or 404 once it expired |
+| `POST /p/{id}/images` | the image bytes, `Content-Type: image/...` | `{"name":...,"mime":...,"size":N}`, the same checks as `files`; the image is kept for good next to the page, in `<page name>.files/` (`plan.html` keeps `plan.files/`), readable by everyone so git and the agent see it |
+| `GET /p/{id}/<page name>.files/{name}` | | a page image; 404 for any other folder or a name that is not a stored image's |
 | `POST /p/{id}/resolve` | `{"note":12}` | `{"seq":N}`; appends a `resolve` event with `re: [12]`; 422 when `12` is not a note |
 
 Images on notes and messages live under `$KAPI_HOME/pages/<id>/files/`,
@@ -332,7 +334,7 @@ when it was last used: when it was uploaded or an event referenced it. The
 daemon deletes images unused for 7 days, on start and every hour, and keeps
 all of them under 512 MB by deleting the least recently used first, but never
 one used in the last hour; an upload that still does not fit is refused.
-| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}` | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
+| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure><img src="plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S}`, where `seq` is the revision event the op logged, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 

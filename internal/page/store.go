@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/render"
 )
@@ -28,6 +30,7 @@ var (
 	ErrNotFound      = errors.New("no such element")
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
+	ErrNoImage       = errors.New("that image is not in the page's files folder")
 	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
@@ -44,6 +47,7 @@ type Op struct {
 	Before string  `json:"before,omitempty"`
 	Done   bool    `json:"done,omitempty"`
 	Dir    string  `json:"dir,omitempty"`
+	Src    string  `json:"src,omitempty"`
 }
 
 type Summary struct {
@@ -521,6 +525,16 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 		}
 		return s.rev, sum, nil
 	}
+	if op.Kind == "image" {
+		if !attach.ValidName(op.Src) {
+			return s.rev, Summary{}, fmt.Errorf("%w: %q", ErrNoImage, op.Src)
+		}
+		if _, err := os.Stat(filepath.Join(FilesDir(s.path), op.Src)); err != nil {
+			return s.rev, Summary{}, fmt.Errorf("%w: %s", ErrNoImage, op.Src)
+		}
+		src := url.PathEscape(filesName(s.path)) + "/" + op.Src
+		op = &Op{Kind: op.Kind, ID: op.ID, HTML: `<figure><img src="` + html.EscapeString(src) + `" alt=""></figure>`}
+	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
 		var text string
@@ -554,6 +568,10 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
+	case "image":
+		if op.ID == "" {
+			return true
+		}
 	case "edit", "text", "archive", "unarchive", "delete", "check", "orient":
 	default:
 		return false
@@ -1044,8 +1062,42 @@ func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
 	return fi.ModTime(), nil
 }
 
+func FilesDir(path string) string {
+	return filepath.Join(filepath.Dir(path), filesName(path))
+}
+
+func filesName(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base)) + ".files"
+}
+
+func insertImage(src []byte, els []element, op *Op) ([]byte, Summary, error) {
+	if op.ID == "" {
+		ins := op.HTML + "\n"
+		if len(src) > 0 && src[len(src)-1] != '\n' {
+			ins = "\n" + ins
+		}
+		return slices.Concat(src, []byte(ins)), Summary{Text: "added an image at the end"}, nil
+	}
+	e, err := find(els, op.ID)
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	for e.parent >= 0 {
+		e = &els[e.parent]
+	}
+	ins := op.HTML
+	if ls, ownLine := lineStart(src, e.start); ownLine {
+		ins = "\n" + string(src[ls:e.start]) + op.HTML
+	}
+	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), Summary{Text: "added an image after " + describe(src, e)}, nil
+}
+
 func apply(src []byte, op *Op) ([]byte, Summary, error) {
 	els := parse(src)
+	if op.Kind == "image" {
+		return insertImage(src, els, op)
+	}
 	e, err := find(els, op.ID)
 	if err != nil {
 		return nil, Summary{}, err

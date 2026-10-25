@@ -69,6 +69,8 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("POST /p/{id}/resolve", s.withPage(s.handleResolve))
 	s.mux.HandleFunc("POST /p/{id}/files", s.withPage(s.handleUpload))
 	s.mux.HandleFunc("GET /p/{id}/files/{name}", s.withPage(s.handleFile))
+	s.mux.HandleFunc("POST /p/{id}/images", s.withPage(s.handleImageUpload))
+	s.mux.HandleFunc("GET /p/{id}/{dir}/{name}", s.withPage(s.handlePageImage))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
 	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
@@ -108,7 +110,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|files|ops|answers)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|files|images|ops|answers)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -147,7 +149,7 @@ func tidy(p string) bool {
 
 func (s *Server) sameOriginJSON(r *http.Request) bool {
 	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	upload := strings.HasPrefix(mt, "image/") && strings.HasSuffix(r.URL.Path, "/files")
+	upload := strings.HasPrefix(mt, "image/") && (strings.HasSuffix(r.URL.Path, "/files") || strings.HasSuffix(r.URL.Path, "/images"))
 	return err == nil && (mt == "application/json" || upload) && r.Header.Get("Origin") == "http://"+s.host
 }
 
@@ -493,6 +495,31 @@ func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]str
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
+	s.upload(w, r, func(data []byte) (attach.File, error) { return s.pages.Attachments().Put(r.PathValue("id"), data) })
+}
+
+func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
+	path, err := s.pages.PagePath(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.upload(w, r, func(data []byte) (attach.File, error) { return attach.Save(page.FilesDir(path), data) })
+}
+
+func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request, _ *page.Store, _ *eventlog.Log) {
+	path, err := s.pages.PagePath(r.PathValue("id"))
+	name := r.PathValue("name")
+	if err != nil || r.PathValue("dir") != filepath.Base(page.FilesDir(path)) || !attach.ValidName(name) {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("Content-Disposition", "inline")
+	http.ServeFile(w, r, filepath.Join(page.FilesDir(path), name))
+}
+
+func (s *Server) upload(w http.ResponseWriter, r *http.Request, save func([]byte) (attach.File, error)) {
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, attach.MaxBytes))
 	var tooBig *http.MaxBytesError
 	if errors.As(err, &tooBig) {
@@ -503,7 +530,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, _ *page.St
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read the image: " + err.Error()})
 		return
 	}
-	f, err := s.pages.Attachments().Put(r.PathValue("id"), data)
+	f, err := save(data)
 	switch {
 	case errors.Is(err, attach.ErrType):
 		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": err.Error()})
