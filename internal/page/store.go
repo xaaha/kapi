@@ -194,7 +194,11 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 			continue
 		}
 		if errors.Is(err, errFileChanged) {
-			_, err = s.commit(raw, raw, s.rev+1, s.undo, nil)
+			var last *revEvent
+			if s.rev > 0 && !bytes.Equal(raw, s.src) {
+				last = fileEvent(s.src, raw, "")
+			}
+			_, err = s.commit(raw, raw, s.rev+1, s.undo, last)
 		}
 		if err != nil {
 			return nil, err
