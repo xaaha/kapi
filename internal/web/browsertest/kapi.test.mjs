@@ -2431,3 +2431,65 @@ test("#39 a cell in a table with no header row is named by its row", async () =>
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   assert.equal(await asking(), "About: row 2: “Bob”");
 });
+
+test("#39 a second tab never sends notes another tab is already sending", async () => {
+  const other = await browser.open(server.url);
+  try {
+    await other.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await select("cccccccc");
+    await page.key("a");
+    await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+    await page.type("only once");
+    await page.key("Enter");
+    await other.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    server.state.notesDelay = 500;
+    await click(".kapi-composer .kapi-primary");
+    await other.waitFor(`!!document.querySelector(".kapi-queued-note[data-sending]")`);
+    assert.equal(await other.eval(`document.querySelector('.kapi-queued-note [aria-label="Remove note"]').disabled`), true);
+    await other.eval(`document.querySelector(".kapi-composer .kapi-primary").click()`);
+    await other.waitFor(`document.querySelector(".kapi-queue").hidden`);
+    assert.equal(requests("POST", "/notes").length, 1);
+    assert.deepEqual(requests("POST", "/notes")[0].body.notes.map((n) => n.text), ["only once"]);
+  } finally {
+    await other.close();
+  }
+});
+
+test("#39 a selection across a block with no text keeps that block in the note", async () => {
+  await reopenWith([
+    { id: "aaaaaaaa", html: '<p data-kapi-id="aaaaaaaa">Before the picture.</p>' },
+    { id: "mmmmmmmm", html: '<figure data-kapi-id="mmmmmmmm"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></figure>' },
+    { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">After the picture.</p>' },
+  ]);
+  await selectText('[data-kapi-id="aaaaaaaa"]', 7, '[data-kapi-id="bbbbbbbb"]', 5);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("about the picture");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 1);
+  assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,mmmmmmmm,bbbbbbbb");
+});
+
+test("#39 a cancelled pointer never stops the toolbar following the selection", async () => {
+  await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "touch" }))`);
+  await page.eval(`document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }))`);
+  await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 4);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask"]);
+});
+
+test("#39 a section row inside the body is a row, not a column", async () => {
+  await reopenWith([
+    { id: "gggggggg", html: '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><th colspan="2">Group A</th></tr><tr><td>Ann</td><td>1</td></tr></tbody></table></div>' },
+  ]);
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(1) th');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 1, Name: “Group A”");
+  await page.key("Escape");
+  await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  assert.equal(await asking(), "About: row 2, Name: “Ann”");
+});

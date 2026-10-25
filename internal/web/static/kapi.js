@@ -654,6 +654,9 @@
     }
   }
 
+  const SEND_HOLD_MS = 30000;
+  const inFlight = (d, now = Date.now()) => typeof d.sentAt === "number" && now - d.sentAt < SEND_HOLD_MS;
+
   function changeDrafts(change) {
     drafts = change(loadDrafts());
     saveDrafts();
@@ -669,9 +672,11 @@
 
   function cellPart(cell) {
     const table = cell.closest("table");
-    const header = (tr) => tr.parentElement === table.tHead || (tr.cells.length > 0 && [...tr.cells].every((c) => c.tagName === "TH"));
+    const all = rowsOf(table);
+    const head = table.tHead?.rows[0] ?? all.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+    const header = (tr) => tr.parentElement === table.tHead || tr === head;
     if (header(cell.parentElement)) return `column ${cell.textContent.trim()}`;
-    const rows = rowsOf(table).filter((tr) => !header(tr));
+    const rows = all.filter((tr) => !header(tr));
     const row = `row ${rows.indexOf(cell.parentElement) + 1}`;
     const label = cell.getAttribute("data-kapi-label");
     return label ? `${row}, ${label}` : row;
@@ -697,6 +702,12 @@
     return r;
   }
 
+  function covers(range, el) {
+    const r = document.createRange();
+    r.selectNode(el);
+    return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
+  }
+
   function rangeText(range) {
     const box = document.createElement("div");
     box.append(range.cloneContents());
@@ -717,7 +728,7 @@
     const common = range.commonAncestorContainer;
     const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
     const blocks = host && main.contains(host) ? [host]
-      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && rangeText(within(range, b)));
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (rangeText(within(range, b)) || (!textOf(b) && covers(range, b))));
     if (!blocks.length) return null;
     const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
     const both = (selector) => {
@@ -868,22 +879,20 @@
   async function sendNotes() {
     if (sending) return;
     const text = input.value.trim();
-    drafts = loadDrafts();
-    if (!drafts.length) return send();
-    const batch = drafts.slice();
+    const now = Date.now();
+    const batch = loadDrafts().filter((d) => !inFlight(d, now));
+    if (!batch.length) return send();
+    const ids = new Set(batch.map((d) => d.id));
     sending = true;
     sendButton.disabled = true;
-    renderQueue();
+    changeDrafts((list) => list.map((d) => (ids.has(d.id) ? { ...d, sentAt: now } : d)));
     input.value = "";
     const res = await request("/notes", { notes: batch.map(({ target, part, quote, prefix, suffix, text: t }) => ({ target, part, quote, prefix, suffix, text: t })), text });
     sending = false;
     sendButton.disabled = false;
-    if (res?.ok) {
-      const sent = new Set(batch.map((d) => d.id));
-      return changeDrafts((list) => list.filter((d) => !sent.has(d.id)));
-    }
+    if (res?.ok) return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
-    renderQueue();
+    changeDrafts((list) => list.map(({ sentAt, ...d }) => (ids.has(d.id) ? d : { ...d, ...(sentAt && { sentAt }) })));
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
   }
 
@@ -917,7 +926,7 @@
     hint.textContent = n ? `Enter sends ${n === 1 ? "the note" : `the ${n} notes`}` : HINT;
     queueBox.replaceChildren(h("h2", { class: "kapi-queue-head", text: n === 1 ? "1 note queued" : `${n} notes queued` }),
       ...drafts.map((d) => {
-        const item = h("div", { class: "kapi-queued-note", "data-draft": d.id },
+        const item = h("div", { class: "kapi-queued-note", "data-draft": d.id, ...(inFlight(d) && { "data-sending": "" }) },
           h("button", { type: "button", class: "kapi-ref kapi-queued-about", "data-ref": d.target.split(",")[0], text: aboutText(d) }),
           h("div", { class: "kapi-queued-text", text: d.text }),
           h("div", { class: "kapi-queued-tools" },
@@ -927,7 +936,7 @@
             } }, icon("x"))));
         return item;
       }));
-    for (const b of queueBox.querySelectorAll("button")) b.disabled = sending;
+    for (const b of queueBox.querySelectorAll(".kapi-queued-tools button")) b.disabled = sending || b.closest("[data-sending]") !== null;
   }
 
   function refresh(ids) {
@@ -1345,11 +1354,13 @@
     pointerDown = false;
     trackSelection();
   }, true);
-  document.addEventListener("pointerup", () => {
-    if (!pointerDown) return;
-    pointerDown = false;
-    trackSelection();
-  }, true);
+  for (const type of ["pointerup", "pointercancel"]) {
+    document.addEventListener(type, () => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      trackSelection();
+    }, true);
+  }
   bar.addEventListener("mousedown", (e) => {
     if (textRange && !editing) e.preventDefault();
   });
