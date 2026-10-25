@@ -126,7 +126,7 @@
     h("button", { type: "button", class: "kapi-btn kapi-primary", text: "Notes", onclick: () => setSheet(!sheetOpen) }));
   const pins = h("div", { class: "kapi-pins" });
   const rail = h("nav", { class: "kapi-rail", "aria-label": "Where the notes are on the page", hidden: "" });
-  const composerTray = imageTray(() => (sendButton.disabled = composerTray.busy()));
+  const composerTray = imageTray(() => (sendButton.disabled = !!composerTray.blocked()));
   const composer = h("form", { class: "kapi-composer" },
     input, composerTray.row,
     h("div", { class: "kapi-composer-row" }, h("span", { class: "kapi-dot kapi-composer-dot", "data-state": "connecting" }),
@@ -862,6 +862,8 @@
       onChange();
     };
     function render() {
+      const focused = row.contains(document.activeElement) ? document.activeElement : null;
+      const keep = focused && { item: items[[...row.children].indexOf(focused.closest(".kapi-chip"))], cls: focused.className };
       row.hidden = !items.length;
       row.replaceChildren(...items.map((it) => h("div", { class: "kapi-chip", "data-state": it.state },
         it.name ? h("img", { src: fileURL(it.name), alt: "" }) : h("span", { class: "kapi-chip-label", text: it.state === "uploading" ? "Uploading…" : it.label }),
@@ -871,6 +873,9 @@
           items = items.filter((x) => x !== it);
           changed();
         } }, icon("x")))));
+      const again = keep && row.children[items.indexOf(keep.item)]?.querySelector(`.${keep.cls.split(" ")[0]}`);
+      if (again) again.focus();
+      else if (focused) (row.querySelector(".kapi-chip-remove") ?? pick).focus();
     }
     async function upload(it) {
       it.state = "uploading";
@@ -909,13 +914,17 @@
       row, pick, picker, add,
       names: () => items.filter((i) => i.state === "ready").map((i) => i.name),
       count: () => items.length,
-      busy: () => items.some((i) => i.state !== "ready"),
-      clear() {
-        items = [];
+      blocked() {
+        if (items.some((i) => i.state === "uploading")) return "Wait for the images to finish uploading.";
+        if (items.some((i) => i.state === "error")) return "Retry or remove the image that did not upload.";
+        return "";
+      },
+      drop(names) {
+        items = items.filter((i) => !names.includes(i.name));
         changed();
       },
-      set(names) {
-        items = names.map((name) => ({ name, state: "ready", label: "" }));
+      restore(names) {
+        items = [...names.map((name) => ({ name, state: "ready", label: "" })), ...items].slice(0, MAX_IMAGES);
         changed();
       },
     };
@@ -925,8 +934,8 @@
     const files = (list) => [...(list || [])].filter((f) => f.kind === undefined || f.kind === "file");
     el.addEventListener("paste", (e) => {
       const found = files(e.clipboardData?.files);
-      if (!found.length) return;
-      if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+      if (!found.length || e.clipboardData.getData("text/plain")) return;
+      e.preventDefault();
       tray.add(found);
     });
     el.addEventListener("dragover", (e) => {
@@ -965,15 +974,13 @@
     const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: "Cancel (Escape)", text: "Cancel", onclick: () => closeAsk(true) });
     const tray = imageTray(() => sync());
     const sync = () => {
-      queueButton.disabled = sendNow.disabled = (!text.value.trim() && !tray.count()) || tray.busy() || sending;
+      queueButton.disabled = sendNow.disabled = (!text.value.trim() && !tray.count()) || !!tray.blocked() || sending;
     };
     text.addEventListener("input", sync);
     text.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        closeAsk(true);
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (e.key === "Escape") return;
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         sendAsk();
       } else if (e.key === "Enter" && !e.shiftKey) {
@@ -984,6 +991,11 @@
     const box = h("div", { class: "kapi-ask", role: "dialog", "aria-label": "Note for the agent" }, head, text, tray.row,
       h("div", { class: "kapi-ask-row" }, tray.pick, tray.picker, cancel, queueButton, sendNow));
     acceptImages(box, tray);
+    box.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      e.stopPropagation();
+      closeAsk(true);
+    });
     root.append(box);
     asking = { box, anchor, range, restore, text, tray, sync, at: (range ?? selected)?.getBoundingClientRect() };
     sync();
@@ -1024,7 +1036,7 @@
   function queueAsk() {
     const text = asking?.text.value.trim() ?? "";
     const files = asking?.tray.names() ?? [];
-    if ((!text && !files.length) || asking.tray.busy() || sending) return false;
+    if ((!text && !files.length) || asking.tray.blocked() || sending) return false;
     const { target, part, quote, prefix, suffix, re = [] } = asking.anchor;
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     closeAsk();
@@ -1040,7 +1052,7 @@
     if (sending) return;
     const text = input.value.trim();
     if (!drafts.length) return send();
-    if (composerTray.busy()) return say("Wait for the images to finish uploading.");
+    if (composerTray.blocked()) return say(composerTray.blocked());
     const files = composerTray.names();
     const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
@@ -1048,16 +1060,17 @@
     sendButton.disabled = true;
     renderQueue();
     input.value = "";
+    composerTray.drop(files);
     const res = await request("/notes", { rev: Number(main.dataset.rev), notes: batch.map(({ target, part, quote, prefix, suffix, re, files: f, text: t }) => ({ target, part, quote, prefix, suffix,
       ...(Array.isArray(re) && re.length ? { re } : {}), ...(Array.isArray(f) && f.length ? { files: f } : {}), text: t })), text, ...(files.length ? { files } : {}) });
     sending = false;
     sendButton.disabled = false;
     asking?.sync();
     if (res?.ok) {
-      composerTray.clear();
       return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
     }
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
+    composerTray.restore(files);
     renderQueue();
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
   }
@@ -1837,13 +1850,15 @@
   async function send() {
     const text = input.value.trim();
     const files = composerTray.names();
-    if (composerTray.busy()) return say("Wait for the images to finish uploading.");
+    if (composerTray.blocked()) return say(composerTray.blocked());
     if (!text && !files.length) return;
     input.value = "";
+    composerTray.drop(files);
     sendButton.disabled = true;
     const res = await request("/messages", { kind: "message", text, ...(files.length ? { files } : {}) });
-    sendButton.disabled = false;
-    if (res?.ok) return composerTray.clear();
+    sendButton.disabled = !!composerTray.blocked();
+    if (res?.ok) return;
+    composerTray.restore(files);
     input.value = input.value ? `${text}\n${input.value}` : text;
     if (res) say(res.data.error || `Message not sent (HTTP ${res.status}).`, "error");
   }
@@ -2172,6 +2187,11 @@
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
+  for (const type of ["dragover", "drop"]) {
+    document.addEventListener(type, (e) => {
+      if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault();
+    });
+  }
   addEventListener("resize", () => schedulePaint());
   phone.addEventListener("change", () => {
     setSheet(false);
