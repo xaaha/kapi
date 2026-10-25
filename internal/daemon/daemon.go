@@ -499,6 +499,28 @@ func (s *Server) handle(conn net.Conn) {
 		}
 	}
 	switch req.Op {
+	case "image":
+		if err := eventlog.CheckReader(req.Author); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		st, _, err := s.store(req.Page)
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		var sum page.Summary
+		for range 3 {
+			_, rev := st.Source()
+			if _, sum, err = st.ApplyBy(req.Author, rev, &page.Op{Kind: "image", ID: req.Target, Src: req.Text}); !errors.Is(err, page.ErrStale) {
+				break
+			}
+		}
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Event: &eventlog.Event{Seq: sum.Seq, Target: strings.Join(sum.IDs, ","), Text: sum.Text}})
 	case "append":
 		marks := req.Seq > 0 && req.Author != "" && eventlog.CheckReader(req.Author) == nil
 		if queued := l.Queued(req.Author); marks && req.Seq > queued {

@@ -31,7 +31,7 @@ var (
 	ErrInboundLinks  = errors.New("other elements link to it")
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrNoImage       = errors.New("that image is not in the page's files folder")
-	ErrUndoConflict  = errors.New("the file changed outside the browser after that op")
+	ErrUndoConflict  = errors.New("the page changed outside the browser after that op, by the agent or in the file, so it cannot be undone from here")
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
@@ -484,6 +484,10 @@ func (s *Store) Refresh() (Summary, bool, error) {
 }
 
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
+	return s.ApplyBy("human", rev, op)
+}
+
+func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.logEvent(); err != nil {
@@ -553,7 +557,11 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	if bytes.Equal(src, s.src) {
 		return s.rev, Summary{}, nil
 	}
-	if sum.Seq, err = s.commit(src, raw, s.rev+1, append(s.undo, s.rev), &revEvent{Author: "human", Text: sum.Text, IDs: sum.IDs}); err != nil {
+	undo := s.undo
+	if author == "human" {
+		undo = append(undo, s.rev)
+	}
+	if sum.Seq, err = s.commit(src, raw, s.rev+1, undo, &revEvent{Author: author, Text: sum.Text, IDs: sum.IDs}); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}
 	return s.rev, sum, nil

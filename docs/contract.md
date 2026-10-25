@@ -426,7 +426,13 @@ Ops reach the agent through the existing event log, so `kapi watch` shows
 with no new command. A note prints its part and quote after the target:
 `#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her? (answer with kapi say --reply 13)`.
 Each image on a note or message adds `[image <absolute path>]` after the
-text, so the agent can open it.
+text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image>`
+copies an image into the page's files folder and adds it with an `image` op
+logged under the reader's name. It refuses a page that is not `.html` or
+`.htm` or does not exist, and removes the copied image when the op fails. The
+browser's Undo cannot take back an agent's op, and, as with a file edit, it
+cannot undo a browser op made before one. Reader names cannot be empty, and
+`human`, `kapi` and `file` are reserved in any letter case.
 `kapi say --reply 13,14` writes a message with `re` set to those notes, and
 the daemon refuses a number that is not a note on the page; other readers see
 `#15 agent reply to note #13, #14: ...`, and a human reply to a note prints

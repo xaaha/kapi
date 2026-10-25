@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,9 +22,11 @@ import (
 
 	"github.com/xaaha/cli"
 
+	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/client"
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
 )
@@ -72,6 +75,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			daemonCmd(),
 			newPresetCmd(out),
 			newPublishCmd(out),
+			attachCmd(c, out),
 			newOpenCmd(c, out),
 		},
 	}
@@ -369,6 +373,65 @@ func daemonBrowser(reopen bool, getenv func(string) string, goos string) func(ur
 		return nil
 	}
 	return func(url string) error { return openBrowser(url) }
+}
+
+func attachCmd(c api, out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
+	after := fs.String("after", "", "Element id to put the image after; the image goes after its top-level block, or at the end when left out")
+	reader := fs.String("reader", "agent", "Reader name to add the image as")
+	return &cli.Command{
+		Name:       "attach",
+		Short:      "Add an image to a page as a block",
+		Long:       "Copy a PNG, JPEG, GIF or WebP image of up to 10 MB into the folder next to the page (plan.files/ for plan.html) and add it to the page as a figure. Prints the new element's id.",
+		Flags:      fs,
+		FlagsFirst: true,
+		Args:       []cli.ArgDef{pageArg, {Name: "image", Required: true, Desc: "Image file to add"}},
+		Examples: []cli.Example{
+			{Command: "kapi attach --after k3f9a2bq plan.html chart.png", Description: "Add chart.png after one element"},
+		},
+		Run: func(args []string) error {
+			pg, err := pagePath(args, 2, "attach")
+			if err != nil {
+				return err
+			}
+			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
+			if ext := strings.ToLower(filepath.Ext(pg)); ext != ".html" && ext != ".htm" {
+				return fmt.Errorf("%s is not an HTML page", pg)
+			}
+			if _, err := os.Stat(pg); err != nil {
+				return err
+			}
+			data, err := os.ReadFile(args[1])
+			if err != nil {
+				return err
+			}
+			dir := page.FilesDir(pg)
+			_, existed := os.Stat(dir)
+			f, err := attach.Save(dir, data)
+			if err != nil {
+				return fmt.Errorf("%s: %w", args[1], err)
+			}
+			resp, err := c.Do(&daemon.Request{Op: "image", Page: pg, Author: *reader, Target: *after, Text: f.Name})
+			if err != nil {
+				if !referenced(pg, f.Name) {
+					os.Remove(filepath.Join(dir, f.Name))
+					if existed != nil {
+						os.Remove(dir)
+					}
+				}
+				return err
+			}
+			_, err = fmt.Fprintf(out, "added #%s (%s)\n", resp.Event.Target, resp.Event.Text)
+			return err
+		},
+	}
+}
+
+func referenced(page, name string) bool {
+	src, err := os.ReadFile(page)
+	return err != nil || bytes.Contains(src, []byte(name))
 }
 
 func newPublishCmd(out io.Writer) *cli.Command {
