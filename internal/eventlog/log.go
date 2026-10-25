@@ -25,8 +25,16 @@ type Event struct {
 	Prefix string    `json:"prefix,omitempty"`
 	Suffix string    `json:"suffix,omitempty"`
 	Rev    uint64    `json:"rev,omitempty"`
+	Re     []uint64  `json:"re,omitempty"`
 	Text   string    `json:"text"`
 }
+
+const (
+	KindNote    = "note"
+	KindResolve = "resolve"
+)
+
+func (e *Event) Quiet() bool { return e.Kind == KindResolve }
 
 type Log struct {
 	mu      sync.Mutex
@@ -160,6 +168,24 @@ func (l *Log) undoAppend() error {
 	if err := truncate(l.file, l.size); err != nil {
 		l.broken = fmt.Errorf("%s may end in a partial line; reopen the log before appending: %w", l.file.Name(), err)
 		return l.broken
+	}
+	return nil
+}
+
+func (l *Log) Get(seq uint64) (Event, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if seq == 0 || seq > uint64(len(l.events)) {
+		return Event{}, false
+	}
+	return l.events[seq-1], true
+}
+
+func (l *Log) CheckNotes(seqs []uint64) error {
+	for _, n := range seqs {
+		if e, ok := l.Get(n); !ok || e.Kind != KindNote {
+			return fmt.Errorf("#%d is not a note on this page", n)
+		}
 	}
 	return nil
 }

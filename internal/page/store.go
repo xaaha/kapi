@@ -411,6 +411,24 @@ func (s *Store) Source() ([]byte, uint64) {
 	return slices.Clone(s.src), s.rev
 }
 
+var ErrNoRev = errors.New("no such revision")
+
+func (s *Store) SourceAt(rev uint64) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case rev == s.rev:
+		return slices.Clone(s.src), nil
+	case rev == 0 || rev > s.rev:
+		return nil, ErrNoRev
+	}
+	src, err := s.readRev(rev)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNoRev
+	}
+	return src, err
+}
+
 func (s *Store) CanUndo() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

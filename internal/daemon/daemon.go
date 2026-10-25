@@ -41,6 +41,7 @@ type Request struct {
 	Target string   `json:"target,omitempty"`
 	Text   string   `json:"text,omitempty"`
 	Seq    uint64   `json:"seq,omitempty"`
+	Re     []uint64 `json:"re,omitempty"`
 	Cut    []uint64 `json:"cut,omitempty"`
 }
 
@@ -483,7 +484,11 @@ func (s *Server) handle(conn net.Conn) {
 			reply(enc, &Response{Error: fmt.Sprintf("--seen #%d was never handed to %s; the last event handed over is #%d, so nothing was sent", req.Seq, req.Author, queued)})
 			return
 		}
-		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Text: req.Text})
+		if err := l.CheckNotes(req.Re); err != nil {
+			reply(enc, &Response{Error: err.Error() + ", so nothing was sent"})
+			return
+		}
+		e, err := l.Append(&eventlog.Event{Author: req.Author, Kind: req.Kind, Target: req.Target, Re: req.Re, Text: req.Text})
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -564,6 +569,7 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 	var mu sync.Mutex
 	sent := l.Cursor(req.Reader)
 	delivered, acked, ownAfter := sent, sent, uint64(0)
+	var held []eventlog.Event
 
 	gone := make(chan struct{})
 	go func() {
@@ -590,6 +596,9 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			e := &events[i]
 			sent = e.Seq
 			if e.Author == req.Reader {
+				if len(held) > 0 {
+					continue
+				}
 				mu.Lock()
 				caughtUp := acked >= delivered
 				if !caughtUp {
@@ -604,9 +613,19 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 			if e.Kind == eventlog.KindPresence {
 				continue
 			}
+			if e.Quiet() {
+				held = append(held, *e)
+				continue
+			}
 			mu.Lock()
 			delivered = e.Seq
 			mu.Unlock()
+			for j := range held {
+				if err := enc.Encode(Response{Event: &held[j]}); err != nil {
+					return
+				}
+			}
+			held = nil
 			if err := enc.Encode(Response{Event: e}); err != nil {
 				return
 			}
@@ -649,7 +668,7 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 	for {
 		_, changed := l.After(^uint64(0))
 		events, queued := unseenForAgent(l, req.Reader)
-		if len(events) > 0 && events[len(events)-1].Seq > queued {
+		if slices.ContainsFunc(events, func(e eventlog.Event) bool { return e.Seq > queued && !e.Quiet() }) {
 			reply(enc, &Response{Events: events})
 			return
 		}
