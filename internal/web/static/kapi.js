@@ -702,12 +702,6 @@
     return r;
   }
 
-  function covers(range, el) {
-    const r = document.createRange();
-    r.selectNode(el);
-    return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
-  }
-
   function rangeText(range) {
     const box = document.createElement("div");
     box.append(range.cloneContents());
@@ -728,7 +722,7 @@
     const common = range.commonAncestorContainer;
     const host = closest(common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement, BLOCK);
     const blocks = host && main.contains(host) ? [host]
-      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (rangeText(within(range, b)) || (!textOf(b) && covers(range, b))));
+      : [...main.querySelectorAll(BLOCK)].filter((b) => !b.parentElement.closest(BLOCK) && range.intersectsNode(b) && (!textOf(b) || rangeText(within(range, b))));
     if (!blocks.length) return null;
     const at = (node) => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
     const both = (selector) => {
@@ -892,18 +886,26 @@
     sendButton.disabled = false;
     if (res?.ok) return changeDrafts((list) => list.filter((d) => !ids.has(d.id)));
     if (text) input.value = input.value ? `${text}\n${input.value}` : text;
-    changeDrafts((list) => list.map(({ sentAt, ...d }) => (ids.has(d.id) ? d : { ...d, ...(sentAt && { sentAt }) })));
+    changeDrafts((list) => list.map(({ sentAt, ...d }) => (ids.has(d.id) && sentAt === now ? d : { ...d, ...(sentAt && { sentAt }) })));
     if (res) say(res.data.error || `Notes not sent (HTTP ${res.status}).`, "error");
   }
 
   function editDraft(item, d) {
     const area = h("textarea", { rows: "2", "aria-label": "Edit queued note" });
     area.value = d.text;
+    let finished = false;
     const done = (save) => {
-      if (!area.isConnected) return;
+      if (finished) return;
+      finished = true;
       const next = area.value.trim();
-      if (save && next) changeDrafts((list) => list.map((x) => (x.id === d.id ? { ...x, text: next } : x)));
-      else renderQueue();
+      if (!save || !next || next === d.text) return renderQueue();
+      changeDrafts((list) => {
+        const open = list.some((x) => x.id === d.id && !inFlight(x));
+        if (open) return list.map((x) => (x.id === d.id ? { ...x, text: next } : x));
+        say("That note left the queue before your edit, so the edit is queued as a new note.");
+        const { sentAt, ...copy } = d;
+        return [...list, { ...copy, id: `${d.id}e${Date.now().toString(36)}`, text: next }];
+      });
     };
     area.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
@@ -920,10 +922,17 @@
     area.focus();
   }
 
+  let wakeTimer = 0;
+
   function renderQueue() {
+    const now = Date.now();
     const n = drafts.length;
+    const free = drafts.filter((d) => !inFlight(d, now)).length;
     queueBox.hidden = !n;
-    hint.textContent = n ? `Enter sends ${n === 1 ? "the note" : `the ${n} notes`}` : HINT;
+    hint.textContent = free ? `Enter sends ${free === 1 ? "the note" : `the ${free} notes`}` : HINT;
+    clearTimeout(wakeTimer);
+    const held = drafts.filter((d) => inFlight(d, now)).map((d) => d.sentAt + SEND_HOLD_MS - now);
+    if (held.length) wakeTimer = setTimeout(renderQueue, Math.min(...held) + 50);
     queueBox.replaceChildren(h("h2", { class: "kapi-queue-head", text: n === 1 ? "1 note queued" : `${n} notes queued` }),
       ...drafts.map((d) => {
         const item = h("div", { class: "kapi-queued-note", "data-draft": d.id, ...(inFlight(d) && { "data-sending": "" }) },

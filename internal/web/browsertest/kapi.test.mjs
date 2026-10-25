@@ -2469,6 +2469,21 @@ test("#39 a selection across a block with no text keeps that block in the note",
   await page.key("Enter", await modifier());
   await until(() => requests("POST", "/notes").length === 1);
   assert.equal(requests("POST", "/notes")[0].body.notes[0].target, "aaaaaaaa,mmmmmmmm,bbbbbbbb");
+  await page.eval(`(() => {
+    const fig = document.querySelector('[data-kapi-id="mmmmmmmm"]');
+    const r = document.createRange();
+    r.setStart(document.querySelector('[data-kapi-id="aaaaaaaa"]').firstChild, 7);
+    r.setEnd(fig, fig.childNodes.length);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+  })()`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("ends in the picture");
+  await page.key("Enter", await modifier());
+  await until(() => requests("POST", "/notes").length === 2);
+  assert.equal(requests("POST", "/notes")[1].body.notes[0].target, "aaaaaaaa,mmmmmmmm");
 });
 
 test("#39 a cancelled pointer never stops the toolbar following the selection", async () => {
@@ -2492,4 +2507,38 @@ test("#39 a section row inside the body is a row, not a column", async () => {
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   assert.equal(await asking(), "About: row 2, Name: “Ann”");
+});
+
+test("#39 a note left marked by a closed tab wakes up after the hold, and an edit to a note sent meanwhile is kept", async () => {
+  const other = await browser.open(server.url);
+  try {
+    await other.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+    await select("cccccccc");
+    await page.key("a");
+    await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+    await page.type("old");
+    await page.key("Enter");
+    await other.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    await other.eval(`(() => {
+      const key = Object.keys(localStorage)[0];
+      localStorage.setItem(key, JSON.stringify(JSON.parse(localStorage.getItem(key)).map((d) => ({ ...d, sentAt: Date.now() - 29500 }))));
+    })()`);
+    await page.waitFor(`!!document.querySelector(".kapi-queued-note[data-sending]")`);
+    await page.waitFor(`!document.querySelector(".kapi-queued-note[data-sending]") && !document.querySelector('.kapi-queued-note [aria-label="Remove note"]').disabled`, 3000);
+
+    await click('.kapi-queued-note [aria-label="Edit note"]');
+    await page.waitFor(`document.activeElement === document.querySelector(".kapi-queued-note textarea")`);
+    await page.eval(`document.activeElement.value = "new"`);
+    server.state.notesDelay = 200;
+    await other.eval(`document.querySelector(".kapi-composer .kapi-primary").click()`);
+    await until(() => requests("POST", "/notes").length === 1);
+    await page.key("Enter");
+    await other.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    assert.deepEqual(requests("POST", "/notes")[0].body.notes.map((n) => n.text), ["old"]);
+    await page.waitFor(`document.querySelectorAll(".kapi-queued-note").length === 1`);
+    assert.deepEqual(await queued(), [["Copy data Flip reads", "new"]]);
+    assert.match(await notice(), /queued as a new note/);
+  } finally {
+    await other.close();
+  }
 });
