@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestD25OnlyAHumanMessageNoteOrAnswerLiftsAnEnd(t *testing.T) {
@@ -59,6 +60,9 @@ func TestD25ConcurrentEndsAppendOnlyOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	checked := endChecked
+	endChecked = func() { time.Sleep(5 * time.Millisecond) }
+	t.Cleanup(func() { endChecked = checked })
 	var wg sync.WaitGroup
 	var ok, refused atomic.Int32
 	for range 20 {

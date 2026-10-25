@@ -155,7 +155,10 @@ func (l *Log) AppendAll(in []Event) ([]Event, error) {
 	return l.appendLocked(in)
 }
 
-var ErrEnded = errors.New("the session has already ended; send a message to start it again")
+var (
+	ErrEnded   = errors.New("the session has already ended; send a message to start it again")
+	endChecked = func() {}
+)
 
 func (l *Log) End(author string) (Event, error) {
 	l.mu.Lock()
@@ -163,6 +166,7 @@ func (l *Log) End(author string) (Event, error) {
 	if Ended(l.events) > 0 {
 		return Event{}, ErrEnded
 	}
+	endChecked()
 	out, err := l.appendLocked([]Event{{Author: author, Kind: KindEnd}})
 	if err != nil {
 		return Event{}, err
@@ -324,6 +328,16 @@ func (l *Log) Cursors() (seen, queued map[string]uint64, advanced <-chan struct{
 func (l *Log) Pending(reader string) []Event {
 	events, _, _ := l.Unseen(reader)
 	return events
+}
+
+// Inbox returns the events a reader has not acknowledged, without ends a later human message lifted, and the end in force.
+func (l *Log) Inbox(reader string) (events []Event, queued, ended uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ended = Ended(l.events)
+	events = unread(l.events[min(l.pos.Seen[reader], uint64(len(l.events))):], reader)
+	events = slices.DeleteFunc(events, func(e Event) bool { return e.Kind == KindEnd && e.Seq != ended })
+	return events, max(l.pos.Queued[reader], l.pos.Seen[reader]), ended
 }
 
 func (l *Log) Unseen(reader string) (events []Event, through, queued uint64) {

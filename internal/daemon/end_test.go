@@ -3,7 +3,9 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/xaaha/kapi/internal/eventlog"
 )
@@ -30,6 +32,9 @@ func TestD25AWatchFlushesHeldResolvesBeforeTheEndAndSkipsALiftedEnd(t *testing.T
 		}
 		defer conn.Close()
 		if err := json.NewEncoder(conn).Encode(Request{Op: "watch", Page: path, Reader: "agent"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
 			t.Fatal(err)
 		}
 		dec := json.NewDecoder(conn)
@@ -74,6 +79,9 @@ func TestD25WaitWakesForAnEndAndInboxAndPagesMarkTheEndedPage(t *testing.T) {
 	if _, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindEnd}); err != nil {
 		t.Fatal(err)
 	}
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	var got Response
 	if err := json.NewDecoder(conn).Decode(&got); err != nil {
 		t.Fatal(err)
@@ -98,5 +106,21 @@ func TestD25WaitWakesForAnEndAndInboxAndPagesMarkTheEndedPage(t *testing.T) {
 	}
 	if inbox, pages := ended(); inbox || pages {
 		t.Errorf("after a new message: inbox Ended %v, pages Ended %v; want neither", inbox, pages)
+	}
+}
+
+func TestD25TheSocketRefusesAnEndAppend(t *testing.T) {
+	home, s, _ := serving(t)
+	path := writePage(t, "<p>x</p>")
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := call(t, home, &Request{Op: "append", Page: path, Author: "agent", Kind: eventlog.KindEnd})
+	if !strings.Contains(resp.Error, "End session") {
+		t.Errorf("append of an end: error %q, want a refusal", resp.Error)
+	}
+	if l.Ended() != 0 {
+		t.Error("an end appended over the socket ended the page")
 	}
 }

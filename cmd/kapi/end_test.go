@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,13 @@ func TestD25EndingASessionStopsTheAgentAndANewMessageStartsItAgain(t *testing.T)
 		t.Fatal(err)
 	}
 	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	wait := func() string {
+		cmd, out := e.start("", "wait", e.page)
+		if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() {
+			t.Fatalf("kapi wait did not return: %v", cmd.ProcessState)
+		}
+		return out.String()
+	}
 	stop := func() string {
 		input, err := json.Marshal(map[string]any{"hook_event_name": "Stop", "cwd": filepath.Dir(e.page)})
 		if err != nil {
@@ -132,8 +140,12 @@ func TestD25EndingASessionStopsTheAgentAndANewMessageStartsItAgain(t *testing.T)
 	if got := e.kapi(); strings.Contains(got, "(ended)") {
 		t.Errorf("home view still marks the page ended after a message:\n%s", got)
 	}
-	if got := stop(); !strings.Contains(got, `"decision":"block"`) || !strings.Contains(got, "human message: back again") {
-		t.Errorf("Stop hook after a new message = %q, want it to hand the agent the message", got)
+	e.post(url, "unread")
+	if got := wait(); !strings.Contains(got, "human message: back again") || strings.Contains(got, "ended the session") {
+		t.Errorf("kapi wait after a new message printed %q, want the message and no lifted end", got)
+	}
+	if got := stop(); !strings.Contains(got, `"decision":"block"`) || !strings.Contains(got, "human message: back again") || strings.Contains(got, "ended the session") {
+		t.Errorf("Stop hook after a new message = %q, want it to hand the agent the message and no lifted end", got)
 	}
 	restarted := e.watch()
 	e.post(url, "and more")
@@ -144,5 +156,35 @@ func TestD25EndingASessionStopsTheAgentAndANewMessageStartsItAgain(t *testing.T)
 	case line, ok := <-restarted.lines:
 		t.Errorf("a watch after the restart printed %q (open %v), want it waiting", line, ok)
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func TestD25AWatchOrWaitOnAnEndedPageWhoseEndWasSeenStillGetsTheEnd(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1>Plan</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
+	w := e.watch()
+	e.post(url, "first")
+	w.event(t)
+	if code := e.end(url); code != http.StatusOK {
+		t.Fatalf("POST end: %d", code)
+	}
+	w.event(t)
+	if !exited(w.cmd, 5*time.Second) {
+		t.Fatal("watch kept running after the end")
+	}
+	e.kapi("seen", e.page, strconv.FormatUint(w.seq, 10))
+	again := e.watch()
+	if got := again.event(t); !strings.HasPrefix(got, "human ended the session") {
+		t.Fatalf("a watch on an ended page whose end was seen printed %q, want the end", got)
+	}
+	if !exited(again.cmd, 5*time.Second) {
+		t.Fatal("a watch on an ended page whose end was seen kept running")
+	}
+	cmd, out := e.start("", "wait", e.page)
+	if !exited(cmd, 5*time.Second) || !strings.Contains(out.String(), "human ended the session") {
+		t.Fatalf("kapi wait on an ended page whose end was seen printed %q, want the end at once", out.String())
 	}
 }
