@@ -484,6 +484,10 @@ func (s *Store) Refresh() (Summary, bool, error) {
 }
 
 func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
+	return s.ApplyBy("human", rev, op)
+}
+
+func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.logEvent(); err != nil {
@@ -553,7 +557,11 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 	if bytes.Equal(src, s.src) {
 		return s.rev, Summary{}, nil
 	}
-	if sum.Seq, err = s.commit(src, raw, s.rev+1, append(s.undo, s.rev), &revEvent{Author: "human", Text: sum.Text, IDs: sum.IDs}); err != nil {
+	undo := s.undo
+	if author == "human" {
+		undo = append(undo, s.rev)
+	}
+	if sum.Seq, err = s.commit(src, raw, s.rev+1, undo, &revEvent{Author: author, Text: sum.Text, IDs: sum.IDs}); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}
 	return s.rev, sum, nil

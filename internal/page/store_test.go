@@ -1640,3 +1640,29 @@ func TestImagesGoInsideTheBodyAndSurviveAColonInThePageName(t *testing.T) {
 		t.Errorf("rendered: %s, %v", out, err)
 	}
 }
+
+func TestAnAgentsImageOpIsLoggedAsTheAgentAndCannotBeUndoneFromTheBrowser(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n")
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "0123456789abcdef0123456789abcdef.png"
+	if err := os.MkdirAll(FilesDir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(FilesDir(path), name), []byte("png"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ApplyBy("agent", 1, &Op{Kind: "image", ID: "aaaaaaaa", Src: name}); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := l.After(0)
+	if e := events[len(events)-1]; e.Author != "agent" || e.Kind != "revision" {
+		t.Errorf("revision = %+v, want author agent", e)
+	}
+	if s.CanUndo() {
+		t.Error("the browser could undo the agent's image")
+	}
+}

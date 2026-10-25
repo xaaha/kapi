@@ -56,6 +56,7 @@ kapi send --on cutover plan.html "is this still true?"   # as the human
 kapi wait plan.html                                        # as the agent: print what is unseen and exit
 kapi say --seen 4 plan.html "yes, confirmed at 14:20"      # reply as the agent, having read #4
 kapi say --reply 5 plan.html "moved it to Track B"         # answer note #5, so its pin turns answered
+kapi attach --after k3f9a2bq plan.html chart.png           # add an image block, stored in plan.files/
 kapi seen plan.html 4                                      # or say you read #4 without replying
 kapi status plan.html
 kapi version

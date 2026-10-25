@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -583,5 +585,45 @@ func TestTheStopHookHoldsTheAgentUntilItHasSeenTheMessage(t *testing.T) {
 	}
 	if read, _ := receipts(t, url); read < next {
 		t.Errorf("read %d, want #%d seen after the Stop hook showed it", read, next)
+	}
+}
+
+func TestAttachAddsAnImageBlockAsTheAgent(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1 data-kapi-id=\"aaaaaaaa\">Plan</h1>\n<p data-kapi-id=\"bbbbbbbb\">Text</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+	img := filepath.Join(t.TempDir(), "chart.png")
+	if err := os.WriteFile(img, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := e.kapi("attach", "--after", "aaaaaaaa", e.page, img)
+	m := regexp.MustCompile(`^added #([a-z2-7]{8}) \(added an image after .*\)\n$`).FindStringSubmatch(got)
+	if m == nil {
+		t.Fatalf("attach printed %q", got)
+	}
+	src, err := os.ReadFile(e.page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fig := regexp.MustCompile(`</h1>\n<figure data-kapi-id="` + m[1] + `"><img src="\./plan\.files/([0-9a-f]{32}\.png)" alt=""></figure>\n<p`).FindSubmatch(src)
+	if fig == nil {
+		t.Fatalf("page source:\n%s", src)
+	}
+	if stored, err := os.ReadFile(filepath.Join(filepath.Dir(e.page), "plan.files", string(fig[1]))); err != nil || !bytes.Equal(stored, png) {
+		t.Errorf("stored image: %v", err)
+	}
+	if pending := e.kapi("pending", "--reader", "codex", e.page); !strings.Contains(pending, " agent revision on #"+m[1]+": added an image after ") {
+		t.Errorf("another reader sees %q", pending)
+	}
+	bad := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(bad, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(e.bin, "attach", e.page, bad) //nolint:gosec // runs the kapi binary this test just built
+	cmd.Env = e.env
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "only PNG, JPEG, GIF and WebP") {
+		t.Errorf("attaching a text file: %v %s", err, out)
 	}
 }
