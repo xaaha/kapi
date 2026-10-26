@@ -1711,9 +1711,11 @@
     }
     const left = Math.min(Math.max(8, a.left + a.width / 2 - 28), areaRight - width - 8);
     const below = a.bottom + 10 + height < innerHeight - 8 || a.top - 10 - height < 8;
+    const wantedTop = below ? a.bottom + 10 : a.top - 10 - height;
+    const top = Math.min(Math.max(8, wantedTop), Math.max(8, innerHeight - height - 8));
     pop.box.toggleAttribute("data-above", !below);
     pop.box.style.left = `${Math.max(8, left)}px`;
-    pop.box.style.top = `${below ? a.bottom + 10 : a.top - 10 - height}px`;
+    pop.box.style.top = `${top}px`;
     pop.box.style.setProperty("--kapi-arrow", `${Math.min(Math.max(14, a.left + a.width / 2 - left - 6), width - 26)}px`);
   }
 
