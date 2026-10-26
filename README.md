@@ -16,6 +16,20 @@ HTML file, you edit, archive, reorder or ask about any block in the browser,
 and every change reaches the agent as one line from `kapi wait`. It works with
 any agent that can run a command, and nothing is lost if either side restarts.
 
+## How it works
+
+<img src="docs/architecture.svg" alt="kapi runtime architecture: an agent writes an HTML page and talks to the Go daemon over a Unix socket; the daemon serves the page and embedded JavaScript to the browser over HTTP and SSE, and stores durable state as plain files under ~/.kapi" width="100%">
+
+Homebrew installs one Go binary. That binary contains the CLI, daemon, renderer,
+agent skill, and the JavaScript, CSS, fonts and icons used by the browser. There
+is no Node runtime and no separate JavaScript process: the Go daemon serves the
+embedded assets on localhost, then the browser runs `kapi.js` and talks back to
+Go with HTTP POSTs and server-sent events.
+
+The page file remains in your project. Events, revisions and reader positions
+are ordinary files under `$KAPI_HOME` (default `~/.kapi`); kapi does not use
+SQLite or a database server.
+
 ## Install
 
 kapi ships via [xaaha/tap](https://github.com/xaaha/homebrew-tap). Homebrew 6.0+ requires explicit trust for third-party taps; without it, `brew upgrade` silently skips kapi. One-time step per machine:
@@ -23,7 +37,11 @@ kapi ships via [xaaha/tap](https://github.com/xaaha/homebrew-tap). Homebrew 6.0+
 ```sh
 brew trust xaaha/tap
 brew install --cask xaaha/tap/kapi
+kapi setup
 ```
+
+`kapi setup` asks which installed agents to connect, then installs or repairs
+kapi's embedded skill and startup hooks. It does not use Node or `npx`.
 
 Other install options:
 
@@ -46,10 +64,6 @@ eval "$(kapi completion bash)"
 ```
 
 ## Usage
-
-Status: phase 0. A daemon keeps a durable event log per page; `kapi watch`
-streams it to the agent and survives restarts without losing or replaying
-events. The browser editor comes next.
 
 ```sh
 kapi send --on cutover plan.html "is this still true?"   # as the human
@@ -85,29 +99,24 @@ the chat with a "Session started again" line.
 
 ## Agent harnesses
 
-Run `kapi` with no arguments to see every page and what is waiting on it.
-To show that to every new agent session automatically:
+Run `kapi setup` after installation. Detected agents are preselected; press
+Enter to accept them or enter a comma-separated list:
 
 ```sh
-kapi setup hooks          # Claude Code, Codex, OpenCode and GitHub Copilot CLI
-kapi setup hooks --remove # take it out again
+kapi setup                              # ask, then install/repair
+kapi setup --agents claude,codex,pi    # non-interactive selection
+kapi setup --project --agents claude,pi # project-local skills
+kapi setup --remove                     # remove only kapi-managed files/hooks
 ```
 
-This adds a SessionStart hook that runs `kapi` (Copilot CLI uses
-`kapi hook-context`, which prints the same view as JSON). In Claude Code it
-also adds UserPromptSubmit, PostToolUse and Stop hooks: a busy agent sees a
-new message on its next tool call, and it cannot stop while a message on a
-page under its directory is unseen. Re-running repairs them. Restart your
-agent sessions afterwards.
+Global skills are written to the standard harness paths, including
+`~/.claude/skills/kapi/SKILL.md`, `~/.agents/skills/kapi/SKILL.md` for Codex
+and Pi, `~/.config/opencode/skills/kapi/SKILL.md`, and
+`~/.copilot/skills/kapi/SKILL.md`. Re-running repairs them.
 
-## Skill
-
-Install the kapi skill in the [Agent Skills](https://agentskills.io) format:
-
-```sh
-npx skills add xaaha/kapi --skill kapi
-```
-
-It is a short stub that sends the agent to `kapi` and `kapi --help`, so an
-installed copy cannot go stale against a newer CLI.
+The skill contains stable rules and sends agents to `kapi`, `kapi --help` and
+`kapi preset` for current commands and page structure, so an installed copy
+does not become a stale CLI manual. Startup hooks provide ambient page and
+unread-message discovery where a harness supports them. Restart agent sessions
+after setup.
 

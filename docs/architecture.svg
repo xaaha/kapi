@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 515" role="img" aria-labelledby="title desc">
+  <title id="title">kapi runtime architecture</title>
+  <desc id="desc">The coding agent reads the kapi skill and CLI help, writes a durable HTML page, and communicates with the Go daemon over a Unix socket. The daemon renders and serves the page and embedded JavaScript to the browser, exchanges browser operations over HTTP and server-sent events, and persists events, revisions, and reader cursors as plain files under ~/.kapi.</desc>
+  <style>
+    :root { color-scheme: light dark; }
+    .bg { fill: #f5f5f7; stroke: #d2d2d7; }
+    .agent { fill: #f5f3ff; stroke: #d9cffc; }
+    .go { fill: #eef7fd; stroke: #b6defa; }
+    .js { fill: #fff5ec; stroke: #fdd0a8; }
+    .disk { fill: #ecfbf3; stroke: #a6ebc9; }
+    rect { stroke-width: 1.5; }
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1d1d1f; }
+    .title { font-size: 16px; font-weight: 700; }
+    .small { font-size: 12px; fill: #515154; }
+    .edge { fill: none; stroke: #66666b; stroke-width: 1.7; }
+    .blue { stroke: #0368a0; stroke-width: 2; }
+    .purple { stroke: #6d28d9; stroke-width: 2; }
+    .label { fill: #f5f5f7; stroke: none; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1c1c1e; stroke: #45454a; }
+      .agent { fill: #251f3a; stroke: #4c3d80; }
+      .go { fill: #162a37; stroke: #255a77; }
+      .js { fill: #36261c; stroke: #7a4523; }
+      .disk { fill: #15302a; stroke: #23634f; }
+      text { fill: #f2f2f4; }
+      .small { fill: #aeaeb4; }
+      .edge { stroke: #98989f; }
+      .blue { stroke: #7cc8f5; }
+      .purple { stroke: #c4b5fd; }
+      .label { fill: #1c1c1e; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker>
+    <marker id="both" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0L0 5L10 10Z" fill="context-stroke"/></marker>
+  </defs>
+
+  <rect id="agent" class="agent" x="45" y="68" width="220" height="128" rx="16"><title>Coding agent</title></rect>
+  <text x="70" y="101" class="title">Coding agent</text>
+  <text x="70" y="128" class="small">1. skill says: ask the CLI</text>
+  <text x="70" y="149" class="small">2. kapi --help / preset</text>
+  <text x="70" y="170" class="small">3. writes page source</text>
+
+  <rect id="page" class="disk" x="390" y="42" width="220" height="112" rx="16"><title>Durable HTML page source</title></rect>
+  <text x="415" y="76" class="title">plan.html</text>
+  <text x="415" y="103" class="small">plain HTML + kapi presets</text>
+  <text x="415" y="124" class="small">durable source of truth</text>
+
+  <rect id="daemon" class="go" x="390" y="235" width="220" height="164" rx="16"><title>Go daemon</title></rect>
+  <text x="415" y="269" class="title">Go daemon</text>
+  <text x="415" y="296" class="small">owns all state</text>
+  <text x="415" y="317" class="small">renders + sanitizes HTML</text>
+  <text x="415" y="338" class="small">applies browser operations</text>
+  <text x="415" y="359" class="small">serves HTTP + SSE</text>
+  <text x="415" y="380" class="small">listens on Unix socket for CLI</text>
+
+  <rect id="files" class="disk" x="390" y="430" width="220" height="74" rx="16"><title>File-based durable storage, no database</title></rect>
+  <text x="500" y="454" text-anchor="middle" class="title">~/.kapi · plain files</text>
+  <text x="500" y="475" text-anchor="middle" class="small">events · revisions · reader cursors</text>
+  <text x="500" y="493" text-anchor="middle" class="small">no SQLite · no database server</text>
+
+  <rect id="browser" class="js" x="735" y="68" width="220" height="128" rx="16"><title>Browser and embedded JavaScript client</title></rect>
+  <text x="760" y="101" class="title">Browser + kapi.js</text>
+  <text x="760" y="128" class="small">shows rendered page</text>
+  <text x="760" y="149" class="small">captures edits + notes</text>
+  <text x="760" y="170" class="small">updates live from events</text>
+
+  <path class="edge purple" d="M265 104H390" marker-end="url(#arrow)"><title>Agent writes the HTML page</title></path>
+  <rect class="label" x="294" y="78" width="68" height="20" rx="5"/><text x="328" y="92" text-anchor="middle" class="small">writes file</text>
+  <path class="edge purple" d="M265 162C320 162 326 318 390 318" marker-start="url(#both)" marker-end="url(#arrow)"><title>Agent CLI and daemon communicate over a Unix socket</title></path>
+  <text x="292" y="253" class="small">CLI socket</text>
+  <path class="edge blue" d="M500 154V235" marker-start="url(#both)" marker-end="url(#arrow)"><title>Daemon notices agent edits and writes browser operations back to the page</title></path>
+  <rect class="label" x="512" y="180" width="120" height="37" rx="5"/><text x="572" y="194" text-anchor="middle" class="small">polls agent edits</text><text x="572" y="210" text-anchor="middle" class="small">applies browser ops</text>
+  <path class="edge blue" d="M610 286C666 286 681 111 735 111" marker-end="url(#arrow)"><title>Go serves rendered HTML and embedded browser assets</title></path>
+  <text x="650" y="184" class="small">HTML + CSS + JS</text>
+  <path class="edge" d="M735 166C676 166 674 349 610 349" marker-end="url(#arrow)"><title>Browser JavaScript sends operations and messages with HTTP POST</title></path>
+  <text x="657" y="270" class="small">HTTP POST</text>
+  <path class="edge blue" d="M610 379C698 425 700 196 790 196" marker-end="url(#arrow)"><title>Go streams live events to browser JavaScript with server-sent events</title></path>
+  <text x="697" y="404" class="small">SSE events</text>
+  <path class="edge blue" d="M500 399V430" marker-start="url(#both)" marker-end="url(#arrow)"><title>Daemon persists events, revisions, and reader positions</title></path>
+</svg>

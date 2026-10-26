@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -60,12 +62,22 @@ func home() string {
 var pageArg = cli.ArgDef{Name: "page", Required: true, Desc: "HTML page the events belong to", Kind: cli.KindFile}
 
 func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli.Command {
+	rootFlags := flag.NewFlagSet("kapi", flag.ContinueOnError)
+	var printVersion bool
+	rootFlags.BoolVar(&printVersion, "v", false, "Print the kapi version")
+	rootFlags.BoolVar(&printVersion, "version", false, "Print the kapi version")
 	root := &cli.Command{
 		Name:   "kapi",
 		Long:   "kapi: shared HTML pages for you and your agent.",
-		Flags:  flag.NewFlagSet("kapi", flag.ContinueOnError),
+		Flags:  rootFlags,
 		Config: &cli.Config{Out: out},
-		Run:    func([]string) error { return homeView(c, out) },
+		Run: func([]string) error {
+			if printVersion {
+				_, err := fmt.Fprintln(out, resolveVersion(version, debug.ReadBuildInfo))
+				return err
+			}
+			return homeView(c, out)
+		},
 		SubCommands: []*cli.Command{
 			waitCmd(c, out, sleep),
 			watchCmd(c, out, sleep),
@@ -82,7 +94,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			newOpenCmd(c, out),
 		},
 	}
-	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(out), hookContextCmd(c, out), hookMessagesCmd(c, in, out))
+	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(in, out), hookContextCmd(c, out), hookMessagesCmd(c, in, out))
 	return root
 }
 
@@ -695,55 +707,166 @@ func homeView(c api, out io.Writer) error {
 	return err
 }
 
-func setupCmd(out io.Writer) *cli.Command {
-	fs := flag.NewFlagSet("hooks", flag.ContinueOnError)
-	remove := fs.Bool("remove", false, "Remove kapi's hooks instead of installing them")
-	return &cli.Command{
+func setupCmd(in io.Reader, out io.Writer) *cli.Command {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	remove := fs.Bool("remove", false, "Remove kapi's hooks and skill instead of installing them")
+	project := fs.Bool("project", false, "Install the skill in the current project instead of globally")
+	agents := fs.String("agents", "", "Comma-separated agents: claude,codex,pi,opencode,copilot (default: ask, with detected agents preselected)")
+
+	hooksFS := flag.NewFlagSet("hooks", flag.ContinueOnError)
+	removeHooks := hooksFS.Bool("remove", false, "Remove kapi's hooks instead of installing them")
+	root := &cli.Command{
 		Name:  "setup",
-		Short: "Connect kapi to your agent harnesses",
-		SubCommands: []*cli.Command{{
-			Name:  "hooks",
-			Short: "Install or repair kapi's hooks in Claude Code, Codex, OpenCode and Copilot CLI",
-			Long: "Install or repair a SessionStart hook that runs `kapi` so every new agent session sees your pages\n" +
-				"and their unread messages. Covers Claude Code, Codex, OpenCode and GitHub Copilot CLI. In Claude Code\n" +
-				"it also adds UserPromptSubmit, PostToolUse and Stop hooks that hand the agent unseen messages on pages\n" +
-				"under its directory and keep it from stopping with any. Re-running repairs the hooks; --remove takes\n" +
-				"them out again. Restart your agent sessions afterwards.",
-			Flags: fs,
-			Run: func([]string) error {
-				home, err := os.UserHomeDir()
+		Short: "Install or repair kapi discovery for your agent harnesses",
+		Long: "Install kapi's embedded Agent Skill and startup hooks without Node or npx. Re-running repairs kapi's files;\n" +
+			"--remove deletes only files and hook entries managed by kapi. Use --project to write portable project skills.",
+		Flags: fs,
+		Run: func([]string) error {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			selected, err := chooseHarnesses(in, out, *agents, home)
+			if err != nil {
+				return err
+			}
+			var projectRoot string
+			if *project {
+				projectRoot, err = os.Getwd()
 				if err != nil {
 					return err
 				}
-				o := setup.Options{Home: home, CopilotHome: os.Getenv("COPILOT_HOME")}
-				var results []setup.Result
+			}
+			var results []setup.Result
+			skillOptions := setup.SkillOptions{Home: home, CopilotHome: os.Getenv("COPILOT_HOME"), Project: projectRoot, Harnesses: selected}
+			if *remove {
+				results = append(results, setup.RemoveSkills(skillOptions)...)
+			} else {
+				results = append(results, setup.InstallSkills(skillOptions)...)
+			}
+			if !*project {
+				hookOptions := setup.Options{Home: home, CopilotHome: os.Getenv("COPILOT_HOME"), Harnesses: setup.Select(selected)}
 				if *remove {
-					results = setup.Remove(o)
-				} else {
-					if o.Command, err = hookCommand(); err != nil {
+					results = append(results, setup.Remove(hookOptions)...)
+				} else if needsHooks(selected) {
+					hookOptions.Command, err = hookCommand()
+					if err != nil {
 						return err
 					}
-					results = setup.Install(o)
+					results = append(results, setup.Install(hookOptions)...)
 				}
-				failed := 0
-				for _, r := range results {
-					if r.Err != nil {
-						failed++
-						fmt.Fprintf(out, "  %-15s error: %v\n", r.Harness, r.Err)
-						continue
-					}
-					fmt.Fprintf(out, "  %-15s %-9s %s\n", r.Harness, r.Status, r.Path)
-				}
-				if !*remove {
-					fmt.Fprintln(out, "Restart your agent sessions so the hook takes effect.")
-				}
-				if failed > 0 {
-					return fmt.Errorf("%d harness(es) failed; see the errors above", failed)
-				}
-				return nil
-			},
-		}},
+			}
+			return printSetupResults(out, results, !*remove)
+		},
 	}
+	root.SubCommands = []*cli.Command{{
+		Name:  "hooks",
+		Short: "Install or repair the legacy startup hooks in every supported harness",
+		Flags: hooksFS,
+		Run: func([]string) error {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			o := setup.Options{Home: home, CopilotHome: os.Getenv("COPILOT_HOME")}
+			var results []setup.Result
+			if *removeHooks {
+				results = setup.Remove(o)
+			} else {
+				if o.Command, err = hookCommand(); err != nil {
+					return err
+				}
+				results = setup.Install(o)
+			}
+			return printSetupResults(out, results, !*removeHooks)
+		},
+	}}
+	return root
+}
+
+func chooseHarnesses(in io.Reader, out io.Writer, raw, home string) ([]string, error) {
+	parse := func(s string) ([]string, error) {
+		var selected []string
+		for _, name := range strings.Split(s, ",") {
+			name = strings.ToLower(strings.TrimSpace(name))
+			if name == "" {
+				continue
+			}
+			if !slices.Contains(setup.Harnesses, name) {
+				return nil, fmt.Errorf("unknown agent %q; choose from %s", name, strings.Join(setup.Harnesses, ","))
+			}
+			if !slices.Contains(selected, name) {
+				selected = append(selected, name)
+			}
+		}
+		if len(selected) == 0 {
+			return nil, errors.New("choose at least one agent")
+		}
+		return selected, nil
+	}
+	if strings.TrimSpace(raw) != "" {
+		return parse(raw)
+	}
+	detected := detectedHarnesses(home)
+	fallback := detected
+	if len(fallback) == 0 {
+		fallback = []string{setup.Claude, setup.Codex, setup.Pi}
+	}
+	fmt.Fprintf(out, "Agents to configure [%s]: ", strings.Join(fallback, ","))
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if strings.TrimSpace(line) == "" {
+		return fallback, nil
+	}
+	return parse(line)
+}
+
+func detectedHarnesses(home string) []string {
+	checks := []struct {
+		name string
+		cmd  string
+		dir  string
+	}{
+		{setup.Claude, "claude", filepath.Join(home, ".claude")},
+		{setup.Codex, "codex", filepath.Join(home, ".codex")},
+		{setup.Pi, "pi", filepath.Join(home, ".pi")},
+		{setup.OpenCode, "opencode", filepath.Join(home, ".config", "opencode")},
+		{setup.Copilot, "copilot", filepath.Join(home, ".copilot")},
+	}
+	var found []string
+	for _, c := range checks {
+		_, cmdErr := exec.LookPath(c.cmd)
+		_, dirErr := os.Stat(c.dir)
+		if cmdErr == nil || dirErr == nil {
+			found = append(found, c.name)
+		}
+	}
+	return found
+}
+
+func needsHooks(selected []string) bool {
+	return slices.ContainsFunc(selected, func(name string) bool { return name != setup.Pi })
+}
+
+func printSetupResults(out io.Writer, results []setup.Result, restart bool) error {
+	failed := 0
+	for _, r := range results {
+		if r.Err != nil {
+			failed++
+			fmt.Fprintf(out, "  %-18s error: %v\n", r.Harness, r.Err)
+			continue
+		}
+		fmt.Fprintf(out, "  %-18s %-9s %s\n", r.Harness, r.Status, r.Path)
+	}
+	if restart {
+		fmt.Fprintln(out, "Restart your agent sessions so kapi is discovered.")
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d harness setup item(s) failed; see the errors above", failed)
+	}
+	return nil
 }
 
 func hookContextCmd(c api, out io.Writer) *cli.Command {

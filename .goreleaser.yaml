@@ -62,6 +62,9 @@ homebrew_casks:
       zsh: completions/kapi.zsh
     caveats: |
       The binary is not signed or notarized. macOS quarantine has been automatically removed.
+
+      Connect kapi to your coding agents:
+        kapi setup
 changelog:
   # GitHub generates the release body from .github/release.yml after this
   # workflow runs (see the "Refresh release notes" step in release.yml).

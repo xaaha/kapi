@@ -25,6 +25,7 @@ type Options struct {
 	CopilotHome string
 	Command     string
 	Timeout     int
+	Harnesses   Selection
 }
 
 // Result reports what happened to one harness's settings.
@@ -54,12 +55,17 @@ func (o Options) timeout() int {
 	return 10
 }
 
+func (o Options) selected(harness string) bool {
+	return o.Harnesses.has(harness)
+}
+
 // Install adds or repairs kapi's SessionStart hook in every supported harness.
 // One harness failing never stops the others.
 func Install(o Options) []Result {
 	claude, codexHooks, codexConfig, openCode, copilot := o.paths()
-	return []Result{
-		rewriteFile("Claude Code", claude, func(b []byte) ([]byte, bool, error) {
+	var results []Result
+	if o.selected(Claude) {
+		results = append(results, rewriteFile("Claude Code", claude, func(b []byte) ([]byte, bool, error) {
 			out, changed, err := eventUpdate(b, "SessionStart", o.Command, o.timeout())
 			for _, event := range messageEvents {
 				if err != nil {
@@ -70,35 +76,52 @@ func Install(o Options) []Result {
 				changed = changed || c
 			}
 			return out, changed, err
-		}),
-		rewriteFile("Codex", codexHooks, func(b []byte) ([]byte, bool, error) {
-			return eventUpdate(b, "SessionStart", o.Command, o.timeout())
-		}),
-		rewriteFile("Codex features", codexConfig, func(b []byte) ([]byte, bool, error) {
-			s, changed, err := codexConfigUpdate(string(b))
-			return []byte(s), changed, err
-		}),
-		rewriteFile("OpenCode", openCode, func(b []byte) ([]byte, bool, error) {
+		}))
+	}
+	if o.selected(Codex) {
+		results = append(results,
+			rewriteFile("Codex", codexHooks, func(b []byte) ([]byte, bool, error) {
+				return eventUpdate(b, "SessionStart", o.Command, o.timeout())
+			}),
+			rewriteFile("Codex features", codexConfig, func(b []byte) ([]byte, bool, error) {
+				s, changed, err := codexConfigUpdate(string(b))
+				return []byte(s), changed, err
+			}),
+		)
+	}
+	if o.selected(OpenCode) {
+		results = append(results, rewriteFile("OpenCode", openCode, func(b []byte) ([]byte, bool, error) {
 			if len(b) > 0 && !bytes.Contains(b, []byte(openCodeManagedPrefix)) {
 				return nil, false, errUnmanagedOpenCode
 			}
 			next := []byte(openCodePlugin(o.Command, o.timeout()))
 			return next, !bytes.Equal(b, next), nil
-		}),
-		rewriteFile("Copilot CLI", copilot, func(b []byte) ([]byte, bool, error) {
-			return copilotUpdate(b, o.Command+" hook-context", o.timeout())
-		}),
+		}))
 	}
+	if o.selected(Copilot) {
+		results = append(results, rewriteFile("Copilot CLI", copilot, func(b []byte) ([]byte, bool, error) {
+			return copilotUpdate(b, o.Command+" hook-context", o.timeout())
+		}))
+	}
+	return results
 }
 
 // Remove deletes only kapi-managed hook entries and files. The Codex
 // [features].hooks flag is shared with other tools and is left alone.
 func Remove(o Options) []Result {
 	claude, codexHooks, _, openCode, copilot := o.paths()
-	results := []Result{
-		removeFromFile("Claude Code", claude, hooksRemoval),
-		removeFromFile("Codex", codexHooks, hooksRemoval),
-		removeFromFile("Copilot CLI", copilot, copilotRemoval),
+	var results []Result
+	if o.selected(Claude) {
+		results = append(results, removeFromFile("Claude Code", claude, hooksRemoval))
+	}
+	if o.selected(Codex) {
+		results = append(results, removeFromFile("Codex", codexHooks, hooksRemoval))
+	}
+	if o.selected(Copilot) {
+		results = append(results, removeFromFile("Copilot CLI", copilot, copilotRemoval))
+	}
+	if !o.selected(OpenCode) {
+		return results
 	}
 	r := Result{Harness: "OpenCode", Path: openCode}
 	b, err := os.ReadFile(openCode)

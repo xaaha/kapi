@@ -5,16 +5,18 @@ import (
 	"testing"
 )
 
-func TestVersionCommandPrintsTheVersion(t *testing.T) {
+func TestVersionCommandAndRootFlagsPrintTheVersion(t *testing.T) {
 	old := version
 	version = "1.2.3"
 	t.Cleanup(func() { version = old })
-	out, err := run(t, &fakeAPI{}, "version")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "1.2.3\n" {
-		t.Errorf("output = %q, want %q", out, "1.2.3\n")
+	for _, args := range [][]string{{"version"}, {"-v"}, {"--version"}} {
+		out, err := run(t, &fakeAPI{}, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != "1.2.3\n" {
+			t.Errorf("%v output = %q, want %q", args, out, "1.2.3\n")
+		}
 	}
 }
 

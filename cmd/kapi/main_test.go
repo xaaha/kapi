@@ -302,6 +302,32 @@ func TestHookContextWrapsTheHomeViewAsJSON(t *testing.T) {
 	}
 }
 
+func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	out, err := run(t, &fakeAPI{}, "setup", "--agents", "pi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".agents", "skills", "kapi", "SKILL.md")
+	if !strings.Contains(out, path) || !strings.Contains(out, "updated") {
+		t.Errorf("setup output:\n%s", out)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	out, err = run(t, &fakeAPI{}, "setup", "--agents", "pi", "--remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "removed") {
+		t.Errorf("remove output:\n%s", out)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("skill still exists: %v", err)
+	}
+}
+
 func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

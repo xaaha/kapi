@@ -8,8 +8,8 @@ github.com/dlclark/regexp2/v2 v2.2.1 h1:mf4KkFUj0gJuarK8P+LgiS+Lit7m9N1yAwEfPbee
 github.com/dlclark/regexp2/v2 v2.2.1/go.mod h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
-github.com/xaaha/cli v0.2.0 h1:SjrsMSH4nW5eHDRxn5QLcLmC9f5xNFDbsari7Uw26qM=
-github.com/xaaha/cli v0.2.0/go.mod h1:OusB+u/em6/v8JcV38bwa+KKdzrdpQstNgTtTY4Q1NY=
+github.com/xaaha/cli v0.3.0 h1:uulGA69QQvOpyh4f+6oMqr0leuAJ2ooIRwDVnOhiFUg=
+github.com/xaaha/cli v0.3.0/go.mod h1:OusB+u/em6/v8JcV38bwa+KKdzrdpQstNgTtTY4Q1NY=
 golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
 golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
 golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
