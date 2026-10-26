@@ -3,32 +3,18 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
     <img src="docs/logo-light.svg" width="64" height="64" alt="" align="absmiddle">
   </picture>
-  kapi
+  kapi <sub>कापी</sub>
 </h1>
 
-Shared HTML pages that you and your coding agent both write to.
+One shared HTML page that you and your coding agent both write to.
 
-*Kapi* (कापी) is Nepali for notebook.
-
-A long session with an agent buries decisions in chat. kapi gives the two of
-you one page instead: the agent writes findings, plans, code and diagrams to an
-HTML file, you edit, archive, reorder or ask about any block in the browser,
-and every change reaches the agent as one line from `kapi wait`. It works with
-any agent that can run a command, and nothing is lost if either side restarts.
+<img src="docs/kapi-demo.gif" alt="A kapi page where the user asks about a block, the agent replies and updates the plan live, and the page menu opens" width="960">
 
 ## How it works
 
 <img src="docs/architecture.svg" alt="kapi runtime architecture: an agent writes an HTML page and talks to the Go daemon over a Unix socket; the daemon serves the page and embedded JavaScript to the browser over HTTP and SSE, and stores durable state as plain files under ~/.kapi" width="100%">
 
-Homebrew installs one Go binary. That binary contains the CLI, daemon, renderer,
-agent skill, and the JavaScript, CSS, fonts and icons used by the browser. There
-is no Node runtime and no separate JavaScript process: the Go daemon serves the
-embedded assets on localhost, then the browser runs `kapi.js` and talks back to
-Go with HTTP POSTs and server-sent events.
-
-The page file remains in your project. Events, revisions and reader positions
-are ordinary files under `$KAPI_HOME` (default `~/.kapi`); kapi does not use
-SQLite or a database server.
+One Go binary serves the browser UI and keeps page history as local files—no Node or database.
 
 ## Install
 
@@ -78,24 +64,11 @@ kapi version
 kapi --help
 ```
 
-In Claude Code, run `kapi wait <page>` as a background command and start it
-again each time it exits; its exit wakes the agent within seconds. The page
-shows a message as Queued once kapi has handed it over, and 👀 only once the
-agent names it with `--seen` or `kapi seen`, runs `kapi pending`, or a kapi
-hook puts it in the agent's context. `kapi watch <page>`
-still streams one line per event for harnesses that deliver every line.
+Use `kapi wait <page>` for one event at a time, or `kapi watch <page>` to stream.
 
-The three-dot menu at the top of the chat panel has Export, Copy path and End
-session. Export opens a submenu that saves the page as one HTML
-file with its images inside, as Markdown (a zip with an images folder when the
-page has images), or as a PDF through the browser's print dialog. Copy path copies the page's
-path.
-
-When you are done with a page, End session in that menu tells the agent to
-stop: `kapi watch` exits, `kapi wait` wakes with the end, the Stop hook no
-longer holds the agent, and `kapi` lists the page as `(ended)`. The page and
-its history stay, and your next message starts the session again, marked in
-the chat with a "Session started again" line.
+The page menu exports HTML, Markdown or PDF, copies the path, and ends the
+session. Ending stops watchers but keeps the page and history; the next message
+resumes it.
 
 ## Agent harnesses
 
