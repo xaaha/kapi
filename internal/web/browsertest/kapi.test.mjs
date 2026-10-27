@@ -2026,6 +2026,7 @@ test("archiving a folded heading archives its section and unarchiving restores i
     { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">One.</p>' },
     { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Detail</h3>' },
     { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">More.</p>' },
+    { id: "oldarchiv", html: '<p data-kapi-id="oldarchiv" data-kapi-state="archived">Already archived.</p>' },
     { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">2. Second</h2>' },
     { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Two.</p>' },
   ]);
@@ -2038,6 +2039,7 @@ test("archiving a folded heading archives its section and unarchiving restores i
   for (const id of ["h2aaaaaa", "p2p2p2p2", "h3cccccc", "p3p3p3p3"]) {
     assert.equal(await page.eval(`document.querySelector('[data-kapi-id="${id}"]').dataset.kapiState`), "archived", id);
   }
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="oldarchiv"]').dataset.kapiState`), "archived");
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2bbbbbb"]').hasAttribute("data-kapi-state")`), false);
 
   await click('[data-kapi-id="h2aaaaaa"]');
@@ -2047,6 +2049,7 @@ test("archiving a folded heading archives its section and unarchiving restores i
   for (const id of ["h2aaaaaa", "p2p2p2p2", "h3cccccc", "p3p3p3p3"]) {
     assert.equal(await page.eval(`document.querySelector('[data-kapi-id="${id}"]').hasAttribute("data-kapi-state")`), false, id);
   }
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="oldarchiv"]').dataset.kapiState`), "archived");
 });
 
 const FOLD_ALL_PAGE = [

@@ -592,6 +592,17 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	if op.Kind == "text" {
 		return textUnchanged(then, s.src, op)
 	}
+	sectionOp := op.Section
+	if !sectionOp && op.Kind == "unarchive" {
+		if current, findErr := find(parse(s.src), op.ID); findErr == nil {
+			_, sectionOp = current.attr(sectionArchiveAttr)
+		}
+	}
+	if sectionOp && (op.Kind == "archive" || op.Kind == "unarchive") {
+		was, wasErr := sectionSource(then, op.ID)
+		is, isErr := sectionSource(s.src, op.ID)
+		return wasErr == nil && isErr == nil && bytes.Equal(was, is)
+	}
 	was, err := Outer(then, op.ID)
 	if err != nil {
 		return false
@@ -1166,6 +1177,23 @@ func sectionIDs(els []element, heading *element) ([]string, error) {
 	return ids, nil
 }
 
+func sectionSource(src []byte, headingID string) ([]byte, error) {
+	els := parse(src)
+	heading, err := find(els, headingID)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := sectionIDs(els, heading)
+	if err != nil {
+		return nil, err
+	}
+	last, err := find(els, ids[len(ids)-1])
+	if err != nil {
+		return nil, err
+	}
+	return src[heading.start:last.end], nil
+}
+
 func archiveSection(src []byte, heading *element) ([]byte, Summary, error) {
 	ids, err := sectionIDs(parse(src), heading)
 	if err != nil {
@@ -1196,9 +1224,13 @@ func archiveSection(src []byte, heading *element) ([]byte, Summary, error) {
 }
 
 func unarchiveSection(src []byte, heading *element) ([]byte, Summary, error) {
-	ids, err := sectionIDs(parse(src), heading)
-	if err != nil {
-		return nil, Summary{}, err
+	ids := []string{heading.id}
+	els := parse(src)
+	for i := range els {
+		e := &els[i]
+		if owner, marked := e.attr(archivedWithAttr); marked && owner == heading.id && e.id != "" {
+			ids = append(ids, e.id)
+		}
 	}
 	changed := make([]string, 0, len(ids))
 	for i, id := range ids {
@@ -1206,12 +1238,6 @@ func unarchiveSection(src []byte, heading *element) ([]byte, Summary, error) {
 		e, findErr := find(els, id)
 		if findErr != nil {
 			return nil, Summary{}, findErr
-		}
-		if i > 0 {
-			owner, marked := e.attr(archivedWithAttr)
-			if !marked || owner != heading.id {
-				continue
-			}
 		}
 		src = removeAttr(src, e, stateAttr)
 		els = parse(src)
@@ -1273,12 +1299,21 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		if op.Section {
 			return archiveSection(src, e)
 		}
-		return setAttr(src, e, stateAttr, "archived"), Summary{Text: about("archived"), IDs: one}, nil
+		text := about("archived")
+		out := removeAttr(src, e, archivedWithAttr)
+		els = parse(out)
+		e, _ = find(els, op.ID)
+		return setAttr(out, e, stateAttr, "archived"), Summary{Text: text, IDs: one}, nil
 	case "unarchive":
-		if op.Section {
+		_, sectioned := e.attr(sectionArchiveAttr)
+		if op.Section || sectioned {
 			return unarchiveSection(src, e)
 		}
-		return removeAttr(src, e, stateAttr), Summary{Text: about("unarchived"), IDs: one}, nil
+		text := about("unarchived")
+		out := removeAttr(src, e, stateAttr)
+		els = parse(out)
+		e, _ = find(els, op.ID)
+		return removeAttr(out, e, archivedWithAttr), Summary{Text: text, IDs: one}, nil
 	case "check":
 		if e.name != "kapi-task" {
 			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)

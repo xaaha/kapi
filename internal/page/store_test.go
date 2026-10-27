@@ -451,6 +451,56 @@ func TestArchiveAndUnarchiveSectionChangesEveryBlockUnderTheHeading(t *testing.T
 	}
 }
 
+func TestSectionArchiveAtAnOldRevisionChecksTheWholeSection(t *testing.T) {
+	home, path := newPage(t, `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+<h2 data-kapi-id="cccccccc">Second</h2>
+`)
+	s := open(t, home, path)
+	inner := "changed"
+	mustApply(t, s, &Op{Kind: "edit", ID: "bbbbbbbb", Inner: &inner})
+	if _, _, err := s.Apply(1, &Op{Kind: "archive", ID: "aaaaaaaa", Section: true}); !errors.Is(err, ErrStale) {
+		t.Fatalf("section archive after a child changed: %v, want ErrStale", err)
+	}
+}
+
+func TestAChildRearchivedSeparatelyStaysArchivedWithItsSectionRestored(t *testing.T) {
+	home, path := newPage(t, `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+<h2 data-kapi-id="cccccccc">Second</h2>
+`)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa", Section: true})
+	mustApply(t, s, &Op{Kind: "unarchive", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "unarchive", ID: "aaaaaaaa", Section: true})
+	want := `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<p data-kapi-state="archived" data-kapi-id="bbbbbbbb">one</p>
+<h2 data-kapi-id="cccccccc">Second</h2>
+`
+	if got := onDisk(t, path); got != want {
+		t.Fatalf("restored section:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestSectionUnarchiveRestoresAnOwnedBlockMovedOutsideTheSection(t *testing.T) {
+	home, path := newPage(t, `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+<h2 data-kapi-id="cccccccc">Second</h2>
+`)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa", Section: true})
+	mustApply(t, s, &Op{Kind: "move", ID: "bbbbbbbb"})
+	mustApply(t, s, &Op{Kind: "unarchive", ID: "aaaaaaaa", Section: true})
+	want := `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<h2 data-kapi-id="cccccccc">Second</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+`
+	if got := onDisk(t, path); got != want {
+		t.Fatalf("restored moved child:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestSectionArchiveNeedsAHeading(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">not a heading</p>`)
 	s := open(t, home, path)

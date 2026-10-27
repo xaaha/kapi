@@ -198,19 +198,25 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     }
     else if (op.kind === "delete") state.blocks.splice(i, 1);
     else if (op.kind === "archive" || op.kind === "unarchive") {
-      const changed = [op.id];
       let end = i + 1;
       if (op.section) {
         const level = Number(/^<h([1-6])\b/i.exec(state.blocks[i].html)?.[1] || 0);
         while (end < state.blocks.length) {
           const next = Number(/^<h([1-6])\b/i.exec(state.blocks[end].html)?.[1] || 0);
           if (next && next <= level) break;
-          changed.push(state.blocks[end].id);
           end++;
         }
       }
-      for (let j = i; j < end; j++) {
-        let html = state.blocks[j].html
+      const changed = [];
+      const indexes = op.section && op.kind === "unarchive"
+        ? state.blocks.map((_, j) => j).filter((j) => j === i || state.blocks[j].html.includes(` data-kapi-archived-with="${op.id}"`))
+        : Array.from({ length: end - i }, (_, j) => i + j);
+      for (const j of indexes) {
+        const before = state.blocks[j].html;
+        const archived = / data-kapi-state="archived"/.test(before);
+        const owned = before.includes(` data-kapi-archived-with="${op.id}"`);
+        if (op.section && j > i && ((op.kind === "archive" && archived) || (op.kind === "unarchive" && !owned))) continue;
+        let html = before
           .replace(/ data-kapi-state="[^"]*"/, "")
           .replace(/ data-kapi-archive-section="[^"]*"/, "")
           .replace(/ data-kapi-archived-with="[^"]*"/, "");
@@ -219,6 +225,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
           html = html.replace(/^<([\w-]+)/, `$& data-kapi-state="archived"${op.section ? marker : ""}`);
         }
         state.blocks[j].html = html;
+        changed.push(state.blocks[j].id);
       }
       changedIDs = changed;
     } else if (op.kind === "move") {

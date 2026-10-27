@@ -138,6 +138,7 @@ type Op struct {
     Before string // move: id to insert before, "" means end
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
+    Section bool // archive/unarchive: include the heading's section
 }
 type Summary struct{ Text string; IDs []string; Seq uint64 } // `deleted callout "Freeze writes."` etc.; Seq is the revision event the store logged
 var ErrStale, ErrNotFound, ErrInboundLinks error
@@ -156,9 +157,16 @@ An op whose result is byte for byte the current source changes nothing: it
 returns 200 with the current `rev`, writes no `revs/` file, adds no undo step
 and logs no event (`Apply` returns an empty `Summary`).
 `archive` sets `data-kapi-state="archived"` on the element and `unarchive`
-removes `data-kapi-state`. An archived block renders dimmed and collapsed to
-one line: a small "archived" label and a text excerpt. Its toolbar offers
-Unarchive in place of Edit and Archive.
+removes `data-kapi-state`. When the browser archives a folded heading it sends
+`section:true`: the heading and every top-level block through the next heading
+of the same or higher level are archived in one revision and undo step.
+Unarchiving that heading restores only the blocks archived with it; a child
+that was already archived, or was later unarchived and archived separately,
+stays archived. The source carries temporary `data-kapi-archive-section` and
+`data-kapi-archived-with` ownership marks until the section is restored. An
+archived block renders dimmed and collapsed to one line: a small "archived"
+label and a text excerpt. Its toolbar offers Unarchive in place of Edit and
+Archive.
 `check`, sent as `{"kind":"check","id":"<task id>","done":true}`, adds or
 removes the `done` attribute on a `<kapi-task>` and is refused with 422 for
 any other element; its summary is `checked` or `unchecked`. `orient`, sent as
@@ -173,9 +181,11 @@ An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
 its current outer source, so edits to other blocks never refuse a save.
 This applies to `edit`, `text`, `archive`, `unarchive`, `delete`, `check` and
-`orient` only. `move` and `undo` depend on the whole page, so they need the exact current `rev`. `ErrStale`
-(409) means the target element itself changed, or a `move` or `undo` came at
-an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
+`orient` only. A section archive or unarchive compares the entire section,
+including its boundary, so a changed, inserted or moved child makes an old op
+stale. `move` and `undo` depend on the whole page, so they need the exact
+current `rev`. `ErrStale` (409) means the target element or requested section
+changed, or a `move` or `undo` came at an old `rev`. Every op except `undo` needs a non-empty `id`; an empty one is
 422.
 
 `undo` reverts only the browser's own ops. When the file changed outside the
