@@ -518,8 +518,11 @@ func (m *mdWriter) preset(n *html.Node) []string {
 	switch n.Data {
 	case "kapi-callout":
 		kind := attrVal(n, "kind")
-		if kind == "" {
+		switch kind {
+		case "":
 			kind = "note"
+		case "alert":
+			kind = "danger"
 		}
 		if alert := alertKinds[kind]; alert != "" {
 			return []string{prefixLines("[!"+alert+"]\n"+joinBlocks(m.blocks(n)), "> ", "> ")}

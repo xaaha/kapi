@@ -125,12 +125,15 @@ var calloutKinds = map[string]calloutKind{
 
 func renderCallout(b *bytes.Buffer, n *html.Node) error {
 	kind := attrVal(n, "kind")
-	if kind == "" {
+	switch kind {
+	case "":
 		kind = "note"
+	case "alert":
+		kind = "danger"
 	}
 	k, ok := calloutKinds[kind]
 	if !ok {
-		return fmt.Errorf("kind must be note, warning, key, danger or success, not %q", kind)
+		return fmt.Errorf("kind must be note, warning, key, danger (or alert) or success, not %q", kind)
 	}
 	writeStart(b, "aside", outerAttrs(n, "kapi-callout kapi-callout-"+kind+" kapi-tone-"+k.tone, "role", "note"))
 	b.WriteString(`<div class="kapi-callout-label">` + k.label + `</div>`)
