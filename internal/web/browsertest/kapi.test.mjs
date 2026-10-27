@@ -1990,9 +1990,12 @@ test("a heading folds everything under it until the next heading of the same or 
     await mouseClickAt(x, y);
   };
   assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+  server.push({ author: "human", kind: "note", target: "p2p2p2p2", quote: "A note.", rev: 1, text: "belongs to Callouts" });
+  await page.waitFor(`!!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
 
   await toggle("h2aaaaaa");
   assert.equal(await shown("p2p2p2p2"), false);
+  await page.waitFor(`!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
   assert.equal(await shown("h2bbbbbb"), true);
   assert.equal(await shown("p3p3p3p3"), true);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
@@ -2013,6 +2016,7 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(await shown("p2p2p2p2"), false);
   await toggle("h2aaaaaa");
   assert.equal(await shown("p2p2p2p2"), true);
+  await page.waitFor(`!!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
   assert.equal(requests("POST", "/ops").length, 0);
 });
 

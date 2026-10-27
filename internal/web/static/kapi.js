@@ -1527,7 +1527,7 @@
     const blocks = targetsOf(n).map(find);
     const first = blocks.find(Boolean) ?? null;
     if (!first) return { blocks, first, range: null, gone: true };
-    const visible = !first.hasAttribute("data-kapi-hidden") && first.getAttribute("data-kapi-state") !== "archived";
+    const visible = !first.closest("[data-kapi-hidden]") && !first.closest('[data-kapi-state="archived"]');
     const range = visible ? findQuote(textMap(blocks.filter(Boolean)), n) : null;
     return { blocks, first, range, gone: false, visible };
   }
@@ -1570,7 +1570,11 @@
     }
     renderNotesList();
     paintRail();
-    if (pop) fillPop(noteBySeq.get(pop.seq));
+    if (pop) {
+      const n = noteBySeq.get(pop.seq);
+      if (!n?.where?.visible) hidePop(true);
+      else fillPop(n);
+    }
   }
 
   function anchorRect(n) {
@@ -2225,6 +2229,7 @@
       localStorage.setItem(FOLD_KEY, JSON.stringify([...folds]));
     } catch {}
     applyFolds();
+    schedulePaint();
   }
 
   main.addEventListener("click", (e) => {
