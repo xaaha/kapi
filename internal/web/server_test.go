@@ -381,7 +381,7 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan.html</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -1260,6 +1260,13 @@ func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.
 	}
 }
 
+func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
+	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
+	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {
+		t.Errorf("page title includes the extension or is not escaped:\n%s", got)
+	}
+}
+
 func TestExportHTMLDownloadsTheRenderedPageWithItsImagesInside(t *testing.T) {
 	name := "0123456789abcdef0123456789abcdef.png"
 	s := newSite(t, `<h1 data-kapi-id="aaaaaaaa">Plan &amp; notes</h1><figure data-kapi-id="bbbbbbbb"><img src="./plan.files/`+name+`" alt=""></figure>`)
@@ -1273,7 +1280,7 @@ func TestExportHTMLDownloadsTheRenderedPageWithItsImagesInside(t *testing.T) {
 	if got.code != http.StatusOK || got.header.Get("Content-Type") != "text/html; charset=utf-8" || got.header.Get("Content-Disposition") != "attachment; filename=plan.html" || got.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("export: %d %v", got.code, got.header)
 	}
-	for _, want := range []string{"<title>plan.html</title>", "Plan &amp; notes", `src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(onePixel) + `"`} {
+	for _, want := range []string{"<title>plan</title>", "Plan &amp; notes", `src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(onePixel) + `"`} {
 		if !strings.Contains(got.body, want) {
 			t.Errorf("the export is missing %q:\n%s", want, got.body)
 		}

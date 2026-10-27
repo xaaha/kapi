@@ -222,6 +222,17 @@ func (s *Server) Poll(ctx context.Context, every time.Duration) {
 	}
 }
 
+func pageTitle(path string) string {
+	name := filepath.Base(path)
+	ext := filepath.Ext(name)
+	if strings.EqualFold(ext, ".html") || strings.EqualFold(ext, ".htm") {
+		if title := strings.TrimSuffix(name, ext); title != "" {
+			return title
+		}
+	}
+	return name
+}
+
 func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, rev := st.Source()
 	body, err := render.Render(src)
@@ -232,7 +243,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
-	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(filepath.Base(st.Path())))
+	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(pageTitle(st.Path())))
 	b.WriteString("<link rel=\"icon\" type=\"image/svg+xml\" href=\"../../static/favicon.svg\">\n")
 	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
@@ -284,7 +295,7 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 func (s *Server) handleExportHTML(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, _ := st.Source()
 	name := filepath.Base(st.Path())
-	doc, err := publish.Export(name, src, page.FilesDir(st.Path()))
+	doc, err := publish.Export(pageTitle(name), src, page.FilesDir(st.Path()))
 	if errors.Is(err, publish.ErrMissingImages) {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
