@@ -2020,6 +2020,35 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
+test("archiving a folded heading archives its section and unarchiving restores it", async () => {
+  await reopenWith([
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">1. First</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">One.</p>' },
+    { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Detail</h3>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">More.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">2. Second</h2>' },
+    { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Two.</p>' },
+  ]);
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await click('[data-kapi-id="h2aaaaaa"]');
+  await click('.kapi-bar [data-action="archive"]');
+  await page.waitFor(`document.querySelector('[data-kapi-id="p3p3p3p3"]')?.dataset.kapiState === "archived"`);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "archive", id: "h2aaaaaa", section: true });
+  for (const id of ["h2aaaaaa", "p2p2p2p2", "h3cccccc", "p3p3p3p3"]) {
+    assert.equal(await page.eval(`document.querySelector('[data-kapi-id="${id}"]').dataset.kapiState`), "archived", id);
+  }
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2bbbbbb"]').hasAttribute("data-kapi-state")`), false);
+
+  await click('[data-kapi-id="h2aaaaaa"]');
+  await click('.kapi-bar [data-action="unarchive"]');
+  await page.waitFor(`!document.querySelector('[data-kapi-id="p3p3p3p3"]').hasAttribute("data-kapi-state")`);
+  assert.deepEqual(requests("POST", "/ops")[1].body.op, { kind: "unarchive", id: "h2aaaaaa", section: true });
+  for (const id of ["h2aaaaaa", "p2p2p2p2", "h3cccccc", "p3p3p3p3"]) {
+    assert.equal(await page.eval(`document.querySelector('[data-kapi-id="${id}"]').hasAttribute("data-kapi-state")`), false, id);
+  }
+});
+
 const FOLD_ALL_PAGE = [
   { id: "h1h1h1h1", html: '<h1 data-kapi-id="h1h1h1h1">Gallery</h1>' },
   { id: "p1p1p1p1", html: '<p data-kapi-id="p1p1p1p1">Intro.</p>' },

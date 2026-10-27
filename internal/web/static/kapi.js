@@ -794,7 +794,11 @@
     if (!selected) return;
     const id = idOf(selected);
     if (name === "edit") return startEdit();
-    if (name === "archive" || name === "unarchive") return (await op(name, { id }))?.ok && refresh([id]);
+    if (name === "archive" || name === "unarchive") {
+      const section = name === "archive" ? selected.hasAttribute("data-kapi-folded") : selected.hasAttribute("data-kapi-archive-section");
+      const res = await op(name, { id, ...(section ? { section: true } : {}) });
+      return res?.ok && refresh(res.data.ids || [id]);
+    }
     if (name === "download") {
       const img = selected.querySelector(":scope > img[src]");
       if (!img) return;
