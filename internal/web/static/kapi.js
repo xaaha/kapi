@@ -1572,7 +1572,7 @@
     paintRail();
     if (pop) {
       const n = noteBySeq.get(pop.seq);
-      if (!n?.where?.visible) hidePop(true);
+      if (n?.where?.visible === false) hidePop(true);
       else fillPop(n);
     }
   }
