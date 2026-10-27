@@ -1527,7 +1527,7 @@
     const blocks = targetsOf(n).map(find);
     const first = blocks.find(Boolean) ?? null;
     if (!first) return { blocks, first, range: null, gone: true };
-    const visible = !first.hasAttribute("data-kapi-hidden") && first.getAttribute("data-kapi-state") !== "archived";
+    const visible = !first.closest("[data-kapi-hidden]") && !first.closest('[data-kapi-state="archived"]');
     const range = visible ? findQuote(textMap(blocks.filter(Boolean)), n) : null;
     return { blocks, first, range, gone: false, visible };
   }
@@ -1570,7 +1570,11 @@
     }
     renderNotesList();
     paintRail();
-    if (pop) fillPop(noteBySeq.get(pop.seq));
+    if (pop) {
+      const n = noteBySeq.get(pop.seq);
+      if (n?.where?.visible === false) hidePop(true);
+      else fillPop(n);
+    }
   }
 
   function anchorRect(n) {
@@ -1711,9 +1715,11 @@
     }
     const left = Math.min(Math.max(8, a.left + a.width / 2 - 28), areaRight - width - 8);
     const below = a.bottom + 10 + height < innerHeight - 8 || a.top - 10 - height < 8;
+    const wantedTop = below ? a.bottom + 10 : a.top - 10 - height;
+    const top = Math.min(Math.max(8, wantedTop), Math.max(8, innerHeight - height - 8));
     pop.box.toggleAttribute("data-above", !below);
     pop.box.style.left = `${Math.max(8, left)}px`;
-    pop.box.style.top = `${below ? a.bottom + 10 : a.top - 10 - height}px`;
+    pop.box.style.top = `${top}px`;
     pop.box.style.setProperty("--kapi-arrow", `${Math.min(Math.max(14, a.left + a.width / 2 - left - 6), width - 26)}px`);
   }
 
@@ -2223,6 +2229,7 @@
       localStorage.setItem(FOLD_KEY, JSON.stringify([...folds]));
     } catch {}
     applyFolds();
+    schedulePaint();
   }
 
   main.addEventListener("click", (e) => {

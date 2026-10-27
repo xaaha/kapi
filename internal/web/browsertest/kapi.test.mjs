@@ -1990,9 +1990,12 @@ test("a heading folds everything under it until the next heading of the same or 
     await mouseClickAt(x, y);
   };
   assert.equal(await page.eval(`getComputedStyle(document.querySelector('[data-kapi-id="h2aaaaaa"]'), "::before").opacity`), "0");
+  server.push({ author: "human", kind: "note", target: "p2p2p2p2", quote: "A note.", rev: 1, text: "belongs to Callouts" });
+  await page.waitFor(`!!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
 
   await toggle("h2aaaaaa");
   assert.equal(await shown("p2p2p2p2"), false);
+  await page.waitFor(`!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
   assert.equal(await shown("h2bbbbbb"), true);
   assert.equal(await shown("p3p3p3p3"), true);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded`), "1 block");
@@ -2013,6 +2016,7 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(await shown("p2p2p2p2"), false);
   await toggle("h2aaaaaa");
   assert.equal(await shown("p2p2p2p2"), true);
+  await page.waitFor(`!!document.querySelector('.kapi-pins .kapi-pin[data-note="1"]')`);
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
@@ -2664,6 +2668,30 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   assert.deepEqual(await highlighted("kapi-note-answered"), ["session store"]);
   server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", re: [1], text: "and later?" });
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
+});
+
+test("#39 a tall note popover stays inside a short page and scrolls to Reply and Resolve", async () => {
+  await reopenWith([{ id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Short session store.</p>' }]);
+  server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", prefix: "Short ", suffix: ".", rev: 1, text: "explain this" });
+  for (let i = 0; i < 8; i++) {
+    server.push({ author: "agent", kind: "message", re: [1], text: `Reply ${i + 1}: ${"A detailed explanation that makes the thread taller. ".repeat(4)}` });
+  }
+  await until(async () => (await pinStates()) === "1:answered");
+  await hoverPin(1);
+  const bounds = await page.eval(`(() => {
+    const p = document.querySelector(".kapi-note-pop");
+    const r = p.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, viewport: innerHeight, client: p.clientHeight, scroll: p.scrollHeight };
+  })()`);
+  assert.ok(bounds.top >= 8, `popover top ${bounds.top} must stay in the viewport`);
+  assert.ok(bounds.bottom <= bounds.viewport - 8, `popover bottom ${bounds.bottom} must stay in the viewport`);
+  assert.ok(bounds.scroll > bounds.client, "the long thread scrolls inside the popover");
+  await page.eval(`document.querySelector(".kapi-note-pop").scrollTop = document.querySelector(".kapi-note-pop").scrollHeight`);
+  assert.equal(await page.eval(`(() => {
+    const pop = document.querySelector(".kapi-note-pop").getBoundingClientRect();
+    const resolve = [...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Resolve").getBoundingClientRect();
+    return resolve.top >= pop.top && resolve.bottom <= pop.bottom;
+  })()`), true, "Resolve is reachable at the bottom of the internal scroll");
 });
 
 test("#39 an agent edit marks its note changed with Before and Now, and Resolve clears the marks", async () => {
