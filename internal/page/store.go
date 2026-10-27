@@ -39,15 +39,16 @@ var (
 )
 
 type Op struct {
-	Kind   string  `json:"kind"`
-	ID     string  `json:"id"`
-	HTML   string  `json:"html,omitempty"`
-	Inner  *string `json:"inner,omitempty"`
-	Parts  []Part  `json:"parts,omitempty"`
-	Before string  `json:"before,omitempty"`
-	Done   bool    `json:"done,omitempty"`
-	Dir    string  `json:"dir,omitempty"`
-	Src    string  `json:"src,omitempty"`
+	Kind    string  `json:"kind"`
+	ID      string  `json:"id"`
+	HTML    string  `json:"html,omitempty"`
+	Inner   *string `json:"inner,omitempty"`
+	Parts   []Part  `json:"parts,omitempty"`
+	Before  string  `json:"before,omitempty"`
+	Done    bool    `json:"done,omitempty"`
+	Dir     string  `json:"dir,omitempty"`
+	Section bool    `json:"section,omitempty"`
+	Src     string  `json:"src,omitempty"`
 }
 
 type Summary struct {
@@ -591,6 +592,17 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	if op.Kind == "text" {
 		return textUnchanged(then, s.src, op)
 	}
+	sectionOp := op.Section
+	if !sectionOp && op.Kind == "unarchive" {
+		if current, findErr := find(parse(s.src), op.ID); findErr == nil {
+			_, sectionOp = current.attr(sectionArchiveAttr)
+		}
+	}
+	if sectionOp && (op.Kind == "archive" || op.Kind == "unarchive") {
+		was, wasErr := sectionSource(then, op.ID)
+		is, isErr := sectionSource(s.src, op.ID)
+		return wasErr == nil && isErr == nil && bytes.Equal(was, is)
+	}
 	was, err := Outer(then, op.ID)
 	if err != nil {
 		return false
@@ -1132,6 +1144,114 @@ func insertImage(src []byte, els []element, op *Op) ([]byte, Summary, error) {
 	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), sum, nil
 }
 
+const (
+	sectionArchiveAttr = "data-kapi-archive-section"
+	archivedWithAttr   = "data-kapi-archived-with"
+)
+
+func headingLevel(name string) int {
+	if len(name) == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6' {
+		return int(name[1] - '0')
+	}
+	return 0
+}
+
+func sectionIDs(els []element, heading *element) ([]string, error) {
+	level := headingLevel(heading.name)
+	if level == 0 {
+		return nil, fmt.Errorf("section archive needs a heading, and #%s is a <%s>", heading.id, heading.name)
+	}
+	ids := []string{heading.id}
+	for i := range els {
+		e := &els[i]
+		if e.start <= heading.start || e.parent != heading.parent {
+			continue
+		}
+		if next := headingLevel(e.name); next > 0 && next <= level {
+			break
+		}
+		if e.id != "" {
+			ids = append(ids, e.id)
+		}
+	}
+	return ids, nil
+}
+
+func sectionSource(src []byte, headingID string) ([]byte, error) {
+	els := parse(src)
+	heading, err := find(els, headingID)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := sectionIDs(els, heading)
+	if err != nil {
+		return nil, err
+	}
+	last, err := find(els, ids[len(ids)-1])
+	if err != nil {
+		return nil, err
+	}
+	return src[heading.start:last.end], nil
+}
+
+func archiveSection(src []byte, heading *element) ([]byte, Summary, error) {
+	ids, err := sectionIDs(parse(src), heading)
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	changed := make([]string, 0, len(ids))
+	for i, id := range ids {
+		els := parse(src)
+		e, findErr := find(els, id)
+		if findErr != nil {
+			return nil, Summary{}, findErr
+		}
+		state, _ := e.attr(stateAttr)
+		if state == "archived" && i > 0 {
+			continue
+		}
+		if i == 0 {
+			src = setAttr(src, e, sectionArchiveAttr, "")
+		} else {
+			src = setAttr(src, e, archivedWithAttr, heading.id)
+		}
+		els = parse(src)
+		e, _ = find(els, id)
+		src = setAttr(src, e, stateAttr, "archived")
+		changed = append(changed, id)
+	}
+	return src, Summary{Text: "archived section " + describeID(src, heading.id), IDs: changed}, nil
+}
+
+func unarchiveSection(src []byte, heading *element) ([]byte, Summary, error) {
+	ids := []string{heading.id}
+	els := parse(src)
+	for i := range els {
+		e := &els[i]
+		if owner, marked := e.attr(archivedWithAttr); marked && owner == heading.id && e.id != "" {
+			ids = append(ids, e.id)
+		}
+	}
+	changed := make([]string, 0, len(ids))
+	for i, id := range ids {
+		els := parse(src)
+		e, findErr := find(els, id)
+		if findErr != nil {
+			return nil, Summary{}, findErr
+		}
+		src = removeAttr(src, e, stateAttr)
+		els = parse(src)
+		e, _ = find(els, id)
+		if i == 0 {
+			src = removeAttr(src, e, sectionArchiveAttr)
+		} else {
+			src = removeAttr(src, e, archivedWithAttr)
+		}
+		changed = append(changed, id)
+	}
+	return src, Summary{Text: "unarchived section " + describeID(src, heading.id), IDs: changed}, nil
+}
+
 func apply(src []byte, op *Op) ([]byte, Summary, error) {
 	els := parse(src)
 	if op.Kind == "image" {
@@ -1176,9 +1296,24 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		}
 		return cut(src, e), Summary{Text: about("deleted"), IDs: one}, nil
 	case "archive":
-		return setAttr(src, e, stateAttr, "archived"), Summary{Text: about("archived"), IDs: one}, nil
+		if op.Section {
+			return archiveSection(src, e)
+		}
+		text := about("archived")
+		out := removeAttr(src, e, archivedWithAttr)
+		els = parse(out)
+		e, _ = find(els, op.ID)
+		return setAttr(out, e, stateAttr, "archived"), Summary{Text: text, IDs: one}, nil
 	case "unarchive":
-		return removeAttr(src, e, stateAttr), Summary{Text: about("unarchived"), IDs: one}, nil
+		_, sectioned := e.attr(sectionArchiveAttr)
+		if op.Section || sectioned {
+			return unarchiveSection(src, e)
+		}
+		text := about("unarchived")
+		out := removeAttr(src, e, stateAttr)
+		els = parse(out)
+		e, _ = find(els, op.ID)
+		return removeAttr(out, e, archivedWithAttr), Summary{Text: text, IDs: one}, nil
 	case "check":
 		if e.name != "kapi-task" {
 			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)
