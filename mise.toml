@@ -1,3 +1,7 @@
+[tasks.tests]
+description = "Run Go tests"
+run = "go test ./... -race -timeout 120s"
+
 [tasks.release]
 description = "Tag and push a release (e.g. mise run release v0.1.1)"
 run = '''
