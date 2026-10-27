@@ -34,7 +34,7 @@ load and writes the file back. Ids never change after that.
 
 | Element | Attributes | Body |
 |---|---|---|
-| `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` (red), `success` (green) | prose |
+| `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` or its alias `alert` (red), `success` (green) | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |

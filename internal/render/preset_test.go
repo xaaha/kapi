@@ -6,14 +6,17 @@ import (
 )
 
 func TestCalloutKindsMapToTones(t *testing.T) {
-	for kind, want := range map[string]string{"": "blue", "note": "blue", "warning": "yellow", "key": "purple", "danger": "red", "success": "green"} {
+	for kind, want := range map[string]string{"": "blue", "note": "blue", "warning": "yellow", "key": "purple", "danger": "red", "alert": "red", "success": "green"} {
 		out := render(t, `<kapi-callout kind="`+kind+`">x</kapi-callout>`)
 		if !strings.Contains(out, " kapi-tone-"+want+`"`) || strings.Contains(out, "kapi-error") {
 			t.Errorf("kind %q: want tone %s:\n%s", kind, want, out)
 		}
 	}
+	if out := render(t, `<kapi-callout kind="alert">x</kapi-callout>`); !strings.Contains(out, `kapi-callout-danger`) || !strings.Contains(out, `>Danger</div>`) {
+		t.Errorf("alert should render exactly like danger:\n%s", out)
+	}
 	out := render(t, `<kapi-callout kind="alarm">x</kapi-callout>`)
-	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "note, warning, key, danger or success") {
+	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "note, warning, key, danger (or alert) or success") {
 		t.Errorf("unknown kind should name every kind in an error box:\n%s", out)
 	}
 }

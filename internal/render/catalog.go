@@ -8,7 +8,7 @@ var catalog = []Preset{
 	{
 		Name:    "kapi-callout",
 		Summary: "Boxed aside for a note, a warning, the key point, a danger or a success",
-		Example: `<!-- kind: note (default, blue), warning (yellow), key (purple), danger (red) or success (green). Body: prose. -->
+		Example: `<!-- kind: note (default, blue), warning (yellow), key (purple), danger or its alias alert (red), or success (green). Body: prose. -->
 <kapi-callout kind="warning">
   <p>The cutover drops writes for about <strong>30 seconds</strong>. Schedule it outside business hours.</p>
 </kapi-callout>`,
