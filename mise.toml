@@ -1,0 +1,22 @@
+[tasks.tests]
+description = "Run Go tests"
+run = "go test ./... -race -timeout 120s"
+
+[tasks.release]
+description = "Tag and push a release (e.g. mise run release v0.1.1)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+VERSION="${1:?usage: mise run release <version>}"
+if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "invalid version format: $VERSION (expected vX.Y.Z)" >&2
+  exit 1
+fi
+if git rev-parse "$VERSION" >/dev/null 2>&1; then
+  echo "tag $VERSION already exists" >&2
+  exit 1
+fi
+git tag "$VERSION"
+git push origin "$VERSION"
+echo "tagged and pushed $VERSION — release workflow will run on GitHub"
+'''
