@@ -389,6 +389,7 @@ func TestRepliesAndResolvesNameTheirNotes(t *testing.T) {
 		{eventlog.Event{Seq: 17, Author: "human", Kind: "note", Target: "a", Re: []uint64{12, 14}, Text: "both?"}, `#17 human reply to note #12, #14 on #a: both? (answer with kapi say --reply 12,14)`},
 		{eventlog.Event{Seq: 15, Author: "codex", Kind: "message", Re: []uint64{12, 14}, Text: "fixed"}, `#15 codex reply to note #12, #14: fixed`},
 		{eventlog.Event{Seq: 16, Author: "human", Kind: "resolve", Re: []uint64{12}}, `#16 human resolved note #12`},
+		{eventlog.Event{Seq: 18, Author: "human", Kind: eventlog.KindDeleteNotes, Re: []uint64{12, 14}}, `#18 human deleted note #12, #14`},
 	} {
 		if got := eventLine(&c.e); got != c.want {
 			t.Errorf("eventLine = %q, want %q", got, c.want)

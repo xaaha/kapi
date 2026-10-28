@@ -32,12 +32,13 @@ type Event struct {
 }
 
 const (
-	KindNote    = "note"
-	KindResolve = "resolve"
-	KindEnd     = "end"
+	KindNote        = "note"
+	KindResolve     = "resolve"
+	KindDeleteNotes = "delete-notes"
+	KindEnd         = "end"
 )
 
-func (e *Event) Quiet() bool { return e.Kind == KindResolve }
+func (e *Event) Quiet() bool { return e.Kind == KindResolve || e.Kind == KindDeleteNotes }
 
 func (e *Event) restarts() bool {
 	return e.Author == "human" && (e.Kind == "message" || e.Kind == KindNote || e.Kind == "answer")

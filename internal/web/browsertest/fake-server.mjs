@@ -400,6 +400,11 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       const ev = push({ author: "human", kind: "resolve", re: [parsed.note] });
       return json(res, 200, { seq: ev.seq });
     }
+    if (req.method === "POST" && rest === "delete-notes") {
+      if (!parsed.notes?.length || parsed.notes.some((note) => state.events[note - 1]?.kind !== "note")) return json(res, 422, { error: "every deleted item must be a note on this page" });
+      const ev = push({ author: "human", kind: "delete-notes", re: [...new Set(parsed.notes)].sort((a, b) => a - b) });
+      return json(res, 200, { seq: ev.seq });
+    }
     if (req.method === "POST" && rest === "end") {
       const ev = push({ author: "human", kind: "end" });
       return json(res, 200, { seq: ev.seq });

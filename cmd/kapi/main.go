@@ -1067,6 +1067,9 @@ func eventLine(e *eventlog.Event) string {
 	if e.Kind == eventlog.KindResolve {
 		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
 	}
+	if e.Kind == eventlog.KindDeleteNotes {
+		return eventlog.Printable(fmt.Sprintf("#%d %s deleted note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
+	}
 	kind := e.Kind
 	if len(e.Re) > 0 {
 		kind = "reply to note " + seqList(e.Re, "#", ", ")
