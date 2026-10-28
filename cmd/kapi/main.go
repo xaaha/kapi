@@ -929,7 +929,10 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		}
 	}
 	text, handed := hookText(resp.Pages, hook.Event == "UserPromptSubmit")
-	if text == "" || (hook.Event == "Stop" && (len(handed) == 0 || !wakes(resp.Pages))) {
+	if hook.Event == "Stop" && (len(handed) == 0 || !wakes(resp.Pages)) {
+		return armKapiWait(c, hook.Cwd, out)
+	}
+	if text == "" {
 		return nil
 	}
 	var reply any = map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": hook.Event, "additionalContext": text}}
@@ -947,6 +950,33 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func armKapiWait(c api, cwd string, out io.Writer) error {
+	resp, err := c.Do(&daemon.Request{Op: "unwatched", Page: cwd, Reader: "agent"})
+	if err != nil {
+		return err
+	}
+	var commands []string
+	for i := range resp.Pages {
+		p := &resp.Pages[i]
+		if p.Error != "" {
+			fmt.Fprintf(os.Stderr, "kapi hook-messages: %s: %s\n", p.Path, p.Error)
+			continue
+		}
+		commands = append(commands, "`kapi wait --reader agent "+shellArg(p.Path)+"`")
+	}
+	if len(commands) == 0 {
+		return nil
+	}
+	reason := "kapi: keep the shared page connected before stopping. Start each command as a background task; do not wait for it in the foreground. Then finish your turn.\n- " + strings.Join(commands, "\n- ")
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(map[string]string{"decision": "block", "reason": reason})
+}
+
+func shellArg(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
 func wakes(pages []daemon.PageStatus) bool {

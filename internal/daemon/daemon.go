@@ -461,16 +461,22 @@ func (s *Server) handle(conn net.Conn) {
 		s.open(enc, req.Page)
 		return
 	}
-	if req.Op == "inbox" {
+	if req.Op == "inbox" || req.Op == "unwatched" {
 		if !filepath.IsAbs(req.Page) {
-			reply(enc, &Response{Error: fmt.Sprintf("inbox directory must be absolute: %q", req.Page)})
+			reply(enc, &Response{Error: fmt.Sprintf("%s directory must be absolute: %q", req.Op, req.Page)})
 			return
 		}
 		if err := eventlog.CheckReader(req.Reader); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
 		}
-		pages, err := s.inbox(req.Page, req.Reader)
+		var pages []PageStatus
+		var err error
+		if req.Op == "inbox" {
+			pages, err = s.inbox(req.Page, req.Reader)
+		} else {
+			pages, err = s.unwatched(req.Page, req.Reader)
+		}
 		if err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -764,6 +770,41 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 		if events, queued, ended := unseenForAgent(l, reader); len(events) > 0 {
 			out = append(out, PageStatus{Path: d.path, Events: events, Queued: queued, Hooked: l.Hooked(reader), Cut: l.Cut(reader), Ended: ended > 0})
 		}
+	}
+	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
+	return out, nil
+}
+
+func (s *Server) unwatched(dir, reader string) ([]PageStatus, error) {
+	s.viewingMu.Lock()
+	ids := make([]string, 0, len(s.viewers))
+	for id, n := range s.viewers {
+		if n > 0 {
+			ids = append(ids, id)
+		}
+	}
+	s.viewingMu.Unlock()
+
+	dir = resolved(dir)
+	var out []PageStatus
+	for _, id := range ids {
+		path, err := s.PagePath(id)
+		if err != nil || !within(dir, path) {
+			continue
+		}
+		l, err := s.page(path)
+		if err != nil {
+			out = append(out, PageStatus{Path: path, Error: err.Error()})
+			continue
+		}
+		if l.Ended() > 0 {
+			continue
+		}
+		readers := s.status(path, l)
+		if slices.ContainsFunc(readers, func(r ReaderStatus) bool { return r.Reader == reader && r.Attached }) {
+			continue
+		}
+		out = append(out, PageStatus{Path: path})
 	}
 	slices.SortFunc(out, func(a, b PageStatus) int { return strings.Compare(a.Path, b.Path) })
 	return out, nil

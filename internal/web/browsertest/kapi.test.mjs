@@ -81,7 +81,7 @@ test("shows disconnected when the stream fails and recovers without duplicating 
 
 test("sets the status dot from presence events", async () => {
   server.push({ kind: "presence", text: "watching" });
-  await page.waitFor(`document.querySelector(".kapi-status").textContent === "Agent is watching"`);
+  await page.waitFor(`document.querySelector(".kapi-status").textContent === "Agent ready"`);
   server.push({ kind: "presence", text: "busy" });
   await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
 });
@@ -92,7 +92,7 @@ test("says Queued until the agent reads a message, then working until it replies
   server.push({ kind: "presence", text: "watching" });
   server.push({ author: "human", kind: "message", text: "please look" });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 1`);
-  assert.equal(await status(), "Agent is watching");
+  assert.equal(await status(), "Agent ready");
   assert.deepEqual(await marks(), [""]);
 
   server.queue("agent", 2);
@@ -109,7 +109,7 @@ test("says Queued until the agent reads a message, then working until it replies
   assert.deepEqual(await marks(), ["\u{1F440}"]);
 
   server.push({ author: "agent", kind: "message", text: "on it" });
-  await until(async () => (await status()) === "Agent is watching");
+  await until(async () => (await status()) === "Agent ready");
 });
 
 test("refetches only the changed block, or the whole page when the target is empty", async () => {
@@ -796,7 +796,7 @@ test("presence stays pinned above the message box while the list scrolls", async
     const p = document.querySelector(".kapi-presence");
     return [box(p), box(document.querySelector(".kapi-scroll")), box(document.querySelector(".kapi-composer")), p.textContent];
   })()`);
-  assert.equal(text, "Agent is watching");
+  assert.equal(text, "Agent ready");
   assert.ok(presence.top >= scroll.bottom - 1 && presence.bottom <= composer.top + 1, JSON.stringify({ presence, scroll, composer }));
   const before = await top();
   await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
@@ -3725,7 +3725,7 @@ test("#26 an ended session shows in the chat until the human sends a new message
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("one more thing");
   await page.key("Enter");
-  await until(async () => (await status()) === "No agent connected");
+  await until(async () => (await status()) === "Agent idle · messages are saved");
   assert.equal(await dot(), "none");
   assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", text: "one more thing" });
 });

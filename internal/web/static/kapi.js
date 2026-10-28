@@ -7,10 +7,10 @@
 
   const STATUS = {
     connecting: "Connecting to kapi\u2026",
-    watching: "Agent is watching",
+    watching: "Agent ready",
     queued: "Queued for the agent",
     busy: "Agent is working",
-    none: "No agent connected",
+    none: "Agent idle \u00b7 messages are saved",
     ended: "Session ended. Send a message to start again.",
     disconnected: "Disconnected. Reconnecting\u2026",
   };

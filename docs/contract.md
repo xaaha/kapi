@@ -549,6 +549,12 @@ show them. Events reach the agent three ways:
   context for a short preview; events that do not fit wait for the next
   hook. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.
+  When a `Stop` hook has no new event to hand over, it asks the daemon for
+  viewed, unended pages under the hook's `cwd` that have no attached `agent`
+  reader. For each one it blocks the stop with an instruction to start
+  `kapi wait --reader agent <page>` as a background task. Once the wait is
+  attached, the next Stop is allowed; the wait's exit wakes the harness when
+  the human sends an event, and the next Stop arms it again.
   `kapi hook-messages` never starts the daemon, gives each daemon call 1
   second, and always exits 0; with no daemon running or answering it prints
   nothing.

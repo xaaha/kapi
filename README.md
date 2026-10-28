@@ -90,6 +90,8 @@ and Pi, `~/.config/opencode/skills/kapi/SKILL.md`, and
 The skill contains stable rules and sends agents to `kapi`, `kapi --help` and
 `kapi preset` for current commands and page structure, so an installed copy
 does not become a stale CLI manual. Startup hooks provide ambient page and
-unread-message discovery where a harness supports them. Restart agent sessions
-after setup.
+unread-message discovery where a harness supports them. In Claude Code, the
+Stop hook also asks the agent to arm a background `kapi wait` for each open
+page before it goes idle, so a new browser message wakes the agent without the
+human asking it to listen. Restart agent sessions after setup.
 
