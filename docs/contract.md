@@ -533,7 +533,10 @@ show them. Events reach the agent three ways:
   starts from the seen position, so a restarted watch prints every queued but
   unseen event again.
 - `kapi setup hooks` adds Claude Code `UserPromptSubmit`, `PostToolUse` and
-  `Stop` hooks that run `kapi hook-messages`. It reads the hook's JSON on
+  `Stop` hooks that run `kapi hook-messages`. Codex receives the same Stop
+  behavior, and Pi receives an extension that runs `kapi hook-idle` at
+  `agent_before_settle` and requests one continuation when a listener needs
+  arming. It reads the Claude/Codex hook JSON on
   stdin and hands the unseen events of reader `agent` on the pages under the
   hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
@@ -552,9 +555,11 @@ show them. Events reach the agent three ways:
   When a `Stop` hook has no new event to hand over, it asks the daemon for
   viewed, unended pages under the hook's `cwd` that have no attached `agent`
   reader. For each one it blocks the stop with an instruction to start
-  `kapi wait --reader agent <page>` as a background task. Once the wait is
-  attached, the next Stop is allowed; the wait's exit wakes the harness when
-  the human sends an event, and the next Stop arms it again.
+  `kapi wait --reader agent <page>` as a background task. `kapi hook-idle`
+  exposes the same instruction as plain text for harness extensions. Once the
+  wait is attached, the next stop or settle is allowed; the wait's exit wakes
+  the harness when the human sends an event, and the next stop or settle arms
+  it again.
   `kapi hook-messages` never starts the daemon, gives each daemon call 1
   second, and always exits 0; with no daemon running or answering it prints
   nothing.

@@ -47,7 +47,7 @@ func statuses(results []Result) map[string]string {
 func TestInstallWritesEveryHarnessAndIsIdempotent(t *testing.T) {
 	o := opts(t)
 	got := statuses(Install(o))
-	for _, h := range []string{"Claude Code", "Codex", "Codex features", "OpenCode", "Copilot CLI"} {
+	for _, h := range []string{"Claude Code", "Codex", "Codex features", "Pi", "OpenCode", "Copilot CLI"} {
 		if got[h] != "updated" {
 			t.Errorf("%s: %s", h, got[h])
 		}
@@ -74,8 +74,14 @@ func TestInstallWritesEveryHarnessAndIsIdempotent(t *testing.T) {
 		group("PostToolUse", "kapi hook-messages"), group("Stop", "kapi hook-messages")); got != want {
 		t.Errorf("claude:\n%s\nwant:\n%s", got, want)
 	}
-	if got, want := read(t, codexHooks), settings(group("SessionStart", "kapi")); got != want {
+	if got, want := read(t, codexHooks), settings(group("SessionStart", "kapi"), group("Stop", "kapi hook-messages")); got != want {
 		t.Errorf("codex:\n%s\nwant:\n%s", got, want)
+	}
+	pi := read(t, o.piExtensionPath())
+	for _, want := range []string{piManagedPrefix, `const command = "kapi";`, `pi.on("agent_before_settle"`, `"hook-idle"`, `continue: true`} {
+		if !strings.Contains(pi, want) {
+			t.Errorf("pi extension missing %q", want)
+		}
 	}
 	if got := read(t, codexConfig); got != "[features]\nhooks = true\n" {
 		t.Errorf("codex config:\n%s", got)
@@ -175,7 +181,7 @@ func TestRemoveDeletesOnlyKapiEntries(t *testing.T) {
 	write(t, copilot, `{"version": 1, "hooks": {"sessionStart": [{"type": "command", "bash": "other-tool"}]}}`)
 	Install(o)
 	got := statuses(Remove(o))
-	for h, want := range map[string]string{"Claude Code": "removed", "Codex": "removed", "OpenCode": "removed", "Copilot CLI": "removed"} {
+	for h, want := range map[string]string{"Claude Code": "removed", "Codex": "removed", "Pi": "removed", "OpenCode": "removed", "Copilot CLI": "removed"} {
 		if got[h] != want {
 			t.Errorf("%s: %s, want %s", h, got[h], want)
 		}

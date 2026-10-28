@@ -94,7 +94,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			newOpenCmd(c, out),
 		},
 	}
-	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(in, out), hookContextCmd(c, out), hookMessagesCmd(c, in, out))
+	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(in, out), hookContextCmd(c, out), hookMessagesCmd(c, in, out), hookIdleCmd(c, out))
 	return root
 }
 
@@ -749,9 +749,12 @@ func setupCmd(in io.Reader, out io.Writer) *cli.Command {
 				if *remove {
 					results = append(results, setup.Remove(hookOptions)...)
 				} else if needsHooks(selected) {
-					hookOptions.Command, err = hookCommand()
-					if err != nil {
-						return err
+					hookOptions.Command = "kapi"
+					if slices.ContainsFunc(selected, func(name string) bool { return name != setup.Pi }) {
+						hookOptions.Command, err = hookCommand()
+						if err != nil {
+							return err
+						}
 					}
 					results = append(results, setup.Install(hookOptions)...)
 				}
@@ -847,7 +850,7 @@ func detectedHarnesses(home string) []string {
 }
 
 func needsHooks(selected []string) bool {
-	return slices.ContainsFunc(selected, func(name string) bool { return name != setup.Pi })
+	return len(selected) > 0
 }
 
 func printSetupResults(out io.Writer, results []setup.Result, restart bool) error {
@@ -953,9 +956,19 @@ func hookMessages(c api, in io.Reader, out io.Writer) error {
 }
 
 func armKapiWait(c api, cwd string, out io.Writer) error {
+	reason, err := kapiWaitReason(c, cwd)
+	if err != nil || reason == "" {
+		return err
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(map[string]string{"decision": "block", "reason": reason})
+}
+
+func kapiWaitReason(c api, cwd string) (string, error) {
 	resp, err := c.Do(&daemon.Request{Op: "unwatched", Page: cwd, Reader: "agent"})
 	if err != nil {
-		return err
+		return "", err
 	}
 	var commands []string
 	for i := range resp.Pages {
@@ -967,12 +980,39 @@ func armKapiWait(c api, cwd string, out io.Writer) error {
 		commands = append(commands, "`kapi wait --reader agent "+shellArg(p.Path)+"`")
 	}
 	if len(commands) == 0 {
-		return nil
+		return "", nil
 	}
-	reason := "kapi: keep the shared page connected before stopping. Start each command as a background task; do not wait for it in the foreground. Then finish your turn.\n- " + strings.Join(commands, "\n- ")
-	enc := json.NewEncoder(out)
-	enc.SetEscapeHTML(false)
-	return enc.Encode(map[string]string{"decision": "block", "reason": reason})
+	return "kapi: keep the shared page connected before going idle. Start each command as a background task; do not wait for it in the foreground. Then finish your turn.\n- " + strings.Join(commands, "\n- "), nil
+}
+
+func hookIdleCmd(c api, out io.Writer) *cli.Command {
+	return &cli.Command{
+		Name:   "hook-idle",
+		Short:  "Print an agent continuation when open kapi pages need listeners",
+		Hidden: true,
+		Args:   []cli.ArgDef{{Name: "directory", Required: true}},
+		Run: func(args []string) error {
+			if cc, ok := c.(client.Client); ok {
+				cc.NoStart = true
+				c = cc
+			}
+			dir, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+			reason, err := kapiWaitReason(c, dir)
+			if errors.Is(err, client.ErrNotRunning) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if reason != "" {
+				_, err = fmt.Fprintln(out, reason)
+			}
+			return err
+		},
+	}
 }
 
 func shellArg(s string) string {

@@ -325,6 +325,10 @@ func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
+	extension := filepath.Join(home, ".pi", "agent", "extensions", "kapi.ts")
+	if b, err := os.ReadFile(extension); err != nil || !strings.Contains(string(b), `pi.on("agent_before_settle"`) {
+		t.Fatalf("Pi extension: %v, %s", err, b)
+	}
 	out, err = run(t, &fakeAPI{}, "setup", "--agents", "pi", "--remove")
 	if err != nil {
 		t.Fatal(err)
@@ -334,6 +338,9 @@ func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("skill still exists: %v", err)
+	}
+	if _, err := os.Stat(extension); !os.IsNotExist(err) {
+		t.Errorf("extension still exists: %v", err)
 	}
 }
 
@@ -348,7 +355,7 @@ func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, h := range []string{"Claude Code", "Codex", "Copilot CLI", "OpenCode"} {
+	for _, h := range []string{"Claude Code", "Codex", "Pi", "Copilot CLI", "OpenCode"} {
 		if !strings.Contains(out, h) || !strings.Contains(out, "absent") {
 			t.Errorf("remove output missing %s absent:\n%s", h, out)
 		}
@@ -493,6 +500,18 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
 		}
+	}
+}
+
+func TestHookIdleGivesEveryHarnessTheSamePortableWaitInstruction(t *testing.T) {
+	f := &fakeAPI{responses: []daemon.Response{{Pages: []daemon.PageStatus{{Path: "/w/plan.html"}}}}}
+	out, err := run(t, f, "hook-idle", "/w")
+	if err != nil || !strings.Contains(out, "Start each command as a background task") || !strings.Contains(out, "kapi wait --reader agent '/w/plan.html'") {
+		t.Fatalf("hook-idle = %q, %v", out, err)
+	}
+	want := []daemon.Request{{Op: "unwatched", Page: "/w", Reader: "agent"}}
+	if !reflect.DeepEqual(f.requests, want) {
+		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
 }
 

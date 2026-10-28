@@ -16,7 +16,10 @@ const Marker = "kapi"
 
 const openCodeManagedPrefix = "kapi managed opencode plugin:"
 
-var errUnmanagedOpenCode = errors.New("refusing to change an OpenCode plugin kapi did not write")
+var (
+	errUnmanagedOpenCode = errors.New("refusing to change an OpenCode plugin kapi did not write")
+	errUnmanagedPi       = errors.New("refusing to change a Pi extension kapi did not write")
+)
 
 // Options says where the agent harnesses keep their settings and which
 // command the hooks run.
@@ -59,6 +62,10 @@ func (o Options) selected(harness string) bool {
 	return o.Harnesses.has(harness)
 }
 
+func (o Options) piExtensionPath() string {
+	return filepath.Join(o.Home, ".pi", "agent", "extensions", "kapi.ts")
+}
+
 // Install adds or repairs kapi's SessionStart hook in every supported harness.
 // One harness failing never stops the others.
 func Install(o Options) []Result {
@@ -81,13 +88,27 @@ func Install(o Options) []Result {
 	if o.selected(Codex) {
 		results = append(results,
 			rewriteFile("Codex", codexHooks, func(b []byte) ([]byte, bool, error) {
-				return eventUpdate(b, "SessionStart", o.Command, o.timeout())
+				out, changed, err := eventUpdate(b, "SessionStart", o.Command, o.timeout())
+				if err != nil {
+					return nil, false, err
+				}
+				next, stopChanged, err := eventUpdate(out, "Stop", o.Command+" hook-messages", o.timeout())
+				return next, changed || stopChanged, err
 			}),
 			rewriteFile("Codex features", codexConfig, func(b []byte) ([]byte, bool, error) {
 				s, changed, err := codexConfigUpdate(string(b))
 				return []byte(s), changed, err
 			}),
 		)
+	}
+	if o.selected(Pi) {
+		results = append(results, rewriteFile("Pi", o.piExtensionPath(), func(b []byte) ([]byte, bool, error) {
+			if len(b) > 0 && !bytes.HasPrefix(b, []byte(piManagedPrefix)) {
+				return nil, false, errUnmanagedPi
+			}
+			next := []byte(piExtension(o.Command))
+			return next, !bytes.Equal(b, next), nil
+		}))
 	}
 	if o.selected(OpenCode) {
 		results = append(results, rewriteFile("OpenCode", openCode, func(b []byte) ([]byte, bool, error) {
@@ -116,6 +137,25 @@ func Remove(o Options) []Result {
 	}
 	if o.selected(Codex) {
 		results = append(results, removeFromFile("Codex", codexHooks, hooksRemoval))
+	}
+	if o.selected(Pi) {
+		path := o.piExtensionPath()
+		r := Result{Harness: "Pi", Path: path}
+		b, err := os.ReadFile(path)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			r.Status = "absent"
+		case err != nil:
+			r.Err = err
+		case !bytes.HasPrefix(b, []byte(piManagedPrefix)):
+			r.Err = errUnmanagedPi
+		default:
+			r.Err = os.Remove(path)
+			if r.Err == nil {
+				r.Status = "removed"
+			}
+		}
+		results = append(results, r)
 	}
 	if o.selected(Copilot) {
 		results = append(results, removeFromFile("Copilot CLI", copilot, copilotRemoval))
