@@ -2748,6 +2748,36 @@ test("#39 an agent edit marks its note changed with Before and Now, and Resolve 
   assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), false);
 });
 
+test("a note can be deleted from its popover", async () => {
+  server.push(sessionNote);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await hoverPin(1);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].map((b) => b.textContent)`), ["Reply", "Resolve", "Delete"]);
+  assert.equal(await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").classList.contains("kapi-danger")`), true);
+  await page.eval(`window.confirm = () => true; [...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").click()`);
+  await until(() => requests("POST", "/delete-notes").length === 1);
+  assert.deepEqual(requests("POST", "/delete-notes")[0].body, { notes: [1] });
+  await until(async () => (await pinStates()) === "");
+  assert.equal(await page.eval(`document.querySelector(".kapi-tabs").hidden`), true);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), false);
+});
+
+test("Delete all removes open and resolved notes from the Notes section", async () => {
+  server.push(sessionNote);
+  server.push({ author: "human", kind: "note", target: "cccccccc", quote: "Flip reads", rev: 1, text: "second" });
+  server.push({ author: "human", kind: "resolve", re: [2] });
+  await until(async () => (await pinStates()) === "1:waiting 2:resolved");
+  await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-note-item").length`), 2);
+  assert.equal(await page.eval(`document.querySelector(".kapi-notes-delete-all").classList.contains("kapi-danger")`), true);
+  await page.eval(`window.confirm = () => true; document.querySelector(".kapi-notes-delete-all").click()`);
+  await until(() => requests("POST", "/delete-notes").length === 1);
+  assert.deepEqual(requests("POST", "/delete-notes")[0].body, { notes: [1, 2] });
+  await until(async () => await page.eval(`document.querySelector(".kapi-tabs").hidden`));
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel").hasAttribute("data-notes")`), false);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-note-item").length`), 0);
+});
+
 test("#39 Reply on a note queues a reply that names its note, and the chat links replies to their pin", async () => {
   server.push(sessionNote);
   server.push({ author: "agent", kind: "message", re: [1], text: "because it is shared" });

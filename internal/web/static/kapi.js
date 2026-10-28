@@ -1323,6 +1323,7 @@
   const DIFF_MAX = 4000000;
   const DIFF_CONTEXT = 4;
   const stateOf = (n) => (n.resolved ? "resolved" : n.last);
+  const activeNotes = () => notes.filter((n) => !n.deleted);
   const targetsOf = (n) => n.target.split(",").map((s) => s.trim()).filter(Boolean);
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1355,6 +1356,11 @@
       for (const seq of re) {
         const n = noteBySeq.get(seq);
         if (n) n.resolved = true;
+      }
+    } else if (ev.kind === "delete-notes") {
+      for (const seq of re) {
+        const n = noteBySeq.get(seq);
+        if (n) n.deleted = true;
       }
     } else return;
     schedulePaint();
@@ -1541,6 +1547,7 @@
     const ranges = { waiting: [], answered: [], changed: [], marks: [] };
     const seen = new Set();
     for (const n of notes) {
+      if (n.deleted) continue;
       const where = locate(n);
       n.where = where;
       n.change = changeOf(n, where.blocks);
@@ -1576,7 +1583,7 @@
     paintRail();
     if (pop) {
       const n = noteBySeq.get(pop.seq);
-      if (n?.where?.visible === false) hidePop(true);
+      if (!n || n.deleted || n.where?.visible === false) hidePop(true);
       else fillPop(n);
     }
   }
@@ -1608,7 +1615,7 @@
   }
 
   function openNotes() {
-    return notes.filter((n) => !n.resolved);
+    return notes.filter((n) => !n.deleted && !n.resolved);
   }
 
   function pageOrder(list) {
@@ -1685,6 +1692,7 @@
         h("button", { type: "button", class: "kapi-link", text: "Reply", onclick: () => replyTo(n) }),
         h("button", { type: "button", class: "kapi-link", text: "Resolve", onclick: () => resolveNote(n) }));
     }
+    foot.append(h("button", { type: "button", class: "kapi-link kapi-danger", text: "Delete", onclick: () => deleteNotes([n]) }));
     kids.push(foot);
     pop.box.replaceChildren(...kids);
     placePop();
@@ -1749,6 +1757,15 @@
     if (res?.ok) hidePop(true);
   }
 
+  async function deleteNotes(list) {
+    if (!list.length) return;
+    const all = list.length > 1;
+    if (!confirm(all ? `Delete all ${list.length} notes, including unresolved notes? This cannot be undone.` : `Delete note ${list[0].num}? This cannot be undone.`)) return;
+    const res = await request("/delete-notes", { notes: list.map((n) => n.seq) });
+    if (res && !res.ok) say(res.data.error || `Notes not deleted (HTTP ${res.status}).`, "error");
+    if (res?.ok) hidePop(true);
+  }
+
   function noteAt(x, y) {
     const el = document.elementFromPoint(x, y);
     const block = el && closest(el, BLOCK);
@@ -1772,14 +1789,19 @@
   });
 
   function renderNotesList() {
+    const active = activeNotes();
     const open = openNotes();
     const changed = open.filter((n) => stateOf(n) === "changed").length;
-    const summary = notes.length ? `${open.length} open \u00b7 ${changed} changed` : "";
+    const summary = active.length ? `${open.length} open \u00b7 ${changed} changed` : "";
     notesTab.textContent = open.length ? `Notes ${open.length}` : "Notes";
-    tabs.hidden = !notes.length;
-    strip.hidden = !notes.length;
-    stripSummary.textContent = notes.length === 1 ? `1 note \u00b7 ${changed} changed` : `${notes.length} notes \u00b7 ${changed} changed`;
-    if (!notes.length) return notesView.replaceChildren();
+    tabs.hidden = !active.length;
+    strip.hidden = !active.length;
+    stripSummary.textContent = active.length === 1 ? `1 note \u00b7 ${changed} changed` : `${active.length} notes \u00b7 ${changed} changed`;
+    if (!active.length) {
+      showTab("chat");
+      setSheet(false);
+      return notesView.replaceChildren();
+    }
     const nav = h("div", { class: "kapi-notes-nav" },
       h("button", { type: "button", class: "kapi-btn", text: "Previous", onclick: () => stepNote(-1) }),
       h("button", { type: "button", class: "kapi-btn", text: "Next", onclick: () => stepNote(1) }),
@@ -1792,9 +1814,10 @@
         h("span", { class: "kapi-note-quote", text: noteAbout(n) }),
         h("span", { class: "kapi-note-text", text: n.text }),
         h("span", { class: "kapi-note-chip", "data-state": stateOf(n), text: stateOf(n) === "changed" && n.changedTime ? `Changed \u00b7 ${ago(n.changedTime)}` : STATE_LABEL[stateOf(n)] }))));
-    const resolved = notes.filter((n) => n.resolved);
+    const resolved = active.filter((n) => n.resolved);
     notesView.replaceChildren(
       h("div", { class: "kapi-notes-head" }, h("h2", { text: "Notes" }), h("span", { class: "kapi-notes-summary", text: summary }),
+        h("button", { type: "button", class: "kapi-link kapi-danger kapi-notes-delete-all", text: "Delete all", onclick: () => deleteNotes(active) }),
         h("button", { type: "button", class: "kapi-notes-close", "aria-label": "Close notes", onclick: () => setSheet(false) }, icon("x"))),
       nav,
       h("p", { class: "kapi-notes-keys" }, h("kbd", { text: "J" }), " next  ", h("kbd", { text: "K" }), " previous"),
@@ -2087,7 +2110,8 @@
     const noted = e.target.closest("[data-note]");
     if (noted) {
       const n = noteBySeq.get(Number(noted.dataset.note));
-      if (n && noted.classList.contains("kapi-pin")) showPop(n, noted);
+      if (!n || n.deleted) return;
+      if (noted.classList.contains("kapi-pin")) showPop(n, noted);
       else focusNote(n);
       return;
     }

@@ -197,6 +197,7 @@ func TestAnOldTokenOnAPageGetsARestartNotice(t *testing.T) {
 		{"/" + old + "/p/" + s.id + "/events", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/notes", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/resolve", "kapi open " + s.path},
+		{"/" + old + "/p/" + s.id + "/delete-notes", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/end", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/files", "kapi open " + s.path},
 		{"/" + old + "/p/" + s.id + "/images", "kapi open " + s.path},
@@ -1022,6 +1023,22 @@ func TestNotesRecordTheirRevisionAndRepliesNameNotes(t *testing.T) {
 	}
 	if e := ev[len(ev)-1]; e.Kind != "note" || e.Rev != 2 || len(e.Re) != 1 || e.Re[0] != 1 {
 		t.Errorf("reply note = %+v, want rev 2, the current one, and re [1]", e)
+	}
+}
+
+func TestDeleteNotesNamesOneOrManyNotes(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">One</p>`)
+	s.post("/notes", `{"notes":[{"target":"aaaaaaaa","text":"first"},{"target":"aaaaaaaa","text":"second"}]}`)
+	for _, bad := range []string{`{"notes":[]}`, `{"notes":[0]}`, `{"notes":[9]}`} {
+		if code, _ := s.post("/delete-notes", bad); code != http.StatusUnprocessableEntity {
+			t.Errorf("POST /delete-notes %s: %d, want 422", bad, code)
+		}
+	}
+	if code, out := s.post("/delete-notes", `{"notes":[2,1,2]}`); code != http.StatusOK || out["seq"] != 3.0 {
+		t.Fatalf("delete notes: %d %v", code, out)
+	}
+	if e := s.events()[2]; e.Kind != eventlog.KindDeleteNotes || e.Author != "human" || !slices.Equal(e.Re, []uint64{1, 2}) {
+		t.Errorf("delete notes = %+v", e)
 	}
 }
 

@@ -1225,6 +1225,10 @@
   cursor: pointer;
 }
 
+#kapi-chrome .kapi-link.kapi-danger {
+  color: var(--kapi-red-text);
+}
+
 #kapi-chrome .kapi-note-ref {
   flex: none;
   font-size: 11.5px;
@@ -1276,6 +1280,11 @@
 #kapi-chrome .kapi-notes-head h2 {
   margin: 0;
   font-size: 15px;
+}
+
+#kapi-chrome .kapi-notes-delete-all {
+  margin-left: auto;
+  font-size: 12px;
 }
 
 #kapi-chrome .kapi-notes-summary,
