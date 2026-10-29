@@ -56,7 +56,7 @@
   const ICONS = {
     archive: "M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z",
     unarchive: "M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40ZM90.34,109.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,91.31V152a8,8,0,0,1-16,0V91.31l-18.34,18.35A8,8,0,0,1,90.34,109.66Z",
-    chat: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM84,116a12,12,0,1,0,12,12A12,12,0,0,0,84,116Zm88,0a12,12,0,1,0,12,12A12,12,0,0,0,172,116Zm60,12A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z",
+    android: "M176,148a12,12,0,1,1-12-12A12,12,0,0,1,176,148ZM92,136a12,12,0,1,0,12,12A12,12,0,0,0,92,136Zm148,24v24a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V161.13A113.38,113.38,0,0,1,51.4,78.72L26.34,53.66A8,8,0,0,1,37.66,42.34L63.82,68.5a111.43,111.43,0,0,1,128.55-.19l26-26a8,8,0,0,1,11.32,11.32L204.82,78.5c.75.71,1.5,1.43,2.24,2.17A111.25,111.25,0,0,1,240,160Zm-16,0a96,96,0,0,0-96-96h-.34C74.91,64.18,32,107.75,32,161.13V184H224Z",
     x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     download: "M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z",
@@ -320,14 +320,14 @@
       bar.replaceChildren(primary,
         ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
     } else if (text) {
-      bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"));
+      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
       const shown = selected.matches("figure") && selected.querySelector(":scope > img[src]");
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
-      bar.replaceChildren(tool("chat", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
@@ -1682,9 +1682,10 @@
         ...(c.before ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Before" }), h("span", { class: "kapi-diff-old", text: clip(c.before, 400) }))] : []),
         ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
     }
-    const msg = (who, text, files) => h("div", { class: "kapi-pop-msg" }, h("span", { class: "kapi-pop-who", text: who }), h("span", { class: "kapi-pop-text", text }), ...thumbs(files));
-    kids.push(msg("You", n.text, n.files));
-    for (const r of n.replies) kids.push(msg(r.author === "human" ? "You" : r.author, r.text, r.files));
+    const msg = (author, text, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
+      h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), h("span", { class: "kapi-pop-text", text }), ...thumbs(files));
+    kids.push(msg("human", n.text, n.files));
+    for (const r of n.replies) kids.push(msg(r.author, r.text, r.files));
     if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
     const foot = h("div", { class: "kapi-pop-foot" }, h("span", { class: "kapi-pop-hint", text: matchMedia("(hover: hover)").matches ? "Move away to close" : "Tap outside to close" }));
     if (!n.resolved) {

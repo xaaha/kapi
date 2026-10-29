@@ -2702,6 +2702,31 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
 });
 
+test("#39 note threads use the chat colours to distinguish the human and agent", async () => {
+  server.push(sessionNote);
+  server.push({ author: "agent", kind: "message", re: [1], text: "because it is shared" });
+  await until(async () => (await pinStates()) === "1:answered");
+  await hoverPin(1);
+  const colours = await page.eval(`(() => {
+    const colour = (el) => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderColor]; };
+    return {
+      chatHuman: colour(document.querySelector('.kapi-msg[data-author="human"]')),
+      chatAgent: colour(document.querySelector('.kapi-msg[data-author="agent"]')),
+      popHuman: colour(document.querySelector('.kapi-pop-msg[data-author="human"]')),
+      popAgent: colour(document.querySelector('.kapi-pop-msg[data-author="agent"]')),
+    };
+  })()`);
+  assert.deepEqual(colours.popHuman, colours.chatHuman);
+  assert.deepEqual(colours.popAgent, colours.chatAgent);
+  assert.notDeepEqual(colours.popHuman, colours.popAgent);
+});
+
+test("the Ask AI action uses the Android logo", async () => {
+  await click('[data-kapi-id="bbbbbbbb"]');
+  const path = await page.eval(`document.querySelector('.kapi-bar [data-action="ask"] svg path').getAttribute("d")`);
+  assert.ok(path.startsWith("M176,148a12,12"));
+});
+
 test("#39 a tall note popover stays inside a short page and scrolls to Reply and Resolve", async () => {
   await reopenWith([{ id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Short session store.</p>' }]);
   server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", prefix: "Short ", suffix: ".", rev: 1, text: "explain this" });

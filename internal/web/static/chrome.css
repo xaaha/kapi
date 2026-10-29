@@ -1196,6 +1196,15 @@
 #kapi-chrome .kapi-pop-msg {
   display: grid;
   gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+}
+
+#kapi-chrome .kapi-pop-msg[data-author="human"] {
+  border-color: var(--kapi-blue-border);
+  background: var(--kapi-blue-fill);
 }
 
 #kapi-chrome .kapi-pop-text {
