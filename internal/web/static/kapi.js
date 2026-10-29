@@ -816,7 +816,8 @@
     }
     if (name === "delete") {
       const spot = noteSpot(selected);
-      if (!(await op("delete", { id }))?.ok) return;
+      const section = selected.hasAttribute("data-kapi-folded");
+      if (!(await op("delete", { id, ...(section ? { section: true } : {}) }))?.ok) return;
       await refresh(null);
       return showNote(spot);
     }

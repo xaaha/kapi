@@ -451,6 +451,49 @@ func TestArchiveAndUnarchiveSectionChangesEveryBlockUnderTheHeading(t *testing.T
 	}
 }
 
+func TestDeleteSectionRemovesTheHeadingAndEveryBlockFoldedUnderIt(t *testing.T) {
+	original := `<h2 data-kapi-id="aaaaaaaa">1. First</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+<h3 data-kapi-id="cccccccc">Detail</h3>
+<p data-kapi-id="dddddddd">more</p>
+<h2 data-kapi-id="eeeeeeee">2. Second</h2>
+<p data-kapi-id="ffffffff">two</p>
+`
+	home, path := newPage(t, original)
+	s := open(t, home, path)
+	sum := mustApply(t, s, &Op{Kind: "delete", ID: "aaaaaaaa", Section: true})
+	if got := strings.Join(sum.IDs, ","); got != "aaaaaaaa,bbbbbbbb,cccccccc,dddddddd" {
+		t.Fatalf("deleted ids = %s", got)
+	}
+	want := `<h2 data-kapi-id="eeeeeeee">2. Second</h2>
+<p data-kapi-id="ffffffff">two</p>
+`
+	if got := onDisk(t, path); got != want {
+		t.Fatalf("after section delete:\n%s\nwant:\n%s", got, want)
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != original {
+		t.Fatalf("undo section delete:\n%s\nwant:\n%s", got, original)
+	}
+}
+
+func TestDeleteSectionChecksEveryChildForStalenessAndInboundLinks(t *testing.T) {
+	home, path := newPage(t, `<h2 data-kapi-id="aaaaaaaa">First</h2>
+<p data-kapi-id="bbbbbbbb">one</p>
+<h2 data-kapi-id="cccccccc">Second</h2>
+<p data-kapi-id="dddddddd"><a href="#bbbbbbbb">back</a></p>
+`)
+	s := open(t, home, path)
+	if _, _, err := s.Apply(1, &Op{Kind: "delete", ID: "aaaaaaaa", Section: true}); !errors.Is(err, ErrInboundLinks) {
+		t.Fatalf("section delete with inbound link: %v, want ErrInboundLinks", err)
+	}
+	inner := "changed"
+	mustApply(t, s, &Op{Kind: "edit", ID: "bbbbbbbb", Inner: &inner})
+	if _, _, err := s.Apply(1, &Op{Kind: "delete", ID: "aaaaaaaa", Section: true}); !errors.Is(err, ErrStale) {
+		t.Fatalf("section delete after a child changed: %v, want ErrStale", err)
+	}
+}
+
 func TestSectionArchiveAtAnOldRevisionChecksTheWholeSection(t *testing.T) {
 	home, path := newPage(t, `<h2 data-kapi-id="aaaaaaaa">First</h2>
 <p data-kapi-id="bbbbbbbb">one</p>
