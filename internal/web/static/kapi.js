@@ -118,6 +118,9 @@
   const restartBox = h("div", { class: "kapi-restart", role: "alert", hidden: "" });
   const log = h("ol", { class: "kapi-log", "aria-live": "polite" });
   const empty = h("p", { class: "kapi-empty", text: "Messages with the agent show up here." });
+  const logScroll = h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log);
+  const scrollBottom = h("button", { type: "button", class: "kapi-scroll-bottom", "aria-label": "Go to latest message", "data-tip": "Go to latest message", hidden: "" }, icon("caret"));
+  const chat = h("div", { class: "kapi-chat" }, logScroll, scrollBottom);
   const input = h("textarea", { rows: "3", placeholder: "Message the agent", "aria-label": "Message" });
   const sendButton = h("button", { type: "submit", class: "kapi-primary", text: "Send" });
   const HINT = "Enter to send, Shift+Enter for a new line";
@@ -168,7 +171,7 @@
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" }, exportGroup, ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle(), menuButton, menu), tabs,
-    restartBox, notice, h("div", { class: "kapi-scroll", tabindex: "-1" }, empty, log), notesView,
+    restartBox, notice, chat, notesView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
@@ -1933,8 +1936,22 @@
     schedulePaint();
   }
 
+  const awayFromLatest = () => logScroll.scrollHeight - logScroll.scrollTop - logScroll.clientHeight >= 40;
+
+  function syncScrollBottom() {
+    scrollBottom.hidden = !awayFromLatest();
+  }
+
+  function goToLatest(behavior = "auto") {
+    logScroll.scrollTo({ top: logScroll.scrollHeight, behavior });
+    scrollBottom.hidden = true;
+  }
+
+  logScroll.addEventListener("scroll", syncScrollBottom);
+  scrollBottom.addEventListener("click", () => goToLatest(reduced() ? "auto" : "smooth"));
+
   function addEntry(ev, body) {
-    const near = log.parentElement.scrollHeight - log.parentElement.scrollTop - log.parentElement.clientHeight < 40;
+    const near = !awayFromLatest();
     const human = ev.author === "human";
     const meta = h("div", { class: "kapi-msg-meta" }, h("span", { class: "kapi-author", text: human ? "You" : ev.author || "agent" }));
     if (ev.time) {
@@ -1953,7 +1970,8 @@
     }
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
     empty.hidden = true;
-    if (near) log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    if (near || human) goToLatest();
+    else syncScrollBottom();
   }
 
   function markRead() {

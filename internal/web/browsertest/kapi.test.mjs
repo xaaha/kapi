@@ -819,6 +819,34 @@ test("presence stays pinned above the message box while the list scrolls", async
   assert.equal(await top(), before);
 });
 
+test("the down arrow reveals more chat and a sent annotation scrolls to its delivered messages", async () => {
+  for (let i = 0; i < 30; i++) server.push({ author: i % 2 ? "agent" : "human", kind: "message", text: `history ${i}` });
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 30`);
+  await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
+  await page.waitFor(`!document.querySelector(".kapi-scroll-bottom").hidden`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-scroll-bottom").getAttribute("aria-label")`), "Go to latest message");
+
+  await click(".kapi-scroll-bottom");
+  await page.waitFor(`(s => s.scrollHeight - s.scrollTop - s.clientHeight < 2)(document.querySelector(".kapi-scroll"))`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-scroll-bottom").hidden`), true);
+
+  await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
+  await page.waitFor(`!document.querySelector(".kapi-scroll-bottom").hidden`);
+  await select("cccccccc");
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask")`);
+  await page.type("please check this");
+  await page.key("Enter");
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("sent while reading old messages");
+  await page.key("Enter");
+  await until(() => requests("POST", "/notes").length === 1);
+  await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 32`);
+  await page.waitFor(`(s => s.scrollHeight - s.scrollTop - s.clientHeight < 2)(document.querySelector(".kapi-scroll"))`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-scroll-bottom").hidden`), true);
+  assert.equal(await page.eval(`document.querySelector(".kapi-msg:last-child .kapi-msg-text").textContent`), "sent while reading old messages");
+});
+
 test("renders markup from events as literal text", async () => {
   const evil = `<img src=x onerror="window.pwned=1">`;
   server.push({ author: evil, kind: "message", target: evil, text: evil });
@@ -2870,7 +2898,7 @@ test("#39 the Notes list keeps open notes in page order and resolved ones apart,
   assert.equal(await page.eval(`document.querySelector(".kapi-tabs").hidden`), false);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].textContent`), "Notes 2");
   await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
-  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-notes")).display !== "none" && getComputedStyle(document.querySelector(".kapi-scroll")).display === "none"`), true);
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-notes")).display !== "none" && getComputedStyle(document.querySelector(".kapi-chat")).display === "none"`), true);
   assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-list")].map((l) => [...l.querySelectorAll(".kapi-note-item")].map((i) => i.dataset.note))`), [["2", "1"], ["3"]]);
   assert.equal(await page.eval(`document.querySelector('.kapi-note-item[data-note="2"] .kapi-note-crumb').textContent`), "Migration plan");
   assert.equal(await page.eval(`document.querySelector(".kapi-notes-summary").textContent`), "2 open · 0 changed");
