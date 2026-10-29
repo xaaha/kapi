@@ -450,6 +450,22 @@ test("Escape ends an edit even when focus has left the text", async () => {
   await page.waitFor(`document.activeElement.dataset.kapiId === "dddddddd"`);
 });
 
+test("clicking outside an edit cancels it and the same click selects its target", async () => {
+  await select("ffffffff");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
+  await page.type(" discarded");
+  await page.eval(`(() => {
+    const target = document.querySelector('[data-kapi-id="bbbbbbbb"]');
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+    target.click();
+  })()`);
+  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
+  assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId`), "bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"] .kapi-callout-body').textContent`), "Copy during the quiet window.");
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
 test("a code block inside a callout stays one piece while the callout is edited", async () => {
   await addBlock({
     id: "kkkkkkkk",
@@ -2700,6 +2716,25 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   assert.deepEqual(await highlighted("kapi-note-answered"), ["session store"]);
   server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", re: [1], text: "and later?" });
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
+});
+
+test("#39 note pins still open while a block is being edited, and clicking one cancels the edit", async () => {
+  server.push(sessionNote);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" discarded");
+  await hoverPin(1);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), true, "hovering shows the thread without discarding the edit");
+  await page.eval(`(() => {
+    const pin = document.querySelector('.kapi-pins .kapi-pin[data-note="1"]');
+    pin.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+    pin.click();
+  })()`);
+  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true);
+  assert.equal(await text("bbbbbbbb"), "Move the session store to the new cluster in two steps.");
 });
 
 test("#39 note threads use the chat colours to distinguish the human and agent", async () => {

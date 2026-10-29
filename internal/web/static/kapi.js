@@ -1701,7 +1701,7 @@
 
   function showPop(n, anchor) {
     clearTimeout(popTimer);
-    if (asking || editing) return;
+    if (asking) return;
     if (!pop || pop.seq !== n.seq) {
       pop?.box.remove();
       const box = h("div", { class: "kapi-note-pop", role: "dialog", "aria-label": `Note ${n.num}` });
@@ -2299,6 +2299,11 @@
     if (!pointerDown) trackSelection();
   });
   document.addEventListener("pointerdown", (e) => {
+    if (editing && !busy && e.button === 0) {
+      const path = e.composedPath();
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar);
+      if (!inside) cancelEdit();
+    }
     pointerDown = e.button === 0 && !root.contains(e.target);
   }, true);
   document.addEventListener("pointermove", (e) => {
