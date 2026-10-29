@@ -2898,7 +2898,7 @@ test("#39 the Notes list keeps open notes in page order and resolved ones apart,
   assert.equal(await page.eval(`document.querySelector(".kapi-tabs").hidden`), false);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].textContent`), "Notes 2");
   await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
-  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-notes")).display !== "none" && getComputedStyle(document.querySelector(".kapi-scroll")).display === "none"`), true);
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-notes")).display !== "none" && getComputedStyle(document.querySelector(".kapi-chat")).display === "none"`), true);
   assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-list")].map((l) => [...l.querySelectorAll(".kapi-note-item")].map((i) => i.dataset.note))`), [["2", "1"], ["3"]]);
   assert.equal(await page.eval(`document.querySelector('.kapi-note-item[data-note="2"] .kapi-note-crumb').textContent`), "Migration plan");
   assert.equal(await page.eval(`document.querySelector(".kapi-notes-summary").textContent`), "2 open · 0 changed");
