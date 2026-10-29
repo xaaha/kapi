@@ -183,9 +183,19 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     }
     const i = state.blocks.findIndex((b) => b.id === op.id);
     if (op.kind !== "undo" && i < 0) return { status: 422, body: { error: `no block #${op.id}` } };
+    let deleteEnd = i + 1;
     if (op.kind === "delete") {
-      const linked = state.blocks.find((b) => b.id !== op.id && b.html.includes(`href="#${op.id}"`));
-      if (linked) return { status: 422, body: { error: `#${op.id} is linked from #${linked.id}` } };
+      if (op.section) {
+        const level = Number(/^<h([1-6])\b/i.exec(state.blocks[i].html)?.[1] || 0);
+        while (deleteEnd < state.blocks.length) {
+          const next = Number(/^<h([1-6])\b/i.exec(state.blocks[deleteEnd].html)?.[1] || 0);
+          if (next && next <= level) break;
+          deleteEnd++;
+        }
+      }
+      const deleted = new Set(state.blocks.slice(i, deleteEnd).map((b) => b.id));
+      const linked = state.blocks.find((b) => !deleted.has(b.id) && [...deleted].some((id) => b.html.includes(`href="#${id}"`)));
+      if (linked) return { status: 422, body: { error: `the deleted block is linked from #${linked.id}` } };
     }
     let changedIDs;
     state.history.push(state.blocks.map((b) => ({ ...b })));
@@ -196,7 +206,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
         state.textAt[part.id] = state.rev + 1;
       }
     }
-    else if (op.kind === "delete") state.blocks.splice(i, 1);
+    else if (op.kind === "delete") state.blocks.splice(i, deleteEnd - i);
     else if (op.kind === "archive" || op.kind === "unarchive") {
       let end = i + 1;
       if (op.section) {

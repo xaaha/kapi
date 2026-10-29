@@ -598,7 +598,7 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 			_, sectionOp = current.attr(sectionArchiveAttr)
 		}
 	}
-	if sectionOp && (op.Kind == "archive" || op.Kind == "unarchive") {
+	if sectionOp && (op.Kind == "archive" || op.Kind == "unarchive" || op.Kind == "delete") {
 		was, wasErr := sectionSource(then, op.ID)
 		is, isErr := sectionSource(s.src, op.ID)
 		return wasErr == nil && isErr == nil && bytes.Equal(was, is)
@@ -1159,7 +1159,7 @@ func headingLevel(name string) int {
 func sectionIDs(els []element, heading *element) ([]string, error) {
 	level := headingLevel(heading.name)
 	if level == 0 {
-		return nil, fmt.Errorf("section archive needs a heading, and #%s is a <%s>", heading.id, heading.name)
+		return nil, fmt.Errorf("section operation needs a heading, and #%s is a <%s>", heading.id, heading.name)
 	}
 	ids := []string{heading.id}
 	for i := range els {
@@ -1192,6 +1192,31 @@ func sectionSource(src []byte, headingID string) ([]byte, error) {
 		return nil, err
 	}
 	return src[heading.start:last.end], nil
+}
+
+func deleteSection(src []byte, heading *element) ([]byte, Summary, error) {
+	els := parse(src)
+	ids, err := sectionIDs(els, heading)
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	last, err := find(els, ids[len(ids)-1])
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	for i := range els {
+		link := &els[i]
+		href, _ := link.attr("href")
+		if len(href) < 2 || href[0] != '#' || (link.start >= heading.start && link.end <= last.end) {
+			continue
+		}
+		if target, findErr := find(els, href[1:]); findErr == nil && target.start >= heading.start && target.end <= last.end {
+			return nil, Summary{}, fmt.Errorf("%w: a link to #%s", ErrInboundLinks, target.id)
+		}
+	}
+	section := *heading
+	section.end = last.end
+	return cut(src, &section), Summary{Text: "deleted section " + describe(src, heading), IDs: ids}, nil
 }
 
 func archiveSection(src []byte, heading *element) ([]byte, Summary, error) {
@@ -1284,6 +1309,9 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		}
 		return out, Summary{Text: "edited " + describeID(out, op.ID), IDs: one}, nil
 	case "delete":
+		if op.Section {
+			return deleteSection(src, e)
+		}
 		for i := range els {
 			l := &els[i]
 			href, _ := l.attr("href")

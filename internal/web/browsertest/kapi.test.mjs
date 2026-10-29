@@ -2036,6 +2036,32 @@ test("a heading folds everything under it until the next heading of the same or 
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
+test("deleting a folded heading deletes its whole hidden section and Undo restores it", async () => {
+  await reopenWith([
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">1. First</h2>' },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">One.</p>' },
+    { id: "h3cccccc", html: '<h3 data-kapi-id="h3cccccc">Detail</h3>' },
+    { id: "p3p3p3p3", html: '<p data-kapi-id="p3p3p3p3">More.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">2. Second</h2>' },
+    { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Two.</p>' },
+  ]);
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await page.waitFor(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded === "3 blocks"`);
+  await click('[data-kapi-id="h2aaaaaa"]');
+  await click('.kapi-bar [data-action="delete"]');
+  await page.waitFor(`!document.querySelector('[data-kapi-id="h2aaaaaa"]')`);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "delete", id: "h2aaaaaa", section: true });
+  for (const id of ["p2p2p2p2", "h3cccccc", "p3p3p3p3"]) assert.equal(await page.eval(`!!document.querySelector('[data-kapi-id="${id}"]')`), false, id);
+  assert.equal(await page.eval(`!!document.querySelector('[data-kapi-id="h2bbbbbb"]')`), true);
+
+  await click("#kapi-page .kapi-undo-note button");
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="p3p3p3p3"]')`);
+  for (const id of ["h2aaaaaa", "p2p2p2p2", "h3cccccc", "p3p3p3p3", "h2bbbbbb", "p4p4p4p4"]) {
+    assert.equal(await page.eval(`!!document.querySelector('[data-kapi-id="${id}"]')`), true, id);
+  }
+});
+
 test("archiving a folded heading archives its section and unarchiving restores it", async () => {
   await reopenWith([
     { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">1. First</h2>' },
