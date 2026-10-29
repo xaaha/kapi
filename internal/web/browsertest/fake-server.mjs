@@ -194,8 +194,13 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
         }
       }
       const deleted = new Set(state.blocks.slice(i, deleteEnd).map((b) => b.id));
-      const linked = state.blocks.find((b) => !deleted.has(b.id) && [...deleted].some((id) => b.html.includes(`href="#${id}"`)));
-      if (linked) return { status: 422, body: { error: `the deleted block is linked from #${linked.id}` } };
+      let linkedTarget = "";
+      const linked = state.blocks.find((b) => {
+        if (deleted.has(b.id)) return false;
+        linkedTarget = [...deleted].find((id) => b.html.includes(`href="#${id}"`)) || "";
+        return !!linkedTarget;
+      });
+      if (linked) return { status: 422, body: { error: `#${linkedTarget} is linked from #${linked.id}` } };
     }
     let changedIDs;
     state.history.push(state.blocks.map((b) => ({ ...b })));
