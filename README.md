@@ -18,16 +18,24 @@ One Go binary serves the browser UI and keeps page history as local files—no N
 
 ## Install
 
-kapi ships via [xaaha/tap](https://github.com/xaaha/homebrew-tap). Homebrew 6.0+ requires explicit trust for third-party taps; without it, `brew upgrade` silently skips kapi. One-time step per machine:
+Install the latest macOS or Linux release, verify its checksum, put `kapi` on PATH, and connect the detected coding agents:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/xaaha/kapi/main/install.sh | sh
+```
+
+The installer runs `kapi setup`, which asks which installed agents to connect
+and installs or repairs kapi's embedded skill and startup hooks. It does not use
+Node or `npx`. Set `KAPI_INSTALL_DIR` to choose the binary directory or
+`KAPI_VERSION` to install a specific release.
+
+Homebrew remains available through [xaaha/tap](https://github.com/xaaha/homebrew-tap). Homebrew 6.0+ requires explicit trust for third-party taps:
 
 ```sh
 brew trust xaaha/tap
 brew install --cask xaaha/tap/kapi
 kapi setup
 ```
-
-`kapi setup` asks which installed agents to connect, then installs or repairs
-kapi's embedded skill and startup hooks. It does not use Node or `npx`.
 
 Other install options:
 
@@ -36,10 +44,9 @@ Other install options:
 
 kapi runs on macOS and Linux.
 
-### Shell completion (go install / source builds)
+### Shell completion (curl, go install, or source builds)
 
-Homebrew installs completion automatically. If you installed via `go install`
-or built from source, opt in once:
+Homebrew installs completion automatically. Otherwise opt in once:
 
 ```sh
 # zsh: add to ~/.zshrc, after compinit
@@ -87,9 +94,13 @@ Global skills are written to the standard harness paths, including
 and Pi, `~/.config/opencode/skills/kapi/SKILL.md`, and
 `~/.copilot/skills/kapi/SKILL.md`. Re-running repairs them.
 
-The skill contains stable rules and sends agents to `kapi`, `kapi --help` and
-`kapi preset` for current commands and page structure, so an installed copy
-does not become a stale CLI manual. Startup hooks provide ambient page and
-unread-message discovery where a harness supports them. Restart agent sessions
-after setup.
+The skill contains stable rules and sends every configured agent to `kapi`,
+`kapi --help` and `kapi preset` for current commands and page structure, so an
+installed copy does not become a stale CLI manual. It tells each agent to keep
+a background `kapi wait` armed before going idle, so a browser message wakes
+the agent without the human asking it to listen. Harness lifecycle integrations
+reinforce this automatically where available: Claude Code and Codex use Stop
+hooks, and Pi uses an `agent_before_settle` extension. Existing startup hooks
+continue to provide ambient page and unread-message discovery. Restart agent
+sessions after setup.
 

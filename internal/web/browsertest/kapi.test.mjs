@@ -81,7 +81,7 @@ test("shows disconnected when the stream fails and recovers without duplicating 
 
 test("sets the status dot from presence events", async () => {
   server.push({ kind: "presence", text: "watching" });
-  await page.waitFor(`document.querySelector(".kapi-status").textContent === "Agent is watching"`);
+  await page.waitFor(`document.querySelector(".kapi-status").textContent === "Agent ready"`);
   server.push({ kind: "presence", text: "busy" });
   await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
 });
@@ -92,7 +92,7 @@ test("says Queued until the agent reads a message, then working until it replies
   server.push({ kind: "presence", text: "watching" });
   server.push({ author: "human", kind: "message", text: "please look" });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 1`);
-  assert.equal(await status(), "Agent is watching");
+  assert.equal(await status(), "Agent ready");
   assert.deepEqual(await marks(), [""]);
 
   server.queue("agent", 2);
@@ -109,7 +109,7 @@ test("says Queued until the agent reads a message, then working until it replies
   assert.deepEqual(await marks(), ["\u{1F440}"]);
 
   server.push({ author: "agent", kind: "message", text: "on it" });
-  await until(async () => (await status()) === "Agent is watching");
+  await until(async () => (await status()) === "Agent ready");
 });
 
 test("refetches only the changed block, or the whole page when the target is empty", async () => {
@@ -448,6 +448,22 @@ test("Escape ends an edit even when focus has left the text", async () => {
   await select("dddddddd");
   await editSelected();
   await page.waitFor(`document.activeElement.dataset.kapiId === "dddddddd"`);
+});
+
+test("clicking outside an edit cancels it and the same click selects its target", async () => {
+  await select("ffffffff");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
+  await page.type(" discarded");
+  await page.eval(`(() => {
+    const target = document.querySelector('[data-kapi-id="bbbbbbbb"]');
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+    target.click();
+  })()`);
+  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
+  assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId`), "bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"] .kapi-callout-body').textContent`), "Copy during the quiet window.");
+  assert.equal(requests("POST", "/ops").length, 0);
 });
 
 test("a code block inside a callout stays one piece while the callout is edited", async () => {
@@ -796,7 +812,7 @@ test("presence stays pinned above the message box while the list scrolls", async
     const p = document.querySelector(".kapi-presence");
     return [box(p), box(document.querySelector(".kapi-scroll")), box(document.querySelector(".kapi-composer")), p.textContent];
   })()`);
-  assert.equal(text, "Agent is watching");
+  assert.equal(text, "Agent ready");
   assert.ok(presence.top >= scroll.bottom - 1 && presence.bottom <= composer.top + 1, JSON.stringify({ presence, scroll, composer }));
   const before = await top();
   await page.eval(`document.querySelector(".kapi-scroll").scrollTop = 0`);
@@ -2702,6 +2718,50 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
 });
 
+test("#39 note pins still open while a block is being edited, and clicking one cancels the edit", async () => {
+  server.push(sessionNote);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" discarded");
+  await hoverPin(1);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), true, "hovering shows the thread without discarding the edit");
+  await page.eval(`(() => {
+    const pin = document.querySelector('.kapi-pins .kapi-pin[data-note="1"]');
+    pin.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+    pin.click();
+  })()`);
+  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true);
+  assert.equal(await text("bbbbbbbb"), "Move the session store to the new cluster in two steps.");
+});
+
+test("#39 note threads use the chat colours to distinguish the human and agent", async () => {
+  server.push(sessionNote);
+  server.push({ author: "agent", kind: "message", re: [1], text: "because it is shared" });
+  await until(async () => (await pinStates()) === "1:answered");
+  await hoverPin(1);
+  const colours = await page.eval(`(() => {
+    const colour = (el) => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderColor]; };
+    return {
+      chatHuman: colour(document.querySelector('.kapi-msg[data-author="human"]')),
+      chatAgent: colour(document.querySelector('.kapi-msg[data-author="agent"]')),
+      popHuman: colour(document.querySelector('.kapi-pop-msg[data-author="human"]')),
+      popAgent: colour(document.querySelector('.kapi-pop-msg[data-author="agent"]')),
+    };
+  })()`);
+  assert.deepEqual(colours.popHuman, colours.chatHuman);
+  assert.deepEqual(colours.popAgent, colours.chatAgent);
+  assert.notDeepEqual(colours.popHuman, colours.popAgent);
+});
+
+test("the Ask AI action uses the Android logo", async () => {
+  await click('[data-kapi-id="bbbbbbbb"]');
+  const path = await page.eval(`document.querySelector('.kapi-bar [data-action="ask"] svg path').getAttribute("d")`);
+  assert.ok(path.startsWith("M176,148a12,12"));
+});
+
 test("#39 a tall note popover stays inside a short page and scrolls to Reply and Resolve", async () => {
   await reopenWith([{ id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Short session store.</p>' }]);
   server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", prefix: "Short ", suffix: ".", rev: 1, text: "explain this" });
@@ -3725,7 +3785,7 @@ test("#26 an ended session shows in the chat until the human sends a new message
   await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
   await page.type("one more thing");
   await page.key("Enter");
-  await until(async () => (await status()) === "No agent connected");
+  await until(async () => (await status()) === "Agent idle · messages are saved");
   assert.equal(await dot(), "none");
   assert.deepEqual(requests("POST", "/messages")[0].body, { kind: "message", text: "one more thing" });
 });

@@ -18,15 +18,24 @@ import (
 )
 
 type fakeAPI struct {
-	requests []daemon.Request
-	resp     daemon.Response
-	watches  []func(fn func(daemon.Response) error) error
-	watched  []string
-	stdin    string
+	requests  []daemon.Request
+	resp      daemon.Response
+	responses []daemon.Response
+	watches   []func(fn func(daemon.Response) error) error
+	watched   []string
+	stdin     string
 }
 
 func (f *fakeAPI) Do(req *daemon.Request) (daemon.Response, error) {
 	f.requests = append(f.requests, *req)
+	if len(f.responses) > 0 {
+		resp := f.responses[0]
+		f.responses = f.responses[1:]
+		return resp, nil
+	}
+	if req.Op == "unwatched" {
+		return daemon.Response{}, nil
+	}
 	return f.resp, nil
 }
 
@@ -316,6 +325,10 @@ func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
+	extension := filepath.Join(home, ".pi", "agent", "extensions", "kapi.ts")
+	if b, err := os.ReadFile(extension); err != nil || !strings.Contains(string(b), `pi.on("agent_before_settle"`) {
+		t.Fatalf("Pi extension: %v, %s", err, b)
+	}
 	out, err = run(t, &fakeAPI{}, "setup", "--agents", "pi", "--remove")
 	if err != nil {
 		t.Fatal(err)
@@ -325,6 +338,9 @@ func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("skill still exists: %v", err)
+	}
+	if _, err := os.Stat(extension); !os.IsNotExist(err) {
+		t.Errorf("extension still exists: %v", err)
 	}
 }
 
@@ -339,7 +355,7 @@ func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, h := range []string{"Claude Code", "Codex", "Copilot CLI", "OpenCode"} {
+	for _, h := range []string{"Claude Code", "Codex", "Pi", "Copilot CLI", "OpenCode"} {
 		if !strings.Contains(out, h) || !strings.Contains(out, "absent") {
 			t.Errorf("remove output missing %s absent:\n%s", h, out)
 		}
@@ -474,13 +490,48 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 	}
 	f := &fakeAPI{stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
-		t.Errorf("nothing unseen: %q, %v; want no output so the agent may stop", out, err)
+		t.Errorf("nothing unseen or open: %q, %v; want no output so the agent may stop", out, err)
+	}
+	if len(f.requests) != 2 || f.requests[1].Op != "unwatched" {
+		t.Errorf("Stop requests = %+v, want inbox then unwatched", f.requests)
 	}
 	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "positions.json: bad"}}}
 	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}} {
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
 		}
+	}
+}
+
+func TestHookIdleGivesEveryHarnessTheSamePortableWaitInstruction(t *testing.T) {
+	f := &fakeAPI{responses: []daemon.Response{{Pages: []daemon.PageStatus{{Path: "/w/plan.html"}}}}}
+	out, err := run(t, f, "hook-idle", "/w")
+	if err != nil || !strings.Contains(out, "Start each command as a background task") || !strings.Contains(out, "kapi wait --reader agent '/w/plan.html'") {
+		t.Fatalf("hook-idle = %q, %v", out, err)
+	}
+	want := []daemon.Request{{Op: "unwatched", Page: "/w", Reader: "agent"}}
+	if !reflect.DeepEqual(f.requests, want) {
+		t.Errorf("requests = %+v, want %+v", f.requests, want)
+	}
+}
+
+func TestTheStopHookArmsAWaitForEveryOpenPageWithoutAListener(t *testing.T) {
+	f := &fakeAPI{
+		responses: []daemon.Response{{}, {Pages: []daemon.PageStatus{{Path: "/w/one.html"}, {Path: "/w/it's two.html"}}}},
+		stdin:     `{"hook_event_name":"Stop","cwd":"/w"}`,
+	}
+	out, err := run(t, f, "hook-messages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"\"decision\":\"block\"", "Start each command as a background task", "kapi wait --reader agent '/w/one.html'", `kapi wait --reader agent '/w/it'\"'\"'s two.html'`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Stop output %q does not contain %q", out, want)
+		}
+	}
+	want := []daemon.Request{{Op: "inbox", Page: "/w", Reader: "agent"}, {Op: "unwatched", Page: "/w", Reader: "agent"}}
+	if !reflect.DeepEqual(f.requests, want) {
+		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
 }
 
@@ -506,7 +557,7 @@ func TestTheStopHookLetsAResolveWaitForTheNextEvent(t *testing.T) {
 	resolve := eventlog.Event{Seq: 4, Author: "human", Kind: "resolve", Re: []uint64{2}}
 	quiet := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve}}}}
 	f := &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
-	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 2 || f.requests[1].Op != "unwatched" {
 		t.Fatalf("Stop on a resolve alone: out %q, err %v, requests %+v", out, err, f.requests)
 	}
 	f = &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}

@@ -16,7 +16,7 @@ Use kapi for substantial work that benefits from a shared visual page. The page 
 - Run `kapi` first. It lists active pages, unread work, and the next commands to use.
 - Use `kapi --help`, `kapi <command> --help`, and `kapi preset` as the current source of truth for commands and page structure.
 - Write only the plain HTML and kapi presets the CLI documents. Keep the page source reviewable and update it as the work changes.
-- Keep `kapi wait <page>` running as a background task when the harness reliably wakes you after it exits; start it again after each event. Use `kapi watch <page>` only when the harness reliably delivers every streamed line.
+- Keep `kapi wait <page>` running as a background task when the harness reliably wakes you after it exits; start it again after each event and before going idle. Use `kapi watch <page>` only when the harness reliably delivers every streamed line.
 - Acknowledge what you read with the CLI's current `say --seen`, `say --reply`, `seen`, or `pending` workflow.
 - Stop watching after the user ends the session.
 

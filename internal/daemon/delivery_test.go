@@ -8,6 +8,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	pkgpage "github.com/xaaha/kapi/internal/page"
 )
 
 func texts(r *Response) []string {
@@ -55,6 +57,40 @@ func TestWaitRepliesOnceAnUnseenEventIsNotQueuedAndRepeatsTheUnseenOnes(t *testi
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("wait did not reply to a new message")
+	}
+}
+
+func TestUnwatchedListsOnlyOpenViewedPagesWithoutAWaitingAgent(t *testing.T) {
+	home, s, _ := serving(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plan.html")
+	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "hello"})
+	done := s.Viewing(pkgpage.ID(path))
+	defer done()
+
+	got := call(t, home, &Request{Op: "unwatched", Page: dir, Reader: "agent"})
+	if len(got.Pages) != 1 || got.Pages[0].Path != path {
+		t.Fatalf("unwatched = %+v, want %s", got.Pages, path)
+	}
+	s.setAttached(path, "agent", true)
+	if got := call(t, home, &Request{Op: "unwatched", Page: dir, Reader: "agent"}); len(got.Pages) != 0 {
+		t.Fatalf("unwatched with a waiter = %+v, want none", got.Pages)
+	}
+	s.setAttached(path, "agent", false)
+	l, err := s.page(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.End("human"); err != nil {
+		t.Fatal(err)
+	}
+	if got := call(t, home, &Request{Op: "unwatched", Page: dir, Reader: "agent"}); len(got.Pages) != 0 {
+		t.Fatalf("unwatched after end = %+v, want none", got.Pages)
+	}
+	for _, req := range []Request{{Op: "unwatched", Page: "rel", Reader: "agent"}, {Op: "unwatched", Page: dir, Reader: "human"}} {
+		if got := call(t, home, &req); got.Error == "" {
+			t.Errorf("%+v: no error", req)
+		}
 	}
 }
 

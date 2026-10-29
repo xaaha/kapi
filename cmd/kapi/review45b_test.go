@@ -75,7 +75,12 @@ func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing
 	}}}}
 	for _, event := range []string{"PostToolUse", "Stop"} {
 		f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
-		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
+		out, err := run(t, f, "hook-messages")
+		wantRequests := 1
+		if event == "Stop" {
+			wantRequests = 2
+		}
+		if err != nil || out != "" || len(f.requests) != wantRequests {
 			t.Errorf("%s with nothing past the hook position = %.200q, %v, %+v; want nothing", event, out, err, f.requests)
 		}
 	}

@@ -38,7 +38,7 @@ func TestD25WatchExitsCleanlyOnAnEndInsteadOfReconnecting(t *testing.T) {
 func TestD25TheStopHookLetsTheAgentStopOnAnEndedPage(t *testing.T) {
 	events := []eventlog.Event{{Seq: 3, Author: "human", Kind: "note", Text: "why?"}, {Seq: 4, Author: "human", Kind: eventlog.KindEnd}}
 	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 2, Ended: true, Events: events}}}, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
-	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 1 {
+	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 2 || f.requests[1].Op != "unwatched" {
 		t.Fatalf("Stop on an ended page with an open note: out %q, err %v, requests %+v", out, err, f.requests)
 	}
 	f = &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 2, Ended: true, Events: events}}}, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
