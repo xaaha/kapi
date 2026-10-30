@@ -2,8 +2,10 @@ package render
 
 import (
 	"bytes"
+	"io/fs"
 	"math"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,28 +31,76 @@ func themeTokens(t *testing.T) map[string]string {
 	return cssTokens(themeCSS)
 }
 
-func paletteTokens(t *testing.T) map[string]map[string]string {
+func paletteFiles(t *testing.T) map[string][]byte {
 	t.Helper()
-	paper := themeTokens(t)
-	for k, v := range cssTokens(paperCSS) {
-		paper[k] = v
+	names, err := fs.Glob(palettes, "palettes/*.css")
+	if err != nil || len(names) == 0 {
+		t.Fatalf("no palettes embedded: %v", err)
 	}
-	return map[string]map[string]string{"default": themeTokens(t), "paper": paper}
+	out := map[string][]byte{}
+	for _, name := range names {
+		b, err := palettes.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[strings.TrimSuffix(path.Base(name), ".css")] = b
+	}
+	return out
 }
 
-func TestPaperOverridesEveryColourAndNothingElse(t *testing.T) {
-	if !strings.HasPrefix(string(paperCSS), `:root[data-palette="paper"] {`) {
-		t.Fatal(`paper.css must be one :root[data-palette="paper"] block`)
+func paletteTokens(t *testing.T) map[string]map[string]string {
+	t.Helper()
+	out := map[string]map[string]string{"default": themeTokens(t)}
+	for id, css := range paletteFiles(t) {
+		merged := themeTokens(t)
+		for k, v := range cssTokens(css) {
+			merged[k] = v
+		}
+		out[id] = merged
 	}
-	base, paper := themeTokens(t), cssTokens(paperCSS)
-	for name, val := range base {
-		_, colour := paper[name]
-		if strings.HasPrefix(val, "light-dark(#") != colour {
-			t.Errorf("--kapi-%s: paper.css should override exactly the light-dark colours", name)
+	return out
+}
+
+func TestPalettesOverrideEveryColourAndNothingElse(t *testing.T) {
+	base := themeTokens(t)
+	for id, css := range paletteFiles(t) {
+		if !strings.HasPrefix(string(css), `:root[data-palette="`+id+`"] {`) {
+			t.Errorf(`palettes/%s.css must be one :root[data-palette="%s"] block`, id, id)
+		}
+		own := cssTokens(css)
+		for name, val := range base {
+			if _, colour := own[name]; strings.HasPrefix(val, "light-dark(#") != colour {
+				t.Errorf("--kapi-%s: palettes/%s.css should override exactly the light-dark colours", name, id)
+			}
+		}
+		for name, val := range own {
+			lightDark(t, name, val)
 		}
 	}
-	for name, val := range paper {
-		lightDark(t, name, val)
+}
+
+func TestThemeMenuListsExactlyTheEmbeddedPalettes(t *testing.T) {
+	js, err := os.ReadFile("../web/static/theme.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\{ id: "([a-z0-9-]+)", label: "[^"]+" \}`).FindAllStringSubmatch(string(js), -1) {
+		listed[m[1]] = true
+	}
+	if !listed["default"] {
+		t.Error("theme.js does not list the default palette")
+	}
+	files := paletteFiles(t)
+	for id := range files {
+		if !listed[id] {
+			t.Errorf("palettes/%s.css has no entry in theme.js PALETTES", id)
+		}
+	}
+	for id := range listed {
+		if _, ok := files[id]; !ok && id != "default" {
+			t.Errorf("theme.js lists %q, but there is no palettes/%s.css", id, id)
+		}
 	}
 }
 

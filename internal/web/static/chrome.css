@@ -433,11 +433,11 @@
   outline: none;
 }
 
-#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="export"][aria-expanded="true"] {
+#kapi-chrome .kapi-panel-head .kapi-menu [aria-haspopup="menu"][aria-expanded="true"] {
   background: var(--kapi-blue-fill);
 }
 
-#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="paper"][aria-checked="false"] svg {
+#kapi-chrome .kapi-panel-head .kapi-menu [role="menuitemradio"][aria-checked="false"] svg {
   visibility: hidden;
 }
 

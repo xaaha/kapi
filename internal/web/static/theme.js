@@ -34,12 +34,16 @@
   }
 
   const PALETTE_KEY = "kapi-palette";
-  const PALETTES = ["default", "paper"];
+  const PALETTES = [
+    { id: "default", label: "Default" },
+    { id: "paper", label: "Paper" },
+  ];
+  const known = (id) => PALETTES.some((p) => p.id === id);
 
   function storedPalette() {
     try {
       const v = localStorage.getItem(PALETTE_KEY);
-      return PALETTES.includes(v) ? v : "default";
+      return known(v) ? v : "default";
     } catch {
       return "default";
     }
@@ -54,7 +58,7 @@
   }
 
   function setPalette(next) {
-    if (!PALETTES.includes(next)) return;
+    if (!known(next)) return;
     palette = next;
     try {
       if (next === "default") localStorage.removeItem(PALETTE_KEY);
