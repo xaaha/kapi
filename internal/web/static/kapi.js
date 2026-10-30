@@ -40,6 +40,7 @@
   let textBackward = false;
   let pointerDown = false;
   let sending = false;
+  let copiedBlock = null;
 
   function h(tag, props = {}, ...kids) {
     const el = document.createElement(tag);
@@ -66,6 +67,9 @@
     system: "M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z",
     light: "M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
+    checkCircle: "M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z",
+    minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
+    plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
@@ -177,6 +181,7 @@
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton);
   const phone = matchMedia("(max-width: 760px)");
+  const diagramZoom = new WeakMap();
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
   const POINT_PAD = 10;
@@ -330,14 +335,20 @@
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
       const shown = selected.matches("figure") && selected.querySelector(":scope > img[src]");
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
-      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
+      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), tool("copy", "Copy as Markdown", "copy", "C"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
+        ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         tool("archive", "Archive", "archive", "E")]),
         tool("trash", "Delete", "delete", DELETE_KEY, "Delete"));
     }
-    for (const b of bar.querySelectorAll("button")) b.disabled ||= busy;
+    if (copiedBlock?.block === selected && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
+    const zoom = selected && diagramZoom.get(selected)?.level;
+    for (const b of bar.querySelectorAll("button")) {
+      b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
+    }
     bar.hidden = false;
     placeRing();
   }
@@ -554,6 +565,51 @@
 
   function copyPath() {
     navigator.clipboard.writeText(pagePath).then(() => say("Copied the page path"), () => say("Could not copy the page path", "error"));
+  }
+
+  function markCopied(button) {
+    if (!button) return;
+    button.dataset.copyState = "copied";
+    button.dataset.tip = "Copied";
+    button.setAttribute("aria-label", "Copied");
+    button.replaceChildren(icon("checkCircle"), h("span", { class: "kapi-tool-label", text: "Copied" }));
+  }
+
+  async function copyBlock() {
+    const id = selected && idOf(selected);
+    if (!id) return;
+    let res;
+    try {
+      res = await fetch(`${base}/export/markdown?block=${encodeURIComponent(id)}`);
+    } catch {
+      return say("Could not reach kapi. Check that the daemon is running.", "error");
+    }
+    if (await restartedReply(res)) return;
+    if (!res.ok) return say(`Could not copy the block: ${(await res.text()).trim()}`, "error");
+    const markdown = await res.text();
+    navigator.clipboard.writeText(markdown).then(() => {
+      notice.hidden = true;
+      const state = { block: selected, until: performance.now() + 1600 };
+      copiedBlock = state;
+      renderBar();
+      setTimeout(() => {
+        if (copiedBlock !== state) return;
+        copiedBlock = null;
+        if (selected === state.block) renderBar();
+      }, 1600);
+    }, () => say("Could not copy the block", "error"));
+  }
+
+  function zoomDiagram(delta) {
+    const svg = selected?.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
+    if (!svg) return;
+    let zoom = diagramZoom.get(selected);
+    if (!zoom) zoom = { base: svg.getBoundingClientRect().width, level: 1 };
+    zoom.level = Math.min(3, Math.max(0.5, zoom.level + delta));
+    diagramZoom.set(selected, zoom);
+    svg.style.width = `${zoom.base * zoom.level}px`;
+    svg.style.maxWidth = "none";
+    renderBar();
   }
 
   let titleBeforePrint = null;
@@ -795,6 +851,9 @@
     if (name === "cancel") return cancelEdit();
     if (name === "ask") return openAsk();
     if (!selected) return;
+    if (name === "copy") return copyBlock();
+    if (name === "zoom-out") return zoomDiagram(-0.25);
+    if (name === "zoom-in") return zoomDiagram(0.25);
     const id = idOf(selected);
     if (name === "edit") return startEdit();
     if (name === "archive" || name === "unarchive") {
@@ -2402,8 +2461,9 @@
       if (!e.metaKey && !e.ctrlKey && (textRange || selected)) {
         const block = !textRange && !busy && selected;
         const name = key === "a" ? "ask"
-          : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
-            : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
+          : block && key === "c" ? "copy"
+            : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
+              : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
         if (name) {
           e.preventDefault();
           return action(name);
