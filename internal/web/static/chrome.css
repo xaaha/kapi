@@ -437,6 +437,10 @@
   background: var(--kapi-blue-fill);
 }
 
+#kapi-chrome .kapi-panel-head .kapi-menu [data-menu="paper"][aria-checked="false"] svg {
+  visibility: hidden;
+}
+
 #kapi-chrome .kapi-panel-head .kapi-menu [data-menu="end"] {
   color: var(--kapi-red-text);
 }

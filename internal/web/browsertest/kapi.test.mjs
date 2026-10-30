@@ -1156,6 +1156,33 @@ test("the theme toggle switches light and dark and remembers the choice across a
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
 });
 
+test("the Paper theme menu item recolours the page in both modes and remembers the choice across a reload", async () => {
+  const paperItem = ".kapi-menu [data-menu=paper]";
+  const state = () => page.eval(`[document.documentElement.dataset.palette ?? "default", document.querySelector(${JSON.stringify(paperItem)}).getAttribute("aria-checked"), getComputedStyle(document.body).backgroundColor]`);
+  const expectState = async (want) => {
+    await until(async () => JSON.stringify(await state()) === JSON.stringify(want)).catch(() => {});
+    assert.deepEqual(await state(), want);
+  };
+  await prefer("light");
+  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await expectState(["default", "false", "rgb(255, 255, 255)"]);
+  await click(".kapi-menu-button");
+  await until(menuOpen);
+  await click(paperItem);
+  await expectState(["paper", "true", "rgb(250, 248, 243)"]);
+  assert.equal(await menuOpen(), true);
+  assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), "paper");
+  await click('.kapi-theme [data-theme-choice="dark"]');
+  await expectState(["paper", "true", "rgb(22, 25, 31)"]);
+  await reload();
+  await expectState(["paper", "true", "rgb(22, 25, 31)"]);
+  await click(".kapi-menu-button");
+  await until(menuOpen);
+  await click(paperItem);
+  await expectState(["default", "false", "rgb(0, 0, 0)"]);
+  assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), null);
+});
+
 test("the theme is set before the first paint, not after the chat panel loads", async () => {
   await page.eval(`localStorage.setItem("kapi-theme", "dark")`);
   await page.call("Page.addScriptToEvaluateOnNewDocument", {
@@ -3479,7 +3506,7 @@ test("#30 an image from another site has no Download tool", async () => {
 const menuOpen = () => page.eval(`!document.querySelector(".kapi-menu").hidden`);
 const expanded = () => page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`);
 const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? document.activeElement.querySelector(".kapi-menu-label").textContent : document.activeElement.className`);
-const topLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].filter((b) => !b.closest(".kapi-submenu")).map((b) => b.querySelector(".kapi-menu-label").textContent)`);
+const topLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu :is([role=menuitem], [role=menuitemcheckbox]):not([hidden])")].filter((b) => !b.closest(".kapi-submenu")).map((b) => b.querySelector(".kapi-menu-label").textContent)`);
 const submenuOpen = () => page.eval(`!document.querySelector(".kapi-submenu").hidden`);
 const exportExpanded = () => page.eval(`document.querySelector(".kapi-menu [data-menu=export]").getAttribute("aria-expanded")`);
 const menuButtonFocused = () => page.eval(`document.activeElement === document.querySelector(".kapi-menu-button")`);
@@ -3508,10 +3535,10 @@ test("#23 the three-dot menu opens on its button, steps with the arrow keys, and
   await page.key("Enter");
   await until(menuOpen);
   assert.equal(await expanded(), "true");
-  assert.deepEqual(await topLabels(), ["Export", "Copy path", "End session"]);
+  assert.deepEqual(await topLabels(), ["Export", "Paper theme", "Copy path", "End session"]);
   assert.equal(await submenuOpen(), false);
   assert.equal(await focusedItem(), "Export");
-  for (const [key, want] of [["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export"], ["ArrowUp", "End session"], ["Home", "Export"], ["End", "End session"]]) {
+  for (const [key, want] of [["ArrowDown", "Paper theme"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export"], ["ArrowUp", "End session"], ["Home", "Export"], ["End", "End session"]]) {
     await pressKey(key);
     assert.equal(await focusedItem(), want, `after ${key}`);
   }
@@ -3857,7 +3884,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
   await page.key("Enter");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export", "Copy path"]);
+  assert.deepEqual(await labels(), ["Export", "Paper theme", "Copy path"]);
   await pressKey("End");
   assert.equal(await focusedItem(), "Copy path");
   await page.key("Escape");
@@ -3866,7 +3893,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.waitFor(`document.querySelector(".kapi-status").textContent !== "Session ended. Send a message to start again."`);
   await mouseOn(".kapi-menu-button");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export", "Copy path", "End session"]);
+  assert.deepEqual(await labels(), ["Export", "Paper theme", "Copy path", "End session"]);
   await page.key("Escape");
 });
 

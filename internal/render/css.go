@@ -13,12 +13,17 @@ import (
 //go:embed theme.css
 var themeCSS []byte
 
+//go:embed paper.css
+var paperCSS []byte
+
 //go:embed style.css
 var baseCSS []byte
 
 var css = sync.OnceValue(func() []byte {
 	var b bytes.Buffer
 	b.Write(themeCSS)
+	b.WriteString("\n")
+	b.Write(paperCSS)
 	b.WriteString("\n")
 	b.Write(baseCSS)
 	b.WriteString("\n")

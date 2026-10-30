@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const staticDir = fileURLToPath(new URL("../static/", import.meta.url));
 const THEME_CSS = await readFile(fileURLToPath(new URL("../../render/theme.css", import.meta.url)), "utf8");
+const PAPER_CSS = await readFile(fileURLToPath(new URL("../../render/paper.css", import.meta.url)), "utf8");
 
 export const PAGE_ID = "0123456789abcdef";
 export const TOKEN = "f00dfacecafebeef";
@@ -139,7 +140,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
 
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
-    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
+    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PAPER_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}" data-path="${escapeAttr(pagePath)}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 

@@ -16,13 +16,42 @@ var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", 
 
 var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
 
-func themeTokens(t *testing.T) map[string]string {
-	t.Helper()
+func cssTokens(css []byte) map[string]string {
 	out := map[string]string{}
-	for _, m := range regexp.MustCompile(`(?m)^\s*--kapi-([a-z0-9-]+):\s*(.+);$`).FindAllStringSubmatch(string(themeCSS), -1) {
+	for _, m := range regexp.MustCompile(`(?m)^\s*--kapi-([a-z0-9-]+):\s*(.+);$`).FindAllStringSubmatch(string(css), -1) {
 		out[m[1]] = m[2]
 	}
 	return out
+}
+
+func themeTokens(t *testing.T) map[string]string {
+	t.Helper()
+	return cssTokens(themeCSS)
+}
+
+func paletteTokens(t *testing.T) map[string]map[string]string {
+	t.Helper()
+	paper := themeTokens(t)
+	for k, v := range cssTokens(paperCSS) {
+		paper[k] = v
+	}
+	return map[string]map[string]string{"default": themeTokens(t), "paper": paper}
+}
+
+func TestPaperOverridesEveryColourAndNothingElse(t *testing.T) {
+	if !strings.HasPrefix(string(paperCSS), `:root[data-palette="paper"] {`) {
+		t.Fatal(`paper.css must be one :root[data-palette="paper"] block`)
+	}
+	base, paper := themeTokens(t), cssTokens(paperCSS)
+	for name, val := range base {
+		_, colour := paper[name]
+		if strings.HasPrefix(val, "light-dark(#") != colour {
+			t.Errorf("--kapi-%s: paper.css should override exactly the light-dark colours", name)
+		}
+	}
+	for name, val := range paper {
+		lightDark(t, name, val)
+	}
 }
 
 func lightDark(t *testing.T, name, val string) (light, dark string) {
@@ -83,7 +112,12 @@ func TestThemeDefinesExactlyTheSharedTones(t *testing.T) {
 }
 
 func TestToneTextIsReadableInBothThemes(t *testing.T) {
-	tokens := themeTokens(t)
+	for palette, tokens := range paletteTokens(t) {
+		t.Run(palette, func(t *testing.T) { toneTextIsReadable(t, tokens) })
+	}
+}
+
+func toneTextIsReadable(t *testing.T, tokens map[string]string) {
 	pair := func(name string) [2]string {
 		l, d := lightDark(t, name, tokens[name])
 		return [2]string{l, d}
@@ -250,7 +284,12 @@ func TestHighlightedPreDropsTheCardShadow(t *testing.T) {
 }
 
 func TestChatPanelTintStandsApartFromPageAndCards(t *testing.T) {
-	tokens := themeTokens(t)
+	for palette, tokens := range paletteTokens(t) {
+		t.Run(palette, func(t *testing.T) { chatPanelStandsApart(t, tokens) })
+	}
+}
+
+func chatPanelStandsApart(t *testing.T, tokens map[string]string) {
 	pl, pd := lightDark(t, "panel", tokens["panel"])
 	for _, other := range []struct {
 		name  string

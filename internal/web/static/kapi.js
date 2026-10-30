@@ -71,6 +71,7 @@
     minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
     plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
+    check: "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z",
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
@@ -101,7 +102,19 @@
     return [h("div", { class: "kapi-theme", role: "group", "aria-label": "Theme" }, ...buttons)];
   }
 
-  const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  function paperToggle() {
+    const theme = window.kapiTheme;
+    if (!theme?.setPalette) return [];
+    const item = h("button", { type: "button", role: "menuitemcheckbox", tabindex: "-1", "data-menu": "paper",
+      onclick: () => theme.setPalette(theme.palette() === "paper" ? "default" : "paper") },
+    icon("check"), h("span", { class: "kapi-menu-label", text: "Paper theme" }));
+    const sync = () => item.setAttribute("aria-checked", String(theme.palette() === "paper"));
+    document.addEventListener("kapi-palette", sync);
+    sync();
+    return [item];
+  }
+
+  const IMAGE_TYPES =["image/png", "image/jpeg", "image/gif", "image/webp"];
   const MAX_IMAGES = 4;
   const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
 
@@ -172,7 +185,8 @@
     icon("download"), h("span", { class: "kapi-menu-label", text: "Export" }), h("span", { class: "kapi-menu-caret" }, icon("caret")));
   const submenu = h("div", { class: "kapi-submenu", role: "menu", "aria-label": "Export", hidden: "" }, ...EXPORTS.map(menuEntry));
   const exportGroup = h("div", { class: "kapi-menu-group", role: "none" }, exportButton, submenu);
-  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" }, exportGroup, ...MENU.map(menuEntry));
+  const paperItem = paperToggle();
+  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" }, exportGroup, ...paperItem, ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle(), menuButton, menu), tabs,
     restartBox, notice, chat, notesView,
@@ -466,7 +480,7 @@
     return true;
   }
 
-  const menuItems = (within) => [...within.querySelectorAll(':scope > [role="menuitem"]:not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
+  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemcheckbox"]):not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
   let hoverOpened = false;
   let submenuTimer;
 

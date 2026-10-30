@@ -576,7 +576,7 @@ func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page
 		}
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		if _, err := w.Write(md); err != nil {
+		if _, err := w.Write(md); err != nil { //nolint:gosec // served as text/markdown, not HTML
 			log.Printf("write block markdown: %v", err)
 		}
 		return
