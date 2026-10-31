@@ -2,8 +2,10 @@ package render
 
 import (
 	"bytes"
+	"io/fs"
 	"math"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,17 +14,94 @@ import (
 
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
-var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
+var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "shadow-ink", "on-solid"}
 
 var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
 
-func themeTokens(t *testing.T) map[string]string {
-	t.Helper()
+func cssTokens(css []byte) map[string]string {
 	out := map[string]string{}
-	for _, m := range regexp.MustCompile(`(?m)^\s*--kapi-([a-z0-9-]+):\s*(.+);$`).FindAllStringSubmatch(string(themeCSS), -1) {
+	for _, m := range regexp.MustCompile(`(?m)^\s*--kapi-([a-z0-9-]+):\s*(.+);$`).FindAllStringSubmatch(string(css), -1) {
 		out[m[1]] = m[2]
 	}
 	return out
+}
+
+func themeTokens(t *testing.T) map[string]string {
+	t.Helper()
+	return cssTokens(themeCSS)
+}
+
+func paletteFiles(t *testing.T) map[string][]byte {
+	t.Helper()
+	names, err := fs.Glob(palettes, "palettes/*.css")
+	if err != nil || len(names) == 0 {
+		t.Fatalf("no palettes embedded: %v", err)
+	}
+	out := map[string][]byte{}
+	for _, name := range names {
+		b, err := palettes.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[strings.TrimSuffix(path.Base(name), ".css")] = b
+	}
+	return out
+}
+
+func paletteTokens(t *testing.T) map[string]map[string]string {
+	t.Helper()
+	out := map[string]map[string]string{"default": themeTokens(t)}
+	for id, css := range paletteFiles(t) {
+		merged := themeTokens(t)
+		for k, v := range cssTokens(css) {
+			merged[k] = v
+		}
+		out[id] = merged
+	}
+	return out
+}
+
+func TestPalettesOverrideEveryColourAndNothingElse(t *testing.T) {
+	base := themeTokens(t)
+	for id, css := range paletteFiles(t) {
+		if !strings.HasPrefix(string(css), `:root[data-palette="`+id+`"] {`) {
+			t.Errorf(`palettes/%s.css must be one :root[data-palette="%s"] block`, id, id)
+		}
+		own := cssTokens(css)
+		for name, val := range base {
+			if _, colour := own[name]; strings.HasPrefix(val, "light-dark(#") != colour {
+				t.Errorf("--kapi-%s: palettes/%s.css should override exactly the light-dark colours", name, id)
+			}
+		}
+		for name, val := range own {
+			lightDark(t, name, val)
+		}
+	}
+}
+
+func TestThemeMenuListsExactlyTheEmbeddedPalettes(t *testing.T) {
+	js, err := os.ReadFile("../web/static/theme.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\{ id: "([a-z0-9-]+)", label: "[^"]+" \}`).FindAllStringSubmatch(string(js), -1) {
+		listed[m[1]] = true
+	}
+	if !listed["default"] {
+		t.Error("theme.js does not list the default palette")
+	}
+	files := paletteFiles(t)
+	for id := range files {
+		if !listed[id] {
+			t.Errorf("palettes/%s.css has no entry in theme.js PALETTES", id)
+		}
+	}
+	for id := range listed {
+		if _, ok := files[id]; !ok && id != "default" {
+			t.Errorf("theme.js lists %q, but there is no palettes/%s.css", id, id)
+		}
+	}
 }
 
 func lightDark(t *testing.T, name, val string) (light, dark string) {
@@ -83,7 +162,12 @@ func TestThemeDefinesExactlyTheSharedTones(t *testing.T) {
 }
 
 func TestToneTextIsReadableInBothThemes(t *testing.T) {
-	tokens := themeTokens(t)
+	for palette, tokens := range paletteTokens(t) {
+		t.Run(palette, func(t *testing.T) { toneTextIsReadable(t, tokens) })
+	}
+}
+
+func toneTextIsReadable(t *testing.T, tokens map[string]string) {
 	pair := func(name string) [2]string {
 		l, d := lightDark(t, name, tokens[name])
 		return [2]string{l, d}
@@ -250,7 +334,12 @@ func TestHighlightedPreDropsTheCardShadow(t *testing.T) {
 }
 
 func TestChatPanelTintStandsApartFromPageAndCards(t *testing.T) {
-	tokens := themeTokens(t)
+	for palette, tokens := range paletteTokens(t) {
+		t.Run(palette, func(t *testing.T) { chatPanelStandsApart(t, tokens) })
+	}
+}
+
+func chatPanelStandsApart(t *testing.T, tokens map[string]string) {
 	pl, pd := lightDark(t, "panel", tokens["panel"])
 	for _, other := range []struct {
 		name  string
@@ -274,7 +363,7 @@ func TestChatPanelTintStandsApartFromPageAndCards(t *testing.T) {
 
 func TestRunningTextUsesTheSerifBodyFaceAndEverythingElseTheSans(t *testing.T) {
 	css := string(CSS())
-	for _, want := range []string{`--kapi-font: "Hanken Grotesk"`, `--kapi-font-body: "Source Serif 4"`, ":where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),\n.kapi-callout-body,\n.kapi-details > :not(summary) {\n  font-family: var(--kapi-font-body);", ".kapi-badge {\n  font-family: var(--kapi-font);"} {
+	for _, want := range []string{`--kapi-font: "Hanken Grotesk"`, `--kapi-font-body: "Source Serif 4"`, ":where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),\n.kapi-callout-body,\n.kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) {\n  font-family: var(--kapi-font-body);", ".kapi-badge {\n  font-family: var(--kapi-font);"} {
 		if !strings.Contains(css, want) {
 			t.Errorf("CSS lacks %q", want)
 		}
