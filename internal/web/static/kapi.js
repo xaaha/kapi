@@ -797,6 +797,10 @@
     }
   }
 
+  function markWideTables() {
+    for (const wrap of main.querySelectorAll(".kapi-table")) wrap.toggleAttribute("data-kapi-wide", wrap.scrollWidth > wrap.clientWidth + 1);
+  }
+
   async function editRaw(el) {
     busy = true;
     renderBar();
@@ -2596,7 +2600,11 @@
     return editing ? renderBar() : placeRing();
   });
   new ResizeObserver(placeRing).observe(main);
-  new ResizeObserver(() => schedulePaint()).observe(main);
+  new ResizeObserver(() => {
+    schedulePaint();
+    markWideTables();
+  }).observe(main);
+  document.fonts.ready.then(markWideTables);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
       document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);

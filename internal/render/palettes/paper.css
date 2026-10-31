@@ -1,15 +1,16 @@
 :root[data-palette="paper"] {
   --kapi-bg: light-dark(#faf8f3, #16191f);
   --kapi-surface: light-dark(#fdfcf9, #1b1f26);
-  --kapi-card: light-dark(#f3f0e9, #21262e);
+  --kapi-card: light-dark(#fffefb, #21262e);
   --kapi-panel: light-dark(#ebe6db, #1c2126);
   --kapi-raised: light-dark(#fdfcf9, #2a3039);
   --kapi-subtle: light-dark(#ebe7de, #2b3038);
   --kapi-fg: light-dark(#2b2925, #bdc2ca);
   --kapi-muted: light-dark(#57534b, #979ea9);
   --kapi-faint: light-dark(#68635a, #9198a3);
-  --kapi-border: light-dark(#e3ddd1, #30363f);
+  --kapi-border: light-dark(#eee8dd, #30363f);
   --kapi-border-strong: light-dark(#d3ccbe, #444b56);
+  --kapi-shadow-ink: light-dark(#3d2b14, #000000);
 
   --kapi-red-fill: light-dark(#f9ebe8, #36222a);
   --kapi-red-border: light-dark(#f6c3c6, #7a3b4a);

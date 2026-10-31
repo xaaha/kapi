@@ -14,7 +14,7 @@ import (
 
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
-var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "on-solid"}
+var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "shadow-ink", "on-solid"}
 
 var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
 
@@ -363,7 +363,7 @@ func chatPanelStandsApart(t *testing.T, tokens map[string]string) {
 
 func TestRunningTextUsesTheSerifBodyFaceAndEverythingElseTheSans(t *testing.T) {
 	css := string(CSS())
-	for _, want := range []string{`--kapi-font: "Hanken Grotesk"`, `--kapi-font-body: "Source Serif 4"`, ":where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),\n.kapi-callout-body,\n.kapi-details > :not(summary) {\n  font-family: var(--kapi-font-body);", ".kapi-badge {\n  font-family: var(--kapi-font);"} {
+	for _, want := range []string{`--kapi-font: "Hanken Grotesk"`, `--kapi-font-body: "Source Serif 4"`, ":where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),\n.kapi-callout-body,\n.kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) {\n  font-family: var(--kapi-font-body);", ".kapi-badge {\n  font-family: var(--kapi-font);"} {
 		if !strings.Contains(css, want) {
 			t.Errorf("CSS lacks %q", want)
 		}

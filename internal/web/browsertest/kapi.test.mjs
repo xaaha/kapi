@@ -1863,6 +1863,24 @@ test("on desktop a table sits on the page surface and tints the whole row under 
   assert.notEqual(after[0], "rgba(0, 0, 0, 0)");
 });
 
+test("a table too wide for the column scrolls inside it and keeps the sans face, also inside a details block", async () => {
+  await withPageStyles(1280, async (p) => {
+    await p.eval(`(() => {
+      const heads = ["Programme", "School", "Type", "Legacy state", "Candidate in catalog", "Candidate id"];
+      const row = ["Masters of Health Administration", "Western Governors University", "masters", "pre_approval_accepted", "Clinical Informatics and Patient Centered Technologies", "ec5fe627"];
+      const d = Object.assign(document.createElement("details"), { open: true, className: "kapi-details" });
+      d.innerHTML = '<summary>Wide</summary><div class="kapi-details-body"><div class="kapi-table"><table><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody><tr>" + row.map((c) => "<td>" + c + "</td>").join("") + "</tr></tbody></table></div></div>";
+      document.getElementById("kapi-page").append(d);
+      return document.fonts.ready.then(() => true);
+    })()`);
+    await p.waitFor(`document.querySelector("#kapi-page > details .kapi-table")?.hasAttribute("data-kapi-wide")`);
+    const [scrolls, inside, face, pageFace] = await p.eval(`((wrap, page) => [getComputedStyle(wrap).overflowX, wrap.getBoundingClientRect().right <= page.getBoundingClientRect().right, getComputedStyle(wrap.querySelector("td")).fontFamily, getComputedStyle(document.querySelector('[data-kapi-id="gggggggg"] td')).fontFamily])(document.querySelector("#kapi-page > details .kapi-table"), document.getElementById("kapi-page"))`);
+    assert.deepEqual([scrolls, inside], ["auto", true]);
+    assert.equal(face, pageFace);
+    assert.equal(await p.eval(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-wide")`), false);
+  });
+});
+
 test("tables turn into cards only when the window itself is phone width", async () => {
   await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
   await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));
