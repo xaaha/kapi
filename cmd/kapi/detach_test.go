@@ -156,16 +156,23 @@ func TestAStartThatRunsOutOfTimeFailsTheClientWithinThreeSeconds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newE2E(t)
 			tc.block(t, e.home)
+			base := exec.Command(e.bin, "version") //nolint:gosec // runs the kapi binary this test just built
+			base.Env = e.env
+			start := time.Now()
+			if err := base.Run(); err != nil {
+				t.Fatal(err)
+			}
+			startup := time.Since(start)
 			cmd := exec.Command(e.bin, "pending", e.page) //nolint:gosec // runs the kapi binary this test just built
 			cmd.Env = e.env
-			start := time.Now()
+			start = time.Now()
 			out, err := cmd.CombinedOutput()
 			took := time.Since(start)
 			if err == nil || !strings.Contains(string(out), "daemon did not start within 3s") || !strings.Contains(string(out), "see "+filepath.Join(e.home, "daemon.log")) {
 				t.Errorf("kapi pending: %v\n%s; want a did not start within 3s error naming daemon.log", err, out)
 			}
-			if took > 3500*time.Millisecond {
-				t.Errorf("the client waited %v, want at most 3s", took)
+			if took > 3500*time.Millisecond+startup {
+				t.Errorf("the client waited %v with a %v process start, want at most 3s", took, startup)
 			}
 		})
 	}
