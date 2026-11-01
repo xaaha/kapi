@@ -1304,6 +1304,14 @@ func TestASelectedRowOrColumnExportsAsMarkdown(t *testing.T) {
 	}
 }
 
+func TestAColumnOfAMergedTableExplainsWhyItCannotBeCopied(t *testing.T) {
+	s := newSite(t, `<kapi-table data-kapi-id="bbbbbbbb"><table><tr><th>A</th><th>B</th></tr><tr><td colspan="2">x</td></tr></table></kapi-table>`)
+	got := s.get("/p/" + s.id + "/export/markdown?block=bbbbbbbb&col=0")
+	if got.code != http.StatusUnprocessableEntity || !strings.Contains(got.body, "merged cells") {
+		t.Errorf("merged column: %d %q", got.code, got.body)
+	}
+}
+
 func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
 	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
 	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {

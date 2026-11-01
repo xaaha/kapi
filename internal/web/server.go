@@ -582,8 +582,12 @@ func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page
 			}
 			block, err = page.OuterCol(src, id, n)
 		}
-		if err != nil {
+		if errors.Is(err, page.ErrNotFound) {
 			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 			return
 		}
 		md, err := render.Markdown(block, nil)
