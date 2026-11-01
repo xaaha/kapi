@@ -625,7 +625,11 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.Do(&daemon.Request{Op: "open", Page: page})
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			resp, err := c.Do(&daemon.Request{Op: "open", Page: page, Dir: wd})
 			if err != nil {
 				return err
 			}

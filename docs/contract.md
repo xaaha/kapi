@@ -537,8 +537,11 @@ show them. Events reach the agent three ways:
   behavior, and Pi receives an extension that runs `kapi hook-idle` at
   `agent_before_settle` and requests one continuation when a listener needs
   arming. It reads the Claude/Codex hook JSON on
-  stdin and hands the unseen events of reader `agent` on the pages under the
-  hook's `cwd` to the model: as `additionalContext` for `PostToolUse` and
+  stdin and hands the unseen events of reader `agent` on the hook's pages to
+  the model. A page is the hook's when its file is under the hook's `cwd`, or
+  when `kapi open` ran under it: `open` records its working directory in
+  `pages/<id>/opened-from.txt`, so a page kept elsewhere still reaches the
+  agent that opened it. The events go as `additionalContext` for `PostToolUse` and
   `UserPromptSubmit`, and for `Stop` as `{"decision":"block","reason":...}`,
   so the agent does not go idle on them. The rule, in two lines:
   each hook shows, in order, only events past the reader's hook position, a too-long one as a short prefix with its `#n` and `kapi pending <page>`, recorded as cut.
@@ -553,7 +556,7 @@ show them. Events reach the agent three ways:
   hook. A hook whose input has `agent_id` fired
   inside a subagent and hands over nothing, so messages reach the main agent.
   When a `Stop` hook has no new event to hand over, it asks the daemon for
-  viewed, unended pages under the hook's `cwd` that have no attached `agent`
+  the hook's viewed, unended pages that have no attached `agent`
   reader. For each one it blocks the stop with an instruction to start
   `kapi wait --reader agent <page>` as a background task. `kapi hook-idle`
   exposes the same instruction as plain text for harness extensions. Once the

@@ -36,6 +36,7 @@ var writeAtomic = page.WriteAtomic
 type Request struct {
 	Op     string   `json:"op"`
 	Page   string   `json:"page"`
+	Dir    string   `json:"dir,omitempty"`
 	Reader string   `json:"reader,omitempty"`
 	Author string   `json:"author,omitempty"`
 	Kind   string   `json:"kind,omitempty"`
@@ -458,7 +459,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	if req.Op == "open" {
-		s.open(enc, req.Page)
+		s.open(enc, &req)
 		return
 	}
 	if req.Op == "inbox" || req.Op == "unwatched" {
@@ -586,11 +587,22 @@ func (s *Server) handle(conn net.Conn) {
 	}
 }
 
-func (s *Server) open(enc *json.Encoder, path string) {
+func (s *Server) open(enc *json.Encoder, req *Request) {
+	path := req.Page
+	if req.Dir != "" && !filepath.IsAbs(req.Dir) {
+		reply(enc, &Response{Error: fmt.Sprintf("open directory must be absolute: %q", req.Dir)})
+		return
+	}
 	st, _, opened, err := s.openStore(path)
 	if err != nil {
 		reply(enc, &Response{Error: err.Error()})
 		return
+	}
+	if req.Dir != "" {
+		if err := s.addOpener(path, req.Dir); err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
 	}
 	s.mu.Lock()
 	resp := &Response{URL: s.baseURL + "p/" + page.ID(path) + "/"}
@@ -599,6 +611,34 @@ func (s *Server) open(enc *json.Encoder, path string) {
 		resp.Notice = st.Conversion()
 	}
 	reply(enc, resp)
+}
+
+func (s *Server) openersPath(path string) string {
+	return filepath.Join(s.home, "pages", page.ID(path), "opened-from.txt")
+}
+
+func (s *Server) openers(path string) []string {
+	b, _ := os.ReadFile(s.openersPath(path))
+	var dirs []string
+	for line := range strings.Lines(string(b)) {
+		dirs = append(dirs, strings.TrimSuffix(line, "\n"))
+	}
+	return dirs
+}
+
+func (s *Server) addOpener(path, dir string) error {
+	dir = resolved(dir)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dirs := s.openers(path)
+	if slices.Contains(dirs, dir) {
+		return nil
+	}
+	return writeAtomic(s.openersPath(path), []byte(strings.Join(append(dirs, dir), "\n")+"\n"))
+}
+
+func (s *Server) belongs(dir, path string) bool {
+	return within(dir, path) || slices.ContainsFunc(s.openers(path), func(o string) bool { return within(dir, o) })
 }
 
 func reply(enc *json.Encoder, resp *Response) {
@@ -759,7 +799,7 @@ func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {
 	dir = resolved(dir)
 	var out []PageStatus
 	for _, d := range dirs {
-		if d.err != nil || !within(dir, d.path) {
+		if d.err != nil || !s.belongs(dir, d.path) {
 			continue
 		}
 		l, err := s.page(d.path)
@@ -789,7 +829,7 @@ func (s *Server) unwatched(dir, reader string) ([]PageStatus, error) {
 	var out []PageStatus
 	for _, id := range ids {
 		path, err := s.PagePath(id)
-		if err != nil || !within(dir, path) {
+		if err != nil || !s.belongs(dir, path) {
 			continue
 		}
 		l, err := s.page(path)
