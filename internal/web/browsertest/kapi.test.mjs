@@ -526,9 +526,9 @@ test("a block with no text of its own says so and opens no editor", async () => 
 });
 
 test("edits table cells in place and sends only the changed cells", async () => {
-  await click('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="gggggggg"] th');
   await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-selected")`);
-  await click('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="gggggggg"] th');
   const order = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody td:first-child')].map((td) => td.textContent).join(",")`);
   assert.notEqual(await order(), "beta,Alpha,gamma");
   await editSelected();
@@ -1280,11 +1280,13 @@ test("every request carries the token prefix and every POST is JSON", async () =
   for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
 });
 
-test("every table sorts by a header click, numeric or by locale, without an op", async () => {
+test("every table sorts by a second click on a header, numeric or by locale, without an op", async () => {
   const column = (i) => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[${i}].textContent)`);
   const sortState = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] th')].map((th) => th.getAttribute("aria-sort"))`);
-  const header = (i) => click(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
+  const header = (i) => mouseClick(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
 
+  await header(1);
+  assert.deepEqual(await sortState(), [null, null]);
   await header(1);
   assert.deepEqual(await column(1), ["9", "10", "1,200"]);
   assert.deepEqual(await sortState(), [null, "ascending"]);
@@ -1292,9 +1294,29 @@ test("every table sorts by a header click, numeric or by locale, without an op",
   assert.deepEqual(await column(1), ["1,200", "10", "9"]);
   assert.deepEqual(await sortState(), [null, "descending"]);
   await header(0);
+  assert.deepEqual(await sortState(), [null, "descending"]);
+  await header(0);
   assert.deepEqual(await column(0), ["Alpha", "beta", "gamma"]);
   assert.deepEqual(await sortState(), ["ascending", null]);
   assert.equal(requests("POST", "").length, 0);
+});
+
+test("deleting a row of a sorted table without cell positions sends the row's place in the source", async () => {
+  await page.eval(`(() => {
+    const wrap = Object.assign(document.createElement("div"), { className: "kapi-table" });
+    wrap.dataset.kapiPreset = "table";
+    wrap.dataset.kapiId = "ssssssss";
+    wrap.innerHTML = "<table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>b</td></tr><tr><td>c</td></tr><tr><td>a</td></tr></tbody></table>";
+    document.getElementById("kapi-page").append(wrap);
+    wrap.scrollIntoView({ block: "center" });
+  })()`);
+  await mouseClick('[data-kapi-id="ssssssss"] th');
+  await mouseClick('[data-kapi-id="ssssssss"] th');
+  assert.equal(await page.eval(`[...document.querySelectorAll('[data-kapi-id="ssssssss"] td')].map((td) => td.textContent).join(",")`), "a,b,c");
+  await mouseClick('[data-kapi-id="ssssssss"] tbody tr:first-child td');
+  await click('.kapi-bar [data-action="delete"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "deleterow", id: "ssssssss", row: 3 });
 });
 
 test("prose that holds a preset edits in place and the preset stays one piece", async () => {

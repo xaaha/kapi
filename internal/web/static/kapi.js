@@ -52,6 +52,7 @@
     collapse: { block: () => expandTable(false) },
     delete: { block: deleteBlock, row: () => deletePart("deleterow", { row: sourceRow(pickedRow()) }), column: () => deletePart("deletecol", { col: pickedColumn() }) },
   };
+  const unsortedRow = new WeakMap();
   let textRange = null;
   let textBackward = false;
   let pointerDown = false;
@@ -1249,7 +1250,7 @@
 
   function sourceRow(tr) {
     const at = tr.cells[0]?.dataset.kapiCell;
-    return at ? Number(at.split(",")[0]) : rowsOf(tr.closest("table")).indexOf(tr);
+    return at ? Number(at.split(",")[0]) : (unsortedRow.get(tr) ?? rowsOf(tr.closest("table")).indexOf(tr));
   }
 
   function blockAnchor(el) {
@@ -2445,6 +2446,8 @@
     const dir = th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
     for (const other of th.parentElement.cells) other.removeAttribute("aria-sort");
     th.setAttribute("aria-sort", dir);
+    const all = rowsOf(table);
+    if (!all.some((tr) => unsortedRow.has(tr))) all.forEach((tr, i) => unsortedRow.set(tr, i));
     const rows = [...body.rows].filter((r) => r !== th.parentElement);
     const text = (r) => (r.cells[col]?.textContent || "").trim();
     const num = (v) => Number(v.replace(/,/g, ""));
@@ -2625,8 +2628,10 @@
     const pill = closest(e.target, ".kapi-code-lang");
     const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
-    const th = labelTapped(e) ?? closest(e.target, ".kapi-table th");
-    if (th && main.contains(th)) sortTable(th);
+    const label = labelTapped(e);
+    const th = closest(e.target, ".kapi-table th");
+    if (label && main.contains(label)) sortTable(label);
+    else if (th && main.contains(th) && selected && pickedCell(selected) === th) sortTable(th);
     const el = closest(e.target, BLOCK);
     if (!el || !main.contains(el)) return;
     if (e.isTrusted) {
