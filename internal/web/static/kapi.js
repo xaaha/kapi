@@ -27,6 +27,7 @@
   let lastReply = 0;
   let ended = false;
   let opened = false;
+  const loadedAt = new Date();
   let busy = false;
   let pending = null;
   let flushTimer = 0;
@@ -1610,6 +1611,7 @@
     const text = input.value.trim();
     if (!drafts.length) return send();
     if (composerTray.blocked()) return say(composerTray.blocked());
+    showChat();
     const files = composerTray.names();
     const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
@@ -2421,7 +2423,10 @@
       if (ev.author === "human") {
         lastHuman = ev.seq;
         setEnded(false);
-      } else lastReply = ev.seq;
+      } else {
+        lastReply = ev.seq;
+        if (outlineOpen && !phone.matches && new Date(ev.time) >= loadedAt) markChatUnread(true);
+      }
       markRead();
     } else if (ev.kind === "revision") onRevision(ev);
     else if (ev.kind === "presence") {
@@ -2470,6 +2475,7 @@
     const files = composerTray.names();
     if (composerTray.blocked()) return say(composerTray.blocked());
     if (!text && !files.length) return;
+    showChat();
     input.value = "";
     sendsInFlight++;
     composerTray.take(files);
@@ -2765,12 +2771,25 @@
 
   function syncOutline() {
     panel.toggleAttribute("data-outline", outlineOpen && !phone.matches);
+    if (!outlineOpen || phone.matches) markChatUnread(false);
     root.toggleAttribute("data-outline-sheet", outlineSheet && phone.matches);
     outlineButton.setAttribute("aria-pressed", String(outlineShown()));
     trackOutline();
   }
 
+  function showChat() {
+    if (outlineOpen && !phone.matches) setOutline(false);
+  }
+
+  function markChatUnread(on) {
+    outlineButton.toggleAttribute("data-unread", on);
+    outlineButton.setAttribute("aria-label", on ? "Outline, new reply in chat" : "Outline");
+    outlineButton.dataset.tip = on ? "New reply in chat" : "Outline";
+  }
+
   function buildOutline() {
+    const had = outlineNodes.find((n) => n.link === document.activeElement || n.chevron === document.activeElement);
+    const part = had && (had.link === document.activeElement ? "link" : "chevron");
     outlineDirty = false;
     outlineTops = null;
     outlineCurrent = null;
@@ -2786,6 +2805,7 @@
     });
     outlineEmpty.hidden = outlineNodes.length > 0;
     outlineTree.replaceChildren(...top.map(outlineItem));
+    if (had) outlineNodes.find((n) => n.id === had.id)?.[part].focus();
   }
 
   function outlineItem(node) {
@@ -2860,7 +2880,7 @@
     outlineDirty = true;
     searchEntries = null;
     trackOutline();
-    if (!search.hidden) runSearch();
+    if (!search.hidden) runSearch(true);
   }
 
   const KINDS = { P: "text", UL: "list", OL: "list", BLOCKQUOTE: "quote", PRE: "code", TABLE: "table", FIGURE: "image", DETAILS: "details", HR: "rule" };
@@ -2964,7 +2984,11 @@
     return [...(from ? ["\u2026"] : []), ...marked(entry.text, spans, from, Math.min(entry.text.length, from + 220))];
   }
 
-  function runSearch() {
+  const searchRowId = (r) => (r.node.classList.contains("kapi-search-section") ? r.key : `${r.key}/${idOf(r.el)}`);
+
+  function runSearch(keep = false) {
+    const kept = keep && searchRows[searchActive] ? searchRowId(searchRows[searchActive]) : null;
+    const scroll = searchResults.scrollTop;
     const low = lower(searchInput.value);
     const terms = [...low.matchAll(WORD)].map((m) => m[0]);
     const phrase = low.replace(/\s+/g, " ").trim();
@@ -3008,8 +3032,9 @@
     const shown = sorted.reduce((n, g) => n + g.hits.length + (g.head ? 1 : 0), 0);
     searchStatus.textContent = !terms.length ? "Search the headings and text on this page" : !shown ? "No matches on this page"
       : `${shown} match${shown === 1 ? "" : "es"} in ${sections} section${sections === 1 ? "" : "s"}${searchHits.length > shown ? `, first ${shown} shown` : ""}`;
-    const want = searchRows.findIndex((r) => r.hit);
-    setSearchActive(want);
+    if (keep) searchResults.scrollTop = scroll;
+    const at = kept ? searchRows.findIndex((r) => searchRowId(r) === kept) : -1;
+    setSearchActive(at >= 0 ? at : searchRows.findIndex((r) => r.hit));
   }
 
   function setSearchActive(i) {
@@ -3044,7 +3069,7 @@
     const r = searchButton.getBoundingClientRect();
     const top = Math.round(head.bottom + 6);
     search.style.top = `${top}px`;
-    search.style.right = `${Math.round(Math.max(12, innerWidth - r.right))}px`;
+    search.style.right = `${Math.round(Math.max(12, document.documentElement.clientWidth - r.right))}px`;
     search.style.maxHeight = `calc(100vh - ${top + 24}px)`;
   }
 
@@ -3117,12 +3142,16 @@
   function goBack() {
     if (!searchBack) return;
     scrollTo({ top: searchBack.y, behavior: reduced() ? "auto" : "smooth" });
+    clearBack();
+  }
+
+  function clearBack() {
     searchBack = null;
     backChip.hidden = true;
     clearSearchMarks();
   }
 
-  searchInput.addEventListener("input", runSearch);
+  searchInput.addEventListener("input", () => runSearch());
   searchInput.addEventListener("keydown", (e) => {
     if (e.isComposing || e.keyCode === 229) return;
     const row = searchRows[searchActive];
@@ -3154,7 +3183,10 @@
     if (outlineSheet && phone.matches && !outlineView.contains(e.target) && !outlineButton.contains(e.target)) setOutline(false);
   }, true);
   addEventListener("popstate", (e) => {
-    if (typeof e.state?.kapiY === "number") return scrollTo(0, e.state.kapiY);
+    if (typeof e.state?.kapiY === "number") {
+      if (searchBack && Math.abs(searchBack.y - e.state.kapiY) < 2) clearBack();
+      return scrollTo(0, e.state.kapiY);
+    }
     const el = location.hash.length > 1 && find(decodeURIComponent(location.hash.slice(1)));
     if (!el) return;
     reveal(el);
@@ -3277,11 +3309,12 @@
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
-    if (!editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey && !e.shiftKey) {
-      if (SHORTCUTS.is("search", e) || SHORTCUTS.is("searchCommand", e)) {
-        e.preventDefault();
-        return openSearch();
-      }
+    const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
+    if (free && (SHORTCUTS.is("search", e) || (!e.shiftKey && SHORTCUTS.is("searchCommand", e)))) {
+      e.preventDefault();
+      return openSearch();
+    }
+    if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;
         e.preventDefault();
@@ -3301,14 +3334,14 @@
       }
     }
     if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
-    if (SHORTCUTS.is("dismiss", e) && searchBack && !editing && !asking && !selected && !typing(focus) && !panel.contains(focus)) {
-      e.preventDefault();
-      return goBack();
-    }
     if (SHORTCUTS.is("dismiss", e) && (pop || sheetOpen)) {
       hidePop(true);
       setSheet(false);
       return;
+    }
+    if (SHORTCUTS.is("dismiss", e) && searchBack && !note && notice.hidden && !editing && !asking && !selected && !typing(focus) && !panel.contains(focus)) {
+      e.preventDefault();
+      return goBack();
     }
     if (SHORTCUTS.is("dismiss", e)) {
       dismissNote();

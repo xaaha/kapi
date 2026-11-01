@@ -383,6 +383,18 @@
   pointer-events: none;
 }
 
+#kapi-chrome .kapi-panel-head .kapi-outline-button[data-unread]::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--kapi-bg);
+  border-radius: 50%;
+  background: var(--kapi-blue-text);
+}
+
 #kapi-chrome :is(.kapi-search-button, .kapi-theme-button, .kapi-outline-button) svg {
   display: block;
   width: 16px;

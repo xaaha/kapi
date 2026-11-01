@@ -4265,3 +4265,89 @@ test("the search button sits in the panel head beside outline and theme, and its
   await click(".kapi-search-button");
   await page.waitFor(`document.querySelector(".kapi-search").hidden`);
 });
+
+async function searchJump(query) {
+  await page.eval(`scrollTo(0, 200)`);
+  await page.key("/");
+  await page.waitFor(`!document.querySelector(".kapi-search").hidden`);
+  await page.type(query);
+  await until(() => page.eval(`!!document.querySelector('.kapi-search [aria-selected="true"]')`));
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector(".kapi-back").hidden`);
+  await until(() => page.eval(`scrollY > 600`));
+}
+
+test("Esc closes a note popover opened after a search jump before it goes back", async () => {
+  await reopenWith(LONG);
+  server.push({ author: "human", kind: "note", target: "z1z1z1z1", quote: "The loop stops", rev: 1, text: "why?" });
+  await page.waitFor(`document.querySelectorAll(".kapi-rail .kapi-rail-dot").length === 1`);
+  await searchJump("zebra");
+  await page.key("j");
+  await page.waitFor(`!!document.querySelector(".kapi-note-pop")`, 3000);
+  const y = await page.eval(`scrollY`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector(".kapi-note-pop")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-back").hidden`), false);
+  assert.equal(await page.eval(`scrollY`), y);
+  await page.key("Escape");
+  await page.waitFor(`document.querySelector(".kapi-back").hidden`);
+  await until(() => page.eval(`scrollY === 200`));
+});
+
+test("browser Back to where a search started hides the back chip", async () => {
+  await reopenWith(LONG);
+  await searchJump("zebra");
+  await page.eval(`history.back()`);
+  await page.waitFor(`scrollY === 200 && document.querySelector(".kapi-back").hidden`);
+  assert.equal(await page.eval(`CSS.highlights.has("kapi-search")`), false);
+});
+
+test("slash opens search when the keyboard needs Shift for it", async () => {
+  await reopenWith(LONG);
+  await page.key("/", { shift: true });
+  await page.waitFor(`!document.querySelector(".kapi-search").hidden`);
+});
+
+test("an agent edit keeps the chosen search result and the focused outline row", async () => {
+  await reopenWith(LONG);
+  await click(".kapi-outline-button");
+  await page.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
+  await page.eval(`document.querySelector('.kapi-outline-link[title="Binary search"]').focus()`);
+  server.agentEdit("f1f1f1f1", '<p data-kapi-id="f1f1f1f1">Filler that the agent rewrote.</p>');
+  await until(async () => (await text("f1f1f1f1")) === "Filler that the agent rewrote.");
+  await until(() => page.eval(`document.activeElement?.title === "Binary search" && document.activeElement.isConnected`));
+
+  await page.key("/");
+  await page.waitFor(`!document.querySelector(".kapi-search").hidden`);
+  await page.type("filler");
+  await until(() => page.eval(`document.querySelectorAll(".kapi-search-hit").length > 3`));
+  await page.key("ArrowDown");
+  await page.key("ArrowDown");
+  const chosen = () => page.eval(`document.querySelector('.kapi-search [aria-selected="true"] .kapi-search-snippet')?.textContent ?? ""`);
+  const before = await chosen();
+  server.agentEdit("f9f9f9f9", '<p data-kapi-id="f9f9f9f9">Filler at the end, rewritten.</p>');
+  await until(async () => (await text("f9f9f9f9")) === "Filler at the end, rewritten.");
+  await until(async () => (await chosen()) === before);
+});
+
+test("an agent reply while the outline hides the chat marks the outline button, and sending shows the chat", async () => {
+  server.push({ author: "agent", kind: "message", text: "from before" });
+  await page.eval(`localStorage.setItem("kapi-outline", "open"); location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-outline").checkVisibility() && document.querySelectorAll(".kapi-msg").length === 1`);
+  const unread = () => page.eval(`document.querySelector(".kapi-outline-button").hasAttribute("data-unread")`);
+  assert.equal(await unread(), false);
+  server.push({ author: "agent", kind: "message", text: "new one" });
+  await until(unread);
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline-button").getAttribute("aria-label")`), "Outline, new reply in chat");
+  await click(".kapi-outline-button");
+  await until(async () => !(await unread()));
+  assert.equal(await page.eval(`document.querySelector(".kapi-chat").checkVisibility()`), true);
+
+  await click(".kapi-outline-button");
+  await page.waitFor(`!document.querySelector(".kapi-chat").checkVisibility()`);
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.type("hello");
+  await page.key("Enter");
+  await page.waitFor(`document.querySelector(".kapi-chat").checkVisibility()`);
+  assert.equal(await page.eval(`localStorage.getItem("kapi-outline")`), null);
+});
