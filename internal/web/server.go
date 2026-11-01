@@ -561,8 +561,26 @@ func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request, _ *page
 	http.ServeFile(w, r, filepath.Join(page.FilesDir(path), name))
 }
 
-func (s *Server) handleMarkdown(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
+func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, _ := st.Source()
+	if id := r.URL.Query().Get("block"); id != "" {
+		block, err := page.Outer(src, id)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		md, err := render.Markdown(block, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		if _, err := w.Write(md); err != nil { //nolint:gosec // served as text/markdown, not HTML
+			log.Printf("write block markdown: %v", err)
+		}
+		return
+	}
 	f, err := export.Markdown(filepath.Base(st.Path()), src, page.FilesDir(st.Path()))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

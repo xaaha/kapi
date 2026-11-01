@@ -2,8 +2,9 @@ package render
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
 	"sort"
 	"sync"
 
@@ -13,6 +14,9 @@ import (
 //go:embed theme.css
 var themeCSS []byte
 
+//go:embed palettes/*.css
+var palettes embed.FS
+
 //go:embed style.css
 var baseCSS []byte
 
@@ -20,6 +24,12 @@ var css = sync.OnceValue(func() []byte {
 	var b bytes.Buffer
 	b.Write(themeCSS)
 	b.WriteString("\n")
+	names, _ := fs.Glob(palettes, "palettes/*.css")
+	for _, name := range names {
+		p, _ := palettes.ReadFile(name)
+		b.Write(p)
+		b.WriteString("\n")
+	}
 	b.Write(baseCSS)
 	b.WriteString("\n")
 	tokenCSS(&b)

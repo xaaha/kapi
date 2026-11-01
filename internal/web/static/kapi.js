@@ -40,6 +40,7 @@
   let textBackward = false;
   let pointerDown = false;
   let sending = false;
+  let copiedBlock = null;
 
   function h(tag, props = {}, ...kids) {
     const el = document.createElement(tag);
@@ -66,7 +67,12 @@
     system: "M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z",
     light: "M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
+    checkCircle: "M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z",
+    minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
+    plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
+    check: "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z",
+    theme: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192V40a88,88,0,0,1,0,176Z",
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
@@ -164,11 +170,30 @@
   const menuEntry = ({ id, glyph, label, detail, run }) =>
     h("button", { type: "button", role: "menuitem", tabindex: "-1", ...(id && { "data-menu": id }), onclick: () => (closeMenu(true), run()) },
       icon(glyph), h("span", { class: "kapi-menu-label", text: label }), ...(detail ? [h("code", { class: "kapi-menu-detail", title: detail, text: `\u200e${detail}` })] : []));
-  const exportButton = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": "export", "aria-haspopup": "menu", "aria-expanded": "false" },
-    icon("download"), h("span", { class: "kapi-menu-label", text: "Export" }), h("span", { class: "kapi-menu-caret" }, icon("caret")));
-  const submenu = h("div", { class: "kapi-submenu", role: "menu", "aria-label": "Export", hidden: "" }, ...EXPORTS.map(menuEntry));
-  const exportGroup = h("div", { class: "kapi-menu-group", role: "none" }, exportButton, submenu);
-  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" }, exportGroup, ...MENU.map(menuEntry));
+  const submenus = [];
+  const submenuGroup = (id, glyph, label, items) => {
+    const button = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": id, "aria-haspopup": "menu", "aria-expanded": "false" },
+      icon(glyph), h("span", { class: "kapi-menu-label", text: label }), h("span", { class: "kapi-menu-caret" }, icon("caret")));
+    const list = h("div", { class: "kapi-submenu", role: "menu", "aria-label": label, hidden: "" }, ...items);
+    const group = h("div", { class: "kapi-menu-group", role: "none" }, button, list);
+    submenus.push({ button, list, group });
+    return group;
+  };
+  const themeItems = () => {
+    const theme = window.kapiTheme;
+    if (!theme?.setPalette) return [];
+    const items = theme.palettes.map(({ id, label }) =>
+      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-palette": id, onclick: () => theme.setPalette(id) },
+        icon("check"), h("span", { class: "kapi-menu-label", text: label })));
+    const sync = () => {
+      for (const b of items) b.setAttribute("aria-checked", String(b.dataset.palette === theme.palette()));
+    };
+    document.addEventListener("kapi-palette", sync);
+    sync();
+    return [submenuGroup("theme", "theme", "Theme", items)];
+  };
+  const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
+    submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle(), menuButton, menu), tabs,
     restartBox, notice, chat, notesView,
@@ -177,6 +202,7 @@
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton);
   const phone = matchMedia("(max-width: 760px)");
+  const diagramZoom = new WeakMap();
   phone.addEventListener("change", () => renderBar());
   const BAR_GAP = 8;
   const POINT_PAD = 10;
@@ -330,14 +356,20 @@
       const next = selected.getAttribute("data-kapi-dir") === "lr" ? "Flow top to bottom" : "Flow left to right";
       const shown = selected.matches("figure") && selected.querySelector(":scope > img[src]");
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
-      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
+      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), tool("copy", "Copy as Markdown", "copy", "C"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
+        ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         tool("archive", "Archive", "archive", "E")]),
         tool("trash", "Delete", "delete", DELETE_KEY, "Delete"));
     }
-    for (const b of bar.querySelectorAll("button")) b.disabled ||= busy;
+    if (copiedBlock?.block === selected && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
+    const zoom = selected && diagramZoom.get(selected)?.level;
+    for (const b of bar.querySelectorAll("button")) {
+      b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
+    }
     bar.hidden = false;
     placeRing();
   }
@@ -455,23 +487,29 @@
     return true;
   }
 
-  const menuItems = (within) => [...within.querySelectorAll(':scope > [role="menuitem"]:not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
+  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemradio"]):not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
   let hoverOpened = false;
   let submenuTimer;
 
-  function openSubmenu(focusFirst) {
-    submenu.hidden = false;
-    exportButton.setAttribute("aria-expanded", "true");
-    if (focusFirst) menuItems(submenu)[0].focus();
+  let openSub = null;
+
+  function openSubmenu(sub, focusFirst) {
+    if (openSub !== sub) closeSubmenu(false);
+    openSub = sub;
+    sub.list.hidden = false;
+    sub.button.setAttribute("aria-expanded", "true");
+    if (focusFirst) menuItems(sub.list)[0].focus();
   }
 
   function closeSubmenu(refocus) {
     hoverOpened = false;
     clearTimeout(submenuTimer);
-    if (submenu.hidden) return;
-    submenu.hidden = true;
-    exportButton.setAttribute("aria-expanded", "false");
-    if (refocus) exportButton.focus();
+    if (!openSub) return;
+    const sub = openSub;
+    openSub = null;
+    sub.list.hidden = true;
+    sub.button.setAttribute("aria-expanded", "false");
+    if (refocus) sub.button.focus();
   }
 
   function openMenu() {
@@ -489,34 +527,43 @@
   }
 
   menuButton.addEventListener("click", () => (menu.hidden ? openMenu() : closeMenu(true)));
-  exportButton.addEventListener("click", () => {
-    if (hoverOpened) hoverOpened = false;
-    else if (submenu.hidden) openSubmenu(false);
-    else closeSubmenu(true);
-  });
-  exportGroup.addEventListener("pointerenter", (e) => {
-    if (e.pointerType !== "mouse") return;
-    clearTimeout(submenuTimer);
-    if (!submenu.hidden) return;
-    openSubmenu(false);
-    hoverOpened = true;
-  });
-  exportGroup.addEventListener("pointerleave", (e) => {
-    if (e.pointerType === "mouse") submenuTimer = setTimeout(() => closeSubmenu(submenu.contains(document.activeElement)), 300);
-  });
+  for (const sub of submenus) {
+    sub.button.addEventListener("click", () => {
+      if (hoverOpened && openSub === sub) hoverOpened = false;
+      else if (openSub !== sub) openSubmenu(sub, false);
+      else closeSubmenu(true);
+    });
+    const hoverOpen = () => {
+      openSubmenu(sub, false);
+      hoverOpened = true;
+    };
+    sub.group.addEventListener("pointerenter", (e) => {
+      if (e.pointerType !== "mouse") return;
+      clearTimeout(submenuTimer);
+      if (openSub === sub) return;
+      if (openSub) submenuTimer = setTimeout(hoverOpen, 300);
+      else hoverOpen();
+    });
+    sub.group.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "mouse" || !openSub) return;
+      clearTimeout(submenuTimer);
+      submenuTimer = setTimeout(() => closeSubmenu(openSub.list.contains(document.activeElement)), 300);
+    });
+  }
   menu.addEventListener("keydown", (e) => {
     if (e.key !== "Tab") e.stopPropagation();
-    const inSubmenu = submenu.contains(e.target);
-    const items = menuItems(inSubmenu ? submenu : menu);
+    const inSubmenu = !!openSub && openSub.list.contains(e.target);
+    const items = menuItems(inSubmenu ? openSub.list : menu);
+    const opener = submenus.find((sub) => sub.button === e.target);
     const at = items.indexOf(document.activeElement);
     const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
     if (to !== undefined) {
       e.preventDefault();
       if (!inSubmenu) closeSubmenu(false);
       items[(to + items.length) % items.length].focus();
-    } else if (e.target === exportButton && ["ArrowRight", "Enter", " "].includes(e.key)) {
+    } else if (opener && ["ArrowRight", "Enter", " "].includes(e.key)) {
       e.preventDefault();
-      openSubmenu(true);
+      openSubmenu(opener, true);
     } else if (inSubmenu && (e.key === "ArrowLeft" || e.key === "Escape")) {
       e.preventDefault();
       closeSubmenu(true);
@@ -554,6 +601,51 @@
 
   function copyPath() {
     navigator.clipboard.writeText(pagePath).then(() => say("Copied the page path"), () => say("Could not copy the page path", "error"));
+  }
+
+  function markCopied(button) {
+    if (!button) return;
+    button.dataset.copyState = "copied";
+    button.dataset.tip = "Copied";
+    button.setAttribute("aria-label", "Copied");
+    button.replaceChildren(icon("checkCircle"), h("span", { class: "kapi-tool-label", text: "Copied" }));
+  }
+
+  async function copyBlock() {
+    const id = selected && idOf(selected);
+    if (!id) return;
+    let res;
+    try {
+      res = await fetch(`${base}/export/markdown?block=${encodeURIComponent(id)}`);
+    } catch {
+      return say("Could not reach kapi. Check that the daemon is running.", "error");
+    }
+    if (await restartedReply(res)) return;
+    if (!res.ok) return say(`Could not copy the block: ${(await res.text()).trim()}`, "error");
+    const markdown = await res.text();
+    navigator.clipboard.writeText(markdown).then(() => {
+      notice.hidden = true;
+      const state = { block: selected, until: performance.now() + 1600 };
+      copiedBlock = state;
+      renderBar();
+      setTimeout(() => {
+        if (copiedBlock !== state) return;
+        copiedBlock = null;
+        if (selected === state.block) renderBar();
+      }, 1600);
+    }, () => say("Could not copy the block", "error"));
+  }
+
+  function zoomDiagram(delta) {
+    const svg = selected?.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
+    if (!svg) return;
+    let zoom = diagramZoom.get(selected);
+    if (!zoom) zoom = { base: svg.getBoundingClientRect().width, level: 1 };
+    zoom.level = Math.min(3, Math.max(0.5, zoom.level + delta));
+    diagramZoom.set(selected, zoom);
+    svg.style.width = `${zoom.base * zoom.level}px`;
+    svg.style.maxWidth = "none";
+    renderBar();
   }
 
   let titleBeforePrint = null;
@@ -705,6 +797,10 @@
     }
   }
 
+  function markWideTables() {
+    for (const wrap of main.querySelectorAll(".kapi-table")) wrap.toggleAttribute("data-kapi-wide", wrap.scrollWidth > wrap.clientWidth + 1);
+  }
+
   async function editRaw(el) {
     busy = true;
     renderBar();
@@ -795,6 +891,9 @@
     if (name === "cancel") return cancelEdit();
     if (name === "ask") return openAsk();
     if (!selected) return;
+    if (name === "copy") return copyBlock();
+    if (name === "zoom-out") return zoomDiagram(-0.25);
+    if (name === "zoom-in") return zoomDiagram(0.25);
     const id = idOf(selected);
     if (name === "edit") return startEdit();
     if (name === "archive" || name === "unarchive") {
@@ -2402,8 +2501,9 @@
       if (!e.metaKey && !e.ctrlKey && (textRange || selected)) {
         const block = !textRange && !busy && selected;
         const name = key === "a" ? "ask"
-          : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
-            : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
+          : block && key === "c" ? "copy"
+            : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
+              : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
         if (name) {
           e.preventDefault();
           return action(name);
@@ -2500,7 +2600,11 @@
     return editing ? renderBar() : placeRing();
   });
   new ResizeObserver(placeRing).observe(main);
-  new ResizeObserver(() => schedulePaint()).observe(main);
+  new ResizeObserver(() => {
+    schedulePaint();
+    markWideTables();
+  }).observe(main);
+  document.fonts.ready.then(markWideTables);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
       document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);

@@ -1277,6 +1277,18 @@ func TestD23ExportMarkdownDownloadsAFileOrAZipWhenThePageShowsImages(t *testing.
 	}
 }
 
+func TestSelectedBlockExportsThroughTheSameMarkdownRenderer(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">Intro</p><kapi-table data-kapi-id="bbbbbbbb"><table><tr><th>Shard</th><th>Rows</th></tr><tr><td>beta</td><td>10</td></tr></table></kapi-table>`)
+	got := s.get("/p/" + s.id + "/export/markdown?block=bbbbbbbb")
+	want := "| Shard | Rows |\n| --- | --- |\n| beta | 10 |\n"
+	if got.code != http.StatusOK || got.body != want || got.header.Get("Content-Type") != "text/markdown; charset=utf-8" || got.header.Get("Content-Disposition") != "" || got.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("block markdown: %d %q %v", got.code, got.body, got.header)
+	}
+	if got := s.get("/p/" + s.id + "/export/markdown?block=missing"); got.code != http.StatusNotFound {
+		t.Errorf("missing block: %d", got.code)
+	}
+}
+
 func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
 	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
 	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {
