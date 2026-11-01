@@ -36,6 +36,20 @@
   let retryDelay = 1000;
   let asking = null;
   let lastPoint = null;
+  let frameTarget = null;
+  const FRAME_PAD = 10;
+  const TABLE = '[data-kapi-preset="table"], table[data-kapi-id]';
+  const BLOCK_ACTIONS = {
+    copy: { block: () => copyBlock(), row: () => copyBlock({ row: sourceRow(pickedRow()) }), column: () => copyBlock({ col: pickedColumn() }) },
+    "zoom-out": { block: () => zoomDiagram(-0.25) },
+    "zoom-in": { block: () => zoomDiagram(0.25) },
+    edit: { block: () => startEdit() },
+    archive: { block: () => archiveBlock("archive") },
+    unarchive: { block: () => archiveBlock("unarchive") },
+    download: { block: downloadImage },
+    flip: { block: flipDiagram },
+    delete: { block: deleteBlock, row: () => deletePart("deleterow", { row: sourceRow(pickedRow()) }), column: () => deletePart("deletecol", { col: pickedColumn() }) },
+  };
   let textRange = null;
   let textBackward = false;
   let pointerDown = false;
@@ -200,7 +214,8 @@
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton);
+  const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton, tableFrame);
   const phone = matchMedia("(max-width: 760px)");
   const diagramZoom = new WeakMap();
   phone.addEventListener("change", () => renderBar());
@@ -332,7 +347,22 @@
     if (el !== selected) selectedAt = performance.now();
     selected = el;
     el?.setAttribute("data-kapi-selected", "");
+    markPicked();
     renderBar();
+  }
+
+  function markPicked() {
+    for (const el of main.querySelectorAll("[data-kapi-picked]")) el.removeAttribute("data-kapi-picked");
+    if (scope() === "row") return pickedRow().setAttribute("data-kapi-picked", "");
+    if (scope() !== "column") return;
+    const col = pickedColumn();
+    for (const tr of rowsOf(pickedCell(selected).closest("table"))) {
+      let at = 0;
+      for (const cell of tr.cells) {
+        if (at === col) cell.setAttribute("data-kapi-picked", "");
+        at += cell.colSpan;
+      }
+    }
   }
 
   function renderBar() {
@@ -357,15 +387,17 @@
       const shown = selected.matches("figure") && selected.querySelector(":scope > img[src]");
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
       const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
-      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"), tool("copy", "Copy as Markdown", "copy", "C"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      const part = scope() === "block" ? "" : ` ${scope()}`;
+      const tools = [tool("android", "Ask AI", "ask", "A"), tool("copy", `Copy${part} as Markdown`, "copy", "C"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
         ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         tool("archive", "Archive", "archive", "E")]),
-        tool("trash", "Delete", "delete", DELETE_KEY, "Delete"));
+        tool("trash", `Delete${part}`, "delete", DELETE_KEY, "Delete")];
+      bar.replaceChildren(...tools.filter((b) => b.dataset.action === "ask" || scopedAction(b.dataset.action)));
     }
-    if (copiedBlock?.block === selected && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
+    if (copiedBlock?.block === selected && copiedBlock.scope === scope() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
     const zoom = selected && diagramZoom.get(selected)?.level;
     for (const b of bar.querySelectorAll("button")) {
       b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
@@ -449,14 +481,17 @@
 
   function placeRing() {
     placeBar();
+    placeFrame();
     ring.hidden = (bar.hidden && !asking) || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
-      ring.style.left = `${r.left - 4}px`;
-      ring.style.top = `${r.top - 4}px`;
-      ring.style.width = `${r.width + 8}px`;
-      ring.style.height = `${r.height + 8}px`;
-      ring.style.borderRadius = getComputedStyle(selected).borderRadius;
+      const table = selected.matches(TABLE);
+      const pad = table ? FRAME_PAD : 4;
+      ring.style.left = `${r.left - pad}px`;
+      ring.style.top = `${r.top - pad}px`;
+      ring.style.width = `${r.width + 2 * pad}px`;
+      ring.style.height = `${r.height + 2 * pad}px`;
+      ring.style.borderRadius = table ? `calc(var(--kapi-radius-lg) + ${FRAME_PAD}px)` : getComputedStyle(selected).borderRadius;
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }
@@ -611,12 +646,12 @@
     button.replaceChildren(icon("checkCircle"), h("span", { class: "kapi-tool-label", text: "Copied" }));
   }
 
-  async function copyBlock() {
+  async function copyBlock(part = {}) {
     const id = selected && idOf(selected);
     if (!id) return;
     let res;
     try {
-      res = await fetch(`${base}/export/markdown?block=${encodeURIComponent(id)}`);
+      res = await fetch(`${base}/export/markdown?block=${encodeURIComponent(id)}${Object.entries(part).map(([k, v]) => `&${k}=${v}`).join("")}`);
     } catch {
       return say("Could not reach kapi. Check that the daemon is running.", "error");
     }
@@ -625,7 +660,7 @@
     const markdown = await res.text();
     navigator.clipboard.writeText(markdown).then(() => {
       notice.hidden = true;
-      const state = { block: selected, until: performance.now() + 1600 };
+      const state = { block: selected, scope: scope(), until: performance.now() + 1600 };
       copiedBlock = state;
       renderBar();
       setTimeout(() => {
@@ -773,10 +808,19 @@
     return [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   }
 
+  function headRow(table) {
+    return table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+  }
+
+  function isHeadRow(tr) {
+    const table = tr.closest("table");
+    return tr.parentElement === table.tHead || tr === headRow(table);
+  }
+
   function numberRows(scope) {
     for (const table of scope.querySelectorAll('[data-kapi-preset$="table"] table')) {
       const rows = rowsOf(table);
-      const head = table.tHead?.rows[0] ?? rows.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+      const head = headRow(table);
       if (!head) continue;
       const labels = [...head.cells].flatMap((c) => Array(c.colSpan).fill(c.textContent.trim()));
       const carry = [];
@@ -890,36 +934,55 @@
     if (name === "save") return saveEdit();
     if (name === "cancel") return cancelEdit();
     if (name === "ask") return openAsk();
-    if (!selected) return;
-    if (name === "copy") return copyBlock();
-    if (name === "zoom-out") return zoomDiagram(-0.25);
-    if (name === "zoom-in") return zoomDiagram(0.25);
+    return scopedAction(name)?.();
+  }
+
+  function scope() {
+    const cell = selected?.matches(TABLE) && pickedCell(selected);
+    if (!cell) return "block";
+    return isHeadRow(cell.parentElement) ? "column" : "row";
+  }
+
+  function scopedAction(name) {
+    return selected ? BLOCK_ACTIONS[name]?.[scope()] : undefined;
+  }
+
+  async function archiveBlock(name) {
     const id = idOf(selected);
-    if (name === "edit") return startEdit();
-    if (name === "archive" || name === "unarchive") {
-      const section = name === "archive" ? selected.hasAttribute("data-kapi-folded") : selected.hasAttribute("data-kapi-archive-section");
-      const res = await op(name, { id, ...(section ? { section: true } : {}) });
-      return res?.ok && refresh(res.data.ids || [id]);
-    }
-    if (name === "download") {
-      const img = selected.querySelector(":scope > img[src]");
-      if (!img) return;
-      const a = h("a", { href: img.src, download: img.src.split("/").pop() });
-      root.append(a);
-      a.click();
-      return a.remove();
-    }
-    if (name === "flip") {
-      const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
-      return (await op("orient", { id, dir }))?.ok && refresh([id]);
-    }
-    if (name === "delete") {
-      const spot = noteSpot(selected);
-      const section = selected.hasAttribute("data-kapi-folded");
-      if (!(await op("delete", { id, ...(section ? { section: true } : {}) }))?.ok) return;
-      await refresh(null);
-      return showNote(spot);
-    }
+    const section = name === "archive" ? selected.hasAttribute("data-kapi-folded") : selected.hasAttribute("data-kapi-archive-section");
+    const res = await op(name, { id, ...(section ? { section: true } : {}) });
+    return res?.ok && refresh(res.data.ids || [id]);
+  }
+
+  function downloadImage() {
+    const img = selected.querySelector(":scope > img[src]");
+    if (!img) return;
+    const a = h("a", { href: img.src, download: img.src.split("/").pop() });
+    root.append(a);
+    a.click();
+    a.remove();
+  }
+
+  async function flipDiagram() {
+    const id = idOf(selected);
+    const dir = selected.getAttribute("data-kapi-dir") === "lr" ? "tb" : "lr";
+    return (await op("orient", { id, dir }))?.ok && refresh([id]);
+  }
+
+  async function deleteBlock() {
+    const spot = noteSpot(selected);
+    const section = selected.hasAttribute("data-kapi-folded");
+    if (!(await op("delete", { id: idOf(selected), ...(section ? { section: true } : {}) }))?.ok) return;
+    await refresh(null);
+    showNote(spot);
+  }
+
+  async function deletePart(kind, at) {
+    const id = idOf(selected);
+    const spot = { ...noteSpot(selected), prev: id, next: "" };
+    if (!(await op(kind, { id, ...at }))?.ok) return;
+    await refresh(null);
+    showNote(spot);
   }
 
   const QUOTE_MAX = 1000;
@@ -990,11 +1053,8 @@
 
   function cellPart(cell) {
     const table = cell.closest("table");
-    const all = rowsOf(table);
-    const head = table.tHead?.rows[0] ?? all.find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
-    const header = (tr) => tr.parentElement === table.tHead || tr === head;
-    if (header(cell.parentElement)) return `column ${cell.textContent.trim()}`;
-    const rows = all.filter((tr) => !header(tr));
+    if (isHeadRow(cell.parentElement)) return `column ${cell.textContent.trim()}`;
+    const rows = rowsOf(table).filter((tr) => !isHeadRow(tr));
     const row = `row ${rows.indexOf(cell.parentElement) + 1}`;
     const label = cell.getAttribute("data-kapi-label");
     return label ? `${row}, ${label}` : row;
@@ -1063,8 +1123,27 @@
     };
   }
 
+  function pickedCell(el) {
+    return lastPoint?.el === el && lastPoint.cell?.isConnected && el.contains(lastPoint.cell) ? lastPoint.cell : null;
+  }
+
+  function pickedRow() {
+    const tr = selected && pickedCell(selected)?.parentElement;
+    return tr && !isHeadRow(tr) ? tr : null;
+  }
+
+  function pickedColumn() {
+    const cell = pickedCell(selected);
+    return [...cell.parentElement.cells].slice(0, cell.cellIndex).reduce((n, c) => n + c.colSpan, 0);
+  }
+
+  function sourceRow(tr) {
+    const at = tr.cells[0]?.dataset.kapiCell;
+    return at ? Number(at.split(",")[0]) : rowsOf(tr.closest("table")).indexOf(tr);
+  }
+
   function blockAnchor(el) {
-    const cell = lastPoint?.el === el && lastPoint.cell?.isConnected && el.contains(lastPoint.cell) ? lastPoint.cell : null;
+    const cell = pickedCell(el);
     if (!cell) return { target: idOf(el), part: "", quote: "", prefix: "", suffix: "" };
     const range = document.createRange();
     range.selectNodeContents(cell);
@@ -2268,7 +2347,7 @@
     if (!cell?.hasAttribute("data-kapi-col") || getComputedStyle(cell).display !== "block") return null;
     if (e.clientX - cell.getBoundingClientRect().left >= parseFloat(getComputedStyle(cell).paddingLeft)) return null;
     const table = cell.closest("table");
-    const head = table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
+    const head = headRow(table);
     let col = 0;
     for (const th of head?.cells ?? []) {
       col += th.colSpan;
@@ -2312,9 +2391,40 @@
   main.addEventListener("mouseover", (e) => {
     const pre = closest(e.target, "pre");
     if (pre && main.contains(pre)) showCopy(pre);
+    const table = closest(e.target, TABLE);
+    showFrame(table && main.contains(table) ? table : null);
   });
   main.addEventListener("mouseleave", (e) => {
     if (e.relatedTarget !== copyButton && !copyButton.contains(e.relatedTarget)) showCopy(null);
+    if (!tableFrame.contains(e.relatedTarget)) showFrame(null);
+  });
+
+  function placeFrame() {
+    const fallback = selected?.matches(TABLE) ? selected : null;
+    const t = !editing && (frameTarget?.isConnected ? frameTarget : fallback);
+    tableFrame.hidden = !t;
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    tableFrame.style.left = `${r.left - FRAME_PAD}px`;
+    tableFrame.style.top = `${r.top - FRAME_PAD}px`;
+    tableFrame.style.width = `${r.width + 2 * FRAME_PAD}px`;
+    tableFrame.style.height = `${r.height + 2 * FRAME_PAD}px`;
+    tableFrame.toggleAttribute("data-picked", t === selected && !pickedCell(t));
+    tableFrame.toggleAttribute("data-selected", t === selected);
+  }
+  function showFrame(table) {
+    frameTarget = table;
+    placeFrame();
+  }
+
+  tableFrame.addEventListener("mouseleave", (e) => {
+    if (!frameTarget?.contains(e.relatedTarget)) showFrame(null);
+  });
+  tableFrame.addEventListener("click", () => {
+    const t = frameTarget?.isConnected ? frameTarget : selected;
+    if (!t?.matches(TABLE) || editing) return;
+    lastPoint = null;
+    select(t);
   });
   copyButton.addEventListener("click", () => {
     if (!copyTarget?.isConnected) return;

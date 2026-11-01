@@ -1714,6 +1714,38 @@
   cursor: copy;
 }
 
+#kapi-chrome .kapi-table-frame {
+  position: fixed;
+  z-index: 2147482998;
+  pointer-events: none;
+}
+
+#kapi-chrome .kapi-table-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--kapi-border-strong);
+  border-radius: calc(var(--kapi-radius-lg) + 10px);
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 10px 10px, 10px calc(100% - 10px), calc(100% - 10px) calc(100% - 10px), calc(100% - 10px) 10px, 10px 10px);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+#kapi-chrome .kapi-table-frame:hover::before {
+  border-style: solid;
+  border-color: var(--kapi-blue-text);
+  background: color-mix(in srgb, var(--kapi-blue-text) 8%, transparent);
+}
+
+#kapi-chrome .kapi-table-frame:is([data-picked], [data-selected]:not(:hover))::before {
+  border-color: transparent;
+  background: none;
+}
+
+#kapi-page :is(tr[data-kapi-picked] > *, td[data-kapi-picked], th[data-kapi-picked]) {
+  background: color-mix(in srgb, var(--kapi-blue-text) 10%, var(--kapi-card));
+}
+
 #kapi-chrome .kapi-copy-code {
   position: fixed;
   z-index: 2147483000;

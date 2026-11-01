@@ -49,6 +49,8 @@ type Op struct {
 	Dir     string  `json:"dir,omitempty"`
 	Section bool    `json:"section,omitempty"`
 	Src     string  `json:"src,omitempty"`
+	Row     *int    `json:"row,omitempty"`
+	Col     *int    `json:"col,omitempty"`
 }
 
 type Summary struct {
@@ -581,7 +583,7 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 		if op.ID == "" {
 			return true
 		}
-	case "edit", "text", "archive", "unarchive", "delete", "check", "orient":
+	case "edit", "text", "archive", "unarchive", "delete", "deleterow", "deletecol", "check", "orient":
 	default:
 		return false
 	}
@@ -1360,6 +1362,10 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
 		}
 		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
+	case "deleterow":
+		return deleteRow(src, els, e, op.Row)
+	case "deletecol":
+		return deleteCol(src, els, e, op.Col)
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := about("moved #"+op.ID) + " to the end"

@@ -565,6 +565,22 @@ func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page
 	src, _ := st.Source()
 	if id := r.URL.Query().Get("block"); id != "" {
 		block, err := page.Outer(src, id)
+		if row := r.URL.Query().Get("row"); row != "" {
+			n, convErr := strconv.Atoi(row)
+			if convErr != nil {
+				http.Error(w, "row must be a number", http.StatusBadRequest)
+				return
+			}
+			block, err = page.OuterRow(src, id, n)
+		}
+		if col := r.URL.Query().Get("col"); col != "" {
+			n, convErr := strconv.Atoi(col)
+			if convErr != nil {
+				http.Error(w, "col must be a number", http.StatusBadRequest)
+				return
+			}
+			block, err = page.OuterCol(src, id, n)
+		}
 		if err != nil {
 			http.NotFound(w, r)
 			return
