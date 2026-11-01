@@ -118,3 +118,25 @@ func TestOuterColKeepsOnlyThatColumn(t *testing.T) {
 		t.Errorf("OuterCol 1:\n%s", s)
 	}
 }
+
+func TestRowAndColumnDeletesRefuseToBreakALinkIntoThem(t *testing.T) {
+	const linked = "<p data-kapi-id=\"pppppppp\"><a href=\"#cccccccc\">see</a></p>\n" +
+		"<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><th>A</th><th>B</th></tr><tr><td>x</td><td><span data-kapi-id=\"cccccccc\">y</span></td></tr><tr><td>z</td><td>w</td></tr></table></kapi-table>\n"
+	for _, op := range []*Op{
+		{Kind: "deleterow", ID: "aaaaaaaa", Row: row(1)},
+		{Kind: "deletecol", ID: "aaaaaaaa", Col: col(1)},
+	} {
+		home, path := newPage(t, linked)
+		s := open(t, home, path)
+		if _, _, err := s.Apply(1, op); !errors.Is(err, ErrInboundLinks) {
+			t.Errorf("%s: err = %v, want ErrInboundLinks", op.Kind, err)
+		}
+		if got := onDisk(t, path); got != linked {
+			t.Errorf("refused %s changed the file:\n%s", op.Kind, got)
+		}
+	}
+	home, path := newPage(t, linked)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "deleterow", ID: "aaaaaaaa", Row: row(2)})
+	mustApply(t, s, &Op{Kind: "deletecol", ID: "aaaaaaaa", Col: col(0)})
+}

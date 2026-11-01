@@ -19,6 +19,9 @@ func deleteRow(src []byte, els []element, e *element, row *int) ([]byte, Summary
 	if isHeaderRow(els, trs[r], cells[r], r) {
 		return nil, Summary{}, ErrHeaderRow
 	}
+	if err := linkedInto(els, trs[r]); err != nil {
+		return nil, Summary{}, err
+	}
 	text := "deleted a row of " + describe(src, e)
 	return cut(src, trs[r]), Summary{Text: text, IDs: []string{e.id}}, nil
 }
@@ -85,6 +88,9 @@ func deleteCol(src []byte, els []element, e *element, col *int) ([]byte, Summary
 	}
 	if widest(els, e) < 2 {
 		return nil, Summary{}, errors.New("the last column cannot be deleted; delete the table instead")
+	}
+	if err := linkedInto(els, cells...); err != nil {
+		return nil, Summary{}, err
 	}
 	text := "deleted a column of " + describe(src, e)
 	out := src
