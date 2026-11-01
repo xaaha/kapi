@@ -139,6 +139,7 @@ body {
 .kapi-table table { margin: 0; }
 @media (min-width: 641px) {
   .kapi-table table { border-collapse: separate; border-spacing: 0; border: 1px solid var(--kapi-border); border-radius: var(--kapi-radius-lg); }
+  .kapi-table[data-kapi-wide] { border-radius: var(--kapi-radius-lg); }
   .kapi-table :where(th, td) { border-bottom-width: 0.5px; }
   .kapi-table thead th:first-child { border-top-left-radius: var(--kapi-radius-lg); }
   .kapi-table thead th:last-child { border-top-right-radius: var(--kapi-radius-lg); }

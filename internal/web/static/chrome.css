@@ -329,6 +329,15 @@
   }
 }
 
+.kapi-site-head {
+  transition: opacity 0.15s;
+}
+
+.kapi-site-head[data-covered] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .kapi-site-head .kapi-logo {
   width: 24px;
   height: 24px;
@@ -1715,6 +1724,8 @@
 }
 
 #kapi-chrome .kapi-table-frame {
+  --kapi-frame-radius: 0;
+  --kapi-frame-band: none;
   position: fixed;
   z-index: 2147482998;
   pointer-events: none;
@@ -1725,8 +1736,8 @@
   position: absolute;
   inset: 0;
   border: 1px dashed var(--kapi-border-strong);
-  border-radius: calc(var(--kapi-radius-lg) + 10px);
-  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 10px 10px, 10px calc(100% - 10px), calc(100% - 10px) calc(100% - 10px), calc(100% - 10px) 10px, 10px 10px);
+  border-radius: var(--kapi-frame-radius);
+  clip-path: var(--kapi-frame-band);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1740,6 +1751,26 @@
 #kapi-chrome .kapi-table-frame:is([data-picked], [data-selected]:not(:hover))::before {
   border-color: transparent;
   background: none;
+}
+
+@media (min-width: 641px) {
+  #kapi-page [data-kapi-fit="short"] {
+    white-space: nowrap;
+  }
+
+  #kapi-page [data-kapi-fit="text"] {
+    overflow-wrap: anywhere;
+  }
+
+  #kapi-page [data-kapi-fit="text"]::before {
+    content: "";
+    display: block;
+    width: 11rem;
+  }
+
+  #kapi-page table[data-kapi-tight] [data-kapi-fit="text"]::before {
+    width: 6rem;
+  }
 }
 
 #kapi-page :is(tr[data-kapi-picked] > *, td[data-kapi-picked], th[data-kapi-picked]) {

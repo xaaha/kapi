@@ -48,6 +48,8 @@
     unarchive: { block: () => archiveBlock("unarchive") },
     download: { block: downloadImage },
     flip: { block: flipDiagram },
+    expand: { block: () => expandTable(true) },
+    collapse: { block: () => expandTable(false) },
     delete: { block: deleteBlock, row: () => deletePart("deleterow", { row: sourceRow(pickedRow()) }), column: () => deletePart("deletecol", { col: pickedColumn() }) },
   };
   let textRange = null;
@@ -83,6 +85,8 @@
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
     checkCircle: "M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z",
     minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
+    expand: "M216,48V96a8,8,0,0,1-16,0V67.31l-50.34,50.35a8,8,0,0,1-11.32-11.32L188.69,56H160a8,8,0,0,1,0-16h48A8,8,0,0,1,216,48ZM106.34,138.34,56,188.69V160a8,8,0,0,0-16,0v48a8,8,0,0,0,8,8H96a8,8,0,0,0,0-16H67.31l50.35-50.34a8,8,0,0,0-11.32-11.32Z",
+    collapse: "M213.66,53.66,163.31,104H192a8,8,0,0,1,0,16H144a8,8,0,0,1-8-8V64a8,8,0,0,1,16,0V92.69l50.34-50.35a8,8,0,0,1,11.32,11.32ZM112,136H64a8,8,0,0,0,0,16H92.69L42.34,202.34a8,8,0,0,0,11.32,11.32L104,163.31V192a8,8,0,0,0,16,0V144A8,8,0,0,0,112,136Z",
     plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
     check: "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z",
@@ -124,12 +128,14 @@
   const button = (label, action, title = label) =>
     h("button", { type: "button", "data-action": action, title, text: label });
 
-  const tool = (glyph, label, action, key = "", shortcut = key) =>
-    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": key ? `${label} ${key}` : label, ...(shortcut && { "aria-keyshortcuts": shortcut }) },
-      icon(glyph), h("span", { class: "kapi-tool-label", text: label }));
+  function toolButton(label, action, ...children) {
+    const key = SHORTCUTS.tool(action);
+    return h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": key ? `${label} ${key.hint}` : label, ...(key && { "aria-keyshortcuts": key.words }) }, ...children);
+  }
 
-  const iconTool = (glyph, label, action) =>
-    h("button", { type: "button", "data-action": action, "aria-label": label, "data-tip": label }, icon(glyph));
+  const tool = (glyph, label, action) => toolButton(label, action, icon(glyph), h("span", { class: "kapi-tool-label", text: label }));
+
+  const iconTool = (glyph, label, action) => toolButton(label, action, icon(glyph));
 
   const dot = h("span", { class: "kapi-dot", "data-state": "connecting" });
   const bar = h("div", { class: "kapi-bar", role: "toolbar", "aria-label": "Block actions", hidden: "" });
@@ -143,7 +149,10 @@
   const chat = h("div", { class: "kapi-chat" }, logScroll, scrollBottom);
   const input = h("textarea", { rows: "3", placeholder: "Message the agent", "aria-label": "Message" });
   const sendButton = h("button", { type: "submit", class: "kapi-primary", text: "Send" });
-  const HINT = "Enter to send, Shift+Enter for a new line";
+  const SHORTCUTS = window.kapiShortcuts;
+  const keyHint = (name) => SHORTCUTS.key(name).hint;
+  const keyWords = (name) => SHORTCUTS.key(name).words;
+  const HINT = `${keyWords("send")} to send, ${keyWords("newLine")} for a new line`;
   const hint = h("span", { class: "kapi-hint", text: HINT });
   const queueBox = h("section", { class: "kapi-queue", "aria-label": "Queued notes", hidden: "" });
   const chatTab = h("button", { type: "button", role: "tab", "aria-selected": "true", text: "Chat", onclick: () => showTab("chat") });
@@ -223,12 +232,11 @@
   const POINT_PAD = 10;
   const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
-  const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318\u21b5" : "Ctrl+\u21b5";
-  const DELETE_KEY = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u232b" : "Del";
   document.body.append(root);
   showUndo(main.dataset.undo);
-  main.before(h("header", { class: "kapi-site-head" },
-    h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
+  const siteHead = h("header", { class: "kapi-site-head" },
+    h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" }));
+  main.before(siteHead);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
@@ -347,12 +355,12 @@
     if (el !== selected) selectedAt = performance.now();
     selected = el;
     el?.setAttribute("data-kapi-selected", "");
-    markPicked();
     renderBar();
   }
 
   function markPicked() {
     for (const el of main.querySelectorAll("[data-kapi-picked]")) el.removeAttribute("data-kapi-picked");
+    if (editing) return;
     if (scope() === "row") return pickedRow().setAttribute("data-kapi-picked", "");
     if (scope() !== "column") return;
     const col = pickedColumn();
@@ -366,6 +374,7 @@
   }
 
   function renderBar() {
+    markPicked();
     const text = !editing && !!textRange;
     if (asking || (!text && (!selected || !selected.isConnected))) {
       bar.hidden = true;
@@ -373,13 +382,13 @@
     }
     if (editing) {
       const changed = !!editing.op();
-      const primary = changed ? button("Save", "save", `Save (${SHORTCUT})`) : button("Cancel", "cancel", `Cancel (${SHORTCUT} or Escape)`);
+      const primary = changed ? button("Save", "save", `Save (${keyWords("submit")})`) : button("Cancel", "cancel", `Cancel (${keyWords("submit")} or ${keyWords("dismiss")})`);
       primary.classList.add("kapi-primary");
-      primary.append(h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
+      primary.append(h("span", { class: "kapi-key", text: ` ${keyHint("submit")}` }));
       bar.replaceChildren(primary,
-        ...(changed ? [button("Cancel", "cancel", "Cancel (Escape)")] : []));
+        ...(changed ? [button("Cancel", "cancel", `Cancel (${keyWords("dismiss")})`)] : []));
     } else if (text) {
-      bar.replaceChildren(tool("android", "Ask AI", "ask", "A"));
+      bar.replaceChildren(tool("android", "Ask AI", "ask"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
@@ -388,13 +397,14 @@
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
       const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
       const part = scope() === "block" ? "" : ` ${scope()}`;
-      const tools = [tool("android", "Ask AI", "ask", "A"), tool("copy", `Copy${part} as Markdown`, "copy", "C"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive", "E")] : [
+      const tools = [tool("android", "Ask AI", "ask"), tool("copy", `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
         ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
-        tool("archive", "Archive", "archive", "E")]),
-        tool("trash", `Delete${part}`, "delete", DELETE_KEY, "Delete")];
+        ...widthTool(),
+        tool("archive", "Archive", "archive")]),
+        tool("trash", `Delete${part}`, "delete")];
       bar.replaceChildren(...tools.filter((b) => b.dataset.action === "ask" || scopedAction(b.dataset.action)));
     }
     if (copiedBlock?.block === selected && copiedBlock.scope === scope() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
@@ -471,7 +481,8 @@
         ["outside", r.right + BAR_GAP, Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)],
         ["above", left, r.top - BAR_GAP - height],
         ["below", left, r.bottom + BAR_GAP],
-      ].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height), target));
+        ["pinned", left, 8],
+      ].find(([place, x, y]) => fits(x, y) && (place === "pinned" ? r.top < y && r.bottom > y + height : !coversContent(new DOMRect(x, y, width, height), target)));
     }
     if (!spot) return dockBar(false);
     bar.dataset.place = spot[0];
@@ -491,7 +502,7 @@
       ring.style.top = `${r.top - pad}px`;
       ring.style.width = `${r.width + 2 * pad}px`;
       ring.style.height = `${r.height + 2 * pad}px`;
-      ring.style.borderRadius = table ? `calc(var(--kapi-radius-lg) + ${FRAME_PAD}px)` : getComputedStyle(selected).borderRadius;
+      ring.style.borderRadius = table ? `${tableRadius(selected) + FRAME_PAD}px` : getComputedStyle(selected).borderRadius;
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }
@@ -586,26 +597,26 @@
     });
   }
   menu.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") e.stopPropagation();
+    if (!SHORTCUTS.is("menuLeave", e)) e.stopPropagation();
     const inSubmenu = !!openSub && openSub.list.contains(e.target);
     const items = menuItems(inSubmenu ? openSub.list : menu);
     const opener = submenus.find((sub) => sub.button === e.target);
     const at = items.indexOf(document.activeElement);
-    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+    const to = SHORTCUTS.is("menuNext", e) ? at + 1 : SHORTCUTS.is("menuPrevious", e) ? at - 1 : SHORTCUTS.is("menuFirst", e) ? 0 : SHORTCUTS.is("menuLast", e) ? items.length - 1 : undefined;
     if (to !== undefined) {
       e.preventDefault();
       if (!inSubmenu) closeSubmenu(false);
       items[(to + items.length) % items.length].focus();
-    } else if (opener && ["ArrowRight", "Enter", " "].includes(e.key)) {
+    } else if (opener && SHORTCUTS.is("menuOpen", e)) {
       e.preventDefault();
       openSubmenu(opener, true);
-    } else if (inSubmenu && (e.key === "ArrowLeft" || e.key === "Escape")) {
+    } else if (inSubmenu && SHORTCUTS.is("menuBack", e)) {
       e.preventDefault();
       closeSubmenu(true);
-    } else if (e.key === "Escape") {
+    } else if (SHORTCUTS.is("dismiss", e)) {
       e.preventDefault();
       closeMenu(true);
-    } else if (e.key === "Tab") closeMenu(false);
+    } else if (SHORTCUTS.is("menuLeave", e)) closeMenu(false);
   });
   document.addEventListener("pointerdown", (e) => {
     if (!menu.hidden && !menu.contains(e.target) && !menuButton.contains(e.target)) closeMenu(false);
@@ -841,8 +852,107 @@
     }
   }
 
-  function markWideTables() {
-    for (const wrap of main.querySelectorAll(".kapi-table")) wrap.toggleAttribute("data-kapi-wide", wrap.scrollWidth > wrap.clientWidth + 1);
+  const SHORT_TEXT = 24;
+  const BREAKOUT_GUTTER = 24;
+  const cardTables = matchMedia("(max-width: 640px)");
+
+  function fitColumns(table) {
+    const longest = [];
+    for (const tr of rowsOf(table)) {
+      if (isHeadRow(tr)) continue;
+      for (const cell of tr.cells) {
+        if (cell.colSpan === 1) longest[cell.cellIndex] = Math.max(longest[cell.cellIndex] ?? 0, cell.textContent.trim().length);
+      }
+    }
+    for (const tr of rowsOf(table)) {
+      for (const cell of tr.cells) {
+        const fit = cell.colSpan === 1 && ((longest[cell.cellIndex] ?? 0) > SHORT_TEXT ? "text" : "short");
+        if (!fit) cell.removeAttribute("data-kapi-fit");
+        else if (cell.getAttribute("data-kapi-fit") !== fit) cell.setAttribute("data-kapi-fit", fit);
+      }
+    }
+  }
+
+  function leastWidth(table) {
+    table.style.width = "min-content";
+    const width = table.getBoundingClientRect().width;
+    table.style.removeProperty("width");
+    return width;
+  }
+
+  const EXPANDED_KEY = `kapi-expanded-tables:${location.pathname}`;
+  const expanded = new Set((() => {
+    try {
+      return JSON.parse(localStorage.getItem(EXPANDED_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  })());
+
+  function breakoutBounds() {
+    return [BREAKOUT_GUTTER, document.body.clientWidth - BREAKOUT_GUTTER];
+  }
+
+  function hideLogoOverTables() {
+    const r = siteHead.getBoundingClientRect();
+    const under = (box) => (b => b.left < r.right && r.left < b.right && b.top < r.bottom && r.top < b.bottom)(box.getBoundingClientRect());
+    const covered = getComputedStyle(siteHead).position === "fixed" && [...main.querySelectorAll("table")].some((t) => tableBox(t).style.width && under(tableBox(t)));
+    siteHead.toggleAttribute("data-covered", covered);
+  }
+
+  function columnWidth() {
+    const style = getComputedStyle(main);
+    return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  }
+
+  const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
+  const canWiden = (box) => box.parentElement === main && !cardTables.matches;
+
+  function fitTables() {
+    const [lo, hi] = breakoutBounds();
+    for (const table of main.querySelectorAll("table")) {
+      fitColumns(table);
+      const box = tableBox(table);
+      box.style.removeProperty("width");
+      box.style.removeProperty("margin-left");
+      table.removeAttribute("data-kapi-tight");
+      if (canWiden(box)) {
+        const column = box.getBoundingClientRect().width;
+        const width = expanded.has(idOf(box)) ? Math.max(hi - lo, column) : column;
+        if (leastWidth(table) > width + 1) table.setAttribute("data-kapi-tight", "");
+        if (width > column + 1) {
+          const left = box.getBoundingClientRect().left;
+          box.style.width = `${width}px`;
+          box.style.marginLeft = `${Math.min(Math.max(left - (width - column) / 2, lo), hi - width) - left}px`;
+        }
+      }
+      if (box !== table) box.toggleAttribute("data-kapi-wide", box.scrollWidth > box.clientWidth + 1);
+    }
+    hideLogoOverTables();
+  }
+
+  function expandTable(on) {
+    if (on) expanded.add(idOf(selected));
+    else expanded.delete(idOf(selected));
+    try {
+      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]));
+    } catch {}
+    fitTables();
+    renderBar();
+  }
+
+  function widthTool() {
+    if (!selected.matches(TABLE) || !canWiden(selected)) return [];
+    if (selected.style.width) return [iconTool("collapse", "Collapse table", "collapse")];
+    const [lo, hi] = breakoutBounds();
+    return hi - lo > columnWidth() + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
+  }
+
+  const tableSizes = new ResizeObserver(fitTables);
+
+  function watchTables() {
+    tableSizes.disconnect();
+    for (const table of main.querySelectorAll(".kapi-table > table")) tableSizes.observe(table);
   }
 
   async function editRaw(el) {
@@ -1334,11 +1444,11 @@
       } }, icon("x")));
     }
     const text = h("textarea", { rows: "3", placeholder: "Ask the agent about this", "aria-label": "Note for the agent" });
-    const queueButton = h("button", { type: "button", class: "kapi-ask-queue", title: "Queue (Enter)", onclick: () => queueAsk() },
-      "Queue", h("span", { class: "kapi-key", text: " \u21b5" }));
-    const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${SHORTCUT})`, onclick: () => sendAsk() },
-      "Send", h("span", { class: "kapi-key", text: ` ${SHORTCUT}` }));
-    const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: "Cancel (Escape)", text: "Cancel", onclick: () => closeAsk(true) });
+    const queueButton = h("button", { type: "button", class: "kapi-ask-queue", title: `Queue (${keyWords("send")})`, onclick: () => queueAsk() },
+      "Queue", h("span", { class: "kapi-key", text: ` ${keyHint("send")}` }));
+    const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${keyWords("submit")})`, onclick: () => sendAsk() },
+      "Send", h("span", { class: "kapi-key", text: ` ${keyHint("submit")}` }));
+    const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: `Cancel (${keyWords("dismiss")})`, text: "Cancel", onclick: () => closeAsk(true) });
     const tray = imageTray(() => sync());
     const sync = () => {
       queueButton.disabled = sendNow.disabled = (!text.value.trim() && !tray.count()) || !!tray.blocked() || sending;
@@ -1346,11 +1456,11 @@
     text.addEventListener("input", sync);
     text.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Escape") return;
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (SHORTCUTS.is("dismiss", e)) return;
+      if (SHORTCUTS.is("submit", e)) {
         e.preventDefault();
         sendAsk();
-      } else if (e.key === "Enter" && !e.shiftKey) {
+      } else if (SHORTCUTS.is("send", e)) {
         e.preventDefault();
         queueAsk();
       }
@@ -1359,7 +1469,7 @@
       h("div", { class: "kapi-ask-row" }, tray.pick, tray.picker, cancel, queueButton, sendNow));
     acceptImages(box, tray);
     box.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      if (!SHORTCUTS.is("dismiss", e) || e.isComposing || e.keyCode === 229) return;
       e.stopPropagation();
       closeAsk(true);
     });
@@ -1457,10 +1567,10 @@
     };
     area.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Escape") {
+      if (SHORTCUTS.is("dismiss", e)) {
         e.stopPropagation();
         done(false);
-      } else if (e.key === "Enter" && !e.shiftKey) {
+      } else if (SHORTCUTS.is("send", e)) {
         e.preventDefault();
         done(true);
       }
@@ -2075,6 +2185,7 @@
     showUndo(fresh.dataset.undo);
     labelArchived(main);
     numberRows(main);
+    watchTables();
     applyFolds();
     select(keep ? find(keep) : null);
     placeNote();
@@ -2102,6 +2213,7 @@
       el.replaceWith(next);
       labelArchived(next);
       numberRows(next);
+      watchTables();
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
       if (res.headers.has("Kapi-Undo")) showUndo(res.headers.get("Kapi-Undo"));
@@ -2405,13 +2517,26 @@
     tableFrame.hidden = !t;
     if (!t) return;
     const r = t.getBoundingClientRect();
+    const [w, h, inner] = [r.width + 2 * FRAME_PAD, r.height + 2 * FRAME_PAD, tableRadius(t)];
     tableFrame.style.left = `${r.left - FRAME_PAD}px`;
     tableFrame.style.top = `${r.top - FRAME_PAD}px`;
-    tableFrame.style.width = `${r.width + 2 * FRAME_PAD}px`;
-    tableFrame.style.height = `${r.height + 2 * FRAME_PAD}px`;
+    tableFrame.style.width = `${w}px`;
+    tableFrame.style.height = `${h}px`;
+    tableFrame.style.setProperty("--kapi-frame-radius", `${inner + FRAME_PAD}px`);
+    tableFrame.style.setProperty("--kapi-frame-band", `path(evenodd, "${roundedRect(0, 0, w, h, inner + FRAME_PAD)} ${roundedRect(FRAME_PAD, FRAME_PAD, r.width, r.height, inner)}")`);
     tableFrame.toggleAttribute("data-picked", t === selected && !pickedCell(t));
     tableFrame.toggleAttribute("data-selected", t === selected);
   }
+  function tableRadius(block) {
+    const table = block.matches("table") ? block : block.querySelector("table");
+    return parseFloat(getComputedStyle(table ?? block).borderTopLeftRadius) || 0;
+  }
+
+  function roundedRect(x, y, w, h, r) {
+    const arc = (ex, ey) => `A${r},${r} 0 0 1 ${ex},${ey}`;
+    return `M${x + r},${y} H${x + w - r} ${arc(x + w, y + r)} V${y + h - r} ${arc(x + w - r, y + h)} H${x + r} ${arc(x, y + h - r)} V${y + r} ${arc(x + r, y)} Z`;
+  }
+
   function showFrame(table) {
     frameTarget = table;
     placeFrame();
@@ -2587,7 +2712,7 @@
   });
 
   input.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    if (!SHORTCUTS.is("send", e) || e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
     sendNotes();
   });
@@ -2598,34 +2723,30 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     if (!editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey && !e.shiftKey) {
-      const key = e.key.toLowerCase();
-      if ((e.metaKey || e.ctrlKey) && key === "z") {
+      if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;
         e.preventDefault();
         return action("undo");
       }
-      if (!e.metaKey && !e.ctrlKey && (key === "j" || key === "k") && notes.length) {
+      const step = SHORTCUTS.is("nextNote", e) ? 1 : SHORTCUTS.is("previousNote", e) ? -1 : 0;
+      if (step && notes.length) {
         e.preventDefault();
-        return stepNote(key === "j" ? 1 : -1);
+        return stepNote(step);
       }
-      if (!e.metaKey && !e.ctrlKey && (textRange || selected)) {
-        const block = !textRange && !busy && selected;
-        const name = key === "a" ? "ask"
-          : block && key === "c" ? "copy"
-            : block && key === "e" ? (selected.getAttribute("data-kapi-state") === "archived" ? "unarchive" : "archive")
-              : block && (e.key === "Delete" || e.key === "Backspace") ? "delete" : "";
-        if (name) {
+      if ((textRange || selected) && !bar.hidden) {
+        const owner = [...bar.querySelectorAll("[data-action]")].find((b) => SHORTCUTS.isTool(b.dataset.action, e));
+        if (owner && !owner.disabled) {
           e.preventDefault();
-          return action(name);
+          return action(owner.dataset.action);
         }
       }
     }
-    if (e.key === "Escape" && (pop || sheetOpen)) {
+    if (SHORTCUTS.is("dismiss", e) && (pop || sheetOpen)) {
       hidePop(true);
       setSheet(false);
       return;
     }
-    if (e.key === "Escape") {
+    if (SHORTCUTS.is("dismiss", e)) {
       dismissNote();
       if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
       else if (panel.contains(focus)) focus.blur();
@@ -2634,12 +2755,12 @@
       return;
     }
     if (!inEditor || e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter" && singleLine && e.shiftKey) {
+    if (SHORTCUTS.is("newLine", e) && singleLine) {
       e.preventDefault();
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey || singleLine)) {
+    } else if (SHORTCUTS.is("submit", e) || (SHORTCUTS.is("send", e) && singleLine)) {
       e.preventDefault();
       defaultAction();
-    } else if (e.key === "Tab" && !e.shiftKey && inContent) {
+    } else if (SHORTCUTS.is("nextField", e) && inContent) {
       e.preventDefault();
       bar.querySelector(".kapi-primary")?.focus();
     }
@@ -2654,6 +2775,7 @@
   addEventListener("scroll", placeAsk, { passive: true });
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
+  addEventListener("scroll", hideLogoOverTables, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
   for (const type of ["dragover", "drop"]) {
     document.addEventListener(type, (e) => {
@@ -2712,9 +2834,16 @@
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {
     schedulePaint();
-    markWideTables();
+    fitTables();
   }).observe(main);
-  document.fonts.ready.then(markWideTables);
+  document.fonts.ready.then(fitTables);
+  let bodyWidth = 0;
+  new ResizeObserver(() => {
+    if (document.body.clientWidth === bodyWidth) return;
+    bodyWidth = document.body.clientWidth;
+    fitTables();
+  }).observe(document.body);
+  cardTables.addEventListener("change", fitTables);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
       document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
@@ -2730,6 +2859,7 @@
 
   labelArchived(main);
   numberRows(main);
+  watchTables();
   applyFolds();
   renderQueue();
   takeOver();
