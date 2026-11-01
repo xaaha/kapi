@@ -253,6 +253,11 @@ body {
   background: color-mix(in srgb, var(--kapi-border-strong) 45%, var(--kapi-card));
   border-bottom-color: var(--kapi-border-strong);
 }
+:where(#kapi-page) :is(thead th, table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:not(:has(> td)) > th) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
 :where(#kapi-page) caption { caption-side: bottom; padding-top: 0.5rem; color: var(--kapi-muted); font-size: 0.875rem; text-align: left; }
 
 .kapi-kv,
@@ -272,10 +277,10 @@ body {
 .kapi-table {
   margin: 1.25rem 0;
 }
-.kapi-table thead th { position: sticky; top: 0; z-index: 1; }
 .kapi-table table { margin: 0; }
 @media (min-width: 641px) {
   .kapi-table table { border-collapse: separate; border-spacing: 0; border: 1px solid var(--kapi-border); border-radius: var(--kapi-radius-lg); }
+  .kapi-table[data-kapi-wide] { border-radius: var(--kapi-radius-lg); }
   .kapi-table :where(th, td) { border-bottom-width: 0.5px; }
   .kapi-table thead th:first-child { border-top-left-radius: var(--kapi-radius-lg); }
   .kapi-table thead th:last-child { border-top-right-radius: var(--kapi-radius-lg); }

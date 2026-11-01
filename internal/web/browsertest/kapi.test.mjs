@@ -526,9 +526,9 @@ test("a block with no text of its own says so and opens no editor", async () => 
 });
 
 test("edits table cells in place and sends only the changed cells", async () => {
-  await click('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="gggggggg"] th');
   await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-selected")`);
-  await click('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="gggggggg"] th');
   const order = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody td:first-child')].map((td) => td.textContent).join(",")`);
   assert.notEqual(await order(), "beta,Alpha,gamma");
   await editSelected();
@@ -700,6 +700,20 @@ test("the toolbar is Ask AI, Archive and Delete, with their keys, and no move bu
   const tools = await page.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => [b.dataset.action, b.dataset.tip, b.getAttribute("aria-keyshortcuts")])`);
   const del = (await page.eval(`/Mac/.test(navigator.platform)`)) ? "\u232b" : "Del";
   assert.deepEqual(tools, [["ask", "Ask AI A", "A"], ["copy", "Copy as Markdown C", "C"], ["archive", "Archive E", "E"], ["delete", `Delete ${del}`, "Delete"]]);
+});
+
+test("W widens a selected table into the margins and W again puts it back in the column", async () => {
+  const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
+  await select("gggggggg");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+  const column = await width();
+  await page.key("w");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="collapse"]')`);
+  assert.ok((await width()) > column + 100, `expanded to ${await width()} from ${column}`);
+  await page.key("w");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+  assert.equal(await width(), column);
+  await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
 });
 
 test("the floating block toolbar is larger than the surrounding chrome", async () => {
@@ -1266,11 +1280,13 @@ test("every request carries the token prefix and every POST is JSON", async () =
   for (const r of requests("POST", "")) assert.equal(r.headers["content-type"], "application/json");
 });
 
-test("every table sorts by a header click, numeric or by locale, without an op", async () => {
+test("every table sorts by a second click on a header, numeric or by locale, without an op", async () => {
   const column = (i) => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] tbody tr')].map((r) => r.cells[${i}].textContent)`);
   const sortState = () => page.eval(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] th')].map((th) => th.getAttribute("aria-sort"))`);
-  const header = (i) => click(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
+  const header = (i) => mouseClick(`[data-kapi-id="gggggggg"] th:nth-child(${i + 1})`);
 
+  await header(1);
+  assert.deepEqual(await sortState(), [null, null]);
   await header(1);
   assert.deepEqual(await column(1), ["9", "10", "1,200"]);
   assert.deepEqual(await sortState(), [null, "ascending"]);
@@ -1278,9 +1294,29 @@ test("every table sorts by a header click, numeric or by locale, without an op",
   assert.deepEqual(await column(1), ["1,200", "10", "9"]);
   assert.deepEqual(await sortState(), [null, "descending"]);
   await header(0);
+  assert.deepEqual(await sortState(), [null, "descending"]);
+  await header(0);
   assert.deepEqual(await column(0), ["Alpha", "beta", "gamma"]);
   assert.deepEqual(await sortState(), ["ascending", null]);
   assert.equal(requests("POST", "").length, 0);
+});
+
+test("deleting a row of a sorted table without cell positions sends the row's place in the source", async () => {
+  await page.eval(`(() => {
+    const wrap = Object.assign(document.createElement("div"), { className: "kapi-table" });
+    wrap.dataset.kapiPreset = "table";
+    wrap.dataset.kapiId = "ssssssss";
+    wrap.innerHTML = "<table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>b</td></tr><tr><td>c</td></tr><tr><td>a</td></tr></tbody></table>";
+    document.getElementById("kapi-page").append(wrap);
+    wrap.scrollIntoView({ block: "center" });
+  })()`);
+  await mouseClick('[data-kapi-id="ssssssss"] th');
+  await mouseClick('[data-kapi-id="ssssssss"] th');
+  assert.equal(await page.eval(`[...document.querySelectorAll('[data-kapi-id="ssssssss"] td')].map((td) => td.textContent).join(",")`), "a,b,c");
+  await mouseClick('[data-kapi-id="ssssssss"] tbody tr:first-child td');
+  await click('.kapi-bar [data-action="delete"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "deleterow", id: "ssssssss", row: 3 });
 });
 
 test("prose that holds a preset edits in place and the preset stays one piece", async () => {
@@ -1881,6 +1917,54 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
   });
 });
 
+async function addCrowdedTable(p) {
+  await p.eval(`(() => {
+    const heads = ["Service", "Region", "Owner", "p50", "p95", "p99", "Errors", "RPS", "Rollout notes", "Status detail"];
+    const prose = "the rollout paused after the canary reported elevated latency so the team is replaying traffic before deciding";
+    const row = (i) => ["service-" + i, "us-east-2", "team-b", "5", "27", "91", "0.13%", "137", prose, prose];
+    const wrap = Object.assign(document.createElement("div"), { className: "kapi-table" });
+    wrap.dataset.kapiPreset = "table";
+    wrap.dataset.kapiId = "wwwwwwww";
+    wrap.innerHTML = "<table><thead><tr>" + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody>" +
+      [1, 2, 3].map((i) => "<tr>" + row(i).map((c) => "<td>" + c + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+    document.getElementById("kapi-page").append(wrap);
+    return document.fonts.ready.then(() => true);
+  })()`);
+}
+
+const crowded = (p) => p.eval(`((wrap, page) => {
+  const box = wrap.getBoundingClientRect();
+  const column = page.getBoundingClientRect();
+  const cells = wrap.querySelector("tbody tr").cells;
+  return { grew: box.width > column.width + 1, inside: box.left >= 0 && box.right <= document.body.clientWidth, scrolls: wrap.hasAttribute("data-kapi-wide"),
+    shortWraps: getComputedStyle(cells[1]).whiteSpace !== "nowrap", textWidth: cells[8].getBoundingClientRect().width };
+})(document.querySelector('[data-kapi-id="wwwwwwww"]'), document.getElementById("kapi-page"))`);
+
+test("a crowded table starts in the column, scrolling with short columns on one line, and widens only when expanded", async () => {
+  await withPageStyles(1600, async (p) => {
+    await addCrowdedTable(p);
+    await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').hasAttribute("data-kapi-wide")`);
+    const before = await crowded(p);
+    assert.deepEqual({ grew: before.grew, scrolls: before.scrolls, shortWraps: before.shortWraps }, { grew: false, scrolls: true, shortWraps: false });
+    await p.eval(`document.querySelector('[data-kapi-id="wwwwwwww"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+    await p.key("w");
+    await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').style.width !== ""`);
+    const after = await crowded(p);
+    assert.deepEqual({ grew: after.grew, inside: after.inside, scrolls: after.scrolls }, { grew: true, inside: true, scrolls: false });
+    assert.ok(after.textWidth >= 170, `text column is ${after.textWidth}px`);
+    await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
+  });
+});
+
+test("a crowded table in a narrow window stays inside the page and scrolls rather than spilling over", async () => {
+  await withPageStyles(820, async (p) => {
+    await addCrowdedTable(p);
+    await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').hasAttribute("data-kapi-wide")`);
+    assert.equal((await crowded(p)).inside, true);
+  });
+});
+
 test("tables turn into cards only when the window itself is phone width", async () => {
   await withPageStyles(900, async (p) => assert.equal(await cellDisplay(p), "table-cell"));
   await withPageStyles(390, async (p) => assert.equal(await cellDisplay(p), "block"));
@@ -1981,10 +2065,13 @@ test("the chat panel sits on its own tinted surface, with agent bubbles on the p
 });
 
 test("the selection ring follows the rounded corners of the selected block", async () => {
-  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').style.borderRadius = "18px"`);
-  await select("gggggggg");
+  await page.eval(`document.querySelector('[data-kapi-id="hhhhhhhh"]').style.borderRadius = "18px"`);
+  await select("hhhhhhhh");
   await page.waitFor(`!document.querySelector(".kapi-ring").hidden`);
   assert.equal(await page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius`), "18px");
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] table').style.borderRadius = "18px"`);
+  await select("gggggggg");
+  await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius === "28px"`);
   await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').style.borderRadius = "10% 4px"`);
   await select("bbbbbbbb");
   await page.waitFor(`getComputedStyle(document.querySelector(".kapi-ring")).borderRadius === "10% 4px"`);
@@ -2621,7 +2708,7 @@ test("#39 Escape after asking about a clicked cell leaves no text selected and t
   await page.key("Escape");
   await page.waitFor(`!document.querySelector(".kapi-ask")`);
   assert.equal(await page.eval(`getSelection().toString()`), "");
-  assert.deepEqual(await barActions(), ["ask", "copy", "archive", "delete"]);
+  assert.deepEqual(await barActions(), ["ask", "copy", "delete"]);
 });
 
 test("#39 a selection that ends at the start of the next block targets only the blocks with selected text", async () => {

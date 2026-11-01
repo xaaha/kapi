@@ -80,7 +80,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
-	for _, name := range []string{"theme.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
+	for _, name := range []string{"theme.js", "shortcuts.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
 		"fonts/hanken-grotesk.woff2", "fonts/hanken-grotesk-italic.woff2", "fonts/source-serif-4.woff2", "fonts/source-serif-4-italic.woff2"} {
 		s.mux.HandleFunc("GET /static/"+name, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -250,6 +250,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
 	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
 	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
+	b.WriteString("<script src=\"../../static/shortcuts.js\" defer></script>\n")
 	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -565,8 +566,28 @@ func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page
 	src, _ := st.Source()
 	if id := r.URL.Query().Get("block"); id != "" {
 		block, err := page.Outer(src, id)
-		if err != nil {
+		if row := r.URL.Query().Get("row"); row != "" {
+			n, convErr := strconv.Atoi(row)
+			if convErr != nil {
+				http.Error(w, "row must be a number", http.StatusBadRequest)
+				return
+			}
+			block, err = page.OuterRow(src, id, n)
+		}
+		if col := r.URL.Query().Get("col"); col != "" {
+			n, convErr := strconv.Atoi(col)
+			if convErr != nil {
+				http.Error(w, "col must be a number", http.StatusBadRequest)
+				return
+			}
+			block, err = page.OuterCol(src, id, n)
+		}
+		if errors.Is(err, page.ErrNotFound) {
 			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 			return
 		}
 		md, err := render.Markdown(block, nil)

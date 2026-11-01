@@ -49,6 +49,8 @@ type Op struct {
 	Dir     string  `json:"dir,omitempty"`
 	Section bool    `json:"section,omitempty"`
 	Src     string  `json:"src,omitempty"`
+	Row     *int    `json:"row,omitempty"`
+	Col     *int    `json:"col,omitempty"`
 }
 
 type Summary struct {
@@ -581,7 +583,7 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 		if op.ID == "" {
 			return true
 		}
-	case "edit", "text", "archive", "unarchive", "delete", "check", "orient":
+	case "edit", "text", "archive", "unarchive", "delete", "deleterow", "deletecol", "check", "orient":
 	default:
 		return false
 	}
@@ -1204,19 +1206,34 @@ func deleteSection(src []byte, heading *element) ([]byte, Summary, error) {
 	if err != nil {
 		return nil, Summary{}, err
 	}
+	section := *heading
+	section.end = last.end
+	if err := linkedInto(els, &section); err != nil {
+		return nil, Summary{}, err
+	}
+	return cut(src, &section), Summary{Text: "deleted section " + describe(src, heading), IDs: ids}, nil
+}
+
+func linkedInto(els []element, removed ...*element) error {
+	inside := func(o *element) bool {
+		for _, r := range removed {
+			if r.contains(o) {
+				return true
+			}
+		}
+		return false
+	}
 	for i := range els {
 		link := &els[i]
 		href, _ := link.attr("href")
-		if len(href) < 2 || href[0] != '#' || (link.start >= heading.start && link.end <= last.end) {
+		if len(href) < 2 || href[0] != '#' || inside(link) {
 			continue
 		}
-		if target, findErr := find(els, href[1:]); findErr == nil && target.start >= heading.start && target.end <= last.end {
-			return nil, Summary{}, fmt.Errorf("%w: a link to #%s", ErrInboundLinks, target.id)
+		if target, err := find(els, href[1:]); err == nil && inside(target) {
+			return fmt.Errorf("%w: a link to #%s", ErrInboundLinks, target.id)
 		}
 	}
-	section := *heading
-	section.end = last.end
-	return cut(src, &section), Summary{Text: "deleted section " + describe(src, heading), IDs: ids}, nil
+	return nil
 }
 
 func archiveSection(src []byte, heading *element) ([]byte, Summary, error) {
@@ -1312,15 +1329,8 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		if op.Section {
 			return deleteSection(src, e)
 		}
-		for i := range els {
-			l := &els[i]
-			href, _ := l.attr("href")
-			if len(href) < 2 || href[0] != '#' || e.contains(l) {
-				continue
-			}
-			if t, err := find(els, href[1:]); err == nil && e.contains(t) {
-				return nil, Summary{}, fmt.Errorf("%w: a link to #%s", ErrInboundLinks, t.id)
-			}
+		if err := linkedInto(els, e); err != nil {
+			return nil, Summary{}, err
 		}
 		return cut(src, e), Summary{Text: about("deleted"), IDs: one}, nil
 	case "archive":
@@ -1360,6 +1370,10 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
 		}
 		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
+	case "deleterow":
+		return deleteRow(src, els, e, op.Row)
+	case "deletecol":
+		return deleteCol(src, els, e, op.Col)
 	case "move":
 		out, err := move(src, els, e, op.Before)
 		text := about("moved #"+op.ID) + " to the end"

@@ -1289,6 +1289,29 @@ func TestSelectedBlockExportsThroughTheSameMarkdownRenderer(t *testing.T) {
 	}
 }
 
+func TestASelectedRowOrColumnExportsAsMarkdown(t *testing.T) {
+	s := newSite(t, `<kapi-table data-kapi-id="bbbbbbbb"><table><tr><th>Shard</th><th>Rows</th></tr><tr><td>beta</td><td>10</td></tr><tr><td><code>alpha</code></td><td>9</td></tr></table></kapi-table>`)
+	if got, want := s.get("/p/"+s.id+"/export/markdown?block=bbbbbbbb&row=2").body, "| Shard | Rows |\n| --- | --- |\n| `alpha` | 9 |\n"; got != want {
+		t.Errorf("row markdown = %q, want %q", got, want)
+	}
+	if got, want := s.get("/p/"+s.id+"/export/markdown?block=bbbbbbbb&col=1").body, "| Rows |\n| --- |\n| 10 |\n| 9 |\n"; got != want {
+		t.Errorf("column markdown = %q, want %q", got, want)
+	}
+	for _, q := range []string{"row=3", "row=x", "col=2", "col=x"} {
+		if got := s.get("/p/" + s.id + "/export/markdown?block=bbbbbbbb&" + q); got.code == http.StatusOK {
+			t.Errorf("%s: %d %q", q, got.code, got.body)
+		}
+	}
+}
+
+func TestAColumnOfAMergedTableExplainsWhyItCannotBeCopied(t *testing.T) {
+	s := newSite(t, `<kapi-table data-kapi-id="bbbbbbbb"><table><tr><th>A</th><th>B</th></tr><tr><td colspan="2">x</td></tr></table></kapi-table>`)
+	got := s.get("/p/" + s.id + "/export/markdown?block=bbbbbbbb&col=0")
+	if got.code != http.StatusUnprocessableEntity || !strings.Contains(got.body, "merged cells") {
+		t.Errorf("merged column: %d %q", got.code, got.body)
+	}
+}
+
 func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
 	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
 	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {
