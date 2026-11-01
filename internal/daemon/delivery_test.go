@@ -147,3 +147,34 @@ func TestInboxHandsOverUnseenEventsOfPagesUnderTheDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestHooksFindAPageOpenedFromTheDirectoryWhereverItIsStored(t *testing.T) {
+	home, s, _ := serving(t)
+	dir, elsewhere := t.TempDir(), t.TempDir()
+	path := filepath.Join(elsewhere, "plan.html")
+	if err := os.WriteFile(path, []byte("<p>x</p>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := call(t, home, &Request{Op: "open", Page: path, Dir: filepath.Join(dir, "sub")}); got.Error != "" {
+		t.Fatal(got.Error)
+	}
+	call(t, home, &Request{Op: "open", Page: path, Dir: filepath.Join(dir, "sub")})
+	call(t, home, &Request{Op: "append", Page: path, Author: "human", Kind: "message", Text: "hello"})
+	done := s.Viewing(pkgpage.ID(path))
+	defer done()
+
+	for _, op := range []string{"unwatched", "inbox"} {
+		if got := call(t, home, &Request{Op: op, Page: dir, Reader: "agent"}); len(got.Pages) != 1 || got.Pages[0].Path != path {
+			t.Errorf("%s = %+v, want %s", op, got.Pages, path)
+		}
+		if got := call(t, home, &Request{Op: op, Page: t.TempDir(), Reader: "agent"}); len(got.Pages) != 0 {
+			t.Errorf("%s from an unrelated directory = %+v, want none", op, got.Pages)
+		}
+	}
+	if got := s.openers(path); len(got) != 1 {
+		t.Errorf("openers = %v, want the directory once", got)
+	}
+	if got := call(t, home, &Request{Op: "open", Page: path, Dir: "rel"}); got.Error == "" {
+		t.Error("open with a relative directory was accepted")
+	}
+}
