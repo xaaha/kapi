@@ -27,6 +27,7 @@
   let lastReply = 0;
   let ended = false;
   let opened = false;
+  const loadedAt = new Date();
   let busy = false;
   let pending = null;
   let flushTimer = 0;
@@ -95,6 +96,9 @@
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
+    outline: "M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z",
+    search: "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z",
+    back: "M232,200a8,8,0,0,1-16,0,88.1,88.1,0,0,0-88-88H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,61.66L51.31,96H128A104.11,104.11,0,0,1,232,200Z",
     dark: "M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z",
   };
 
@@ -111,15 +115,72 @@
   function themeToggle() {
     const theme = window.kapiTheme;
     if (!theme) return [];
-    const names = { system: "System", light: "Light", dark: "Dark" };
-    const buttons = theme.choices.map((c) =>
-      h("button", { type: "button", "data-theme-choice": c, title: `${names[c]} theme`, "aria-label": `${names[c]} theme`, onclick: () => theme.set(c) }, icon(c)));
+    const names = { light: "Light", dark: "Dark", system: "System" };
+    const toggle = h("button", { type: "button", class: "kapi-theme-button", "aria-label": "Theme", "data-tip": "Theme", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("theme"));
+    const items = ["light", "dark", "system"].filter((c) => theme.choices.includes(c)).map((c) =>
+      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-theme-choice": c, onclick: () => (theme.set(c), close(wrap.contains(document.activeElement))) },
+        icon("check"), h("span", { class: "kapi-menu-label", text: names[c] }), icon(c)));
+    const list = h("div", { class: "kapi-theme-menu", role: "menu", "aria-label": "Theme", hidden: "" }, ...items);
+    const wrap = h("div", { class: "kapi-theme" }, toggle, list);
+    let hovered = false;
+    let timer = 0;
+    const open = (focus) => {
+      clearTimeout(timer);
+      list.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      if (focus) (items.find((b) => b.getAttribute("aria-checked") === "true") ?? items[0]).focus();
+    };
+    function close(refocus) {
+      clearTimeout(timer);
+      hovered = false;
+      if (list.hidden) return;
+      list.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      if (refocus) toggle.focus();
+    }
+    toggle.addEventListener("click", () => {
+      if (hovered) hovered = false;
+      else if (list.hidden) open(false);
+      else close(false);
+    });
+    toggle.addEventListener("keydown", (e) => {
+      if (!SHORTCUTS.is("menuOpen", e) && !SHORTCUTS.is("menuNext", e)) return;
+      e.preventDefault();
+      open(true);
+    });
+    wrap.addEventListener("pointerenter", (e) => {
+      if (e.pointerType !== "mouse") return;
+      clearTimeout(timer);
+      if (!list.hidden) return;
+      open(false);
+      hovered = true;
+    });
+    wrap.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "mouse" || !hovered) return;
+      timer = setTimeout(() => close(list.contains(document.activeElement)), 250);
+    });
+    list.addEventListener("keydown", (e) => {
+      if (!SHORTCUTS.is("menuLeave", e)) e.stopPropagation();
+      const at = items.indexOf(document.activeElement);
+      const to = SHORTCUTS.is("menuNext", e) ? at + 1 : SHORTCUTS.is("menuPrevious", e) ? at - 1 : SHORTCUTS.is("menuFirst", e) ? 0 : SHORTCUTS.is("menuLast", e) ? items.length - 1 : undefined;
+      if (to !== undefined) {
+        e.preventDefault();
+        items[(to + items.length) % items.length].focus();
+      } else if (SHORTCUTS.is("dismiss", e) || SHORTCUTS.is("menuBack", e)) {
+        e.preventDefault();
+        close(true);
+      } else if (SHORTCUTS.is("menuLeave", e)) close(false);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!wrap.contains(e.target)) close(false);
+    }, true);
     const sync = () => {
-      for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === theme.get()));
+      for (const b of items) b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme.get()));
+      toggle.dataset.tip = `Theme: ${names[theme.get()]}`;
     };
     document.addEventListener("kapi-theme", sync);
     sync();
-    return [h("div", { class: "kapi-theme", role: "group", "aria-label": "Theme" }, ...buttons)];
+    return [wrap];
   }
 
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -160,6 +221,25 @@
   const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
+  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": `${keyWords("search")} ${keyWords("searchCommand")}`, "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
+  const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
+  const outlineTree = h("ul", { class: "kapi-outline-tree" });
+  const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
+  const outlineScroll = h("div", { class: "kapi-outline-scroll" }, outlineEmpty, outlineTree);
+  const outlineView = h("nav", { class: "kapi-outline", "aria-label": "Outline" },
+    h("div", { class: "kapi-outline-head" }, h("h2", { text: "Outline" }),
+      h("button", { type: "button", class: "kapi-outline-close", "aria-label": "Close outline", onclick: () => setOutline(false) }, icon("x"))),
+    outlineScroll);
+  const searchInput = h("input", { type: "search", class: "kapi-search-input", placeholder: "Search this page", "aria-label": "Search this page", role: "combobox", "aria-expanded": "true", "aria-controls": "kapi-search-results", "aria-autocomplete": "list", autocomplete: "off", spellcheck: "false" });
+  const searchStatus = h("p", { class: "kapi-search-status", role: "status" });
+  const searchResults = h("div", { class: "kapi-search-results", id: "kapi-search-results", role: "listbox", "aria-label": "Results" });
+  const search = h("div", { class: "kapi-search", role: "dialog", "aria-label": "Search this page", hidden: "" },
+    h("div", { class: "kapi-search-field" }, icon("search"), searchInput),
+    searchStatus, searchResults,
+    h("div", { class: "kapi-search-keys", "aria-hidden": "true" }, ...[[`${keyHint("searchPrevious")}${keyHint("searchNext")}`, "move"], [keyHint("searchJump"), "jump"],
+      [`${keyHint("searchCollapse")}${keyHint("searchExpand")}`, "fold section"], [keyHint("dismiss"), "close"]].map(([k, what]) => h("span", {}, h("kbd", { text: k }), ` ${what}`))));
+  const backLabel = h("span", { class: "kapi-back-label" });
+  const backChip = h("button", { type: "button", class: "kapi-back", hidden: "", onclick: () => goBack() }, icon("back"), backLabel, h("kbd", { text: keyHint("dismiss") }));
   const stripSummary = h("span", { class: "kapi-strip-summary" });
   const strip = h("div", { class: "kapi-notes-strip", hidden: "" }, stripSummary,
     h("button", { type: "button", class: "kapi-btn", text: "Next change", onclick: () => stepNote(1, "changed") }),
@@ -219,13 +299,13 @@
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, undoButton, ...themeToggle(), menuButton, menu), tabs,
-    restartBox, notice, chat, notesView,
+    h("header", { class: "kapi-panel-head" }, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu), tabs,
+    restartBox, notice, chat, notesView, outlineView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton, tableFrame);
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton, tableFrame, search, backChip);
   const phone = matchMedia("(max-width: 760px)");
   const diagramZoom = new WeakMap();
   phone.addEventListener("change", () => renderBar());
@@ -1531,6 +1611,7 @@
     const text = input.value.trim();
     if (!drafts.length) return send();
     if (composerTray.blocked()) return say(composerTray.blocked());
+    showChat();
     const files = composerTray.names();
     const batch = drafts.slice();
     const ids = new Set(batch.map((d) => d.id));
@@ -1938,10 +2019,7 @@
     if (!where.first) return showPop(n, null);
     const target = where.range ? where.range.startContainer.parentElement : where.first;
     target.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
-    where.first.removeAttribute("data-kapi-note-flash");
-    void where.first.offsetWidth;
-    where.first.setAttribute("data-kapi-note-flash", "");
-    setTimeout(() => where.first.removeAttribute("data-kapi-note-flash"), 1000);
+    flashBlock(where.first);
     setTimeout(() => {
       placePins();
       if (currentNote === n.seq) showPop(n, pinEls.get(n.seq) ?? where.first);
@@ -2345,7 +2423,10 @@
       if (ev.author === "human") {
         lastHuman = ev.seq;
         setEnded(false);
-      } else lastReply = ev.seq;
+      } else {
+        lastReply = ev.seq;
+        if (outlineOpen && !phone.matches && new Date(ev.time) >= loadedAt) markChatUnread(true);
+      }
       markRead();
     } else if (ev.kind === "revision") onRevision(ev);
     else if (ev.kind === "presence") {
@@ -2394,6 +2475,7 @@
     const files = composerTray.names();
     if (composerTray.blocked()) return say(composerTray.blocked());
     if (!text && !files.length) return;
+    showChat();
     input.value = "";
     sendsInFlight++;
     composerTray.take(files);
@@ -2594,6 +2676,7 @@
     }
     while (open.length) close(open.pop());
     if (selected?.hasAttribute("data-kapi-hidden")) select(null);
+    pageChanged();
   }
 
   function foldableHeadings(level) {
@@ -2610,12 +2693,511 @@
       if (ids.every((each) => folds.has(each))) for (const each of ids) folds.delete(each);
       else for (const each of ids) folds.add(each);
     } else if (!folds.delete(id)) folds.add(id);
+    saveFolds();
+  }
+
+  function saveFolds() {
     try {
       localStorage.setItem(FOLD_KEY, JSON.stringify([...folds]));
     } catch {}
     applyFolds();
     schedulePaint();
   }
+
+  function reveal(el) {
+    let level = levelOf(el) || 7;
+    let changed = false;
+    for (let at = el.previousElementSibling; at && level > 1; at = at.previousElementSibling) {
+      const l = levelOf(at);
+      if (!l || l >= level) continue;
+      level = l;
+      changed = folds.delete(idOf(at)) || changed;
+    }
+    if (changed) saveFolds();
+  }
+
+  function flashBlock(el) {
+    el.removeAttribute("data-kapi-note-flash");
+    void el.offsetWidth;
+    el.setAttribute("data-kapi-note-flash", "");
+    setTimeout(() => el.removeAttribute("data-kapi-note-flash"), 1000);
+  }
+
+  function leaveFor(id) {
+    history.replaceState({ ...history.state, kapiY: scrollY }, "");
+    history.pushState({ kapiY: null }, "", `#${id}`);
+  }
+
+  const outlineHeadings = () => [...main.children].filter((el) => levelOf(el) && levelOf(el) <= 3 && el.getAttribute("data-kapi-state") !== "archived");
+  const shownTops = (items, elOf) => items.filter((item) => !elOf(item).hasAttribute("data-kapi-hidden")).map((item) => ({ item, top: elOf(item).getBoundingClientRect().top + scrollY }));
+
+  function headingAt(tops) {
+    const line = scrollY + innerHeight / 3;
+    const bottom = scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
+    let at = null;
+    for (const t of tops) if (t.top <= line || (bottom && t.top < scrollY + innerHeight)) at = t.item;
+    return at;
+  }
+
+  const OUTLINE_KEY = "kapi-outline";
+  let outlineOpen = (() => {
+    try {
+      return localStorage.getItem(OUTLINE_KEY) === "open";
+    } catch {
+      return false;
+    }
+  })();
+  let outlineSheet = false;
+  let outlineNodes = [];
+  let outlineDirty = true;
+  let outlineTops = null;
+  let outlineCurrent = null;
+  let outlinePinned = null;
+  let outlineQueued = false;
+  const outlineCollapsed = new Set();
+  const outlineShown = () => (phone.matches ? outlineSheet : outlineOpen);
+
+  function setOutline(open) {
+    if (phone.matches) outlineSheet = open;
+    else {
+      outlineOpen = open;
+      try {
+        if (open) localStorage.setItem(OUTLINE_KEY, "open");
+        else localStorage.removeItem(OUTLINE_KEY);
+      } catch {}
+    }
+    syncOutline();
+  }
+
+  function syncOutline() {
+    panel.toggleAttribute("data-outline", outlineOpen && !phone.matches);
+    if (!outlineOpen || phone.matches) markChatUnread(false);
+    root.toggleAttribute("data-outline-sheet", outlineSheet && phone.matches);
+    outlineButton.setAttribute("aria-pressed", String(outlineShown()));
+    trackOutline();
+  }
+
+  function showChat() {
+    if (outlineOpen && !phone.matches) setOutline(false);
+  }
+
+  function markChatUnread(on) {
+    outlineButton.toggleAttribute("data-unread", on);
+    outlineButton.setAttribute("aria-label", on ? "Outline, new reply in chat" : "Outline");
+    outlineButton.dataset.tip = on ? "New reply in chat" : "Outline";
+  }
+
+  function buildOutline() {
+    const had = outlineNodes.find((n) => n.link === document.activeElement || n.chevron === document.activeElement);
+    const part = had && (had.link === document.activeElement ? "link" : "chevron");
+    outlineDirty = false;
+    outlineTops = null;
+    outlineCurrent = null;
+    const top = [];
+    const stack = [];
+    outlineNodes = outlineHeadings().map((el) => {
+      const node = { el, id: idOf(el), level: levelOf(el), kids: [], parent: null };
+      while (stack.length && stack.at(-1).level >= node.level) stack.pop();
+      node.parent = stack.at(-1) ?? null;
+      (node.parent?.kids ?? top).push(node);
+      stack.push(node);
+      return node;
+    });
+    outlineEmpty.hidden = outlineNodes.length > 0;
+    outlineTree.replaceChildren(...top.map(outlineItem));
+    if (had) outlineNodes.find((n) => n.id === had.id)?.[part].focus();
+  }
+
+  function outlineItem(node) {
+    const title = textOf(node.el) || "Untitled";
+    const folded = parseInt(node.el.dataset.kapiFolded, 10);
+    const collapsed = outlineCollapsed.has(node.id);
+    node.link = h("button", { type: "button", class: "kapi-outline-link", title, text: title, onclick: () => goToHeading(node.id) });
+    node.chevron = node.kids.length
+      ? h("button", { type: "button", class: "kapi-outline-chevron", "aria-expanded": String(!collapsed), "aria-label": `${collapsed ? "Expand" : "Collapse"} ${title}`, onclick: () => collapseOutline(node, !outlineCollapsed.has(node.id)) }, icon("caret"))
+      : h("span", { class: "kapi-outline-chevron", "aria-hidden": "true" });
+    node.row = h("div", { class: "kapi-outline-row" }, node.chevron, node.link,
+      ...(folded ? [h("span", { class: "kapi-outline-folded", text: `${folded} folded` })] : []));
+    node.list = node.kids.length ? h("ul", { class: "kapi-outline-kids", ...(collapsed && { hidden: "" }) }, ...node.kids.map(outlineItem)) : null;
+    return h("li", { "data-outline": node.id }, node.row, ...(node.list ? [node.list] : []));
+  }
+
+  function collapseOutline(node, collapsed) {
+    if (!node.list || node.list.hidden === collapsed) return;
+    if (collapsed) outlineCollapsed.add(node.id);
+    else outlineCollapsed.delete(node.id);
+    node.list.hidden = collapsed;
+    node.chevron.setAttribute("aria-expanded", String(!collapsed));
+    node.chevron.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${node.link.textContent}`);
+  }
+
+  function trackOutline() {
+    if (!outlineShown()) return;
+    if (outlineDirty) buildOutline();
+    outlineTops ??= shownTops(outlineNodes, (n) => n.el);
+    if (outlinePinned && Math.abs(scrollY - outlinePinned.y) > 2) outlinePinned = null;
+    setOutlineCurrent(outlinePinned?.node ?? headingAt(outlineTops));
+  }
+
+  function scheduleOutline() {
+    if (outlineQueued || !outlineShown()) return;
+    outlineQueued = true;
+    requestAnimationFrame(() => {
+      outlineQueued = false;
+      trackOutline();
+    });
+  }
+
+  function setOutlineCurrent(node) {
+    if (node === outlineCurrent) return;
+    outlineCurrent?.row.removeAttribute("data-current");
+    outlineCurrent?.link.removeAttribute("aria-current");
+    outlineCurrent = node;
+    if (!node) return;
+    for (let up = node.parent; up; up = up.parent) collapseOutline(up, false);
+    node.row.setAttribute("data-current", "");
+    node.link.setAttribute("aria-current", "location");
+    const r = node.row.getBoundingClientRect();
+    const v = outlineScroll.getBoundingClientRect();
+    if (r.top < v.top + 8) outlineScroll.scrollTop -= v.top + 8 - r.top;
+    else if (r.bottom > v.bottom - 8) outlineScroll.scrollTop += r.bottom - v.bottom + 8;
+  }
+
+  function goToHeading(id) {
+    const el = find(id);
+    if (!el) return;
+    reveal(el);
+    leaveFor(id);
+    el.scrollIntoView({ block: "start" });
+    if (phone.matches) setOutline(false);
+    if (outlineDirty) buildOutline();
+    const node = outlineNodes.find((n) => n.id === id);
+    outlinePinned = node && { node, y: scrollY };
+    trackOutline();
+  }
+
+  function pageChanged() {
+    outlineDirty = true;
+    searchEntries = null;
+    trackOutline();
+    if (!search.hidden) runSearch(true);
+  }
+
+  const KINDS = { P: "text", UL: "list", OL: "list", BLOCKQUOTE: "quote", PRE: "code", TABLE: "table", FIGURE: "image", DETAILS: "details", HR: "rule" };
+  const kindOf = (el) => (levelOf(el) ? "heading" : el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "") || KINDS[el.tagName] || "block");
+  const lower = (text) => text.replace(/[\s\S]/gu, (c) => (c.toLowerCase().length === c.length ? c.toLowerCase() : c));
+  const WORD = /[\p{L}\p{N}]+/gu;
+  const SEARCH_LIMIT = 60;
+  let searchEntries = null;
+  let searchHits = [];
+  let searchRows = [];
+  let searchActive = -1;
+  let searchBack = null;
+  let searchFocus = null;
+  const searchCollapsed = new Set();
+
+  function searchIndex() {
+    if (searchEntries) return searchEntries;
+    const stack = [];
+    let section = null;
+    searchEntries = [];
+    const titled = [...main.children].filter((el) => el.tagName === "H1").length === 1;
+    for (const el of main.children) {
+      if (el === note?.el || !idOf(el) || el.getAttribute("data-kapi-state") === "archived") continue;
+      const level = levelOf(el);
+      const { text } = textMap([el]);
+      if (level) {
+        while (stack.length && stack.at(-1).level >= level) stack.pop();
+        section = { el, level, title: text.trim() || "Untitled", path: stack.filter((s) => !titled || s.level > 1).map((s) => s.title) };
+        stack.push(section);
+      }
+      const low = lower(text);
+      searchEntries.push({ el, section, heading: !!level, kind: kindOf(el), text, words: [...low.matchAll(WORD)].map((m) => [m[0], m.index]), low, order: searchEntries.length });
+    }
+    return searchEntries;
+  }
+
+  function nearOne(a, b) {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0;
+    let j = 0;
+    let edits = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) {
+        i++;
+        j++;
+        continue;
+      }
+      if (++edits > 1) return false;
+      if (a.length >= b.length) i++;
+      if (a.length <= b.length) j++;
+    }
+    return edits + (a.length - i) + (b.length - j) <= 1;
+  }
+
+  function matchEntry(entry, terms, phrase) {
+    let score = 0;
+    const spans = [];
+    for (const q of terms) {
+      let best = 0;
+      for (const [w, at] of entry.words) {
+        const tier = w === q ? 3 : w.startsWith(q) ? 2 : q.length >= 5 && nearOne(q, w) ? 1 : 0;
+        if (!tier) continue;
+        spans.push([at, tier === 1 ? w.length : q.length]);
+        best = Math.max(best, tier);
+      }
+      if (!best) return null;
+      score += best;
+    }
+    const whole = terms.length > 1 ? entry.low.indexOf(phrase) : -1;
+    if (whole >= 0) spans.push([whole, phrase.length]);
+    spans.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [at, len] of spans) {
+      const last = merged.at(-1);
+      if (last && at <= last[0] + last[1]) last[1] = Math.max(last[1], at + len - last[0]);
+      else merged.push([at, len]);
+    }
+    return { entry, spans: merged, score: (entry.heading ? 1000 : 0) + (whole >= 0 ? 100 : 0) + score };
+  }
+
+  function marked(text, spans, from = 0, to = text.length) {
+    const out = [];
+    let at = from;
+    for (const [s, len] of spans) {
+      const a = Math.max(s, at);
+      const b = Math.min(s + len, to);
+      if (b <= a) continue;
+      if (a > at) out.push(text.slice(at, a));
+      out.push(h("mark", { text: text.slice(a, b) }));
+      at = b;
+    }
+    if (at < to) out.push(text.slice(at, to));
+    return out;
+  }
+
+  function snippet({ entry, spans }) {
+    const first = spans[0][0];
+    let from = Math.max(0, first - 28);
+    const space = from && entry.text.indexOf(" ", from);
+    if (from && space >= 0 && space < first) from = space + 1;
+    return [...(from ? ["\u2026"] : []), ...marked(entry.text, spans, from, Math.min(entry.text.length, from + 220))];
+  }
+
+  const searchRowId = (r) => (r.node.classList.contains("kapi-search-section") ? r.key : `${r.key}/${idOf(r.el)}`);
+
+  function runSearch(keep = false) {
+    const kept = keep && searchRows[searchActive] ? searchRowId(searchRows[searchActive]) : null;
+    const scroll = searchResults.scrollTop;
+    const low = lower(searchInput.value);
+    const terms = [...low.matchAll(WORD)].map((m) => m[0]);
+    const phrase = low.replace(/\s+/g, " ").trim();
+    searchHits = terms.length ? searchIndex().map((e) => matchEntry(e, terms, phrase)).filter(Boolean) : [];
+    const groups = new Map();
+    for (const hit of searchHits) {
+      const key = hit.entry.section;
+      if (!groups.has(key)) groups.set(key, { section: key, head: null, hits: [], best: 0, order: hit.entry.order });
+      const g = groups.get(key);
+      if (hit.entry.heading) g.head = hit;
+      else g.hits.push(hit);
+      g.best = Math.max(g.best, hit.score);
+    }
+    let room = SEARCH_LIMIT;
+    const sorted = [...groups.values()].sort((a, b) => b.best - a.best || a.order - b.order).filter((g) => room > 0 && (room -= (g.head ? 1 : 0) + g.hits.length, true));
+    searchRows = [];
+    const blocks = sorted.map((g) => {
+      const key = g.section ? idOf(g.section.el) : "";
+      const title = g.section?.title ?? "Top of page";
+      const collapsed = searchCollapsed.has(key);
+      const count = g.hits.length + (g.head ? 1 : 0);
+      const head = h("div", { class: "kapi-search-section", role: "option", "aria-selected": "false", ...(g.hits.length && { "aria-expanded": String(!collapsed) }) },
+        g.hits.length ? h("span", { class: "kapi-search-chevron", "data-fold": "" }, icon("caret")) : h("span", { class: "kapi-search-chevron" }),
+        h("span", { class: "kapi-search-title" }, ...marked(title, g.head?.spans ?? [], 0, title.length)),
+        ...(g.section?.path.length ? [h("span", { class: "kapi-search-path", text: g.section.path.join(" \u203a ") })] : []),
+        h("span", { class: "kapi-search-count", text: String(count) }));
+      const row = { key, group: g, hit: g.head, el: g.section?.el ?? main.firstElementChild, node: head };
+      searchRows.push(row);
+      const hits = collapsed ? [] : g.hits.map((hit) => {
+        const node = h("div", { class: "kapi-search-hit", role: "option", "aria-selected": "false" },
+          h("span", { class: "kapi-search-kind", text: hit.entry.kind }), h("span", { class: "kapi-search-snippet" }, ...snippet(hit)));
+        const r = { key, group: g, hit, el: hit.entry.el, node };
+        searchRows.push(r);
+        return node;
+      });
+      return h("div", { class: "kapi-search-group" }, head, ...hits);
+    });
+    searchRows.forEach((r, i) => (r.node.id = `kapi-search-row-${i}`));
+    searchResults.replaceChildren(...blocks);
+    const sections = sorted.length;
+    const shown = sorted.reduce((n, g) => n + g.hits.length + (g.head ? 1 : 0), 0);
+    searchStatus.textContent = !terms.length ? "Search the headings and text on this page" : !shown ? "No matches on this page"
+      : `${shown} match${shown === 1 ? "" : "es"} in ${sections} section${sections === 1 ? "" : "s"}${searchHits.length > shown ? `, first ${shown} shown` : ""}`;
+    if (keep) searchResults.scrollTop = scroll;
+    const at = kept ? searchRows.findIndex((r) => searchRowId(r) === kept) : -1;
+    setSearchActive(at >= 0 ? at : searchRows.findIndex((r) => r.hit));
+  }
+
+  function setSearchActive(i) {
+    searchRows[searchActive]?.node.setAttribute("aria-selected", "false");
+    searchActive = i;
+    const row = searchRows[i];
+    if (!row) return searchInput.removeAttribute("aria-activedescendant");
+    row.node.setAttribute("aria-selected", "true");
+    searchInput.setAttribute("aria-activedescendant", row.node.id);
+    const r = row.node.getBoundingClientRect();
+    const v = searchResults.getBoundingClientRect();
+    if (r.top < v.top) searchResults.scrollTop -= v.top - r.top;
+    else if (r.bottom > v.bottom) searchResults.scrollTop += r.bottom - v.bottom;
+  }
+
+  function foldSearchGroup(row, collapsed) {
+    if (!row?.group.hits.length || searchCollapsed.has(row.key) === collapsed) return;
+    if (collapsed) searchCollapsed.add(row.key);
+    else searchCollapsed.delete(row.key);
+    runSearch();
+    setSearchActive(searchRows.findIndex((r) => r.key === row.key && r.node.classList.contains("kapi-search-section")));
+  }
+
+  function placeSearch() {
+    if (phone.matches) {
+      search.style.removeProperty("top");
+      search.style.removeProperty("right");
+      search.style.removeProperty("max-height");
+      return;
+    }
+    const head = searchButton.closest(".kapi-panel-head").getBoundingClientRect();
+    const r = searchButton.getBoundingClientRect();
+    const top = Math.round(head.bottom + 6);
+    search.style.top = `${top}px`;
+    search.style.right = `${Math.round(Math.max(12, document.documentElement.clientWidth - r.right))}px`;
+    search.style.maxHeight = `calc(100vh - ${top + 24}px)`;
+  }
+
+  function openSearch() {
+    if (!search.hidden) return searchInput.select();
+    searchFocus = document.activeElement;
+    searchCollapsed.clear();
+    search.hidden = false;
+    searchButton.setAttribute("aria-expanded", "true");
+    placeSearch();
+    searchInput.focus();
+    searchInput.select();
+    runSearch();
+  }
+
+  function closeSearch(refocus) {
+    if (search.hidden) return;
+    search.hidden = true;
+    searchButton.setAttribute("aria-expanded", "false");
+    if (refocus && searchFocus?.isConnected && searchFocus !== document.body) searchFocus.focus();
+    else if (search.contains(document.activeElement)) document.activeElement.blur();
+  }
+
+  function markSearch(current) {
+    const mine = [];
+    const all = [];
+    for (const hit of searchHits) {
+      const map = textMap([hit.entry.el]);
+      for (const [at, len] of hit.spans) {
+        const r = map.range(at, at + len);
+        if (r) (hit === current ? mine : all).push(r);
+      }
+    }
+    if (window.Highlight && CSS.highlights) {
+      CSS.highlights.set("kapi-search", new Highlight(...all));
+      CSS.highlights.set("kapi-search-current", new Highlight(...mine));
+    }
+    return mine;
+  }
+
+  function clearSearchMarks() {
+    CSS.highlights?.delete("kapi-search");
+    CSS.highlights?.delete("kapi-search-current");
+  }
+
+  function jumpSearch(row) {
+    if (!row) return;
+    if (!row.el?.isConnected) return runSearch();
+    const el = row.el;
+    const here = headingAt(shownTops(outlineHeadings(), (e) => e));
+    searchBack ??= { y: scrollY, title: here ? textOf(here) : "" };
+    closeSearch(false);
+    reveal(el);
+    const ranges = markSearch(row.hit);
+    for (const r of ranges) {
+      const start = r.startContainer.nodeType === Node.ELEMENT_NODE ? r.startContainer : r.startContainer.parentElement;
+      for (let d = closest(start, "details"); d && el.contains(d); d = d.parentElement && closest(d.parentElement, "details")) d.open = true;
+    }
+    leaveFor(idOf(el));
+    requestAnimationFrame(() => {
+      const box = (ranges[0] ?? el).getBoundingClientRect();
+      const top = scrollY + box.top - (levelOf(el) ? 24 : innerHeight / 3);
+      scrollTo({ top: Math.max(0, top), behavior: reduced() ? "auto" : "smooth" });
+      flashBlock(el);
+    });
+    backLabel.textContent = searchBack.title ? `Back to \u201c${searchBack.title}\u201d` : "Back to where you were";
+    backChip.hidden = false;
+  }
+
+  function goBack() {
+    if (!searchBack) return;
+    scrollTo({ top: searchBack.y, behavior: reduced() ? "auto" : "smooth" });
+    clearBack();
+  }
+
+  function clearBack() {
+    searchBack = null;
+    backChip.hidden = true;
+    clearSearchMarks();
+  }
+
+  searchInput.addEventListener("input", () => runSearch());
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    const row = searchRows[searchActive];
+    const onSection = !!row?.node.classList.contains("kapi-search-section");
+    if (SHORTCUTS.is("searchNext", e) || SHORTCUTS.is("searchPrevious", e)) {
+      e.preventDefault();
+      if (searchRows.length) setSearchActive((searchActive + (SHORTCUTS.is("searchNext", e) ? 1 : -1) + searchRows.length) % searchRows.length);
+    } else if (SHORTCUTS.is("searchJump", e)) {
+      e.preventDefault();
+      jumpSearch(row);
+    } else if (onSection && (SHORTCUTS.is("searchCollapse", e) || SHORTCUTS.is("searchExpand", e)) && row.group.hits.length) {
+      e.preventDefault();
+      foldSearchGroup(row, SHORTCUTS.is("searchCollapse", e));
+    } else if (SHORTCUTS.is("dismiss", e)) {
+      e.preventDefault();
+      closeSearch(true);
+    } else return;
+    e.stopPropagation();
+  });
+  searchResults.addEventListener("click", (e) => {
+    const i = searchRows.findIndex((r) => r.node.contains(e.target));
+    if (i < 0) return;
+    if (e.target.closest("[data-fold]")) return foldSearchGroup(searchRows[i], !searchCollapsed.has(searchRows[i].key));
+    jumpSearch(searchRows[i]);
+  });
+  searchResults.addEventListener("pointerdown", (e) => e.preventDefault());
+  document.addEventListener("pointerdown", (e) => {
+    if (!search.hidden && !search.contains(e.target) && !searchButton.contains(e.target)) closeSearch(false);
+    if (outlineSheet && phone.matches && !outlineView.contains(e.target) && !outlineButton.contains(e.target)) setOutline(false);
+  }, true);
+  addEventListener("popstate", (e) => {
+    if (typeof e.state?.kapiY === "number") {
+      if (searchBack && Math.abs(searchBack.y - e.state.kapiY) < 2) clearBack();
+      return scrollTo(0, e.state.kapiY);
+    }
+    const el = location.hash.length > 1 && find(decodeURIComponent(location.hash.slice(1)));
+    if (!el) return;
+    reveal(el);
+    el.scrollIntoView({ block: "start" });
+  });
+  addEventListener("scroll", scheduleOutline, { passive: true });
+  addEventListener("resize", () => {
+    outlineTops = null;
+    scheduleOutline();
+    if (!search.hidden) placeSearch();
+  });
 
   main.addEventListener("click", (e) => {
     if (editing) {
@@ -2727,7 +3309,12 @@
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
-    if (!editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey && !e.shiftKey) {
+    const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
+    if (free && (SHORTCUTS.is("search", e) || (!e.shiftKey && SHORTCUTS.is("searchCommand", e)))) {
+      e.preventDefault();
+      return openSearch();
+    }
+    if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;
         e.preventDefault();
@@ -2746,10 +3333,15 @@
         }
       }
     }
+    if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
     if (SHORTCUTS.is("dismiss", e) && (pop || sheetOpen)) {
       hidePop(true);
       setSheet(false);
       return;
+    }
+    if (SHORTCUTS.is("dismiss", e) && searchBack && !note && notice.hidden && !editing && !asking && !selected && !typing(focus) && !panel.contains(focus)) {
+      e.preventDefault();
+      return goBack();
     }
     if (SHORTCUTS.is("dismiss", e)) {
       dismissNote();
@@ -2802,6 +3394,8 @@
   phone.addEventListener("change", () => {
     setSheet(false);
     schedulePaint();
+    closeSearch(false);
+    syncOutline();
   });
   pins.addEventListener("pointerover", (e) => {
     const pin = e.pointerType === "mouse" && e.target.closest(".kapi-pin");
@@ -2840,6 +3434,8 @@
   new ResizeObserver(() => {
     schedulePaint();
     fitTables();
+    outlineTops = null;
+    scheduleOutline();
   }).observe(main);
   document.fonts.ready.then(fitTables);
   let bodyWidth = 0;
@@ -2866,6 +3462,7 @@
   numberRows(main);
   watchTables();
   applyFolds();
+  syncOutline();
   renderQueue();
   takeOver();
   addEventListener("storage", (e) => {

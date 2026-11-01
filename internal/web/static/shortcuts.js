@@ -27,6 +27,13 @@ window.kapiShortcuts = (() => {
     send: { keys: ["Enter"], shift: false, hint: "↵", words: "Enter" },
     newLine: { keys: ["Enter"], shift: true, hint: "Shift+↵", words: "Shift+Enter" },
     nextField: { keys: ["Tab"], shift: false, hint: "Tab", words: "Tab" },
+    search: { keys: ["/"], mod: false, hint: "/", words: "/" },
+    searchCommand: { keys: ["k"], mod: true, hint: `${command}K`, words: `${command}K` },
+    searchNext: { keys: ["ArrowDown"], hint: "↓", words: "Down arrow", also: { keys: ["n"], ctrl: true, meta: false } },
+    searchPrevious: { keys: ["ArrowUp"], hint: "↑", words: "Up arrow", also: { keys: ["p"], ctrl: true, meta: false } },
+    searchJump: { keys: ["Enter"], hint: "↵", words: "Enter" },
+    searchCollapse: { keys: ["ArrowLeft"], hint: "←", words: "Left arrow" },
+    searchExpand: { keys: ["ArrowRight"], hint: "→", words: "Right arrow" },
     menuNext: { keys: ["ArrowDown"] },
     menuPrevious: { keys: ["ArrowUp"] },
     menuFirst: { keys: ["Home"] },
@@ -38,9 +45,12 @@ window.kapiShortcuts = (() => {
 
   const matches = (binding, e) => {
     if (!binding) return false;
+    if (binding.also && matches(binding.also, e)) return true;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (!binding.keys.includes(key)) return false;
     if (binding.mod !== undefined && binding.mod !== (e.metaKey || e.ctrlKey)) return false;
+    if (binding.ctrl !== undefined && binding.ctrl !== e.ctrlKey) return false;
+    if (binding.meta !== undefined && binding.meta !== e.metaKey) return false;
     return binding.shift === undefined || binding.shift === e.shiftKey;
   };
 
