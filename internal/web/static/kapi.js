@@ -989,6 +989,22 @@
   const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
   const canWiden = (box) => box.parentElement === main && !cardTables.matches;
 
+  function stickWideTableHeads() {
+    for (const table of main.querySelectorAll(".kapi-table > table")) {
+      const head = table.tHead;
+      const box = table.parentElement;
+      if (!head || !box.hasAttribute("data-kapi-wide")) {
+        head?.style.removeProperty("transform");
+        continue;
+      }
+      head.style.removeProperty("transform");
+      const outer = box.getBoundingClientRect();
+      const at = head.getBoundingClientRect();
+      const shift = Math.max(0, Math.min(-at.top, outer.bottom - at.bottom));
+      if (shift) head.style.transform = `translateY(${shift}px)`;
+    }
+  }
+
   function fitTables() {
     const [lo, hi] = breakoutBounds();
     for (const table of main.querySelectorAll("table")) {
@@ -1010,6 +1026,7 @@
       if (box !== table) box.toggleAttribute("data-kapi-wide", box.scrollWidth > box.clientWidth + 1);
     }
     hideLogoOverTables();
+    stickWideTableHeads();
   }
 
   function expandTable(on) {
@@ -3373,6 +3390,7 @@
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("scroll", hideLogoOverTables, { passive: true });
+  addEventListener("scroll", stickWideTableHeads, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
   for (const type of ["dragover", "drop"]) {
     document.addEventListener(type, (e) => {
