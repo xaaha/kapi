@@ -1909,7 +1909,7 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
       const heads = ["Programme", "School", "Type", "Legacy state", "Candidate in catalog", "Candidate id"];
       const row = ["Masters of Health Administration", "Western Governors University", "masters", "pre_approval_accepted", "Clinical Informatics and Patient Centered Technologies", "ec5fe627"];
       const d = Object.assign(document.createElement("details"), { open: true, className: "kapi-details" });
-      d.innerHTML = '<summary>Wide</summary><div class="kapi-details-body"><div class="kapi-table"><table><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody><tr>" + row.map((c) => "<td>" + c + "</td>").join("") + "</tr></tbody></table></div></div>";
+      d.innerHTML = '<summary>Wide</summary><div class="kapi-details-body"><div class="kapi-table" data-kapi-preset="table" data-kapi-id="vvvvvvvv"><table><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody><tr>" + row.map((c) => "<td>" + c + "</td>").join("") + "</tr></tbody></table></div></div>";
       document.getElementById("kapi-page").append(d);
       return document.fonts.ready.then(() => true);
     })()`);
@@ -1918,6 +1918,16 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
     assert.deepEqual([scrolls, inside], ["auto", true]);
     assert.equal(face, pageFace);
     assert.equal(await p.eval(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-wide")`), false);
+
+    const before = await p.eval(`document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect().width`);
+    await p.eval(`document.querySelector('[data-kapi-id="vvvvvvvv"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+    await p.key("w");
+    await p.waitFor(`document.querySelector('[data-kapi-id="vvvvvvvv"]').style.width !== ""`);
+    const [after, fits] = await p.eval(`(r => [r.width, r.left >= 0 && r.right <= document.body.clientWidth])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect())`);
+    assert.ok(after > before + 100, `expanded from ${before}px to ${after}px`);
+    assert.equal(fits, true);
+    await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });
 

@@ -981,13 +981,8 @@
     siteHead.toggleAttribute("data-covered", covered);
   }
 
-  function columnWidth() {
-    const style = getComputedStyle(main);
-    return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-  }
-
   const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
-  const canWiden = (box) => box.parentElement === main && !cardTables.matches;
+  const canWiden = (box) => box.matches(".kapi-table") && !cardTables.matches;
 
   function stickWideTableHeads() {
     for (const table of main.querySelectorAll(".kapi-table > table")) {
@@ -1043,7 +1038,7 @@
     if (!selected.matches(TABLE) || !canWiden(selected)) return [];
     if (selected.style.width) return [iconTool("collapse", "Collapse table", "collapse")];
     const [lo, hi] = breakoutBounds();
-    return hi - lo > columnWidth() + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
+    return hi - lo > selected.getBoundingClientRect().width + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
   }
 
   const tableSizes = new ResizeObserver(fitTables);
