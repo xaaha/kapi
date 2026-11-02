@@ -202,9 +202,13 @@ func TestStylesUseOnlyThemeTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tables, err := os.ReadFile("../web/static/tables.css")
+	if err != nil {
+		t.Fatal(err)
+	}
 	var tokenRules bytes.Buffer
 	tokenCSS(&tokenRules)
-	files := map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome), "code token rules": tokenRules.String()}
+	files := map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome), "tables.css": string(tables), "code token rules": tokenRules.String()}
 	for name, css := range files {
 		local := map[string]bool{}
 		for _, m := range regexp.MustCompile(`(--kapi-[a-z0-9-]+)\s*:`).FindAllStringSubmatch(css, -1) {
@@ -232,8 +236,12 @@ func TestPurpleIsOnlyAToneAndADiagramColour(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tables, err := os.ReadFile("../web/static/tables.css")
+	if err != nil {
+		t.Fatal(err)
+	}
 	allowed := map[string]bool{".kapi-tone-purple": true}
-	for name, css := range map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome)} {
+	for name, css := range map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome), "tables.css": string(tables)} {
 		for _, m := range regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`).FindAllStringSubmatch(css, -1) {
 			if !strings.Contains(m[2], "--kapi-purple-") {
 				continue

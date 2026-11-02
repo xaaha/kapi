@@ -80,7 +80,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
-	for _, name := range []string{"theme.js", "shortcuts.js", "kapi.js", "chrome.css", "logo.svg", "favicon.svg",
+	for _, name := range []string{"theme.js", "shortcuts.js", "tables.js", "kapi.js", "chrome.css", "tables.css", "logo.svg", "favicon.svg",
 		"fonts/hanken-grotesk.woff2", "fonts/hanken-grotesk-italic.woff2", "fonts/source-serif-4.woff2", "fonts/source-serif-4-italic.woff2"} {
 		s.mux.HandleFunc("GET /static/"+name, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -248,9 +248,11 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	b.WriteString("<link rel=\"icon\" type=\"image/svg+xml\" href=\"../../static/favicon.svg\">\n")
 	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
-	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n</head>\n<body>\n")
+	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n")
+	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/tables.css\">\n</head>\n<body>\n")
 	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
 	b.WriteString("<script src=\"../../static/shortcuts.js\" defer></script>\n")
+	b.WriteString("<script src=\"../../static/tables.js\" defer></script>\n")
 	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
