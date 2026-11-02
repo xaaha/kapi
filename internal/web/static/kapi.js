@@ -39,7 +39,6 @@
   let lastPoint = null;
   let frameTarget = null;
   const FRAME_PAD = 10;
-  const TABLE = '[data-kapi-preset="table"], table[data-kapi-id]';
   const BLOCK_ACTIONS = {
     copy: { block: () => copyBlock(), row: () => copyBlock({ row: sourceRow(pickedRow()) }), column: () => copyBlock({ col: pickedColumn() }) },
     "zoom-out": { block: () => zoomDiagram(-0.25) },
@@ -53,7 +52,6 @@
     collapse: { block: () => expandTable(false) },
     delete: { block: deleteBlock, row: () => deletePart("deleterow", { row: sourceRow(pickedRow()) }), column: () => deletePart("deletecol", { col: pickedColumn() }) },
   };
-  const unsortedRow = new WeakMap();
   let textRange = null;
   let textBackward = false;
   let pointerDown = false;
@@ -440,18 +438,7 @@
   }
 
   function markPicked() {
-    for (const el of main.querySelectorAll("[data-kapi-picked]")) el.removeAttribute("data-kapi-picked");
-    if (editing) return;
-    if (scope() === "row") return pickedRow().setAttribute("data-kapi-picked", "");
-    if (scope() !== "column") return;
-    const col = pickedColumn();
-    for (const tr of rowsOf(pickedCell(selected).closest("table"))) {
-      let at = 0;
-      for (const cell of tr.cells) {
-        if (at === col) cell.setAttribute("data-kapi-picked", "");
-        at += cell.colSpan;
-      }
-    }
+    tables.markPicked(selected, lastPoint, editing);
   }
 
   function renderBar() {
@@ -577,13 +564,13 @@
     ring.hidden = (bar.hidden && !asking) || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
-      const table = selected.matches(TABLE);
+      const table = tables.matches(selected);
       const pad = table ? FRAME_PAD : 4;
       ring.style.left = `${r.left - pad}px`;
       ring.style.top = `${r.top - pad}px`;
       ring.style.width = `${r.width + 2 * pad}px`;
       ring.style.height = `${r.height + 2 * pad}px`;
-      ring.style.borderRadius = table ? `${tableRadius(selected) + FRAME_PAD}px` : getComputedStyle(selected).borderRadius;
+      ring.style.borderRadius = table ? `${tables.radius(selected) + FRAME_PAD}px` : getComputedStyle(selected).borderRadius;
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }
@@ -896,156 +883,16 @@
     renderBar();
   }
 
-  function rowsOf(table) {
-    return [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
-  }
-
-  function headRow(table) {
-    return table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
-  }
-
-  function isHeadRow(tr) {
-    const table = tr.closest("table");
-    return tr.parentElement === table.tHead || tr === headRow(table);
-  }
-
-  function numberRows(scope) {
-    for (const table of scope.querySelectorAll('[data-kapi-preset$="table"] table')) {
-      const rows = rowsOf(table);
-      const head = headRow(table);
-      if (!head) continue;
-      const labels = [...head.cells].flatMap((c) => Array(c.colSpan).fill(c.textContent.trim()));
-      const carry = [];
-      for (const tr of rows) {
-        if (tr === head || tr.parentElement === table.tHead) continue;
-        let col = 0;
-        const skip = () => {
-          while (carry[col] > 0) carry[col++]--;
-        };
-        for (const cell of tr.cells) {
-          skip();
-          cell.setAttribute("data-kapi-label", labels[col] ?? "");
-          cell.setAttribute("data-kapi-col", col);
-          for (let i = 0; i < cell.colSpan; i++) carry[col++] = Math.max(cell.rowSpan, 1) - 1;
-        }
-        skip();
-      }
-    }
-  }
-
-  const SHORT_TEXT = 24;
-  const BREAKOUT_GUTTER = 24;
-  const cardTables = matchMedia("(max-width: 640px)");
-
-  function fitColumns(table) {
-    const longest = [];
-    for (const tr of rowsOf(table)) {
-      if (isHeadRow(tr)) continue;
-      for (const cell of tr.cells) {
-        if (cell.colSpan === 1) longest[cell.cellIndex] = Math.max(longest[cell.cellIndex] ?? 0, cell.textContent.trim().length);
-      }
-    }
-    for (const tr of rowsOf(table)) {
-      for (const cell of tr.cells) {
-        const fit = cell.colSpan === 1 && ((longest[cell.cellIndex] ?? 0) > SHORT_TEXT ? "text" : "short");
-        if (!fit) cell.removeAttribute("data-kapi-fit");
-        else if (cell.getAttribute("data-kapi-fit") !== fit) cell.setAttribute("data-kapi-fit", fit);
-      }
-    }
-  }
-
-  function leastWidth(table) {
-    table.style.width = "min-content";
-    const width = table.getBoundingClientRect().width;
-    table.style.removeProperty("width");
-    return width;
-  }
-
-  const EXPANDED_KEY = `kapi-expanded-tables:${location.pathname}`;
-  const expanded = new Set((() => {
-    try {
-      return JSON.parse(localStorage.getItem(EXPANDED_KEY) || "[]");
-    } catch {
-      return [];
-    }
-  })());
-
-  function breakoutBounds() {
-    return [BREAKOUT_GUTTER, document.body.clientWidth - BREAKOUT_GUTTER];
-  }
-
-  function hideLogoOverTables() {
-    const r = siteHead.getBoundingClientRect();
-    const under = (box) => (b => b.left < r.right && r.left < b.right && b.top < r.bottom && r.top < b.bottom)(box.getBoundingClientRect());
-    const covered = getComputedStyle(siteHead).position === "fixed" && [...main.querySelectorAll("table")].some((t) => tableBox(t).style.width && under(tableBox(t)));
-    siteHead.toggleAttribute("data-covered", covered);
-  }
-
-  const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
-  const canWiden = (box) => box.matches(".kapi-table") && !cardTables.matches;
-
-  function stickWideTableHeads() {
-    for (const table of main.querySelectorAll(".kapi-table > table")) {
-      const head = table.tHead;
-      const box = table.parentElement;
-      if (!head || !box.hasAttribute("data-kapi-wide")) {
-        head?.style.removeProperty("transform");
-        continue;
-      }
-      head.style.removeProperty("transform");
-      const outer = box.getBoundingClientRect();
-      const at = head.getBoundingClientRect();
-      const shift = Math.max(0, Math.min(-at.top, outer.bottom - at.bottom));
-      if (shift) head.style.transform = `translateY(${shift}px)`;
-    }
-  }
-
-  function fitTables() {
-    const [lo, hi] = breakoutBounds();
-    for (const table of main.querySelectorAll("table")) {
-      fitColumns(table);
-      const box = tableBox(table);
-      box.style.removeProperty("width");
-      box.style.removeProperty("margin-left");
-      table.removeAttribute("data-kapi-tight");
-      if (canWiden(box)) {
-        const column = box.getBoundingClientRect().width;
-        const width = expanded.has(idOf(box)) ? Math.max(hi - lo, column) : column;
-        if (leastWidth(table) > width + 1) table.setAttribute("data-kapi-tight", "");
-        if (width > column + 1) {
-          const left = box.getBoundingClientRect().left;
-          box.style.width = `${width}px`;
-          box.style.marginLeft = `${Math.min(Math.max(left - (width - column) / 2, lo), hi - width) - left}px`;
-        }
-      }
-      if (box !== table) box.toggleAttribute("data-kapi-wide", box.scrollWidth > box.clientWidth + 1);
-    }
-    hideLogoOverTables();
-    stickWideTableHeads();
-  }
+  const tables = window.kapiCreateTables({ main, siteHead, idOf });
 
   function expandTable(on) {
-    if (on) expanded.add(idOf(selected));
-    else expanded.delete(idOf(selected));
-    try {
-      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]));
-    } catch {}
-    fitTables();
+    tables.setExpanded(selected, on);
     renderBar();
   }
 
   function widthTool() {
-    if (!selected.matches(TABLE) || !canWiden(selected)) return [];
-    if (selected.style.width) return [iconTool("collapse", "Collapse table", "collapse")];
-    const [lo, hi] = breakoutBounds();
-    return hi - lo > selected.getBoundingClientRect().width + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
-  }
-
-  const tableSizes = new ResizeObserver(fitTables);
-
-  function watchTables() {
-    tableSizes.disconnect();
-    for (const table of main.querySelectorAll(".kapi-table > table")) tableSizes.observe(table);
+    const action = tables.widthAction(selected);
+    return action ? [iconTool(action, action === "expand" ? "Expand table" : "Collapse table", action)] : [];
   }
 
   async function editRaw(el) {
@@ -1141,9 +988,7 @@
   }
 
   function scope() {
-    const cell = selected?.matches(TABLE) && pickedCell(selected);
-    if (!cell) return "block";
-    return isHeadRow(cell.parentElement) ? "column" : "row";
+    return tables.scope(selected, lastPoint);
   }
 
   function scopedAction(name) {
@@ -1254,14 +1099,7 @@
     renderQueue();
   }
 
-  function cellPart(cell) {
-    const table = cell.closest("table");
-    if (isHeadRow(cell.parentElement)) return `column ${cell.textContent.trim()}`;
-    const rows = rowsOf(table).filter((tr) => !isHeadRow(tr));
-    const row = `row ${rows.indexOf(cell.parentElement) + 1}`;
-    const label = cell.getAttribute("data-kapi-label");
-    return label ? `${row}, ${label}` : row;
-  }
+  const cellPart = (cell) => tables.cellPart(cell);
 
   function linePart(pre, range) {
     const lineAt = (node, offset) => {
@@ -1326,24 +1164,10 @@
     };
   }
 
-  function pickedCell(el) {
-    return lastPoint?.el === el && lastPoint.cell?.isConnected && el.contains(lastPoint.cell) ? lastPoint.cell : null;
-  }
-
-  function pickedRow() {
-    const tr = selected && pickedCell(selected)?.parentElement;
-    return tr && !isHeadRow(tr) ? tr : null;
-  }
-
-  function pickedColumn() {
-    const cell = pickedCell(selected);
-    return [...cell.parentElement.cells].slice(0, cell.cellIndex).reduce((n, c) => n + c.colSpan, 0);
-  }
-
-  function sourceRow(tr) {
-    const at = tr.cells[0]?.dataset.kapiCell;
-    return at ? Number(at.split(",")[0]) : (unsortedRow.get(tr) ?? rowsOf(tr.closest("table")).indexOf(tr));
-  }
+  const pickedCell = (el) => tables.pickedCell(el, lastPoint);
+  const pickedRow = () => tables.pickedRow(selected, lastPoint);
+  const pickedColumn = () => tables.pickedColumn(selected, lastPoint);
+  const sourceRow = (tr) => tables.sourceRow(tr);
 
   function blockAnchor(el) {
     const cell = pickedCell(el);
@@ -2275,8 +2099,7 @@
     main.dataset.rev = fresh.dataset.rev;
     showUndo(fresh.dataset.undo);
     labelArchived(main);
-    numberRows(main);
-    watchTables();
+    tables.prepare(main);
     applyFolds();
     select(keep ? find(keep) : null);
     placeNote();
@@ -2303,8 +2126,7 @@
       }
       el.replaceWith(next);
       labelArchived(next);
-      numberRows(next);
-      watchTables();
+      tables.prepare(next);
       const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
       if (res.headers.has("Kapi-Undo")) showUndo(res.headers.get("Kapi-Undo"));
@@ -2532,39 +2354,6 @@
     if (b && !b.disabled) action(b.dataset.action);
   });
 
-  function sortTable(th) {
-    const table = th.closest("table");
-    const body = table.tBodies[0];
-    if (!body) return;
-    const col = th.cellIndex;
-    const dir = th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
-    for (const other of th.parentElement.cells) other.removeAttribute("aria-sort");
-    th.setAttribute("aria-sort", dir);
-    const all = rowsOf(table);
-    if (!all.some((tr) => unsortedRow.has(tr))) all.forEach((tr, i) => unsortedRow.set(tr, i));
-    const rows = [...body.rows].filter((r) => r !== th.parentElement);
-    const text = (r) => (r.cells[col]?.textContent || "").trim();
-    const num = (v) => Number(v.replace(/,/g, ""));
-    const numeric = rows.every((r) => text(r) !== "" && Number.isFinite(num(text(r))));
-    const cmp = numeric ? (a, b) => num(text(a)) - num(text(b)) : (a, b) => text(a).localeCompare(text(b));
-    rows.sort((a, b) => (dir === "ascending" ? cmp(a, b) : cmp(b, a)));
-    body.append(...rows);
-  }
-
-  function labelTapped(e) {
-    const cell = closest(e.target, ".kapi-table td, .kapi-table th");
-    if (!cell?.hasAttribute("data-kapi-col") || getComputedStyle(cell).display !== "block") return null;
-    if (e.clientX - cell.getBoundingClientRect().left >= parseFloat(getComputedStyle(cell).paddingLeft)) return null;
-    const table = cell.closest("table");
-    const head = headRow(table);
-    let col = 0;
-    for (const th of head?.cells ?? []) {
-      col += th.colSpan;
-      if (col > Number(cell.dataset.kapiCol)) return th;
-    }
-    return null;
-  }
-
   function codeText(pre) {
     const lines = [...pre.querySelectorAll(".kapi-line")];
     if (!lines.length) return pre.textContent.replace(/\n$/, "");
@@ -2600,7 +2389,7 @@
   main.addEventListener("mouseover", (e) => {
     const pre = closest(e.target, "pre");
     if (pre && main.contains(pre)) showCopy(pre);
-    const table = closest(e.target, TABLE);
+    const table = closest(e.target, tables.selector);
     showFrame(table && main.contains(table) ? table : null);
   });
   main.addEventListener("mouseleave", (e) => {
@@ -2609,12 +2398,12 @@
   });
 
   function placeFrame() {
-    const fallback = selected?.matches(TABLE) ? selected : null;
+    const fallback = tables.matches(selected) ? selected : null;
     const t = !editing && (frameTarget?.isConnected ? frameTarget : fallback);
     tableFrame.hidden = !t;
     if (!t) return;
     const r = t.getBoundingClientRect();
-    const [w, h, inner] = [r.width + 2 * FRAME_PAD, r.height + 2 * FRAME_PAD, tableRadius(t)];
+    const [w, h, inner] = [r.width + 2 * FRAME_PAD, r.height + 2 * FRAME_PAD, tables.radius(t)];
     tableFrame.style.left = `${r.left - FRAME_PAD}px`;
     tableFrame.style.top = `${r.top - FRAME_PAD}px`;
     tableFrame.style.width = `${w}px`;
@@ -2624,11 +2413,6 @@
     tableFrame.toggleAttribute("data-picked", t === selected && !pickedCell(t));
     tableFrame.toggleAttribute("data-selected", t === selected);
   }
-  function tableRadius(block) {
-    const table = block.matches("table") ? block : block.querySelector("table");
-    return parseFloat(getComputedStyle(table ?? block).borderTopLeftRadius) || 0;
-  }
-
   function roundedRect(x, y, w, h, r) {
     const arc = (ex, ey) => `A${r},${r} 0 0 1 ${ex},${ey}`;
     return `M${x + r},${y} H${x + w - r} ${arc(x + w, y + r)} V${y + h - r} ${arc(x + w - r, y + h)} H${x + r} ${arc(x, y + h - r)} V${y + r} ${arc(x + r, y)} Z`;
@@ -2644,7 +2428,7 @@
   });
   tableFrame.addEventListener("click", () => {
     const t = frameTarget?.isConnected ? frameTarget : selected;
-    if (!t?.matches(TABLE) || editing) return;
+    if (!tables.matches(t) || editing) return;
     lastPoint = null;
     select(t);
   });
@@ -3222,10 +3006,7 @@
     const pill = closest(e.target, ".kapi-code-lang");
     const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
-    const label = labelTapped(e);
-    const th = closest(e.target, ".kapi-table th");
-    if (label && main.contains(label)) sortTable(label);
-    else if (th && main.contains(th) && selected && pickedCell(selected) === th) sortTable(th);
+    tables.handleClick(e, selected, lastPoint);
     const el = closest(e.target, BLOCK);
     if (!el || !main.contains(el)) return;
     if (e.isTrusted) {
@@ -3384,8 +3165,6 @@
   addEventListener("scroll", placeAsk, { passive: true });
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
-  addEventListener("scroll", hideLogoOverTables, { passive: true });
-  addEventListener("scroll", stickWideTableHeads, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
   for (const type of ["dragover", "drop"]) {
     document.addEventListener(type, (e) => {
@@ -3446,18 +3225,9 @@
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {
     schedulePaint();
-    fitTables();
     outlineTops = null;
     scheduleOutline();
   }).observe(main);
-  document.fonts.ready.then(fitTables);
-  let bodyWidth = 0;
-  new ResizeObserver(() => {
-    if (document.body.clientWidth === bodyWidth) return;
-    bodyWidth = document.body.clientWidth;
-    fitTables();
-  }).observe(document.body);
-  cardTables.addEventListener("change", fitTables);
   new ResizeObserver(() => {
     if (!panel.classList.contains("kapi-expanded")) {
       document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
@@ -3472,8 +3242,7 @@
   });
 
   labelArchived(main);
-  numberRows(main);
-  watchTables();
+  tables.start();
   applyFolds();
   syncOutline();
   renderQueue();

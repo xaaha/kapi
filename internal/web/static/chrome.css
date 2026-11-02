@@ -1770,60 +1770,6 @@
   cursor: copy;
 }
 
-#kapi-chrome .kapi-table-frame {
-  --kapi-frame-radius: 0;
-  --kapi-frame-band: none;
-  position: fixed;
-  z-index: 2147482998;
-  pointer-events: none;
-}
-
-#kapi-chrome .kapi-table-frame::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px dashed var(--kapi-border-strong);
-  border-radius: var(--kapi-frame-radius);
-  clip-path: var(--kapi-frame-band);
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-#kapi-chrome .kapi-table-frame:hover::before {
-  border-style: solid;
-  border-color: var(--kapi-blue-text);
-  background: color-mix(in srgb, var(--kapi-blue-text) 8%, transparent);
-}
-
-#kapi-chrome .kapi-table-frame:is([data-picked], [data-selected]:not(:hover))::before {
-  border-color: transparent;
-  background: none;
-}
-
-@media (min-width: 641px) {
-  #kapi-page [data-kapi-fit="short"] {
-    white-space: nowrap;
-  }
-
-  #kapi-page [data-kapi-fit="text"] {
-    overflow-wrap: anywhere;
-  }
-
-  #kapi-page [data-kapi-fit="text"]::before {
-    content: "";
-    display: block;
-    width: 11rem;
-  }
-
-  #kapi-page table[data-kapi-tight] [data-kapi-fit="text"]::before {
-    width: 6rem;
-  }
-}
-
-#kapi-page :is(tr[data-kapi-picked] > *, td[data-kapi-picked], th[data-kapi-picked]) {
-  background: color-mix(in srgb, var(--kapi-blue-text) 10%, var(--kapi-card));
-}
-
 #kapi-chrome .kapi-copy-code {
   position: fixed;
   z-index: 2147483000;

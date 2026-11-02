@@ -141,9 +141,9 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
 
   const pageHTML = () =>
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
-    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PALETTE_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"></head><body>` +
+    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PALETTE_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"><link rel="stylesheet" href="/${TOKEN}/static/tables.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}" data-path="${escapeAttr(pagePath)}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
-    `<script src="/${TOKEN}/static/shortcuts.js"></script><script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
+    `<script src="/${TOKEN}/static/shortcuts.js"></script><script src="/${TOKEN}/static/tables.js"></script><script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
     const full = { seq: state.events.length + 1, time: new Date().toISOString(), author: "agent", text: "", ...ev };
