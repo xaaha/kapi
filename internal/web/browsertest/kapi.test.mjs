@@ -1909,7 +1909,7 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
       const heads = ["Programme", "School", "Type", "Legacy state", "Candidate in catalog", "Candidate id"];
       const row = ["Masters of Health Administration", "Western Governors University", "masters", "pre_approval_accepted", "Clinical Informatics and Patient Centered Technologies", "ec5fe627"];
       const d = Object.assign(document.createElement("details"), { open: true, className: "kapi-details" });
-      d.innerHTML = '<summary>Wide</summary><div class="kapi-details-body"><div class="kapi-table"><table><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody><tr>" + row.map((c) => "<td>" + c + "</td>").join("") + "</tr></tbody></table></div></div>";
+      d.innerHTML = '<summary>Wide</summary><div class="kapi-details-body"><div class="kapi-table" data-kapi-preset="table" data-kapi-id="vvvvvvvv"><table><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody><tr>" + row.map((c) => "<td>" + c + "</td>").join("") + "</tr></tbody></table></div></div>";
       document.getElementById("kapi-page").append(d);
       return document.fonts.ready.then(() => true);
     })()`);
@@ -1918,10 +1918,20 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
     assert.deepEqual([scrolls, inside], ["auto", true]);
     assert.equal(face, pageFace);
     assert.equal(await p.eval(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-wide")`), false);
+
+    const before = await p.eval(`document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect().width`);
+    await p.eval(`document.querySelector('[data-kapi-id="vvvvvvvv"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+    await p.key("w");
+    await p.waitFor(`document.querySelector('[data-kapi-id="vvvvvvvv"]').style.width !== ""`);
+    const [after, fits] = await p.eval(`(r => [r.width, r.left >= 0 && r.right <= document.body.clientWidth])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect())`);
+    assert.ok(after > before + 100, `expanded from ${before}px to ${after}px`);
+    assert.equal(fits, true);
+    await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });
 
-async function addCrowdedTable(p) {
+async function addCrowdedTable(p, count = 3) {
   await p.eval(`(() => {
     const heads = ["Service", "Region", "Owner", "p50", "p95", "p99", "Errors", "RPS", "Rollout notes", "Status detail"];
     const prose = "the rollout paused after the canary reported elevated latency so the team is replaying traffic before deciding";
@@ -1930,7 +1940,7 @@ async function addCrowdedTable(p) {
     wrap.dataset.kapiPreset = "table";
     wrap.dataset.kapiId = "wwwwwwww";
     wrap.innerHTML = "<table><thead><tr>" + heads.map((h) => "<th>" + h + "</th>").join("") + "</tr></thead><tbody>" +
-      [1, 2, 3].map((i) => "<tr>" + row(i).map((c) => "<td>" + c + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+      Array.from({ length: ${count} }, (_, i) => "<tr>" + row(i + 1).map((c) => "<td>" + c + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
     document.getElementById("kapi-page").append(wrap);
     return document.fonts.ready.then(() => true);
   })()`);
@@ -1957,6 +1967,27 @@ test("a crowded table starts in the column, scrolling with short columns on one 
     const after = await crowded(p);
     assert.deepEqual({ grew: after.grew, inside: after.inside, scrolls: after.scrolls }, { grew: true, inside: true, scrolls: false });
     assert.ok(after.textWidth >= 170, `text column is ${after.textWidth}px`);
+    await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
+  });
+});
+
+test("a crowded table's header stays sticky before and after the table is expanded", async () => {
+  await withPageStyles(1600, async (p) => {
+    await addCrowdedTable(p, 60);
+    await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').hasAttribute("data-kapi-wide")`);
+    const scrollToMiddle = () => p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="wwwwwwww"]'))`);
+    const headTop = () => p.eval(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top)`);
+    await scrollToMiddle();
+    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 0`);
+    assert.equal(await headTop(), 0);
+
+    await p.eval(`document.querySelector('[data-kapi-id="wwwwwwww"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+    await p.key("w");
+    await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').style.width !== ""`);
+    await scrollToMiddle();
+    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 0`);
+    assert.equal(await headTop(), 0);
     await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });

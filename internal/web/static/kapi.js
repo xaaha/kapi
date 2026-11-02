@@ -981,13 +981,24 @@
     siteHead.toggleAttribute("data-covered", covered);
   }
 
-  function columnWidth() {
-    const style = getComputedStyle(main);
-    return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-  }
-
   const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
-  const canWiden = (box) => box.parentElement === main && !cardTables.matches;
+  const canWiden = (box) => box.matches(".kapi-table") && !cardTables.matches;
+
+  function stickWideTableHeads() {
+    for (const table of main.querySelectorAll(".kapi-table > table")) {
+      const head = table.tHead;
+      const box = table.parentElement;
+      if (!head || !box.hasAttribute("data-kapi-wide")) {
+        head?.style.removeProperty("transform");
+        continue;
+      }
+      head.style.removeProperty("transform");
+      const outer = box.getBoundingClientRect();
+      const at = head.getBoundingClientRect();
+      const shift = Math.max(0, Math.min(-at.top, outer.bottom - at.bottom));
+      if (shift) head.style.transform = `translateY(${shift}px)`;
+    }
+  }
 
   function fitTables() {
     const [lo, hi] = breakoutBounds();
@@ -1010,6 +1021,7 @@
       if (box !== table) box.toggleAttribute("data-kapi-wide", box.scrollWidth > box.clientWidth + 1);
     }
     hideLogoOverTables();
+    stickWideTableHeads();
   }
 
   function expandTable(on) {
@@ -1026,7 +1038,7 @@
     if (!selected.matches(TABLE) || !canWiden(selected)) return [];
     if (selected.style.width) return [iconTool("collapse", "Collapse table", "collapse")];
     const [lo, hi] = breakoutBounds();
-    return hi - lo > columnWidth() + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
+    return hi - lo > selected.getBoundingClientRect().width + 1 ? [iconTool("expand", "Expand table", "expand")] : [];
   }
 
   const tableSizes = new ResizeObserver(fitTables);
@@ -3373,6 +3385,7 @@
   addEventListener("resize", placeAsk);
   addEventListener("scroll", placeCopy, { passive: true });
   addEventListener("scroll", hideLogoOverTables, { passive: true });
+  addEventListener("scroll", stickWideTableHeads, { passive: true });
   addEventListener("scroll", () => placePop(), { passive: true });
   for (const type of ["dragover", "drop"]) {
     document.addEventListener(type, (e) => {
