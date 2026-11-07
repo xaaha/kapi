@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xaaha/kapi/internal/durable"
 )
 
 const (
@@ -142,7 +144,7 @@ func writeTemp(dir string, data []byte) (string, error) {
 	}
 	_, err = tmp.Write(data)
 	if err == nil {
-		err = tmp.Sync()
+		err = durable.Sync(tmp)
 	}
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
@@ -160,7 +162,7 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	return d.Sync()
+	return durable.Sync(d)
 }
 
 func (s *Store) Path(page, name string) (string, error) {

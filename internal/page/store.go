@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/xaaha/kapi/internal/attach"
+	"github.com/xaaha/kapi/internal/durable"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/render"
 )
@@ -622,7 +623,7 @@ var (
 	errNoSwap      = errors.New("this file system cannot swap files atomically")
 	replaceHook    func(stage string)
 	appendEvent    = (*eventlog.Log).Append
-	syncFile       = (*os.File).Sync
+	syncFile       = durable.Sync
 	renameFile     = os.Rename
 	swapFiles      = exchangeFiles
 	writeTemp      = (*os.File).Write

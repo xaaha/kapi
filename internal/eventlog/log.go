@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xaaha/kapi/internal/durable"
 )
 
 type Event struct {
@@ -83,7 +86,7 @@ const (
 )
 
 var (
-	syncFile   = (*os.File).Sync
+	syncFile   = durable.Sync
 	renameFile = os.Rename
 	writeLine  = (*os.File).Write
 	truncate   = (*os.File).Truncate
@@ -101,11 +104,11 @@ func Open(dir string) (*Log, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	if err := f.Truncate(whole); err != nil {
+	if err := cutTo(f, whole); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -208,8 +211,17 @@ func (l *Log) appendLocked(in []Event) ([]Event, error) {
 	return out, nil
 }
 
+// cutTo also moves the write offset because the file is not opened with O_APPEND, which Windows cannot truncate.
+func cutTo(f *os.File, size int64) error {
+	if err := truncate(f, size); err != nil {
+		return err
+	}
+	_, err := f.Seek(size, io.SeekStart)
+	return err
+}
+
 func (l *Log) undoAppend() error {
-	if err := truncate(l.file, l.size); err != nil {
+	if err := cutTo(l.file, l.size); err != nil {
 		l.broken = fmt.Errorf("%s may end in a partial line; reopen the log before appending: %w", l.file.Name(), err)
 		return l.broken
 	}
