@@ -42,7 +42,8 @@ Other install options:
 - `go install github.com/xaaha/kapi/cmd/kapi@latest`
 - Build from source with `go build -o kapi ./cmd/kapi`
 
-kapi runs on macOS and Linux.
+kapi runs on macOS, Linux, and Windows 10 or later. On Windows, install with
+`go install` or download the `.zip` from the latest release.
 
 ### Shell completion (curl, go install, or source builds)
 
