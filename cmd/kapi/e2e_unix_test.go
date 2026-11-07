@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 )
 
+const missingFileText = "no such file"
+
 const exeSuffix = ""
 
 func (e *e2e) fakeOpeners(dir string) {

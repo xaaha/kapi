@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -71,9 +72,27 @@ func (e *e2e) kapi(args ...string) string {
 }
 
 type watcher struct {
-	cmd   *exec.Cmd
-	lines chan string
-	seq   uint64
+	cmd    *exec.Cmd
+	lines  chan string
+	seq    uint64
+	stderr *syncBuffer
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func (e *e2e) watch() *watcher {
@@ -89,10 +108,12 @@ func (e *e2e) watchAs(reader string) *watcher {
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	stderr := &syncBuffer{}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
-	w := &watcher{cmd: cmd, lines: make(chan string, 16)}
+	w := &watcher{cmd: cmd, lines: make(chan string, 16), stderr: stderr}
 	go func() {
 		sc := bufio.NewScanner(stdout)
 		for sc.Scan() {
@@ -113,7 +134,7 @@ func (w *watcher) next(t *testing.T) string {
 	select {
 	case line, ok := <-w.lines:
 		if !ok {
-			t.Fatal("watch exited")
+			t.Fatalf("watch exited: %s", w.stderr)
 		}
 		return line
 	case <-time.After(5 * time.Second):
@@ -425,7 +446,7 @@ func (e *e2e) start(stdin string, args ...string) (*exec.Cmd, *bytes.Buffer) {
 	cmd.Env = e.env
 	cmd.Stdin = strings.NewReader(stdin)
 	var out bytes.Buffer
-	cmd.Stdout = &out
+	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
@@ -629,7 +650,7 @@ func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, "no such file"},
+		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, missingFileText},
 		{[]string{"attach", "--after", "zzzzzzzz", e.page, img}, "no such element"},
 		{[]string{"attach", notes, img}, "not an HTML page"},
 		{[]string{"attach", "--reader", "", e.page, img}, "cannot be empty"},

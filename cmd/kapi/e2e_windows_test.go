@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const missingFileText = "cannot find the file"
+
 const exeSuffix = ".exe"
 
 func (e *e2e) fakeOpeners(dir string) {
