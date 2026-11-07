@@ -419,6 +419,7 @@ func killMidRestore(t *testing.T, home, path string) {
 }
 
 func TestOpenRestoresAnAgentWriteAKillLeftInATempFile(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, oneBlock)
 	killMidRestore(t, home, path)
 	if got := onDisk(t, path); got != oneBlockUno {
@@ -460,6 +461,7 @@ func TestASwapLostToAnAgentLeavesNoRevisionInFlight(t *testing.T) {
 }
 
 func TestOpenKeepsADisplacedAgentWriteWhenThePageChangedSince(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, oneBlock)
 	killMidRestore(t, home, path)
 	externalWrite(t, path, "<p data-kapi-id=\"aaaaaaaa\">newer</p>\n")

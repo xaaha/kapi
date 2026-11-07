@@ -17,7 +17,7 @@ func cutThenShort() daemon.Response {
 
 func TestReview45dANewMessageBehindAQueuedCutEventReachesTheModel(t *testing.T) {
 	for _, event := range []string{"PostToolUse", "Stop"} {
-		f := &fakeAPI{resp: cutThenShort(), stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
+		f := &fakeAPI{resp: cutThenShort(), stdin: `{"hook_event_name":"` + event + `","cwd":` + workDirJSON + `}`}
 		out, err := run(t, f, "hook-messages")
 		if err != nil {
 			t.Fatal(err)
@@ -32,7 +32,7 @@ func TestReview45dStopDoesNotBlockEveryTurnOnTheSameQueuedCutEvent(t *testing.T)
 	resp := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Queued: 1, Hooked: 1, Events: []eventlog.Event{
 		{Seq: 1, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)},
 	}}}}
-	f := &fakeAPI{resp: resp, stdin: `{"hook_event_name":"Stop","cwd":"/w","stop_hook_active":false}`}
+	f := &fakeAPI{resp: resp, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `,"stop_hook_active":false}`}
 	out, err := run(t, f, "hook-messages")
 	if err != nil {
 		t.Fatal(err)

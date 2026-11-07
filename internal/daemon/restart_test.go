@@ -85,7 +85,7 @@ func TestARestartedDaemonKeepsThePortWithANewTokenAndTheStreamResumes(t *testing
 	if after.Host != before.Host || after.Path == before.Path {
 		t.Fatalf("http.url after restart = %s, was %s; want the same port and a new token", after, before)
 	}
-	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || !modeIs(fi, 0o600) {
 		t.Errorf("http.url mode = %v, %v; want 0600", fi.Mode().Perm(), err)
 	}
 	resp, err := http.Get(pageURL + "events") //nolint:gosec // the daemon under test gave this URL
@@ -97,7 +97,8 @@ func TestARestartedDaemonKeepsThePortWithANewTokenAndTheStreamResumes(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"error":"kapi restarted","reopen":"kapi open ` + path + `"}` + "\n"
+	reopen, _ := json.Marshal("kapi open " + path)
+	want := `{"error":"kapi restarted","reopen":` + string(reopen) + `}` + "\n"
 	if resp.StatusCode != http.StatusForbidden || string(notice) != want {
 		t.Errorf("old tab's events after restart: %s %q, want 403 %q", resp.Status, notice, want)
 	}
@@ -187,7 +188,7 @@ func TestOnlyTheLastThreeIssuedTokensGetThePagePath(t *testing.T) {
 	}
 	_, stop := servingAt(t, home)
 	defer stop()
-	if fi, err := os.Stat(filepath.Join(home, "previous-tokens")); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(filepath.Join(home, "previous-tokens")); err != nil || !modeIs(fi, 0o600) {
 		t.Fatalf("previous-tokens: %v, %v; want mode 0600", fi, err)
 	}
 	for i, u := range urls {

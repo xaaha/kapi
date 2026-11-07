@@ -17,7 +17,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -37,7 +36,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Skip("builds and runs the kapi binary")
 	}
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "kapi")
+	bin := filepath.Join(dir, "kapi"+exeSuffix)
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -60,22 +59,6 @@ func newE2E(t *testing.T) *e2e {
 	return e
 }
 
-func (e *e2e) fakeOpeners(dir string) {
-	e.t.Helper()
-	bin := filepath.Join(dir, "openers")
-	if err := os.Mkdir(bin, 0o700); err != nil {
-		e.t.Fatal(err)
-	}
-	e.opened = filepath.Join(dir, "opened")
-	script := "#!/bin/sh\necho \"$1\" >> '" + e.opened + "'\n"
-	for _, name := range []string{"open", "xdg-open"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o700); err != nil { //nolint:gosec // a test opener must be executable
-			e.t.Fatal(err)
-		}
-	}
-	e.env = append(e.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
 func (e *e2e) kapi(args ...string) string {
 	e.t.Helper()
 	cmd := exec.Command(e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
@@ -85,15 +68,6 @@ func (e *e2e) kapi(args ...string) string {
 		e.t.Fatalf("kapi %v: %v\n%s", args, err, out)
 	}
 	return string(out)
-}
-
-func (e *e2e) killDaemon() {
-	if out, err := exec.Command("pkill", "-f", e.bin+" daemon").CombinedOutput(); err != nil && len(out) > 0 { //nolint:gosec // matches only the kapi binary this test just built
-		e.t.Logf("pkill: %v %s", err, out)
-	}
-	waitFor(e.t, "the daemon to exit", func() bool {
-		return exec.Command("pgrep", "-f", e.bin+" daemon").Run() != nil //nolint:gosec // matches only the kapi binary this test just built
-	})
 }
 
 type watcher struct {
@@ -166,7 +140,7 @@ func (w *watcher) event(t *testing.T) string {
 
 func (w *watcher) kill9(t *testing.T) {
 	t.Helper()
-	if err := w.cmd.Process.Signal(syscall.SIGKILL); err != nil {
+	if err := w.cmd.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
 	_ = w.cmd.Wait()

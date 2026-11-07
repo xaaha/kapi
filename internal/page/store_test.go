@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/osfile"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -46,6 +48,20 @@ func pageLog(t *testing.T, home, path string) *eventlog.Log {
 	}
 	t.Cleanup(func() { l.Close() })
 	return l
+}
+
+func needSwap(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	a, b := filepath.Join(dir, "a"), filepath.Join(dir, "b")
+	for _, name := range []string{a, b} {
+		if err := os.WriteFile(name, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if errors.Is(exchangeFiles(a, b), errNoSwap) {
+		t.Skip("this file system cannot swap files, so kapi never moves a file aside")
+	}
 }
 
 func onDisk(t *testing.T, path string) string {
@@ -119,7 +135,7 @@ func TestApplyReplacesTheFileInsteadOfWritingIntoIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != 0o640 {
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o640 {
 		t.Errorf("mode = %v, want 0640 kept", fi.Mode().Perm())
 	}
 	left, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".*kapi-*"))
@@ -1087,7 +1103,7 @@ func TestOpsNeverOverwriteAnAgentsAtomicRename(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				if err := os.Rename(tmp, path); err != nil {
+				if err := osfile.Rename(tmp, path); err != nil {
 					t.Error(err)
 					return
 				}
@@ -1183,6 +1199,7 @@ func TestTheLastAgentRenameWinsWhenItsMtimeTiesWithTheOneBefore(t *testing.T) {
 }
 
 func TestAnAgentWriteIntoTheFileWinsWhenItsMtimeTiesWithTheOneBefore(t *testing.T) {
+	needSwap(t)
 	tick := time.Now().Truncate(time.Second)
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">start</p>\n")
 	s := open(t, home, path)
@@ -1253,6 +1270,7 @@ func lateInPlaceWrite(t *testing.T, holdAt string, gap time.Duration, body func(
 }
 
 func TestALateWriteIntoTheFileKapiMovedAsideWinsAtTheNextRefresh(t *testing.T) {
+	needSwap(t)
 	late := func(string) string { return "<p data-kapi-id=\"aaaaaaaa\">late</p>\n" }
 	for _, holdAt := range []string{"swap", "restore"} {
 		for _, gap := range []time.Duration{0, 5 * time.Millisecond, 20 * time.Millisecond} {
@@ -1262,6 +1280,7 @@ func TestALateWriteIntoTheFileKapiMovedAsideWinsAtTheNextRefresh(t *testing.T) {
 }
 
 func TestOpenSettlesAFileKapiMovedAsideBeforeItStopped(t *testing.T) {
+	needSwap(t)
 	for _, write := range []bool{true, false} {
 		start := "<p data-kapi-id=\"aaaaaaaa\">start</p>\n"
 		late := "<p data-kapi-id=\"aaaaaaaa\">late</p>\n"
@@ -1746,6 +1765,9 @@ func TestAnImageOpAddsAFigureAfterTheTopLevelBlockOrAtTheEnd(t *testing.T) {
 }
 
 func TestImagesGoInsideTheBodyAndSurviveAColonInThePageName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reads a colon in a file name as a data stream")
+	}
 	const src = "<!doctype html>\n<html><head><title>t</title></head><body>\n<p data-kapi-id=\"aaaaaaaa\">a</p>\n</body></html>\n"
 	dir := t.TempDir()
 	home, path := filepath.Join(dir, "home"), filepath.Join(dir, "notes 10:30.html")

@@ -96,6 +96,7 @@ func TestAKilledLogRecoversAtEveryWritePoint(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reopen after a kill at write %d: %v", at, err)
 			}
+			closeAtEnd(t, l)
 			defer l.Close()
 			events, _ := l.After(0)
 			for i, e := range events {
@@ -148,6 +149,7 @@ func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	appendText := func(text string) error {
 		_, err := l.Append(&Event{Author: "human", Kind: "message", Text: text})
@@ -187,6 +189,7 @@ func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen after failed appends: %v", err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	events, _ := reopened.After(0)
 	var got []string
@@ -207,6 +210,7 @@ func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
 		t.Fatal(err)
@@ -230,6 +234,7 @@ func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testi
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	if events, _ := reopened.After(0); len(events) != 1 || events[0].Text != "one" {
 		t.Fatalf("events after reopen %+v, want only the first", events)
@@ -245,6 +250,7 @@ func TestAppendAllWritesTheWholeBatchOrNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	batch := func(texts ...string) ([]Event, error) {
 		in := make([]Event, len(texts))
@@ -289,6 +295,7 @@ func TestAppendAllWritesTheWholeBatchOrNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	events, _ := reopened.After(0)
 	var got []string

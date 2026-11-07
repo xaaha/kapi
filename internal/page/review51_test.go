@@ -41,6 +41,7 @@ func r51write(t *testing.T, f *os.File, body string) {
 }
 
 func TestReview51CtimeOnlyChangeToHeldFileRevertsTheOp(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})
@@ -59,6 +60,7 @@ func TestReview51CtimeOnlyChangeToHeldFileRevertsTheOp(t *testing.T) {
 }
 
 func TestReview51CtimeOnlyChangeToPageDropsALateWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -77,6 +79,7 @@ func TestReview51CtimeOnlyChangeToPageDropsALateWrite(t *testing.T) {
 }
 
 func TestReview51ThreeQuickRefreshesRetireTheHeldFileInMilliseconds(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -95,6 +98,7 @@ func TestReview51ThreeQuickRefreshesRetireTheHeldFileInMilliseconds(t *testing.T
 }
 
 func TestReview51ASecondOpDeletesTheHeldFileOfTheFirst(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -111,6 +115,7 @@ func TestReview51ASecondOpDeletesTheHeldFileOfTheFirst(t *testing.T) {
 }
 
 func TestReview51BothChangedTheLaterHeldWriteIsDeletedUnkept(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -129,6 +134,7 @@ func TestReview51BothChangedTheLaterHeldWriteIsDeletedUnkept(t *testing.T) {
 }
 
 func TestReview51RefreshRetryDeletesARestoreStageLateWrite(t *testing.T) {
+	needSwap(t)
 	for _, gap := range []time.Duration{0, 5 * time.Millisecond} {
 		home, path := newPage(t, r51start)
 		s := open(t, home, path)
@@ -174,6 +180,7 @@ func TestReview51OpenWithNoRefreshLeavesTheHeldFile(t *testing.T) {
 }
 
 func TestReview51KillAfterSwapBackDropsTheNewestWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -203,6 +210,7 @@ func TestReview51KillAfterSwapBackDropsTheNewestWrite(t *testing.T) {
 }
 
 func TestReview51OpenDeletesUnknownHeldBytesUnkept(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)

@@ -105,7 +105,7 @@ func TestPagesListsEveryKnownPage(t *testing.T) {
 	}
 	t.Cleanup(func() { os.RemoveAll(home) })
 	s := New(home)
-	for _, page := range []string{"/tmp/a.html", "/tmp/a.html", "/tmp/b.html"} {
+	for _, page := range []string{tmpRoot + "/a.html", tmpRoot + "/a.html", tmpRoot + "/b.html"} {
 		l, err := s.page(page)
 		if err != nil {
 			t.Fatal(err)
@@ -114,7 +114,7 @@ func TestPagesListsEveryKnownPage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	l, err := s.page("/tmp/a.html")
+	l, err := s.page(tmpRoot + "/a.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestPagesListsEveryKnownPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Path != "/tmp/a.html" || got[1].Path != "/tmp/b.html" {
+	if len(got) != 2 || got[0].Path != tmpRoot+"/a.html" || got[1].Path != tmpRoot+"/b.html" {
 		t.Fatalf("pages = %+v", got)
 	}
 	if got[0].Readers[0].Reader != "agent" || got[0].Readers[0].Pending != 2 || got[1].Readers[0].Pending != 1 {

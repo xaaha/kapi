@@ -22,6 +22,7 @@ func heldFiles(t *testing.T, s *Store) []string {
 }
 
 func TestEachHeldFileRetiresByItsOwnClockAndNotBefore(t *testing.T) {
+	needSwap(t)
 	now := time.Now()
 	clock = func() time.Time { return now }
 	defer func() { clock = time.Now }()
@@ -54,6 +55,7 @@ func TestEachHeldFileRetiresByItsOwnClockAndNotBefore(t *testing.T) {
 }
 
 func TestSettleSwapsBackALateWriteAndRemovesEveryHeldFile(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -100,6 +102,7 @@ func TestSwapBackChildProcess(t *testing.T) {
 }
 
 func TestAKilledSwapBackKeepsTheAgentsLateWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -159,6 +162,7 @@ func TestAKilledSwapBackKeepsTheAgentsLateWrite(t *testing.T) {
 }
 
 func TestARetriedCommitFirstSwapsBackALateWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
