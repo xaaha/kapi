@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"syscall"
 	"testing"
 	"time"
+
+	"github.com/xaaha/kapi/internal/crashtest"
 )
 
 var crashTexts = []string{"one", "two", "three", "four"}
@@ -59,7 +60,7 @@ func TestCrashChildProcess(t *testing.T) {
 	n := 0
 	defer traceWrites(func(string, string) {
 		if n++; n == at {
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			crashtest.KillSelf()
 			time.Sleep(time.Hour)
 		}
 	})()
@@ -87,8 +88,7 @@ func TestAKilledLogRecoversAtEveryWritePoint(t *testing.T) {
 			cmd := exec.Command(exe, "-test.run=^TestCrashChildProcess$", "-test.count=1")
 			cmd.Env = append(os.Environ(), "KAPI_LOG_CRASH_AT="+strconv.Itoa(at), "KAPI_LOG_CRASH_DIR="+dir)
 			out, err := cmd.CombinedOutput()
-			var exit *exec.ExitError
-			killed := errors.As(err, &exit) && exit.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL
+			killed := crashtest.Killed(err)
 			if killed != (at <= n) || (!killed && err != nil) {
 				t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
 			}

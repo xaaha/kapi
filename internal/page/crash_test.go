@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/xaaha/kapi/internal/crashtest"
 	"github.com/xaaha/kapi/internal/eventlog"
 )
 
@@ -86,7 +86,7 @@ func TestCrashChildProcess(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			crashtest.KillSelf()
 			time.Sleep(time.Hour)
 		}
 	})()
@@ -143,8 +143,7 @@ func TestAKilledStoreRecoversAtEveryWritePoint(t *testing.T) {
 				cmd := exec.Command(exe, "-test.run=^TestCrashChildProcess$", "-test.count=1")
 				cmd.Env = append(os.Environ(), "KAPI_CRASH_AT="+strconv.Itoa(at), "KAPI_CRASH_PARTIAL="+partial, "KAPI_CRASH_HOME="+home, "KAPI_CRASH_PAGE="+path)
 				out, err := cmd.CombinedOutput()
-				var exit *exec.ExitError
-				killed := errors.As(err, &exit) && exit.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL
+				killed := crashtest.Killed(err)
 				if killed != (at <= n) || (!killed && err != nil) {
 					t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
 				}
@@ -397,7 +396,7 @@ func TestRestoreChildProcess(t *testing.T) {
 		case "swap":
 			agentRename(t, path, agentWrite)
 		case "restore":
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			crashtest.KillSelf()
 			time.Sleep(time.Hour)
 		}
 	}
@@ -414,8 +413,7 @@ func killMidRestore(t *testing.T, home, path string) {
 	cmd := exec.Command(exe, "-test.run=^TestRestoreChildProcess$", "-test.count=1")
 	cmd.Env = append(os.Environ(), "KAPI_RESTORE_HOME="+home, "KAPI_RESTORE_PAGE="+path)
 	out, err := cmd.CombinedOutput()
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+	if !crashtest.Killed(err) {
 		t.Fatalf("child was not killed in the restore window: %v\n%s", err, out)
 	}
 }

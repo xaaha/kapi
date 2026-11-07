@@ -600,11 +600,14 @@ func writeNew(path string, data []byte) error {
 }
 
 var openBrowser = func(url string) error {
-	name := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		name = "open"
+	cmd := exec.Command("xdg-open", url)
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	}
-	return exec.Command(name, url).Run() //nolint:gosec // the URL comes from the local daemon
+	return cmd.Run() //nolint:gosec // the URL comes from the local daemon
 }
 
 func newOpenCmd(c api, out io.Writer) *cli.Command {

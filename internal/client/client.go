@@ -10,9 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/xaaha/kapi/internal/daemon"
@@ -108,7 +106,7 @@ func Spawn(home, reopenExcept string) error {
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout, cmd.Stderr = logf, logf
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = detachedProcess()
 	if err := closeInheritedOnExec(); err != nil {
 		return err
 	}
@@ -116,19 +114,6 @@ func Spawn(home, reopenExcept string) error {
 		return err
 	}
 	return cmd.Process.Release()
-}
-
-func closeInheritedOnExec() error {
-	entries, err := os.ReadDir("/dev/fd")
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if fd, err := strconv.Atoi(e.Name()); err == nil && fd > 2 {
-			syscall.CloseOnExec(fd)
-		}
-	}
-	return nil
 }
 
 func (c Client) Do(req *daemon.Request) (daemon.Response, error) {
