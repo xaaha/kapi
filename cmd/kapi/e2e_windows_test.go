@@ -23,7 +23,7 @@ func (e *e2e) fakeOpeners(dir string) {
 
 func (e *e2e) daemonQuery(then string) string {
 	e.t.Helper()
-	script := "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '" + e.bin + "' }" + then
+	script := "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '" + e.bin + "' -and $_.CommandLine -match ' daemon( |$)' }" + then
 	out, err := exec.Command("powershell", "-NoProfile", "-Command", script).CombinedOutput() //nolint:gosec // matches only the kapi binary this test just built
 	if err != nil {
 		e.t.Logf("powershell: %v %s", err, out)

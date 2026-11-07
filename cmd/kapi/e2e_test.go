@@ -454,6 +454,15 @@ func (e *e2e) start(stdin string, args ...string) (*exec.Cmd, *bytes.Buffer) {
 	return cmd, &out
 }
 
+func hookInput(t *testing.T, event, cwd string) string {
+	t.Helper()
+	b, err := json.Marshal(map[string]string{"hook_event_name": event, "cwd": cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func exited(cmd *exec.Cmd, within time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
@@ -504,7 +513,7 @@ func TestAMessageBehindACutOneReachesTheModelAndStopDoesNotBlockTwice(t *testing
 	}
 	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
 	hook := func(event string) string {
-		cmd, out := e.start(`{"hook_event_name":"`+event+`","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+		cmd, out := e.start(hookInput(e.t, event, filepath.Dir(e.page)), "hook-messages")
 		if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() {
 			t.Fatalf("%s hook failed: %v", event, cmd.ProcessState)
 		}
@@ -533,7 +542,7 @@ func TestAMessageBehindACutOneReachesTheModelAndStopDoesNotBlockTwice(t *testing
 
 func TestAHookDoesNotStartTheDaemon(t *testing.T) {
 	e := newE2E(t)
-	cmd, out := e.start(`{"hook_event_name":"Stop","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+	cmd, out := e.start(hookInput(e.t, "Stop", filepath.Dir(e.page)), "hook-messages")
 	if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() || out.Len() != 0 {
 		t.Fatalf("hook with no daemon: %v, output %q; want a quiet zero exit", cmd.ProcessState, out.String())
 	}
