@@ -1313,8 +1313,8 @@ func TestAColumnOfAMergedTableExplainsWhyItCannotBeCopied(t *testing.T) {
 }
 
 func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
-	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
-	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {
+	s := newSiteNamed(t, "Quarterly & plan.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
+	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &amp; plan</title>") {
 		t.Errorf("page title includes the extension or is not escaped:\n%s", got)
 	}
 }
