@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xaaha/kapi/internal/durable"
+	"github.com/xaaha/kapi/internal/osfile"
 )
 
 type Event struct {
@@ -86,8 +86,8 @@ const (
 )
 
 var (
-	syncFile   = durable.Sync
-	renameFile = os.Rename
+	syncFile   = osfile.Sync
+	renameFile = osfile.Rename
 	writeLine  = (*os.File).Write
 	truncate   = (*os.File).Truncate
 )

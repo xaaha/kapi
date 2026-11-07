@@ -30,6 +30,7 @@ import (
 	"github.com/xaaha/kapi/internal/daemon"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/export"
+	"github.com/xaaha/kapi/internal/osfile"
 	pkgpage "github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
@@ -453,7 +454,7 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 }
 
 func referenced(page, name string) bool {
-	src, err := os.ReadFile(page)
+	src, err := osfile.ReadFile(page)
 	return err != nil || bytes.Contains(src, []byte(name))
 }
 
@@ -475,7 +476,7 @@ func newPublishCmd(out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
-			src, err := os.ReadFile(page)
+			src, err := osfile.ReadFile(page)
 			if err != nil {
 				return err
 			}
@@ -528,7 +529,7 @@ func newExportCmd(out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
-			src, err := os.ReadFile(page)
+			src, err := osfile.ReadFile(page)
 			if err != nil {
 				return err
 			}

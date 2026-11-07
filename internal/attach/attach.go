@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xaaha/kapi/internal/durable"
+	"github.com/xaaha/kapi/internal/osfile"
 )
 
 const (
@@ -96,7 +96,7 @@ func Save(dir string, data []byte) (File, error) {
 	if err := os.Chmod(tmp, 0o644); err != nil {
 		return File{}, err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := osfile.Rename(tmp, path); err != nil {
 		return File{}, err
 	}
 	return f, syncDir(dir)
@@ -128,7 +128,7 @@ func (s *Store) Put(page string, data []byte) (File, error) {
 	if err := s.makeRoom(f.Size); err != nil {
 		return File{}, err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := osfile.Rename(tmp, path); err != nil {
 		return File{}, err
 	}
 	if err := syncDir(dir); err != nil {
@@ -144,7 +144,7 @@ func writeTemp(dir string, data []byte) (string, error) {
 	}
 	_, err = tmp.Write(data)
 	if err == nil {
-		err = durable.Sync(tmp)
+		err = osfile.Sync(tmp)
 	}
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
@@ -162,7 +162,7 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	return durable.Sync(d)
+	return osfile.Sync(d)
 }
 
 func (s *Store) Path(page, name string) (string, error) {
