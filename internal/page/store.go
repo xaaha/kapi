@@ -22,6 +22,7 @@ import (
 
 	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
+	"github.com/xaaha/kapi/internal/osfile"
 	"github.com/xaaha/kapi/internal/render"
 )
 
@@ -147,7 +148,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 		}
 	}
 	var st state
-	b, err := os.ReadFile(filepath.Join(s.dir, "state.json"))
+	b, err := osfile.ReadFile(filepath.Join(s.dir, "state.json"))
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
@@ -179,7 +180,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 		return nil, err
 	}
 	for attempt := 0; ; attempt++ {
-		raw, err := os.ReadFile(path)
+		raw, err := osfile.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +221,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 func (s *Store) load(st *state) error {
 	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
 	if s.rev > 0 {
-		src, err := os.ReadFile(s.revPath(s.rev))
+		src, err := osfile.ReadFile(s.revPath(s.rev))
 		if err != nil {
 			return err
 		}
@@ -229,11 +230,11 @@ func (s *Store) load(st *state) error {
 	if st.Next == nil {
 		return nil
 	}
-	raw, err := os.ReadFile(s.path)
+	raw, err := osfile.ReadFile(s.path)
 	if err != nil {
 		return err
 	}
-	if after, err := os.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
+	if after, err := osfile.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
 		s.src, s.rev, s.undo, s.event = after, st.Next.Rev, st.Next.Undo, st.Next.Event
 	}
 	return nil
@@ -273,12 +274,12 @@ func (s *Store) restoreDisplaced(st *state) error {
 			return err
 		}
 	}
-	page, err := os.ReadFile(s.path)
+	page, err := osfile.ReadFile(s.path)
 	if err != nil {
 		return err
 	}
 	for _, tmp := range temps {
-		theirs, err := os.ReadFile(tmp)
+		theirs, err := osfile.ReadFile(tmp)
 		if err != nil {
 			return err
 		}
@@ -329,7 +330,7 @@ func (s *Store) readRev(rev uint64) ([]byte, error) {
 	if rev == 0 {
 		return nil, nil
 	}
-	return os.ReadFile(s.revPath(rev))
+	return osfile.ReadFile(s.revPath(rev))
 }
 
 func (s *Store) Path() string { return s.path }
@@ -450,7 +451,7 @@ func (s *Store) CanUndo() bool {
 	if n == 0 {
 		return false
 	}
-	after, err := os.ReadFile(s.revPath(s.undo[n-1] + 1))
+	after, err := osfile.ReadFile(s.revPath(s.undo[n-1] + 1))
 	return err == nil && bytes.Equal(after, s.src)
 }
 
@@ -465,7 +466,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		return Summary{}, false, err
 	}
 	for attempt := 0; attempt < 10; attempt++ {
-		raw, err := os.ReadFile(s.path)
+		raw, err := osfile.ReadFile(s.path)
 		if err != nil || bytes.Equal(raw, s.src) {
 			return Summary{}, false, err
 		}
@@ -502,7 +503,7 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
 		return s.rev, Summary{}, ErrStale
 	}
-	raw, err := os.ReadFile(s.path)
+	raw, err := osfile.ReadFile(s.path)
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
@@ -515,14 +516,14 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 			return s.rev, Summary{}, ErrNothingToUndo
 		}
 		back := s.undo[n-1]
-		after, err := os.ReadFile(s.revPath(back + 1))
+		after, err := osfile.ReadFile(s.revPath(back + 1))
 		if err != nil {
 			return s.rev, Summary{}, err
 		}
 		if !bytes.Equal(after, s.src) {
 			return s.rev, Summary{}, ErrUndoConflict
 		}
-		src, err := os.ReadFile(s.revPath(back))
+		src, err := osfile.ReadFile(s.revPath(back))
 		if err != nil {
 			return s.rev, Summary{}, err
 		}
@@ -587,7 +588,7 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	default:
 		return false
 	}
-	then, err := os.ReadFile(s.revPath(rev))
+	then, err := osfile.ReadFile(s.revPath(rev))
 	if err != nil {
 		return false
 	}
@@ -622,8 +623,8 @@ var (
 	errNoSwap      = errors.New("this file system cannot swap files atomically")
 	replaceHook    func(stage string)
 	appendEvent    = (*eventlog.Log).Append
-	syncFile       = (*os.File).Sync
-	renameFile     = os.Rename
+	syncFile       = osfile.Sync
+	renameFile     = osfile.Rename
 	swapFiles      = exchangeFiles
 	writeTemp      = (*os.File).Write
 )
@@ -798,7 +799,7 @@ func swapIn(tmp, path string, ours, expect []byte) (*moved, error) {
 	}
 	err = swapFiles(tmp, path)
 	if errors.Is(err, errNoSwap) {
-		cur, err := os.ReadFile(path)
+		cur, err := osfile.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -1048,7 +1049,7 @@ func capture(name string) (placement, error) {
 	if err != nil {
 		return placement{}, err
 	}
-	b, err := os.ReadFile(name)
+	b, err := osfile.ReadFile(name)
 	return placement{fi, b}, err
 }
 
@@ -1077,7 +1078,7 @@ func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
 	if err != nil || !os.SameFile(fi, mine) {
 		return fi.ModTime(), err
 	}
-	b, err := os.ReadFile(name)
+	b, err := osfile.ReadFile(name)
 	if err != nil || bytes.Equal(b, ours) {
 		return time.Time{}, err
 	}

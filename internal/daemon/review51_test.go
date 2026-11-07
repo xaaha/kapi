@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -27,6 +28,9 @@ func TestReview51OpenWithoutABrowserLeavesTheHeldFile(t *testing.T) {
 }
 
 func TestTheDaemonSwapsBackALateWriteWithNoBrowserConnected(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot swap files, so kapi never moves a file aside")
+	}
 	home := shortHome(t)
 	path := writePage(t, "<p>needs an id</p>\n")
 	_, stop := servingAt(t, home)

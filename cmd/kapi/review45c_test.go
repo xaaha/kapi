@@ -11,7 +11,7 @@ import (
 
 func TestReview45cATruncatedEventIsHandedOverSoTheAgentCanNameItAndItIsNotReinjected(t *testing.T) {
 	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)}}}}}
-	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
+	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"PostToolUse","cwd":` + workDirJSON + `}`}
 	out, err := run(t, f, "hook-messages")
 	if err != nil || !strings.Contains(out, "#4 human message: xxx") {
 		t.Fatalf("hook = %q, %v", out, err)
@@ -27,13 +27,13 @@ func TestReview45cATruncatedEventIsHandedOverSoTheAgentCanNameItAndItIsNotReinje
 func TestEveryHookShowsANewCutEventOnceHandsItOverAndLeavesItUnseen(t *testing.T) {
 	cut := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: strings.Repeat("x", 12000)}}}}}
 	for _, event := range []string{"PostToolUse", "UserPromptSubmit", "Stop"} {
-		f := &fakeAPI{resp: cut, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
+		f := &fakeAPI{resp: cut, stdin: `{"hook_event_name":"` + event + `","cwd":` + workDirJSON + `}`}
 		out, err := run(t, f, "hook-messages")
 		if err != nil || !strings.Contains(out, "#4 human message: xxx") || !strings.Contains(out, "kapi pending /w/plan.html` to read #4") || len(out) > 1000 {
 			t.Errorf("%s = %.200q, %v; want a short placeholder for #4 and the pointer", event, out, err)
 		}
 		want := []daemon.Request{
-			{Op: "inbox", Page: "/w", Reader: "agent"},
+			{Op: "inbox", Page: workDir, Reader: "agent"},
 			{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 4, Cut: []uint64{4}},
 		}
 		if !reflect.DeepEqual(f.requests, want) {

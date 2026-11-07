@@ -314,6 +314,7 @@ func TestHookContextWrapsTheHomeViewAsJSON(t *testing.T) {
 func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	out, err := run(t, &fakeAPI{}, "setup", "--agents", "pi")
 	if err != nil {
 		t.Fatal(err)
@@ -347,6 +348,7 @@ func TestSetupInstallsAndRemovesTheEmbeddedSkill(t *testing.T) {
 func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("COPILOT_HOME", "")
 	if _, err := run(t, &fakeAPI{}, "setup", "hooks"); err == nil || !strings.Contains(err.Error(), "temporary build") {
 		t.Errorf("install from a test binary: error = %v", err)
@@ -365,6 +367,7 @@ func TestSetupHooksRefusesATemporaryBuildAndRemovesCleanly(t *testing.T) {
 func TestReviewH5SetupHooksFailsWhenAHarnessFails(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("COPILOT_HOME", "")
 	settings := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settings), 0o700); err != nil {
@@ -461,9 +464,9 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		stdin string
 		want  string
 	}{
-		{`{"hook_event_name":"Stop","cwd":"/w"}`, `{"decision":"block","reason":"kapi: `},
-		{`{"hook_event_name":"PostToolUse","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
-		{`{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`, `{"decision":"block","reason":"kapi: `},
+		{`{"hook_event_name":"PostToolUse","cwd":` + workDirJSON + `}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
+		{`{"hook_event_name":"UserPromptSubmit","cwd":` + workDirJSON + `}`, `{"hookSpecificOutput":{"additionalContext":"kapi: `},
 	}
 	for _, tc := range cases {
 		f := &fakeAPI{resp: inbox, stdin: tc.stdin}
@@ -475,20 +478,20 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 			t.Errorf("%s: output = %s", tc.stdin, out)
 		}
 		want := []daemon.Request{
-			{Op: "inbox", Page: "/w", Reader: "agent"},
+			{Op: "inbox", Page: workDir, Reader: "agent"},
 			{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 4},
 		}
 		if !reflect.DeepEqual(f.requests, want) {
 			t.Errorf("%s: requests = %+v, want %+v", tc.stdin, f.requests, want)
 		}
 	}
-	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":"/w"}`, `{"hook_event_name":"Stop","cwd":"rel"}`, `{"hook_event_name":"PostToolUse","cwd":"/w","agent_id":"a1","agent_type":"Explore"}`} {
+	for _, stdin := range []string{`{"hook_event_name":"SessionStart","cwd":` + workDirJSON + `}`, `{"hook_event_name":"Stop","cwd":"rel"}`, `{"hook_event_name":"PostToolUse","cwd":` + workDirJSON + `,"agent_id":"a1","agent_type":"Explore"}`} {
 		f := &fakeAPI{resp: inbox, stdin: stdin}
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 0 {
 			t.Errorf("%s: %q, %v, %d requests; want nothing", stdin, out, err, len(f.requests))
 		}
 	}
-	f := &fakeAPI{stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	f := &fakeAPI{stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 		t.Errorf("nothing unseen or open: %q, %v; want no output so the agent may stop", out, err)
 	}
@@ -496,7 +499,7 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 		t.Errorf("Stop requests = %+v, want inbox then unwatched", f.requests)
 	}
 	broken := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/bad.html", Error: "positions.json: bad"}}}
-	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}} {
+	for _, f := range []*fakeAPI{{stdin: "not json"}, {resp: broken, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}} {
 		if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 			t.Errorf("%s: %q, %v; want no output and a zero exit so the agent carries on", f.stdin, out, err)
 		}
@@ -505,11 +508,11 @@ func TestHookMessagesAnswersEachClaudeCodeEvent(t *testing.T) {
 
 func TestHookIdleGivesEveryHarnessTheSamePortableWaitInstruction(t *testing.T) {
 	f := &fakeAPI{responses: []daemon.Response{{Pages: []daemon.PageStatus{{Path: "/w/plan.html"}}}}}
-	out, err := run(t, f, "hook-idle", "/w")
+	out, err := run(t, f, "hook-idle", workDir)
 	if err != nil || !strings.Contains(out, "Start each command as a background task") || !strings.Contains(out, "kapi wait --reader agent '/w/plan.html'") {
 		t.Fatalf("hook-idle = %q, %v", out, err)
 	}
-	want := []daemon.Request{{Op: "unwatched", Page: "/w", Reader: "agent"}}
+	want := []daemon.Request{{Op: "unwatched", Page: workDir, Reader: "agent"}}
 	if !reflect.DeepEqual(f.requests, want) {
 		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
@@ -518,7 +521,7 @@ func TestHookIdleGivesEveryHarnessTheSamePortableWaitInstruction(t *testing.T) {
 func TestTheStopHookArmsAWaitForEveryOpenPageWithoutAListener(t *testing.T) {
 	f := &fakeAPI{
 		responses: []daemon.Response{{}, {Pages: []daemon.PageStatus{{Path: "/w/one.html"}, {Path: "/w/it's two.html"}}}},
-		stdin:     `{"hook_event_name":"Stop","cwd":"/w"}`,
+		stdin:     `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`,
 	}
 	out, err := run(t, f, "hook-messages")
 	if err != nil {
@@ -529,7 +532,7 @@ func TestTheStopHookArmsAWaitForEveryOpenPageWithoutAListener(t *testing.T) {
 			t.Errorf("Stop output %q does not contain %q", out, want)
 		}
 	}
-	want := []daemon.Request{{Op: "inbox", Page: "/w", Reader: "agent"}, {Op: "unwatched", Page: "/w", Reader: "agent"}}
+	want := []daemon.Request{{Op: "inbox", Page: workDir, Reader: "agent"}, {Op: "unwatched", Page: workDir, Reader: "agent"}}
 	if !reflect.DeepEqual(f.requests, want) {
 		t.Errorf("requests = %+v, want %+v", f.requests, want)
 	}
@@ -556,22 +559,22 @@ func TestSayWithReplyNamesTheNotes(t *testing.T) {
 func TestTheStopHookLetsAResolveWaitForTheNextEvent(t *testing.T) {
 	resolve := eventlog.Event{Seq: 4, Author: "human", Kind: "resolve", Re: []uint64{2}}
 	quiet := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve}}}}
-	f := &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	f := &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" || len(f.requests) != 2 || f.requests[1].Op != "unwatched" {
 		t.Fatalf("Stop on a resolve alone: out %q, err %v, requests %+v", out, err, f.requests)
 	}
-	f = &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
+	f = &fakeAPI{resp: quiet, stdin: `{"hook_event_name":"PostToolUse","cwd":` + workDirJSON + `}`}
 	if out, _ := run(t, f, "hook-messages"); !strings.Contains(out, "#4 human resolved note #2") {
 		t.Errorf("PostToolUse did not carry the resolve along: %s", out)
 	}
 	seen := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{{Seq: 3, Author: "human", Kind: "message", Text: "go"}, resolve}}}}
-	f = &fakeAPI{resp: seen, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	f = &fakeAPI{resp: seen, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}
 	if out, err := run(t, f, "hook-messages"); err != nil || out != "" {
 		t.Fatalf("Stop on an already shown message and a resolve: out %q, err %v", out, err)
 	}
 	loud := quiet
 	loud.Pages = []daemon.PageStatus{{Path: "/w/plan.html", Hooked: 3, Events: []eventlog.Event{resolve, {Seq: 5, Author: "human", Kind: "message", Text: "go"}}}}
-	f = &fakeAPI{resp: loud, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	f = &fakeAPI{resp: loud, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}
 	if out, _ := run(t, f, "hook-messages"); !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "resolved note #2") {
 		t.Errorf("Stop with a message after the resolve: %s", out)
 	}

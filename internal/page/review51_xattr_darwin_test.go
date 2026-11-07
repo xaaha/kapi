@@ -8,6 +8,7 @@ import (
 )
 
 func TestReview51XattrOnHeldFileRevertsTheOp(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	mustApply(t, s, &Op{Kind: "archive", ID: "aaaaaaaa"})

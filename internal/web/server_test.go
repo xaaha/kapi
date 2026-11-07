@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,6 +91,14 @@ func (f *fakePages) Page(id string) (*page.Store, *eventlog.Log, error) {
 	return st, l, nil
 }
 
+func (f *fakePages) close() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.logs {
+		l.Close()
+	}
+}
+
 type site struct {
 	t      *testing.T
 	srv    *httptest.Server
@@ -114,6 +123,7 @@ func newSiteNamed(t *testing.T, name, src string) *site {
 	}
 	id := page.ID(path)
 	pages := &fakePages{home: filepath.Join(dir, "home"), paths: map[string]string{id: path}, logs: map[string]*eventlog.Log{}, pages: map[string]*page.Store{}}
+	t.Cleanup(pages.close)
 	srv := httptest.NewUnstartedServer(nil)
 	web := New(pages, token, srv.Listener.Addr().String(), [][32]byte{sha256.Sum256([]byte(oldToken))})
 	srv.Config.Handler = web
@@ -1209,7 +1219,7 @@ func TestPageImagesLiveNextToThePageAndAnOpAddsThem(t *testing.T) {
 		t.Fatalf("upload: %d %v", code, out)
 	}
 	stored := filepath.Join(filepath.Dir(s.path), "plan.files", name)
-	if info, err := os.Stat(stored); err != nil || info.Mode().Perm() != 0o644 {
+	if info, err := os.Stat(stored); err != nil || !modeIs(info, 0o644) {
 		t.Fatalf("stored next to the page: %v %v", info, err)
 	}
 	code, out = s.post("/ops", `{"rev":1,"op":{"kind":"image","id":"aaaaaaaa","src":"`+name+`"}}`)
@@ -1313,8 +1323,8 @@ func TestAColumnOfAMergedTableExplainsWhyItCannotBeCopied(t *testing.T) {
 }
 
 func TestPageTitleOmitsTheHTMLSuffixAndEscapesTheName(t *testing.T) {
-	s := newSiteNamed(t, "Quarterly <plan>.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
-	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &lt;plan&gt;</title>") {
+	s := newSiteNamed(t, "Quarterly & plan.HTML", `<p data-kapi-id="aaaaaaaa">Report</p>`)
+	if got := s.get("/p/" + s.id + "/").body; !strings.Contains(got, "<title>Quarterly &amp; plan</title>") {
 		t.Errorf("page title includes the extension or is not escaped:\n%s", got)
 	}
 }
@@ -1379,14 +1389,18 @@ func TestExportRefusesAPageWithMissingImagesAndHasNoHubLimit(t *testing.T) {
 
 func TestThePagePathIsEscapedInItsAttribute(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	path := filepath.Join(filepath.Dir(s.path), `a"<b>&'.html`)
+	name, escaped := `a"<b>&'.html`, `a&#34;&lt;b&gt;&amp;&#39;.html`
+	if runtime.GOOS == "windows" {
+		name, escaped = `a&'b.html`, `a&amp;&#39;b.html`
+	}
+	path := filepath.Join(filepath.Dir(s.path), name)
 	if err := os.WriteFile(path, []byte(`<p data-kapi-id="aaaaaaaa">a</p>`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	id := page.ID(path)
 	s.pages.paths[id] = path
 	got := s.get("/p/" + id + "/")
-	want := ` data-path="` + filepath.Dir(s.path) + `/a&#34;&lt;b&gt;&amp;&#39;.html">`
+	want := ` data-path="` + filepath.Dir(s.path) + string(filepath.Separator) + escaped + `">`
 	if got.code != http.StatusOK || !strings.Contains(got.body, want) {
 		t.Errorf("page %d, want %s in:\n%s", got.code, want, got.body)
 	}

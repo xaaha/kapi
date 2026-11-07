@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -220,6 +221,9 @@ func TestRemoveRefusesAnOpenCodePluginItDidNotWrite(t *testing.T) {
 }
 
 func TestInstallKeepsAnExistingFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows files have no permission bits")
+	}
 	o := opts(t)
 	claude, _, _, _, _ := o.paths()
 	write(t, claude, "{}")

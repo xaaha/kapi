@@ -17,7 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
+	"sync"
 	"testing"
 	"time"
 )
@@ -37,7 +37,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Skip("builds and runs the kapi binary")
 	}
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "kapi")
+	bin := filepath.Join(dir, "kapi"+exeSuffix)
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -60,22 +60,6 @@ func newE2E(t *testing.T) *e2e {
 	return e
 }
 
-func (e *e2e) fakeOpeners(dir string) {
-	e.t.Helper()
-	bin := filepath.Join(dir, "openers")
-	if err := os.Mkdir(bin, 0o700); err != nil {
-		e.t.Fatal(err)
-	}
-	e.opened = filepath.Join(dir, "opened")
-	script := "#!/bin/sh\necho \"$1\" >> '" + e.opened + "'\n"
-	for _, name := range []string{"open", "xdg-open"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o700); err != nil { //nolint:gosec // a test opener must be executable
-			e.t.Fatal(err)
-		}
-	}
-	e.env = append(e.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
 func (e *e2e) kapi(args ...string) string {
 	e.t.Helper()
 	cmd := exec.Command(e.bin, args...) //nolint:gosec // runs the kapi binary this test just built
@@ -87,19 +71,28 @@ func (e *e2e) kapi(args ...string) string {
 	return string(out)
 }
 
-func (e *e2e) killDaemon() {
-	if out, err := exec.Command("pkill", "-f", e.bin+" daemon").CombinedOutput(); err != nil && len(out) > 0 { //nolint:gosec // matches only the kapi binary this test just built
-		e.t.Logf("pkill: %v %s", err, out)
-	}
-	waitFor(e.t, "the daemon to exit", func() bool {
-		return exec.Command("pgrep", "-f", e.bin+" daemon").Run() != nil //nolint:gosec // matches only the kapi binary this test just built
-	})
+type watcher struct {
+	cmd    *exec.Cmd
+	lines  chan string
+	seq    uint64
+	stderr *syncBuffer
 }
 
-type watcher struct {
-	cmd   *exec.Cmd
-	lines chan string
-	seq   uint64
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func (e *e2e) watch() *watcher {
@@ -115,10 +108,12 @@ func (e *e2e) watchAs(reader string) *watcher {
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	stderr := &syncBuffer{}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
-	w := &watcher{cmd: cmd, lines: make(chan string, 16)}
+	w := &watcher{cmd: cmd, lines: make(chan string, 16), stderr: stderr}
 	go func() {
 		sc := bufio.NewScanner(stdout)
 		for sc.Scan() {
@@ -139,7 +134,7 @@ func (w *watcher) next(t *testing.T) string {
 	select {
 	case line, ok := <-w.lines:
 		if !ok {
-			t.Fatal("watch exited")
+			t.Fatalf("watch exited: %s", w.stderr)
 		}
 		return line
 	case <-time.After(5 * time.Second):
@@ -166,7 +161,7 @@ func (w *watcher) event(t *testing.T) string {
 
 func (w *watcher) kill9(t *testing.T) {
 	t.Helper()
-	if err := w.cmd.Process.Signal(syscall.SIGKILL); err != nil {
+	if err := w.cmd.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
 	_ = w.cmd.Wait()
@@ -451,12 +446,21 @@ func (e *e2e) start(stdin string, args ...string) (*exec.Cmd, *bytes.Buffer) {
 	cmd.Env = e.env
 	cmd.Stdin = strings.NewReader(stdin)
 	var out bytes.Buffer
-	cmd.Stdout = &out
+	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
 	e.t.Cleanup(func() { _ = cmd.Process.Kill() })
 	return cmd, &out
+}
+
+func hookInput(t *testing.T, event, cwd string) string {
+	t.Helper()
+	b, err := json.Marshal(map[string]string{"hook_event_name": event, "cwd": cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func exited(cmd *exec.Cmd, within time.Duration) bool {
@@ -509,7 +513,7 @@ func TestAMessageBehindACutOneReachesTheModelAndStopDoesNotBlockTwice(t *testing
 	}
 	url := strings.TrimSpace(e.kapi("open", "--print", e.page))
 	hook := func(event string) string {
-		cmd, out := e.start(`{"hook_event_name":"`+event+`","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+		cmd, out := e.start(hookInput(e.t, event, filepath.Dir(e.page)), "hook-messages")
 		if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() {
 			t.Fatalf("%s hook failed: %v", event, cmd.ProcessState)
 		}
@@ -538,7 +542,7 @@ func TestAMessageBehindACutOneReachesTheModelAndStopDoesNotBlockTwice(t *testing
 
 func TestAHookDoesNotStartTheDaemon(t *testing.T) {
 	e := newE2E(t)
-	cmd, out := e.start(`{"hook_event_name":"Stop","cwd":"`+filepath.Dir(e.page)+`"}`, "hook-messages")
+	cmd, out := e.start(hookInput(e.t, "Stop", filepath.Dir(e.page)), "hook-messages")
 	if !exited(cmd, 5*time.Second) || !cmd.ProcessState.Success() || out.Len() != 0 {
 		t.Fatalf("hook with no daemon: %v, output %q; want a quiet zero exit", cmd.ProcessState, out.String())
 	}
@@ -655,7 +659,7 @@ func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, "no such file"},
+		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, missingFileText},
 		{[]string{"attach", "--after", "zzzzzzzz", e.page, img}, "no such element"},
 		{[]string{"attach", notes, img}, "not an HTML page"},
 		{[]string{"attach", "--reader", "", e.page, img}, "cannot be empty"},

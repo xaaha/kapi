@@ -21,7 +21,7 @@ func (f seenFails) Do(req *daemon.Request) (daemon.Response, error) {
 
 func TestReview45eAFailedSeenCallDoesNotLeaveAWholeEventLookingCut(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 1, Author: "human", Kind: "message", Text: "short"}}}}}}
-	if err := hookMessages(seenFails{f}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":"/w"}`), &strings.Builder{}); err == nil {
+	if err := hookMessages(seenFails{f}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":`+workDirJSON+`}`), &strings.Builder{}); err == nil {
 		t.Fatal("want the seen error")
 	}
 	for _, r := range f.requests {

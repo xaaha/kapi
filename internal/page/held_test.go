@@ -1,15 +1,15 @@
 package page
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
+
+	"github.com/xaaha/kapi/internal/crashtest"
 )
 
 func heldFiles(t *testing.T, s *Store) []string {
@@ -22,6 +22,7 @@ func heldFiles(t *testing.T, s *Store) []string {
 }
 
 func TestEachHeldFileRetiresByItsOwnClockAndNotBefore(t *testing.T) {
+	needSwap(t)
 	now := time.Now()
 	clock = func() time.Time { return now }
 	defer func() { clock = time.Now }()
@@ -54,6 +55,7 @@ func TestEachHeldFileRetiresByItsOwnClockAndNotBefore(t *testing.T) {
 }
 
 func TestSettleSwapsBackALateWriteAndRemovesEveryHeldFile(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -90,7 +92,7 @@ func TestSwapBackChildProcess(t *testing.T) {
 	n := 0
 	defer traceWrites(func(writeEvent) {
 		if n++; n == at {
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			crashtest.KillSelf()
 			time.Sleep(time.Hour)
 		}
 	})()
@@ -100,6 +102,7 @@ func TestSwapBackChildProcess(t *testing.T) {
 }
 
 func TestAKilledSwapBackKeepsTheAgentsLateWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)
@@ -128,8 +131,7 @@ func TestAKilledSwapBackKeepsTheAgentsLateWrite(t *testing.T) {
 			cmd := exec.Command(exe, "-test.run=^TestSwapBackChildProcess$", "-test.count=1")
 			cmd.Env = append(os.Environ(), "KAPI_SWAPBACK_AT="+strconv.Itoa(at), "KAPI_SWAPBACK_HOME="+home, "KAPI_SWAPBACK_PAGE="+path)
 			out, err := cmd.CombinedOutput()
-			var exit *exec.ExitError
-			if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+			if !crashtest.Killed(err) {
 				t.Fatalf("child at write %d of %d was not killed: %v\n%s", at, n, err, out)
 			}
 			s := open(t, home, path)
@@ -160,6 +162,7 @@ func TestAKilledSwapBackKeepsTheAgentsLateWrite(t *testing.T) {
 }
 
 func TestARetriedCommitFirstSwapsBackALateWrite(t *testing.T) {
+	needSwap(t)
 	home, path := newPage(t, r51start)
 	s := open(t, home, path)
 	fp := r51holdAtSwap(t, path)

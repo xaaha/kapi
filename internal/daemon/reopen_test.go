@@ -346,7 +346,7 @@ func TestTheViewingFileListsAPageWhileAnyViewerIsConnected(t *testing.T) {
 	first := connectViewer(t, pageURL)
 	waitUntil(t, "the viewing file once a viewer connects", func() bool { return exists(viewing) })
 	fi, err := os.Stat(viewing)
-	if err != nil || fi.Mode().Perm() != 0o600 {
+	if err != nil || !modeIs(fi, 0o600) {
 		t.Fatalf("viewing: %v, %v; want mode 0600", fi, err)
 	}
 	b, err := os.ReadFile(viewing)

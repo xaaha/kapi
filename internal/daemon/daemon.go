@@ -20,7 +20,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/xaaha/kapi/internal/attach"
@@ -156,11 +155,12 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return fmt.Errorf("%w on %s", ErrAlreadyRunning, sock)
-		}
+	held, err := lockExclusive(lock)
+	if err != nil {
 		return err
+	}
+	if held {
+		return fmt.Errorf("%w on %s", ErrAlreadyRunning, sock)
 	}
 	s.stopping = ctx.Done()
 	recent := s.takeViewedPages()

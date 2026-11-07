@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"syscall"
 	"testing"
 	"time"
+
+	"github.com/xaaha/kapi/internal/crashtest"
 )
 
 var crashTexts = []string{"one", "two", "three", "four"}
@@ -59,7 +60,7 @@ func TestCrashChildProcess(t *testing.T) {
 	n := 0
 	defer traceWrites(func(string, string) {
 		if n++; n == at {
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			crashtest.KillSelf()
 			time.Sleep(time.Hour)
 		}
 	})()
@@ -87,8 +88,7 @@ func TestAKilledLogRecoversAtEveryWritePoint(t *testing.T) {
 			cmd := exec.Command(exe, "-test.run=^TestCrashChildProcess$", "-test.count=1")
 			cmd.Env = append(os.Environ(), "KAPI_LOG_CRASH_AT="+strconv.Itoa(at), "KAPI_LOG_CRASH_DIR="+dir)
 			out, err := cmd.CombinedOutput()
-			var exit *exec.ExitError
-			killed := errors.As(err, &exit) && exit.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL
+			killed := crashtest.Killed(err)
 			if killed != (at <= n) || (!killed && err != nil) {
 				t.Fatalf("child at write %d of %d: %v\n%s", at, n, err, out)
 			}
@@ -96,6 +96,7 @@ func TestAKilledLogRecoversAtEveryWritePoint(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reopen after a kill at write %d: %v", at, err)
 			}
+			closeAtEnd(t, l)
 			defer l.Close()
 			events, _ := l.After(0)
 			for i, e := range events {
@@ -148,6 +149,7 @@ func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	appendText := func(text string) error {
 		_, err := l.Append(&Event{Author: "human", Kind: "message", Text: text})
@@ -187,6 +189,7 @@ func TestAFailedAppendLeavesTheLogLineComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen after failed appends: %v", err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	events, _ := reopened.After(0)
 	var got []string
@@ -207,6 +210,7 @@ func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "one"}); err != nil {
 		t.Fatal(err)
@@ -230,6 +234,7 @@ func TestALogWhosePartialLineCannotBeRemovedRefusesAppendsUntilReopened(t *testi
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	if events, _ := reopened.After(0); len(events) != 1 || events[0].Text != "one" {
 		t.Fatalf("events after reopen %+v, want only the first", events)
@@ -245,6 +250,7 @@ func TestAppendAllWritesTheWholeBatchOrNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	batch := func(texts ...string) ([]Event, error) {
 		in := make([]Event, len(texts))
@@ -289,6 +295,7 @@ func TestAppendAllWritesTheWholeBatchOrNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, reopened)
 	defer reopened.Close()
 	events, _ := reopened.After(0)
 	var got []string

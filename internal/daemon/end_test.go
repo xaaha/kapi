@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func TestD25WaitWakesForAnEndAndInboxAndPagesMarkTheEndedPage(t *testing.T) {
 	}
 	ended := func() (inbox, pages bool) {
 		t.Helper()
-		in := call(t, home, &Request{Op: "inbox", Page: "/", Reader: "agent"})
+		in := call(t, home, &Request{Op: "inbox", Page: filepath.Dir(path), Reader: "agent"})
 		all := call(t, home, &Request{Op: "pages"})
 		if len(in.Pages) != 1 || len(all.Pages) != 1 {
 			t.Fatalf("inbox %+v, pages %+v", in.Pages, all.Pages)

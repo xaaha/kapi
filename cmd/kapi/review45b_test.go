@@ -21,7 +21,7 @@ import (
 func TestReview45bHookContextFitsClaudeCodesTenThousandCharacterCap(t *testing.T) {
 	long := strings.Repeat("x", 12000)
 	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: long}}}}}
-	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"PostToolUse","cwd":"/w"}`}
+	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"PostToolUse","cwd":` + workDirJSON + `}`}
 	out, err := run(t, f, "hook-messages")
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +51,7 @@ func TestHookMarksSeenOnlyThroughTheLastEventItShowedWhole(t *testing.T) {
 		{Seq: 3, Author: "human", Kind: "message", Text: strings.Repeat("y", 9500)},
 		{Seq: 5, Author: "human", Kind: "message", Text: "after"},
 	}
-	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: events}}}, stdin: `{"hook_event_name":"Stop","cwd":"/w"}`}
+	f := &fakeAPI{resp: daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: events}}}, stdin: `{"hook_event_name":"Stop","cwd":` + workDirJSON + `}`}
 	out, err := run(t, f, "hook-messages")
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestHookMarksSeenOnlyThroughTheLastEventItShowedWhole(t *testing.T) {
 		t.Errorf("output = %.600s", out)
 	}
 	want := []daemon.Request{
-		{Op: "inbox", Page: "/w", Reader: "agent"},
+		{Op: "inbox", Page: workDir, Reader: "agent"},
 		{Op: "handover", Page: "/w/plan.html", Reader: "agent", Seq: 5, Cut: []uint64{3}},
 	}
 	if !reflect.DeepEqual(f.requests, want) {
@@ -74,7 +74,7 @@ func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing
 		{Seq: 5, Author: "human", Kind: "message", Text: "after"},
 	}}}}
 	for _, event := range []string{"PostToolUse", "Stop"} {
-		f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"` + event + `","cwd":"/w"}`}
+		f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"` + event + `","cwd":` + workDirJSON + `}`}
 		out, err := run(t, f, "hook-messages")
 		wantRequests := 1
 		if event == "Stop" {
@@ -84,7 +84,7 @@ func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing
 			t.Errorf("%s with nothing past the hook position = %.200q, %v, %+v; want nothing", event, out, err, f.requests)
 		}
 	}
-	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"UserPromptSubmit","cwd":"/w"}`}
+	f := &fakeAPI{resp: inbox, stdin: `{"hook_event_name":"UserPromptSubmit","cwd":` + workDirJSON + `}`}
 	out, err := run(t, f, "hook-messages")
 	if err != nil || !strings.Contains(out, "#3 is still unread; run `kapi pending /w/plan.html`") || strings.Contains(out, "yyyy") || strings.Contains(out, "after") || len(f.requests) != 1 {
 		t.Errorf("prompt = %.300q, %v, %+v; want only a one-line reminder", out, err, f.requests)
@@ -93,7 +93,7 @@ func TestOnlyEventsPastTheHookPositionAreShownAndAPromptGetsAReminder(t *testing
 
 func shortHome(t *testing.T) string {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "kr")
+	home, err := os.MkdirTemp(shortTempRoot, "kr")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func shortHome(t *testing.T) string {
 func TestReview45bHookNeverStartsTheDaemon(t *testing.T) {
 	home := shortHome(t)
 	var out bytes.Buffer
-	err := newRoot(client.Client{Home: home}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":"/w"}`), &out, func(time.Duration) {}).Execute([]string{"hook-messages"})
+	err := newRoot(client.Client{Home: home}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":`+workDirJSON+`}`), &out, func(time.Duration) {}).Execute([]string{"hook-messages"})
 	if err != nil || out.Len() != 0 {
 		t.Fatalf("hook = %q, %v", out.String(), err)
 	}
@@ -140,7 +140,7 @@ func TestReview45bHookReturnsQuicklyWhenTheDaemonDoesNotAnswer(t *testing.T) {
 	var err2 error
 	go func() {
 		defer close(done)
-		err2 = newRoot(client.Client{Home: home}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":"/w"}`), &out, func(time.Duration) {}).Execute([]string{"hook-messages"})
+		err2 = newRoot(client.Client{Home: home}, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":`+workDirJSON+`}`), &out, func(time.Duration) {}).Execute([]string{"hook-messages"})
 	}()
 	select {
 	case <-done:
@@ -159,7 +159,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("stdout c
 func TestHookMarksNothingSeenWhenItsOutputIsLost(t *testing.T) {
 	inbox := daemon.Response{Pages: []daemon.PageStatus{{Path: "/w/plan.html", Events: []eventlog.Event{{Seq: 4, Author: "human", Kind: "message", Text: "hi"}}}}}
 	f := &fakeAPI{resp: inbox}
-	if err := hookMessages(f, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":"/w"}`), failingWriter{}); err == nil {
+	if err := hookMessages(f, strings.NewReader(`{"hook_event_name":"PostToolUse","cwd":`+workDirJSON+`}`), failingWriter{}); err == nil {
 		t.Error("a lost write went unreported")
 	}
 	if len(f.requests) != 1 {

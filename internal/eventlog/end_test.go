@@ -41,6 +41,7 @@ func TestD25SummaryReportsTheEndInForce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	if _, err := l.AppendAll([]Event{{Author: "human", Kind: "message", Text: "hi"}, {Author: "human", Kind: KindEnd}}); err != nil {
 		t.Fatal(err)
 	}
@@ -60,6 +61,7 @@ func TestD25ConcurrentEndsAppendOnlyOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	checked := endChecked
 	endChecked = func() { time.Sleep(5 * time.Millisecond) }
 	t.Cleanup(func() { endChecked = checked })
@@ -90,6 +92,7 @@ func TestD25ALiftedEndIsNeverUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	if _, err := l.AppendAll([]Event{{Author: "human", Kind: "message", Text: "a"}, {Author: "human", Kind: KindEnd}, {Author: "human", Kind: "message", Text: "b"}}); err != nil {
 		t.Fatal(err)
 	}

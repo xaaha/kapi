@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -269,7 +270,11 @@ func TestLoadConfigFromHubJSON(t *testing.T) {
 
 	abs := filepath.Join(t.TempDir(), "elsewhere")
 	write(t, abs, token)
-	write(t, filepath.Join(home, "hub.json"), `{"url":"https://hub.example","token_file":"`+abs+`"}`)
+	quoted, err := json.Marshal(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(home, "hub.json"), `{"url":"https://hub.example","token_file":`+string(quoted)+`}`)
 	if cfg, err = LoadConfig(home, env(nil)); err != nil || string(cfg.Token) != token {
 		t.Errorf("absolute token_file: %v, %v", err, cfg)
 	}

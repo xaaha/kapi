@@ -110,7 +110,7 @@ func TestDaemonServesPagesOverHTTPAndWritesTheURL(t *testing.T) {
 	if !regexp.MustCompile(`^http://127\.0\.0\.1:\d+/[0-9a-f]{32}/$`).MatchString(base) {
 		t.Fatalf("http.url = %q, want http://127.0.0.1:<port>/<token>/", b)
 	}
-	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(HTTPURLPath(home)); err != nil || !modeIs(fi, 0o600) {
 		t.Errorf("http.url mode = %v, %v; want 0600", fi.Mode().Perm(), err)
 	}
 

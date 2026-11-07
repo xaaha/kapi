@@ -9,12 +9,17 @@ import (
 	"time"
 )
 
+func closeAtEnd(t *testing.T, l *Log) {
+	t.Cleanup(func() { l.Close() })
+}
+
 func TestAppendSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	l, err := Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	for _, text := range []string{"one", "two", "three"} {
 		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: text}); err != nil {
 			t.Fatal(err)
@@ -29,6 +34,7 @@ func TestAppendSurvivesReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	pending := l.Pending("agent")
 	if len(pending) != 2 || pending[0].Text != "two" || pending[1].Seq != 3 {
 		t.Fatalf("pending after reopen = %+v", pending)
@@ -40,6 +46,7 @@ func TestAfterWakesOnAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	events, changed := l.After(0)
 	if len(events) != 0 {
 		t.Fatalf("expected empty log, got %d", len(events))
@@ -67,6 +74,7 @@ func TestAckIsMonotonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	for _, text := range []string{"a", "b"} {
 		if _, err := l.Append(&Event{Text: text}); err != nil {
 			t.Fatal(err)
@@ -91,6 +99,7 @@ func TestQueuedSurvivesReopenAndNeverTrailsSeen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	for _, text := range []string{"a", "b", "c"} {
 		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: text}); err != nil {
 			t.Fatal(err)
@@ -106,6 +115,7 @@ func TestQueuedSurvivesReopenAndNeverTrailsSeen(t *testing.T) {
 	if l, err = Open(dir); err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	if q, c := l.Queued("agent"), l.Cursor("agent"); q != 2 || c != 0 {
 		t.Fatalf("after reopen queued = %d, seen = %d; want 2 and 0", q, c)
 	}
@@ -126,6 +136,7 @@ func TestAHandoverSetsEveryPositionInOneWriteAndSeenStopsBeforeACutEvent(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	for range 5 {
 		if _, err := l.Append(&Event{Author: "human", Kind: "message", Text: "m"}); err != nil {
 			t.Fatal(err)
@@ -144,6 +155,7 @@ func TestAHandoverSetsEveryPositionInOneWriteAndSeenStopsBeforeACutEvent(t *test
 	if l, err = Open(dir); err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	if s, h, q, c := l.Cursor("agent"), l.Hooked("agent"), l.Queued("agent"), l.Cut("agent"); s != 2 || h != 4 || q != 5 || !slices.Equal(c, []uint64{3}) {
 		t.Fatalf("after reopen seen %d, hooked %d, queued %d, cut %v; want 2, 4, 5, [3]", s, h, q, c)
 	}
@@ -167,6 +179,7 @@ func TestPositionsFromAnOlderCursorsFileAreKept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	if c := l.Cursor("agent"); c != 1 {
 		t.Errorf("seen = %d from an older kapi's cursors.json, want 1", c)
 	}
@@ -224,6 +237,7 @@ func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open of a log with a torn last line: %v", err)
 	}
+	closeAtEnd(t, l)
 	if e, err := l.Append(&Event{Author: "human", Kind: "message", Text: "two"}); err != nil || e.Seq != 2 {
 		t.Fatalf("Append after a torn line = %+v, %v", e, err)
 	}
@@ -232,6 +246,7 @@ func TestATornLastLineIsDroppedOnOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen after appending past a torn line: %v", err)
 	}
+	closeAtEnd(t, l)
 	if events, _ := l.After(0); len(events) != 2 || events[1].Text != "two" {
 		t.Errorf("events = %+v, want one and two", events)
 	}
@@ -256,6 +271,7 @@ func TestTheLogSyncsItsFilesAndDirectoryBeforeRelyingOnThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	defer l.Close()
 	if !slices.Contains(syncs, syncAt{name: dir, events: true}) {
 		t.Errorf("Open did not sync %s after creating %s: %+v", dir, eventsFile, syncs)
@@ -280,6 +296,7 @@ func TestPresenceIsNeverPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeAtEnd(t, l)
 	for _, e := range []Event{{Kind: KindPresence, Text: "watching"}, {Kind: "message", Text: "hi"}, {Kind: KindPresence, Text: "none"}} {
 		if _, err := l.Append(&e); err != nil {
 			t.Fatal(err)
