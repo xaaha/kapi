@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"time"
 )
 
 // Service is one feature. Its routes live under /api/<Name>/ and its browser files under /assets/<Name>/.
@@ -25,6 +26,18 @@ func NewRouter(mux *http.ServeMux, name string) Router { return Router{mux: mux,
 
 func (r Router) Get(path string, h http.HandlerFunc)  { r.mux.HandleFunc("GET /api/"+r.name+path, h) }
 func (r Router) Post(path string, h http.HandlerFunc) { r.mux.HandleFunc("POST /api/"+r.name+path, h) }
+
+// Page is one page kapi knows about, wherever its file lives.
+type Page struct {
+	ID      string    `json:"id"`
+	Path    string    `json:"path"`
+	Title   string    `json:"title"`
+	Summary string    `json:"summary,omitempty"`
+	Folders []string  `json:"folders,omitempty"`
+	Changed time.Time `json:"changed,omitzero"`
+	Ended   bool      `json:"ended,omitempty"`
+	Missing bool      `json:"missing,omitempty"`
+}
 
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(v); err != nil {
