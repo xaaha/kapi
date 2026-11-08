@@ -28,6 +28,7 @@ window.kapiShortcuts = (() => {
     newLine: { keys: ["Enter"], shift: true, hint: "Shift+↵", words: "Shift+Enter" },
     nextField: { keys: ["Tab"], shift: false, hint: "Tab", words: "Tab" },
     search: { keys: ["/"], mod: false, hint: "/", words: "/" },
+    notebook: { keys: ["\\"], mod: true, hint: `${command}\\`, words: `${command}\\` },
     searchCommand: { keys: ["k"], mod: true, hint: `${command}K`, words: `${command}K` },
     searchNext: { keys: ["ArrowDown"], hint: "↓", words: "Down arrow", also: { keys: ["n"], ctrl: true, meta: false } },
     searchPrevious: { keys: ["ArrowUp"], hint: "↑", words: "Up arrow", also: { keys: ["p"], ctrl: true, meta: false } },

@@ -9,10 +9,13 @@ import (
 
 	"github.com/xaaha/kapi/internal/render"
 	"github.com/xaaha/kapi/internal/web/app"
+	"github.com/xaaha/kapi/internal/web/notebook"
 )
 
-func services(Pages) []app.Service {
-	return []app.Service{}
+func services(pages Pages) []app.Service {
+	return []app.Service{
+		notebook.New(pages),
+	}
 }
 
 func (s *Server) mount(list []app.Service) {
@@ -40,6 +43,10 @@ func files(fsys fs.FS) http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFileFS(w, r, fsys, name)
 	})
+}
+
+func (s *Server) handleHome(w http.ResponseWriter, _ *http.Request) {
+	s.shell(w, "", "kapi", "<main id=\"kapi-home\"></main>\n")
 }
 
 // shell writes the HTML document around main. root is the relative path from the request to the token root.

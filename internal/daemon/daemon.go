@@ -96,6 +96,8 @@ type Server struct {
 	presenceMu sync.Mutex
 	presence   map[string]map[string]string
 	watchers   map[string]map[string]int
+
+	index indexCache
 }
 
 func New(home string) *Server {

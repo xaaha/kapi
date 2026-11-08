@@ -44,6 +44,7 @@ type Pages interface {
 	Viewing(id string) (done func())
 	Reopened(id string) bool
 	Attachments() *attach.Store
+	Index() ([]app.Page, error)
 }
 
 type Server struct {
@@ -66,9 +67,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 
 func newServer(pages Pages, token, host string, previous [][32]byte, list []app.Service) *Server {
 	s := &Server{pages: pages, token: token, host: host, previous: previous, mux: http.NewServeMux(), seen: map[string]bool{}}
-	s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintln(w, "kapi is running. Open a page with: kapi open <page>")
-	})
+	s.mux.HandleFunc("GET /{$}", s.handleHome)
 	s.mux.HandleFunc("GET /p/{id}/{$}", s.withPage(s.handlePage))
 	s.mux.HandleFunc("GET /p/{id}/blocks/{block}", s.withPage(s.handleBlock))
 	s.mux.HandleFunc("GET /p/{id}/source/{block}", s.withPage(s.handleSource))
@@ -107,9 +106,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "posts must come from this page as application/json", http.StatusForbidden)
 		return
 	}
-	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	seg, rest, slash := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !s.validToken(seg) {
 		s.refuseToken(w, seg, rest)
+		return
+	}
+	if !slash {
+		http.Redirect(w, r, "/"+s.token+"/", http.StatusPermanentRedirect)
 		return
 	}
 	r2 := r.Clone(r.Context())

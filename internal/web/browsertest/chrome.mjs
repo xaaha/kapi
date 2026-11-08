@@ -82,7 +82,7 @@ export async function launch() {
     });
 
   return {
-    async open(url, { width = 1280, height = 800 } = {}) {
+    async open(url, { width = 1280, height = 800, ready = "!!document.getElementById('kapi-chrome')" } = {}) {
       const { targetId } = await send("Target.createTarget", { url: "about:blank" });
       const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
       const call = (method, params) => send(method, params, sessionId);
@@ -130,7 +130,7 @@ export async function launch() {
         },
         close: () => send("Target.closeTarget", { targetId }),
       };
-      await page.waitFor("document.readyState === 'complete' && !!document.getElementById('kapi-chrome')", 5000);
+      await page.waitFor(`document.readyState === 'complete' && ${ready}`, 5000);
       return page;
     },
     async close() {

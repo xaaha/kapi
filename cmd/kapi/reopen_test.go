@@ -94,10 +94,10 @@ func TestADaemonStartedOnDemandReopensAPageWhoseTabWasOpen(t *testing.T) {
 	if err != nil || body["reopened"] != true {
 		t.Errorf("old tab's notice = %v %v, want reopened", body, err)
 	}
-	logf, err := os.ReadFile(filepath.Join(e.home, "daemon.log"))
-	if err != nil || !strings.Contains(string(logf), "reopened "+e.page+" in the browser") {
-		t.Errorf("daemon.log = %q %v, want the reopen recorded", logf, err)
-	}
+	waitFor(t, "the reopen in daemon.log", func() bool {
+		logf, _ := os.ReadFile(filepath.Join(e.home, "daemon.log"))
+		return strings.Contains(string(logf), "reopened "+e.page+" in the browser")
+	})
 }
 
 func TestADaemonStartedOnDemandWithKapiNoBrowserReopensNothing(t *testing.T) {

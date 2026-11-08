@@ -32,11 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - uses: actions/setup-node@v6
         with:
           node-version: 24
       - name: Run browser tests
-        run: node --test --test-concurrency=1 --test-timeout=60000 internal/web/browsertest/kapi.test.mjs
+        run: node --test --test-concurrency=1 --test-timeout=60000 internal/web/browsertest/kapi.test.mjs internal/web/browsertest/notebook.test.mjs
   lint:
     runs-on: ubuntu-latest
     steps:
