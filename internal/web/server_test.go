@@ -30,6 +30,7 @@ import (
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 const (
@@ -49,6 +50,16 @@ type fakePages struct {
 func (f *fakePages) Viewing(string) func() { return func() {} }
 
 func (f *fakePages) Reopened(string) bool { return false }
+
+func (f *fakePages) Index() ([]app.Page, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []app.Page
+	for id, path := range f.paths {
+		out = append(out, app.Page{ID: id, Path: path, Title: page.Title(path)})
+	}
+	return out, nil
+}
 
 func (f *fakePages) Attachments() *attach.Store {
 	f.mu.Lock()
