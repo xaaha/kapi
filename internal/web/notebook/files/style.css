@@ -102,7 +102,9 @@ html[data-kapi-notebook] .kapi-nb {
 }
 
 .kapi-nb-page {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 5px 6px;
   border-radius: var(--kapi-radius-sm);
   color: var(--kapi-fg);
@@ -130,6 +132,7 @@ html[data-kapi-notebook] .kapi-nb {
 
 .kapi-nb-title {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

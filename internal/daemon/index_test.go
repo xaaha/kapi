@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
@@ -78,4 +80,68 @@ func TestIndexRereadsAPageOnlyWhenItsFileChanges(t *testing.T) {
 	if got := title(); got != "Second title / two" {
 		t.Errorf("after an edit, title = %q", got)
 	}
+}
+
+func TestIndexStateFollowsTheSessionForAnyAgentReader(t *testing.T) {
+	dir := t.TempDir()
+	quiet, asked, readByCodex, readByAgent, watched, ended := filepath.Join(dir, "quiet.html"), filepath.Join(dir, "asked.html"),
+		filepath.Join(dir, "codex.html"), filepath.Join(dir, "agent.html"), filepath.Join(dir, "watched.html"), filepath.Join(dir, "ended.html")
+	home, err := os.MkdirTemp("", "ks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	first := New(home)
+	for path, reader := range map[string]string{quiet: "", asked: "", readByCodex: "codex", readByAgent: "agent", watched: "", ended: ""} {
+		l, err := first.page(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if path != quiet {
+			e, err := l.Append(&eventlog.Event{Author: "human", Kind: "message", Text: "please review"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reader != "" {
+				if err := l.Ack(reader, e.Seq); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if path == ended {
+			if _, err := l.End("human"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string]string{quiet: app.Idle, asked: app.Waiting, readByCodex: app.Idle, readByAgent: app.Idle, watched: app.Waiting, ended: app.Ended}
+	check := func(s *Server, how string) {
+		t.Helper()
+		pages, err := s.Index()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pages) != len(want) {
+			t.Fatalf("%s: pages = %+v", how, pages)
+		}
+		for _, p := range pages {
+			if p.State != want[p.Path] {
+				t.Errorf("%s: %s state %q, want %q", how, filepath.Base(p.Path), p.State, want[p.Path])
+			}
+		}
+	}
+	s := New(home)
+	check(s, "closed logs")
+	for path := range want {
+		if _, err := s.page(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check(s, "open logs")
+	s.setAttached(watched, "codex", true)
+	want[watched] = app.Live
+	check(s, "a named reader watching")
 }

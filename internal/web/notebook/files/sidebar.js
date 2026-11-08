@@ -1,5 +1,5 @@
 import { h, pageID, prefs, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, matches, redraw, watch } from "./pages.js";
+import { ago, base, byFolder, matches, redraw, stateLabel, watch } from "./pages.js";
 
 const OPEN_KEY = "kapi-notebook-open";
 const docked = matchMedia("(min-width: 1100px)");
@@ -9,11 +9,11 @@ function link(p, folder) {
     class: "kapi-nb-page",
     "data-key": `${folder}\n${p.id}`,
     href: `${root}p/${p.id}/`,
-    title: `${p.path}\n${ago(p.changed)}`,
+    title: `${p.path}\n${stateLabel(p)} \u00b7 ${ago(p.changed)}`,
     "aria-current": p.id === pageID ? "page" : false,
-    "data-ended": p.ended || false,
+    "data-ended": p.state === "ended",
     "data-missing": p.missing || false,
-  }, h("span", { class: "kapi-nb-title", text: p.title }));
+  }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }));
 }
 
 function render(list, pages, query) {

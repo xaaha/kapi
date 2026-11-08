@@ -27,6 +27,14 @@ func NewRouter(mux *http.ServeMux, name string) Router { return Router{mux: mux,
 func (r Router) Get(path string, h http.HandlerFunc)  { r.mux.HandleFunc("GET /api/"+r.name+path, h) }
 func (r Router) Post(path string, h http.HandlerFunc) { r.mux.HandleFunc("POST /api/"+r.name+path, h) }
 
+// Page states: an agent is watching it, a person wrote something no agent has read, nothing is happening, or its session ended.
+const (
+	Live    = "live"
+	Waiting = "waiting"
+	Idle    = "idle"
+	Ended   = "ended"
+)
+
 // Page is one page kapi knows about, wherever its file lives.
 type Page struct {
 	ID      string    `json:"id"`
@@ -35,7 +43,7 @@ type Page struct {
 	Summary string    `json:"summary,omitempty"`
 	Folders []string  `json:"folders,omitempty"`
 	Changed time.Time `json:"changed,omitzero"`
-	Ended   bool      `json:"ended,omitempty"`
+	State   string    `json:"state"`
 	Missing bool      `json:"missing,omitempty"`
 }
 

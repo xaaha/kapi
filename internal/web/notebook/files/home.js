@@ -1,17 +1,14 @@
 import { h, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, folderOf, inFolder, matches, redraw, tones, watch } from "./pages.js";
+import { ago, base, byFolder, folderOf, inFolder, legend, liveliest, matches, redraw, stateLabel, watch } from "./pages.js";
 
 const SHOWN_PER_PROJECT = 3;
-let tone = () => false;
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const href = (p) => `${root}p/${p.id}/`;
 
-function state(p) {
-  if (p.missing) return "File moved or deleted";
-  if (p.ended) return "Session ended";
-  return "";
-}
+const dot = (state, label) => h("span", { class: "nb-dot", "data-state": state, title: label, "aria-label": label, role: "img" });
+const pageDot = (p) => dot(p.missing ? "ended" : p.state, stateLabel(p));
+const dim = (p) => p.missing || p.state === "ended";
 
 function sheet(p) {
   if (!p) {
@@ -20,14 +17,13 @@ function sheet(p) {
       h("p", { text: "Ask an agent to make a page, or run kapi open notes.html in any folder. It shows up here." }));
   }
   const folder = folderOf(p);
-  return h("a", { class: "nb-sheet", "data-key": "sheet", href: href(p), "data-tone": tone(folder) },
+  return h("a", { class: "nb-sheet", "data-key": "sheet", href: href(p), "data-state": p.state },
     h("div", { class: "nb-sheet-meta" },
-      h("span", { class: "nb-dot", "aria-hidden": "true" }),
-      h("span", { text: base(folder) }),
+      pageDot(p),
+      h("span", { text: `${stateLabel(p)} \u00b7 ${base(folder)}` }),
       h("time", { datetime: p.changed, text: ago(p.changed) })),
     h("h2", { text: p.title }),
     p.summary ? h("p", { text: p.summary }) : null,
-    state(p) ? h("span", { class: "nb-state", text: state(p) }) : null,
     h("span", { class: "nb-continue", text: "Continue ↗" }));
 }
 
@@ -35,26 +31,27 @@ function projectList(groups, pick) {
   const list = h("ul", { class: "nb-projects" });
   for (const [folder, items] of groups) {
     const button = h("button", { type: "button", class: "nb-project", "data-key": `project\n${folder}`, title: `Show every page in ${folder}` },
-      h("span", { class: "nb-dot", "aria-hidden": "true" }),
+      dot(liveliest(items), `Most active page: ${stateLabel({ state: liveliest(items) })}`),
       h("span", { class: "nb-project-name", text: base(folder) }),
       h("span", { class: "nb-project-count", text: plural(items.length, "page") }));
     button.addEventListener("click", () => pick(folder));
     const recent = h("ul", { class: "nb-project-pages" }, ...items.slice(0, SHOWN_PER_PROJECT).map((p) =>
-      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, h("span", { text: p.title }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
-    list.append(h("li", { class: "nb-project-item", "data-tone": tone(folder) }, button, recent));
+      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, pageDot(p), h("span", { text: p.title }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
+    list.append(h("li", { class: "nb-project-item" }, button, recent));
   }
   return list;
 }
 
 function card(p, picked) {
   const folder = picked ?? folderOf(p);
-  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-tone": tone(folder), "data-dim": !!state(p) },
+  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-dim": dim(p) },
     h("span", { class: "nb-card-top" },
       h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...p.title.trim()][0]?.toUpperCase() ?? "?" }),
-      h("span", { class: "nb-card-folder", text: base(folder) })),
+      h("span", { class: "nb-card-folder", text: base(folder) }),
+      pageDot(p)),
     h("span", { class: "nb-card-title", text: p.title }),
     p.summary ? h("span", { class: "nb-card-summary", text: p.summary }) : null,
-    h("span", { class: "nb-card-foot", text: [state(p), ago(p.changed)].filter(Boolean).join(" · ") }));
+    h("span", { class: "nb-card-foot", text: [stateLabel(p), ago(p.changed)].filter(Boolean).join(" · ") }));
 }
 
 function heading(title, note) {
@@ -78,10 +75,10 @@ export function showHome(main) {
   const grid = h("div", { class: "nb-grid" });
   const libraryNote = h("span");
   const library = h("section", { class: "nb-library", "aria-label": "Every page" },
-    h("div", { class: "nb-heading" }, h("h2", { text: "Every page" }), libraryNote), chips, grid);
+    h("div", { class: "nb-heading" }, h("h2", { text: "Every page" }), libraryNote), h("div", { class: "nb-filters" }, chips, legend(h)), grid);
   main.append(h("div", { class: "nb-home" }, top, hero,
     h("section", { class: "nb-desk" },
-      h("div", {}, heading("On your desk", "The page that changed last"), desk),
+      h("div", {}, heading("On your desk", "The open page that changed last"), desk),
       h("div", {}, heading("Projects", "Where your pages were opened"), projects)),
     library,
     h("footer", { class: "nb-foot" }, h("span", { text: "kapi" }), h("em", { text: "A notebook you share with your agents." }))));
@@ -96,7 +93,8 @@ export function showHome(main) {
   const drawLibrary = () => redraw(library, () => {
     const groups = byFolder(pages);
     chips.replaceChildren(...[null, ...groups.keys()].map((folder) => {
-      const chip = h("button", { type: "button", class: "nb-chip", "data-key": `chip\n${folder ?? ""}`, "aria-pressed": String(picked === folder), "data-tone": folder ? tone(folder) : false, text: folder ? base(folder) : "All" });
+      const chip = h("button", { type: "button", class: "nb-chip", "data-key": `chip
+${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base(folder) : "All" });
       chip.addEventListener("click", () => pick(folder));
       return chip;
     }));
@@ -107,12 +105,11 @@ export function showHome(main) {
   });
   const draw = () => redraw(main, () => {
     const groups = byFolder(pages);
-    const palette = tones(groups.keys());
-    tone = (folder) => palette.get(folder) ?? false;
     if (picked && !groups.has(picked)) picked = null;
     const day = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-    eyebrow.textContent = [day, plural(pages.length, "page"), plural(groups.size, "project")].join(" · ");
-    desk.replaceChildren(h("article", { class: "nb-desk-card" }, h("div", { class: "nb-sheet-under", "aria-hidden": "true" }), sheet(pages[0])));
+    const live = pages.filter((p) => p.state === "live").length;
+    eyebrow.textContent = [day, plural(pages.length, "page"), plural(groups.size, "project"), live ? `${live} live` : ""].filter(Boolean).join(" · ");
+    desk.replaceChildren(h("article", { class: "nb-desk-card" }, h("div", { class: "nb-sheet-under", "aria-hidden": "true" }), sheet(pages.find((p) => !dim(p)) ?? pages[0])));
     projects.replaceChildren(h("article", { class: "nb-projects-card" }, groups.size ? projectList(groups, pick) : h("p", { class: "nb-empty", text: "Projects appear once a page is opened." })));
     drawLibrary();
   });
