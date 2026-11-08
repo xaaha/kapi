@@ -142,3 +142,19 @@ test("on a phone the sidebar starts closed, opens over the page and nothing scro
     await h.close();
   }
 });
+
+test("an ended session mutes its sidebar title and turns its dot red", async () => {
+  const s = await withSidebar();
+  try {
+    await s.eval(`(async () => {
+      const pages = await fetch(${JSON.stringify(base)} + "api/notebook/pages").then((r) => r.json());
+      const bugs = pages.find((p) => p.title === "Bug list");
+      await fetch(${JSON.stringify(base)} + "p/" + bugs.id + "/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    })()`);
+    await refresh(s);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-page[data-ended]")].some((a) => a.textContent.includes("Bug list"))`);
+    assert.equal(await s.eval(`[...document.querySelectorAll(".kapi-nb-page")].find((a) => a.textContent.includes("Bug list")).querySelector(".nb-dot").dataset.state`), "ended");
+  } finally {
+    await s.close();
+  }
+});

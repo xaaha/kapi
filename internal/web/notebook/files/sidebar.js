@@ -11,7 +11,7 @@ function link(p, folder) {
     href: `${root}p/${p.id}/`,
     title: `${p.path}\n${stateLabel(p)} \u00b7 ${ago(p.changed)}`,
     "aria-current": p.id === pageID ? "page" : false,
-    "data-ended": p.ended || false,
+    "data-ended": p.state === "ended",
     "data-missing": p.missing || false,
   }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }));
 }

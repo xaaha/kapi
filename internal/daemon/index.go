@@ -97,7 +97,7 @@ func (s *Server) state(path, dir string) string {
 	s.mu.Unlock()
 	var ended, waiting bool
 	if open {
-		ended, waiting = l.Ended() > 0, l.Waiting("agent")
+		ended, waiting = l.Ended() > 0, l.Waiting()
 	} else {
 		c := s.closedSession(dir)
 		ended, waiting = c.ended, c.waiting
@@ -127,7 +127,7 @@ func (s *Server) closedSession(dir string) session {
 	if err != nil {
 		return session{}
 	}
-	waiting, _ := eventlog.WaitingIn(dir, "agent")
+	waiting, _ := eventlog.WaitingIn(dir)
 	fresh := session{events: events, positions: positions, ended: endedSeq > 0, waiting: waiting}
 	c.mu.Lock()
 	if c.sessions == nil {
