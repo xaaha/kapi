@@ -8,12 +8,59 @@ body:has(#kapi-home) {
     var(--kapi-bg);
 }
 
-[data-tone="green"] { --nb-tint: var(--kapi-green-tint); --nb-ink: var(--kapi-green-text); --nb-solid: var(--kapi-green-solid); }
-[data-tone="orange"] { --nb-tint: var(--kapi-orange-tint); --nb-ink: var(--kapi-orange-text); --nb-solid: var(--kapi-orange-solid); }
-[data-tone="purple"] { --nb-tint: var(--kapi-purple-tint); --nb-ink: var(--kapi-purple-text); --nb-solid: var(--kapi-purple-solid); }
-[data-tone="blue"] { --nb-tint: var(--kapi-blue-tint); --nb-ink: var(--kapi-blue-text); --nb-solid: var(--kapi-blue-solid); }
-[data-tone="yellow"] { --nb-tint: var(--kapi-yellow-tint); --nb-ink: var(--kapi-yellow-text); --nb-solid: var(--kapi-yellow-solid); }
-[data-tone="red"] { --nb-tint: var(--kapi-red-tint); --nb-ink: var(--kapi-red-text); --nb-solid: var(--kapi-red-solid); }
+.nb-dot[data-state="live"],
+.nb-sheet[data-state="live"] { --nb-state: var(--kapi-green-solid); }
+.nb-dot[data-state="waiting"],
+.nb-sheet[data-state="waiting"] { --nb-state: var(--kapi-orange-solid); }
+.nb-dot[data-state="idle"],
+.nb-sheet[data-state="idle"] { --nb-state: var(--kapi-grey-solid); }
+.nb-dot[data-state="ended"],
+.nb-sheet[data-state="ended"] { --nb-state: var(--kapi-red-solid); }
+
+.nb-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--nb-state, var(--kapi-grey-solid));
+}
+
+.nb-dot[data-state="live"] {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--kapi-green-solid) 45%, transparent);
+  animation: nb-live 2.4s ease-out infinite;
+}
+
+@keyframes nb-live {
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.nb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--kapi-faint);
+  font-size: 12px;
+}
+
+.nb-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nb-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+}
+
+.nb-filters .nb-chips {
+  margin-bottom: 0;
+}
 
 .nb-home {
   box-sizing: border-box;
@@ -210,17 +257,8 @@ body:has(#kapi-home) {
 }
 
 .nb-desk-card {
-  --nb-tint: var(--kapi-green-tint);
-  --nb-ink: var(--kapi-green-text);
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(color-mix(in srgb, var(--kapi-fg) 14%, transparent) 0.6px, transparent 0.6px) 0 0 / 12px 12px,
-    radial-gradient(circle at 92% 88%, color-mix(in srgb, var(--kapi-green-solid) 18%, transparent), transparent 42%),
-    var(--kapi-green-tint);
-}
-
-.nb-desk-card:has([data-tone]) {
   background:
     radial-gradient(color-mix(in srgb, var(--kapi-fg) 14%, transparent) 0.6px, transparent 0.6px) 0 0 / 12px 12px,
     var(--kapi-card);
@@ -250,7 +288,7 @@ body:has(#kapi-home) {
   border: 1px solid var(--kapi-border);
   border-radius: 2px;
   background:
-    linear-gradient(90deg, transparent 44px, var(--nb-tint, var(--kapi-border)) 44px, var(--nb-tint, var(--kapi-border)) 46px, transparent 46px),
+    linear-gradient(90deg, transparent 44px, var(--kapi-border) 44px, var(--kapi-border) 46px, transparent 46px),
     var(--kapi-surface);
   box-shadow: 0 14px 36px color-mix(in srgb, var(--kapi-shadow-ink) 16%, transparent);
   transform: rotate(1.2deg);
@@ -270,7 +308,7 @@ a.nb-sheet:hover {
   width: 44px;
   height: 11px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--nb-solid, var(--kapi-green-solid)) 35%, transparent);
+  background: color-mix(in srgb, var(--nb-state, var(--kapi-grey-solid)) 35%, transparent);
   transform: rotate(-2deg);
 }
 
@@ -290,14 +328,6 @@ a.nb-sheet:hover {
   font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: none;
-}
-
-.nb-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--nb-solid, var(--kapi-muted));
 }
 
 .nb-sheet h2 {
@@ -399,8 +429,8 @@ a.nb-sheet:hover {
 .nb-project-count {
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--nb-tint);
-  color: var(--nb-ink);
+  background: var(--kapi-subtle);
+  color: var(--kapi-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -490,7 +520,7 @@ a.nb-sheet:hover {
 }
 
 .nb-card:hover {
-  border-color: var(--nb-solid);
+  border-color: var(--kapi-border-strong);
   box-shadow: 0 10px 26px color-mix(in srgb, var(--kapi-shadow-ink) 10%, transparent);
   transform: translateY(-3px);
 }
@@ -502,7 +532,6 @@ a.nb-sheet:hover {
 .nb-card-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
@@ -512,12 +541,13 @@ a.nb-sheet:hover {
   width: 36px;
   height: 36px;
   border-radius: 9px;
-  background: var(--nb-tint);
-  color: var(--nb-ink);
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
   font: 400 21px/1 var(--kapi-font-body);
 }
 
 .nb-card-folder {
+  margin-left: auto;
   overflow: hidden;
   color: var(--kapi-faint);
   font-size: 11px;
@@ -639,7 +669,7 @@ a.nb-sheet:hover {
     left: 20px;
     padding: 24px 22px 84px 44px;
     background:
-      linear-gradient(90deg, transparent 26px, var(--nb-tint, var(--kapi-border)) 26px, var(--nb-tint, var(--kapi-border)) 28px, transparent 28px),
+      linear-gradient(90deg, transparent 26px, var(--kapi-border) 26px, var(--kapi-border) 28px, transparent 28px),
       var(--kapi-surface);
   }
 
@@ -662,6 +692,10 @@ a.nb-sheet:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .nb-dot[data-state="live"] {
+    animation: none;
+  }
+
   .nb-sheet,
   .nb-card,
   a.nb-sheet:hover,

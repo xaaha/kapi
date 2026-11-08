@@ -34,22 +34,14 @@ export function byFolder(pages) {
   return out;
 }
 
-const TONES = ["green", "orange", "purple", "blue", "yellow", "red"];
+const LABELS = { live: "Agent watching", waiting: "Waiting on the agent", idle: "Idle", ended: "Session ended" };
+const RANK = ["live", "waiting", "idle", "ended"];
 
-const hash = (s) => [...s].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7);
+export const stateLabel = (p) => (p.missing ? "File moved or deleted" : LABELS[p.state] ?? "");
 
-export function tones(folders) {
-  const out = new Map();
-  const taken = new Set();
-  for (const folder of [...folders].sort()) {
-    let i = hash(folder) % TONES.length;
-    for (let tries = 0; taken.has(TONES[i]) && tries < TONES.length; tries++) i = (i + 1) % TONES.length;
-    taken.add(TONES[i]);
-    if (taken.size === TONES.length) taken.clear();
-    out.set(folder, TONES[i]);
-  }
-  return out;
-}
+export const liveliest = (pages) => RANK.find((s) => pages.some((p) => p.state === s)) ?? "idle";
+
+export const legend = (h) => h("span", { class: "nb-legend" }, ...RANK.map((s) => h("span", {}, h("span", { class: "nb-dot", "data-state": s, "aria-hidden": "true" }), LABELS[s])));
 
 export function redraw(container, build) {
   const key = container.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;

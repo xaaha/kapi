@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
@@ -77,5 +78,32 @@ func TestIndexRereadsAPageOnlyWhenItsFileChanges(t *testing.T) {
 	}
 	if got := title(); got != "Second title / two" {
 		t.Errorf("after an edit, title = %q", got)
+	}
+}
+
+func TestIndexStateFollowsTheSession(t *testing.T) {
+	dir := t.TempDir()
+	quiet, asked, watched, ended := filepath.Join(dir, "quiet.html"), filepath.Join(dir, "asked.html"), filepath.Join(dir, "watched.html"), filepath.Join(dir, "ended.html")
+	_, s := homeWith(t, "ks", []pageCount{{quiet, 0}, {asked, 1}, {watched, 1}, {ended, 0}})
+	s.setAttached(watched, "agent", true)
+	l, err := s.page(ended)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.End("human"); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := s.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{quiet: app.Idle, asked: app.Waiting, watched: app.Live, ended: app.Ended}
+	for _, p := range pages {
+		if p.State != want[p.Path] {
+			t.Errorf("%s: state %q, want %q", filepath.Base(p.Path), p.State, want[p.Path])
+		}
+	}
+	if len(pages) != len(want) {
+		t.Errorf("pages = %+v", pages)
 	}
 }

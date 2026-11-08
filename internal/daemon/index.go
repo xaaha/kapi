@@ -32,7 +32,7 @@ type preview struct {
 
 type session struct {
 	events, positions stamp
-	ended             bool
+	ended, waiting    bool
 }
 
 type indexCache struct {
@@ -52,7 +52,7 @@ func (s *Server) Index() ([]app.Page, error) {
 		if d.err != nil {
 			continue
 		}
-		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), Ended: s.ended(d.path, d.dir)}
+		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir)}
 		if at, ok := stampOf(d.path); ok {
 			p.Changed = at.mod
 			title, summary := s.preview(d.path, at)
@@ -90,14 +90,27 @@ func (s *Server) preview(path string, at stamp) (title, summary string) {
 	return title, summary
 }
 
-func (s *Server) ended(path, dir string) bool {
+func (s *Server) state(path, dir string) string {
 	s.mu.Lock()
 	l, open := s.pages[path]
+	live := len(s.attached[path]) > 0
 	s.mu.Unlock()
+	var ended, waiting bool
 	if open {
-		return l.Ended() > 0
+		ended, waiting = l.Ended() > 0, l.Waiting("agent")
+	} else {
+		c := s.closedSession(dir)
+		ended, waiting = c.ended, c.waiting
 	}
-	return s.closedSession(dir).ended
+	switch {
+	case ended:
+		return app.Ended
+	case live:
+		return app.Live
+	case waiting:
+		return app.Waiting
+	}
+	return app.Idle
 }
 
 func (s *Server) closedSession(dir string) session {
@@ -114,7 +127,8 @@ func (s *Server) closedSession(dir string) session {
 	if err != nil {
 		return session{}
 	}
-	fresh := session{events: events, positions: positions, ended: endedSeq > 0}
+	waiting, _ := eventlog.WaitingIn(dir, "agent")
+	fresh := session{events: events, positions: positions, ended: endedSeq > 0, waiting: waiting}
 	c.mu.Lock()
 	if c.sessions == nil {
 		c.sessions = map[string]session{}
