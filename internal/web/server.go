@@ -106,9 +106,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "posts must come from this page as application/json", http.StatusForbidden)
 		return
 	}
-	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	seg, rest, slash := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !s.validToken(seg) {
 		s.refuseToken(w, seg, rest)
+		return
+	}
+	if !slash {
+		http.Redirect(w, r, "/"+s.token+"/", http.StatusPermanentRedirect)
 		return
 	}
 	r2 := r.Clone(r.Context())

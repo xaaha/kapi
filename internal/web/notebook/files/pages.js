@@ -5,7 +5,9 @@ const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
 export const base = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 const dirname = (path) => path.replace(/[\\/][^\\/]*$/, "") || path;
-export const folderOf = (p) => p.folders?.[0] ?? dirname(p.path);
+export const foldersOf = (p) => (p.folders?.length ? p.folders : [dirname(p.path)]);
+export const folderOf = (p) => foldersOf(p)[0];
+export const inFolder = (p, folder) => foldersOf(p).includes(folder);
 
 export function ago(iso) {
   if (!iso) return "";
@@ -24,9 +26,10 @@ export function matches(p, query) {
 export function byFolder(pages) {
   const out = new Map();
   for (const p of pages) {
-    const folder = folderOf(p);
-    if (!out.has(folder)) out.set(folder, []);
-    out.get(folder).push(p);
+    for (const folder of foldersOf(p)) {
+      if (!out.has(folder)) out.set(folder, []);
+      out.get(folder).push(p);
+    }
   }
   return out;
 }
@@ -48,12 +51,40 @@ export function tones(folders) {
   return out;
 }
 
+export function redraw(container, build) {
+  const key = container.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;
+  build();
+  if (key) container.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+}
+
+const MINUTE = 60000;
+
 export function watch(show, fail) {
+  let loading = false;
+  let again = false;
+  let last = "";
   const load = async () => {
+    if (loading) {
+      again = true;
+      return;
+    }
+    loading = true;
     try {
-      show(await getJSON("api/notebook/pages"));
+      const pages = await getJSON("api/notebook/pages");
+      const seen = `${Math.floor(Date.now() / MINUTE)}:${JSON.stringify(pages)}`;
+      if (seen !== last) {
+        last = seen;
+        show(pages);
+      }
     } catch {
+      last = "";
       fail();
+    } finally {
+      loading = false;
+      if (again) {
+        again = false;
+        load();
+      }
     }
   };
   load();

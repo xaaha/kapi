@@ -1,5 +1,5 @@
 import { h, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, folderOf, matches, tones, watch } from "./pages.js";
+import { ago, base, byFolder, folderOf, inFolder, matches, redraw, tones, watch } from "./pages.js";
 
 const SHOWN_PER_PROJECT = 3;
 let tone = () => false;
@@ -20,7 +20,7 @@ function sheet(p) {
       h("p", { text: "Ask an agent to make a page, or run kapi open notes.html in any folder. It shows up here." }));
   }
   const folder = folderOf(p);
-  return h("a", { class: "nb-sheet", href: href(p), "data-tone": tone(folder) },
+  return h("a", { class: "nb-sheet", "data-key": "sheet", href: href(p), "data-tone": tone(folder) },
     h("div", { class: "nb-sheet-meta" },
       h("span", { class: "nb-dot", "aria-hidden": "true" }),
       h("span", { text: base(folder) }),
@@ -34,21 +34,21 @@ function sheet(p) {
 function projectList(groups, pick) {
   const list = h("ul", { class: "nb-projects" });
   for (const [folder, items] of groups) {
-    const button = h("button", { type: "button", class: "nb-project", title: `Show every page in ${folder}` },
+    const button = h("button", { type: "button", class: "nb-project", "data-key": `project\n${folder}`, title: `Show every page in ${folder}` },
       h("span", { class: "nb-dot", "aria-hidden": "true" }),
       h("span", { class: "nb-project-name", text: base(folder) }),
       h("span", { class: "nb-project-count", text: plural(items.length, "page") }));
     button.addEventListener("click", () => pick(folder));
     const recent = h("ul", { class: "nb-project-pages" }, ...items.slice(0, SHOWN_PER_PROJECT).map((p) =>
-      h("li", {}, h("a", { href: href(p), title: p.path }, h("span", { text: p.title }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
+      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, h("span", { text: p.title }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
     list.append(h("li", { class: "nb-project-item", "data-tone": tone(folder) }, button, recent));
   }
   return list;
 }
 
-function card(p) {
-  const folder = folderOf(p);
-  return h("a", { class: "nb-card", href: href(p), title: p.path, "data-tone": tone(folder), "data-dim": !!state(p) },
+function card(p, picked) {
+  const folder = picked ?? folderOf(p);
+  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-tone": tone(folder), "data-dim": !!state(p) },
     h("span", { class: "nb-card-top" },
       h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...p.title.trim()][0]?.toUpperCase() ?? "?" }),
       h("span", { class: "nb-card-folder", text: base(folder) })),
@@ -93,19 +93,19 @@ export function showHome(main) {
     drawLibrary();
     if (picked) library.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  const drawLibrary = () => {
+  const drawLibrary = () => redraw(library, () => {
     const groups = byFolder(pages);
     chips.replaceChildren(...[null, ...groups.keys()].map((folder) => {
-      const chip = h("button", { type: "button", class: "nb-chip", "aria-pressed": String(picked === folder), "data-tone": folder ? tone(folder) : false, text: folder ? base(folder) : "All" });
+      const chip = h("button", { type: "button", class: "nb-chip", "data-key": `chip\n${folder ?? ""}`, "aria-pressed": String(picked === folder), "data-tone": folder ? tone(folder) : false, text: folder ? base(folder) : "All" });
       chip.addEventListener("click", () => pick(folder));
       return chip;
     }));
     chips.hidden = groups.size < 2;
-    const shown = pages.filter((p) => (!picked || folderOf(p) === picked) && matches(p, search.value));
+    const shown = pages.filter((p) => (!picked || inFolder(p, picked)) && matches(p, search.value));
     libraryNote.textContent = shown.length === pages.length ? plural(pages.length, "page") : `${shown.length} of ${pages.length}`;
-    grid.replaceChildren(...(shown.length ? shown.map(card) : [h("p", { class: "nb-empty", text: pages.length ? "No page matches." : "No pages yet." })]));
-  };
-  const draw = () => {
+    grid.replaceChildren(...(shown.length ? shown.map((p) => card(p, picked)) : [h("p", { class: "nb-empty", text: pages.length ? "No page matches." : "No pages yet." })]));
+  });
+  const draw = () => redraw(main, () => {
     const groups = byFolder(pages);
     const palette = tones(groups.keys());
     tone = (folder) => palette.get(folder) ?? false;
@@ -115,7 +115,7 @@ export function showHome(main) {
     desk.replaceChildren(h("article", { class: "nb-desk-card" }, h("div", { class: "nb-sheet-under", "aria-hidden": "true" }), sheet(pages[0])));
     projects.replaceChildren(h("article", { class: "nb-projects-card" }, groups.size ? projectList(groups, pick) : h("p", { class: "nb-empty", text: "Projects appear once a page is opened." })));
     drawLibrary();
-  };
+  });
   search.addEventListener("input", drawLibrary);
   document.addEventListener("keydown", (e) => {
     if (document.activeElement !== search && (shortcuts.is("searchCommand", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea")))) {

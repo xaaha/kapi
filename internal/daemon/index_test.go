@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/xaaha/kapi/internal/page"
 )
@@ -47,5 +48,34 @@ func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
 	}
 	if p := pages[byPath[gone]]; !p.Missing || p.Title != "gone" {
 		t.Errorf("moved page = %+v", p)
+	}
+}
+
+func TestIndexRereadsAPageOnlyWhenItsFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plan.html")
+	if err := os.WriteFile(path, []byte("<h1>First</h1><p>one</p>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, s := homeWith(t, "kc", []pageCount{{path, 0}})
+	title := func() string {
+		t.Helper()
+		pages, err := s.Index()
+		if err != nil || len(pages) != 1 {
+			t.Fatalf("Index = %+v, %v", pages, err)
+		}
+		return pages[0].Title + " / " + pages[0].Summary
+	}
+	if got := title(); got != "First / one" {
+		t.Fatalf("title = %q", got)
+	}
+	if err := os.WriteFile(path, []byte("<h1>Second title</h1><p>two</p>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, time.Now().Add(time.Minute), time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if got := title(); got != "Second title / two" {
+		t.Errorf("after an edit, title = %q", got)
 	}
 }

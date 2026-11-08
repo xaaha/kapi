@@ -1,12 +1,13 @@
 import { h, pageID, prefs, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, matches, watch } from "./pages.js";
+import { ago, base, byFolder, matches, redraw, watch } from "./pages.js";
 
 const OPEN_KEY = "kapi-notebook-open";
 const docked = matchMedia("(min-width: 1100px)");
 
-function link(p) {
+function link(p, folder) {
   return h("a", {
     class: "kapi-nb-page",
+    "data-key": `${folder}\n${p.id}`,
     href: `${root}p/${p.id}/`,
     title: `${p.path}\n${ago(p.changed)}`,
     "aria-current": p.id === pageID ? "page" : false,
@@ -25,7 +26,7 @@ function render(list, pages, query) {
   for (const [folder, items] of found) {
     list.append(h("section", { class: "kapi-nb-group" },
       h("h2", { class: "kapi-nb-folder", title: folder, text: base(folder) }),
-      ...items.map(link)));
+      ...items.map((p) => link(p, folder))));
   }
 }
 
@@ -35,7 +36,7 @@ export function showSidebar() {
   const list = h("div", { class: "kapi-nb-list" });
   nav.append(h("div", { class: "kapi-nb-head" }, h("a", { class: "kapi-nb-home", href: root, text: "Notebook" })), filter, list);
   let pages = [];
-  const draw = () => render(list, pages, filter.value);
+  const draw = () => redraw(list, () => render(list, pages, filter.value));
   filter.addEventListener("input", draw);
   watch((next) => {
     pages = next;

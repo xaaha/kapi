@@ -4,10 +4,42 @@ import (
 	"cmp"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
+	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/web/app"
 )
+
+type stamp struct {
+	size int64
+	mod  time.Time
+}
+
+func stampOf(path string) (stamp, bool) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return stamp{}, false
+	}
+	return stamp{fi.Size(), fi.ModTime()}, true
+}
+
+type preview struct {
+	at             stamp
+	title, summary string
+}
+
+type session struct {
+	events, positions stamp
+	ended             bool
+}
+
+type indexCache struct {
+	mu       sync.Mutex
+	previews map[string]preview
+	sessions map[string]session
+}
 
 // Index lists every page kapi has opened, for the notebook.
 func (s *Server) Index() ([]app.Page, error) {
@@ -20,20 +52,74 @@ func (s *Server) Index() ([]app.Page, error) {
 		if d.err != nil {
 			continue
 		}
-		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), Ended: s.pageStatus(d.path, d.dir).Ended}
-		if src, err := os.ReadFile(d.path); err != nil {
-			p.Missing = true
-		} else {
-			title, summary := page.Preview(src)
+		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), Ended: s.ended(d.path, d.dir)}
+		if at, ok := stampOf(d.path); ok {
+			p.Changed = at.mod
+			title, summary := s.preview(d.path, at)
 			p.Title, p.Summary = cmp.Or(title, p.Title), summary
+		} else {
+			p.Missing = true
 		}
-		if info, err := os.Stat(d.path); err == nil {
-			p.Changed = info.ModTime()
-		}
-		if info, err := os.Stat(filepath.Join(d.dir, "events.ndjson")); err == nil && info.ModTime().After(p.Changed) {
-			p.Changed = info.ModTime()
+		if at, ok := stampOf(filepath.Join(d.dir, "events.ndjson")); ok && at.mod.After(p.Changed) {
+			p.Changed = at.mod
 		}
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+func (s *Server) preview(path string, at stamp) (title, summary string) {
+	c := &s.index
+	c.mu.Lock()
+	cached, ok := c.previews[path]
+	c.mu.Unlock()
+	if ok && cached.at == at {
+		return cached.title, cached.summary
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return "", ""
+	}
+	title, summary = page.Preview(src)
+	c.mu.Lock()
+	if c.previews == nil {
+		c.previews = map[string]preview{}
+	}
+	c.previews[path] = preview{at: at, title: title, summary: summary}
+	c.mu.Unlock()
+	return title, summary
+}
+
+func (s *Server) ended(path, dir string) bool {
+	s.mu.Lock()
+	l, open := s.pages[path]
+	s.mu.Unlock()
+	if open {
+		return l.Ended() > 0
+	}
+	return s.closedSession(dir).ended
+}
+
+func (s *Server) closedSession(dir string) session {
+	events, _ := stampOf(filepath.Join(dir, "events.ndjson"))
+	positions, _ := stampOf(filepath.Join(dir, "positions.json"))
+	c := &s.index
+	c.mu.Lock()
+	cached, ok := c.sessions[dir]
+	c.mu.Unlock()
+	if ok && cached.events == events && cached.positions == positions {
+		return cached
+	}
+	_, _, endedSeq, err := eventlog.Summary(dir)
+	if err != nil {
+		return session{}
+	}
+	fresh := session{events: events, positions: positions, ended: endedSeq > 0}
+	c.mu.Lock()
+	if c.sessions == nil {
+		c.sessions = map[string]session{}
+	}
+	c.sessions[dir] = fresh
+	c.mu.Unlock()
+	return fresh
 }

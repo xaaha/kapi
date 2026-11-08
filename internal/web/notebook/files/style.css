@@ -181,3 +181,10 @@ body > .kapi-nb-toggle {
   border-radius: 2px;
   background: linear-gradient(90deg, currentColor 0 30%, transparent 30%);
 }
+
+@media print {
+  .kapi-nb,
+  .kapi-nb-toggle {
+    display: none !important;
+  }
+}

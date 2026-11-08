@@ -51,3 +51,18 @@ func TestNotebookListsPagesWithTheirTitles(t *testing.T) {
 		t.Errorf("pages = %+v", pages)
 	}
 }
+
+func TestTheTokenRootWithoutASlashRedirectsToTheHome(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp := s.raw("GET", "/"+token, nil)
+	if resp.code != http.StatusPermanentRedirect || resp.header.Get("Location") != "/"+token+"/" {
+		t.Errorf("GET /<token>: %d to %q, want 308 to /<token>/", resp.code, resp.header.Get("Location"))
+	}
+	if home := s.get("/"); home.code != http.StatusOK || !strings.Contains(home.body, `src="assets/notebook/main.js"`) {
+		t.Errorf("GET /<token>/: %d", home.code)
+	}
+	if resp := s.raw("GET", "/"+token+"x", nil); resp.code != http.StatusForbidden {
+		t.Errorf("GET /<wrong token>: %d, want 403", resp.code)
+	}
+}
