@@ -122,6 +122,18 @@ func ID(path string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+// Title is the file name without its .html or .htm extension.
+func Title(path string) string {
+	name := filepath.Base(path)
+	ext := filepath.Ext(name)
+	if strings.EqualFold(ext, ".html") || strings.EqualFold(ext, ".htm") {
+		if title := strings.TrimSuffix(name, ext); title != "" {
+			return title
+		}
+	}
+	return name
+}
+
 func Open(home, path string, l *eventlog.Log) (*Store, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("page path must be absolute: %q", path)
