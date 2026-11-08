@@ -31,6 +31,7 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 //go:embed static
@@ -51,6 +52,7 @@ type Server struct {
 	host     string
 	previous [][32]byte
 	mux      *http.ServeMux
+	services []app.Service
 
 	mu   sync.Mutex
 	seen map[string]bool
@@ -59,6 +61,10 @@ type Server struct {
 // New serves pages to requests addressed to host (127.0.0.1:<port>) whose path starts with /<token>/.
 // previous holds the SHA-256 of tokens earlier runs issued; only those learn a page's path.
 func New(pages Pages, token, host string, previous [][32]byte) *Server {
+	return newServer(pages, token, host, previous, services(pages))
+}
+
+func newServer(pages Pages, token, host string, previous [][32]byte, list []app.Service) *Server {
 	s := &Server{pages: pages, token: token, host: host, previous: previous, mux: http.NewServeMux(), seen: map[string]bool{}}
 	s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "kapi is running. Open a page with: kapi open <page>")
@@ -80,13 +86,7 @@ func New(pages Pages, token, host string, previous [][32]byte) *Server {
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
-	for _, name := range []string{"theme.js", "shortcuts.js", "tables.js", "kapi.js", "chrome.css", "tables.css", "logo.svg", "favicon.svg",
-		"fonts/hanken-grotesk.woff2", "fonts/hanken-grotesk-italic.woff2", "fonts/source-serif-4.woff2", "fonts/source-serif-4-italic.woff2"} {
-		s.mux.HandleFunc("GET /static/"+name, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", "no-cache")
-			http.ServeFileFS(w, r, static, "static/"+name)
-		})
-	}
+	s.mount(list)
 	return s
 }
 
@@ -134,7 +134,7 @@ func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 			body["reopened"] = true
 		}
 	}
-	writeJSON(w, http.StatusForbidden, body)
+	app.JSON(w, http.StatusForbidden, body)
 }
 
 func (s *Server) issuedBefore(seg string) bool {
@@ -223,17 +223,6 @@ func (s *Server) Poll(ctx context.Context, every time.Duration) {
 	}
 }
 
-func pageTitle(path string) string {
-	name := filepath.Base(path)
-	ext := filepath.Ext(name)
-	if strings.EqualFold(ext, ".html") || strings.EqualFold(ext, ".htm") {
-		if title := strings.TrimSuffix(name, ext); title != "" {
-			return title
-		}
-	}
-	return name
-}
-
 func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, rev := st.Source()
 	body, err := render.Render(src)
@@ -241,22 +230,9 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var b strings.Builder
-	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
-	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
-	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(pageTitle(st.Path())))
-	b.WriteString("<link rel=\"icon\" type=\"image/svg+xml\" href=\"../../static/favicon.svg\">\n")
-	b.WriteString("<script src=\"../../static/theme.js\"></script>\n")
-	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
-	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/chrome.css\">\n")
-	b.WriteString("<link rel=\"stylesheet\" href=\"../../static/tables.css\">\n</head>\n<body>\n")
-	fmt.Fprintf(&b, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
-	b.WriteString("<script src=\"../../static/shortcuts.js\" defer></script>\n")
-	b.WriteString("<script src=\"../../static/tables.js\" defer></script>\n")
-	b.WriteString("<script src=\"../../static/kapi.js\" defer></script>\n</body>\n</html>\n")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	fmt.Fprint(w, b.String())
+	var main strings.Builder
+	fmt.Fprintf(&main, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
+	s.shell(w, "../../", page.Title(st.Path()), main.String())
 }
 
 func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
@@ -299,7 +275,7 @@ func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.St
 func (s *Server) handleExportHTML(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, _ := st.Source()
 	name := filepath.Base(st.Path())
-	doc, err := publish.Export(pageTitle(name), src, page.FilesDir(st.Path()))
+	doc, err := publish.Export(page.Title(name), src, page.FilesDir(st.Path()))
 	if errors.Is(err, publish.ErrMissingImages) {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -416,11 +392,11 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 		Text   string   `json:"text"`
 		Files  []string `json:"files"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	if in.Kind != "message" || (strings.TrimSpace(in.Text) == "" && len(in.Files) == 0) {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": `want kind "message" and non-empty text or an image`})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": `want kind "message" and non-empty text or an image`})
 		return
 	}
 	files, ok := s.useFiles(w, r, [][]string{in.Files})
@@ -432,7 +408,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
@@ -451,7 +427,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 		Text  string   `json:"text"`
 		Files []string `json:"files"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	rev := in.Rev
@@ -462,11 +438,11 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 	for i := range in.Notes {
 		n := &in.Notes[i]
 		if (strings.TrimSpace(n.Text) == "" && len(n.Files) == 0) || n.Target == "" {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "every note needs a target and text or an image"})
+			app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "every note needs a target and text or an image"})
 			return
 		}
 		if err := l.CheckNotes(n.Re); err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
 		events = append(events, eventlog.Event{Author: "human", Kind: eventlog.KindNote, Target: n.Target, Part: n.Part,
@@ -491,7 +467,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 		events = append(events, eventlog.Event{Author: "human", Kind: "message", Files: files[len(files)-1], Text: in.Text})
 	}
 	if len(events) == 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note or a message"})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note or a message"})
 		return
 	}
 	out, err := l.AppendAll(events)
@@ -499,7 +475,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
 }
 
 func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]string) ([][]string, bool) {
@@ -513,7 +489,7 @@ func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]str
 		}
 		names = unique[i]
 		if len(names) > attach.MaxPerSend {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": fmt.Sprintf("at most %d images per note or message", attach.MaxPerSend)})
+			app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": fmt.Sprintf("at most %d images per note or message", attach.MaxPerSend)})
 			return nil, false
 		}
 		all = append(all, names...)
@@ -524,7 +500,7 @@ func (s *Server) useFiles(w http.ResponseWriter, r *http.Request, groups [][]str
 	}
 	paths, err := s.pages.Attachments().Use(r.PathValue("id"), all)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return nil, false
 	}
 	for i, names := range unique {
@@ -621,25 +597,25 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, save func([]byte
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, attach.MaxBytes))
 	var tooBig *http.MaxBytesError
 	if errors.As(err, &tooBig) {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": attach.ErrTooBig.Error()})
+		app.JSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": attach.ErrTooBig.Error()})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read the image: " + err.Error()})
+		app.JSON(w, http.StatusBadRequest, map[string]string{"error": "could not read the image: " + err.Error()})
 		return
 	}
 	f, err := save(data)
 	switch {
 	case errors.Is(err, attach.ErrType):
-		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": err.Error()})
 	case errors.Is(err, attach.ErrTooBig):
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": err.Error()})
 	case errors.Is(err, attach.ErrFull):
-		writeJSON(w, http.StatusInsufficientStorage, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusInsufficientStorage, map[string]string{"error": err.Error()})
 	case err != nil:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	default:
-		writeJSON(w, http.StatusOK, f)
+		app.JSON(w, http.StatusOK, f)
 	}
 }
 
@@ -658,11 +634,11 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request, _ *page.S
 	var in struct {
 		Note uint64 `json:"note"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	if err := l.CheckNotes([]uint64{in.Note}); err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindResolve, Re: []uint64{in.Note}})
@@ -670,24 +646,24 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request, _ *page.S
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 func (s *Server) handleDeleteNotes(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
 	var in struct {
 		Notes []uint64 `json:"notes"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	slices.Sort(in.Notes)
 	in.Notes = slices.Compact(in.Notes)
 	if len(in.Notes) == 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note to delete"})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "want at least one note to delete"})
 		return
 	}
 	if err := l.CheckNotes(in.Notes); err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindDeleteNotes, Re: in.Notes})
@@ -695,24 +671,24 @@ func (s *Server) handleDeleteNotes(w http.ResponseWriter, r *http.Request, _ *pa
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
 	var in struct{}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	e, err := l.End("human")
 	if errors.Is(err, eventlog.ErrEnded) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 type opResult struct {
@@ -727,19 +703,19 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 		Rev uint64  `json:"rev"`
 		Op  page.Op `json:"op"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	rev, sum, err := st.Apply(in.Rev, &in.Op)
 	if errors.Is(err, page.ErrStale) {
-		writeJSON(w, http.StatusConflict, opResult{Rev: rev, Undo: st.CanUndo()})
+		app.JSON(w, http.StatusConflict, opResult{Rev: rev, Undo: st.CanUndo()})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq, IDs: sum.IDs})
+	app.JSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq, IDs: sum.IDs})
 }
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
@@ -747,13 +723,13 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.S
 		Form   string              `json:"form"`
 		Values map[string][]string `json:"values"`
 	}
-	if !decode(w, r, &in) {
+	if !app.Decode(w, r, &in) {
 		return
 	}
 	src, _ := st.Source()
 	formID, err := page.FormID(src, in.Form)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	text, err := json.Marshal(in)
@@ -766,21 +742,5 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.S
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
-}
-
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request body: " + err.Error()})
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("write response: %v", err)
-	}
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }

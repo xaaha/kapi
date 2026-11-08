@@ -16,6 +16,12 @@ const pageRules = `rules:
   plus the presets above. Top-level elements carry data-kapi-id; kapi adds the ones you leave out.
   <script>, <style>, style= and on* attributes and javascript: links are removed when the page renders.
   A misspelled or misplaced kapi-* element renders as a red error box naming the problem.
+writing:
+  Lead with the fact or the answer. Explanation, if any, comes after it.
+  Use numbers, names and dates instead of adjectives: "103F, 23F over the safe limit", not "extremely hot".
+  Say each thing once. No recap, no restating the question, no closing summary of what the page said.
+  Prefer a table, list or kv preset over a paragraph that compares or enumerates.
+  One page per task. Add a section to the page you already have before making a new one.
 `
 
 func newPresetCmd(out io.Writer) *cli.Command {

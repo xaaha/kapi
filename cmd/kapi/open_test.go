@@ -50,6 +50,19 @@ func TestOpenWithPrintOnlyPrints(t *testing.T) {
 	}
 }
 
+func TestOpenOnlyPrintsWhenKapiNoBrowserIsSet(t *testing.T) {
+	t.Setenv("KAPI_NO_BROWSER", "1")
+	opened := stubBrowser(t, nil)
+	const url = "http://127.0.0.1:5000/tok/p/x/"
+	out, err := run(t, &fakeAPI{resp: daemon.Response{URL: url}}, "open", "plan.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != url+"\n" || len(*opened) != 0 {
+		t.Errorf("output %q, opened %v; want the URL printed and no browser", out, *opened)
+	}
+}
+
 func TestOpenReportsABrowserFailure(t *testing.T) {
 	failed := errors.New("no browser")
 	stubBrowser(t, failed)
