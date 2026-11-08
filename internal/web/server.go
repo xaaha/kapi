@@ -45,6 +45,8 @@ type Pages interface {
 	Reopened(id string) bool
 	Attachments() *attach.Store
 	Index() ([]app.Page, error)
+	Tab() (done func())
+	Changes() <-chan struct{}
 }
 
 type Server struct {

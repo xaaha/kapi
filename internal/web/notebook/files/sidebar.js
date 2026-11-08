@@ -1,10 +1,10 @@
 import { h, pageID, prefs, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, matches, redraw, stateLabel, watch } from "./pages.js";
+import { ago, base, byFolder, markVisited, matches, newIDs, onVisit, redraw, stateLabel, watch } from "./pages.js";
 
 const OPEN_KEY = "kapi-notebook-open";
 const docked = matchMedia("(min-width: 1100px)");
 
-function link(p, folder) {
+function link(p, folder, fresh) {
   return h("a", {
     class: "kapi-nb-page",
     "data-key": `${folder}\n${p.id}`,
@@ -13,10 +13,12 @@ function link(p, folder) {
     "aria-current": p.id === pageID ? "page" : false,
     "data-ended": p.state === "ended",
     "data-missing": p.missing || false,
-  }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }));
+    "data-new": fresh || false,
+  }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }),
+  fresh ? h("span", { class: "kapi-nb-new", text: "New" }) : null);
 }
 
-function render(list, pages, query) {
+function render(list, pages, query, fresh) {
   const found = byFolder(pages.filter((p) => matches(p, query)));
   list.replaceChildren();
   if (!found.size) {
@@ -26,7 +28,7 @@ function render(list, pages, query) {
   for (const [folder, items] of found) {
     list.append(h("section", { class: "kapi-nb-group" },
       h("h2", { class: "kapi-nb-folder", title: folder, text: base(folder) }),
-      ...items.map((p) => link(p, folder))));
+      ...items.map((p) => link(p, folder, fresh.has(p.id)))));
   }
 }
 
@@ -35,17 +37,26 @@ export function showSidebar() {
   const filter = h("input", { class: "kapi-nb-filter", type: "search", placeholder: "Filter pages", "aria-label": "Filter pages" });
   const list = h("div", { class: "kapi-nb-list" });
   nav.append(h("div", { class: "kapi-nb-head" }, h("a", { class: "kapi-nb-home", href: root, text: "Notebook" })), filter, list);
+  const toggle = h("button", { class: "kapi-nb-toggle", type: "button", "aria-controls": "kapi-notebook", title: `Pages (${shortcuts.key("notebook").hint})` },
+    h("span", { class: "kapi-nb-toggle-icon", "aria-hidden": "true" }));
   let pages = [];
-  const draw = () => redraw(list, () => render(list, pages, filter.value));
+  let fresh = new Set();
+  const draw = () => redraw(list, () => render(list, pages, filter.value, fresh));
   filter.addEventListener("input", draw);
+  onVisit(() => {
+    fresh = newIDs(pages, pageID);
+    toggle.toggleAttribute("data-new", fresh.size > 0);
+    draw();
+  });
   watch((next) => {
+    if (pageID) markVisited(pageID, next);
     pages = next;
+    fresh = newIDs(pages, pageID);
+    toggle.toggleAttribute("data-new", fresh.size > 0);
     nav.removeAttribute("data-error");
     draw();
   }, () => nav.setAttribute("data-error", ""));
 
-  const toggle = h("button", { class: "kapi-nb-toggle", type: "button", "aria-controls": "kapi-notebook", title: `Pages (${shortcuts.key("notebook").hint})` },
-    h("span", { class: "kapi-nb-toggle-icon", "aria-hidden": "true" }));
   document.body.append(nav);
   const head = document.querySelector(".kapi-site-head");
   if (head) head.prepend(toggle);

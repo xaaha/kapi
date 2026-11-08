@@ -1,10 +1,13 @@
 package web
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xaaha/kapi/internal/web/app"
 )
@@ -64,5 +67,47 @@ func TestTheTokenRootWithoutASlashRedirectsToTheHome(t *testing.T) {
 	}
 	if resp := s.raw("GET", "/"+token+"x", nil); resp.code != http.StatusForbidden {
 		t.Errorf("GET /<wrong token>: %d, want 403", resp.code)
+	}
+}
+
+func TestTheNotebookStreamCountsATabAndSaysWhenPagesChange(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.srv.URL+"/"+token+"/api/notebook/events", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("content type %q", resp.Header.Get("Content-Type"))
+	}
+	lines := bufio.NewScanner(resp.Body)
+	next := func() {
+		t.Helper()
+		for lines.Scan() {
+			if lines.Text() == "data: changed" {
+				return
+			}
+		}
+		t.Fatalf("stream ended: %v", lines.Err())
+	}
+	next()
+	if n := s.pages.tabCount(); n != 1 {
+		t.Errorf("tabs = %d, want 1 while the stream is open", n)
+	}
+	s.pages.change()
+	next()
+	cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for s.pages.tabCount() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the tab is still counted after the stream closed")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

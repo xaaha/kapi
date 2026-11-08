@@ -1,4 +1,4 @@
-import { getJSON } from "../../static/core.js";
+import { getJSON, prefs, root } from "../../static/core.js";
 
 const REFRESH_MS = 10000;
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
@@ -79,7 +79,41 @@ export function watch(show, fail) {
       }
     }
   };
-  load();
+  try {
+    const worker = new SharedWorker(new URL("./stream.js", import.meta.url), { name: "kapi-notebook" });
+    worker.port.onmessage = load;
+    worker.port.start();
+  } catch {
+    new EventSource(`${root}api/notebook/events`).onmessage = load;
+  }
   setInterval(() => document.visibilityState === "visible" && load(), REFRESH_MS);
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && load());
+}
+
+const VISITS_KEY = "kapi-notebook-visits";
+
+export const onVisit = (run) => addEventListener("storage", (e) => e.key === VISITS_KEY && run());
+
+function visits() {
+  let v = null;
+  try {
+    v = JSON.parse(prefs.get(VISITS_KEY));
+  } catch {}
+  if (!v || typeof v.since !== "number" || typeof v.ids !== "object") {
+    v = { since: Date.now(), ids: {} };
+    prefs.set(VISITS_KEY, JSON.stringify(v));
+  }
+  return v;
+}
+
+export function markVisited(id, pages) {
+  const v = visits();
+  v.ids[id] = Date.now();
+  if (pages) for (const known of Object.keys(v.ids)) if (!pages.some((p) => p.id === known)) delete v.ids[known];
+  prefs.set(VISITS_KEY, JSON.stringify(v));
+}
+
+export function newIDs(pages, current) {
+  const v = visits();
+  return new Set(pages.filter((p) => p.id !== current && p.opened && Date.parse(p.opened) > Math.max(v.ids[p.id] ?? 0, v.since)).map((p) => p.id));
 }

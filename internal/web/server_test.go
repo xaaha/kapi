@@ -45,11 +45,49 @@ type fakePages struct {
 	logs  map[string]*eventlog.Log
 	pages map[string]*page.Store
 	files *attach.Store
+
+	tabs    int
+	changed chan struct{}
 }
 
 func (f *fakePages) Viewing(string) func() { return func() {} }
 
 func (f *fakePages) Reopened(string) bool { return false }
+
+func (f *fakePages) Tab() func() {
+	f.mu.Lock()
+	f.tabs++
+	f.mu.Unlock()
+	return func() {
+		f.mu.Lock()
+		f.tabs--
+		f.mu.Unlock()
+	}
+}
+
+func (f *fakePages) Changes() <-chan struct{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.changed == nil {
+		f.changed = make(chan struct{})
+	}
+	return f.changed
+}
+
+func (f *fakePages) change() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.changed != nil {
+		close(f.changed)
+		f.changed = nil
+	}
+}
+
+func (f *fakePages) tabCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tabs
+}
 
 func (f *fakePages) Index() ([]app.Page, error) {
 	f.mu.Lock()

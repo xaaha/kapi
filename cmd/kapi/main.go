@@ -617,7 +617,7 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 	return &cli.Command{
 		Name:  "open",
 		Short: "Open a page in the browser",
-		Long:  "Print the page's local URL and open it in the default browser, unless KAPI_NO_BROWSER is set. The URL holds a token, so treat it like a password.",
+		Long:  "Print the page's local URL and open it in the default browser, unless KAPI_NO_BROWSER is set or a kapi tab is already open; then the page shows up in that tab's sidebar. The URL holds a token, so treat it like a password.",
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -647,6 +647,10 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 			}
 			if *printOnly || os.Getenv("KAPI_NO_BROWSER") != "" {
 				return nil
+			}
+			if resp.Shown {
+				_, err := fmt.Fprintln(out, "The page is in the sidebar of the open kapi tab.")
+				return err
 			}
 			return openBrowser(resp.URL)
 		},

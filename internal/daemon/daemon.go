@@ -54,6 +54,7 @@ type Response struct {
 	Pages   []PageStatus     `json:"pages,omitempty"`
 	URL     string           `json:"url,omitempty"`
 	Notice  string           `json:"notice,omitempty"`
+	Shown   bool             `json:"shown,omitempty"`
 }
 
 type PageStatus struct {
@@ -98,6 +99,8 @@ type Server struct {
 	watchers   map[string]map[string]int
 
 	index indexCache
+
+	tabs tabs
 }
 
 func New(home string) *Server {
@@ -609,6 +612,7 @@ func (s *Server) open(enc *json.Encoder, req *Request) {
 	s.mu.Lock()
 	resp := &Response{URL: s.baseURL + "p/" + page.ID(path) + "/"}
 	s.mu.Unlock()
+	resp.Shown = s.markOpened(path)
 	if opened {
 		resp.Notice = st.Conversion()
 	}
@@ -865,6 +869,7 @@ func resolved(path string) string {
 }
 
 func (s *Server) setAttached(page, reader string, on bool) {
+	defer s.notebookChanged()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.attached[page] == nil {

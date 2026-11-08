@@ -43,6 +43,7 @@ type Page struct {
 	Summary string    `json:"summary,omitempty"`
 	Folders []string  `json:"folders,omitempty"`
 	Changed time.Time `json:"changed,omitzero"`
+	Opened  time.Time `json:"opened,omitzero"`
 	State   string    `json:"state"`
 	Missing bool      `json:"missing,omitempty"`
 }
