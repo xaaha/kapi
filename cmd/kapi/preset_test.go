@@ -22,7 +22,7 @@ func TestPresetListsEveryPreset(t *testing.T) {
 			t.Errorf("output misses %s and its summary:\n%s", p.Name, out)
 		}
 	}
-	for _, want := range []string{"rules:", "data-kapi-id", "kapi preset <name>"} {
+	for _, want := range []string{"rules:", "data-kapi-id", "writing:", "Lead with the fact", "One page per task", "kapi preset <name>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output misses %q:\n%s", want, out)
 		}
