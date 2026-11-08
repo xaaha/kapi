@@ -191,3 +191,48 @@ body > .kapi-nb-toggle {
     display: none !important;
   }
 }
+
+.kapi-nb-page[data-new] {
+  background: var(--kapi-subtle);
+  animation: kapi-nb-arrive 1.4s ease-out;
+}
+
+@keyframes kapi-nb-arrive {
+  from {
+    background: color-mix(in srgb, var(--kapi-blue-solid) 28%, transparent);
+    transform: translateX(-8px);
+  }
+}
+
+.kapi-nb-new {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--kapi-blue-solid);
+  color: var(--kapi-on-solid);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kapi-nb-toggle {
+  position: relative;
+}
+
+.kapi-nb-toggle[data-new]::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--kapi-bg);
+  border-radius: 50%;
+  background: var(--kapi-blue-solid);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kapi-nb-page[data-new] {
+    animation: none;
+  }
+}

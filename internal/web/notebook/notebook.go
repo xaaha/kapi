@@ -4,6 +4,7 @@ package notebook
 import (
 	"cmp"
 	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"slices"
@@ -16,6 +17,8 @@ var files embed.FS
 
 type Index interface {
 	Index() ([]app.Page, error)
+	Tab() (done func())
+	Changes() <-chan struct{}
 }
 
 type Service struct{ index Index }
@@ -26,6 +29,7 @@ func (*Service) Name() string { return "notebook" }
 
 func (s *Service) Routes(r app.Router) {
 	r.Get("/pages", s.pages)
+	r.Get("/events", s.events)
 }
 
 func (*Service) Files() fs.FS {
@@ -48,4 +52,28 @@ func (s *Service) pages(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	app.JSON(w, http.StatusOK, pages)
+}
+
+func (s *Service) events(w http.ResponseWriter, r *http.Request) {
+	defer s.index.Tab()()
+	rc := http.NewResponseController(w)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	if _, err := fmt.Fprint(w, "retry: 2000\n\n"); err != nil {
+		return
+	}
+	for {
+		changed := s.index.Changes()
+		if _, err := fmt.Fprint(w, "data: changed\n\n"); err != nil {
+			return
+		}
+		if err := rc.Flush(); err != nil {
+			return
+		}
+		select {
+		case <-changed:
+		case <-r.Context().Done():
+			return
+		}
+	}
 }

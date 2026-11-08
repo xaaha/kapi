@@ -52,7 +52,7 @@ func (s *Server) Index() ([]app.Page, error) {
 		if d.err != nil {
 			continue
 		}
-		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir)}
+		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir), Opened: s.openedAt(d.path)}
 		if at, ok := stampOf(d.path); ok {
 			p.Changed = at.mod
 			title, summary := s.preview(d.path, at)

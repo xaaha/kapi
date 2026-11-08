@@ -63,6 +63,18 @@ func TestOpenOnlyPrintsWhenKapiNoBrowserIsSet(t *testing.T) {
 	}
 }
 
+func TestOpenLeavesTheBrowserAloneWhenAKapiTabShowsThePage(t *testing.T) {
+	opened := stubBrowser(t, nil)
+	const url = "http://127.0.0.1:5000/tok/p/x/"
+	out, err := run(t, &fakeAPI{resp: daemon.Response{URL: url, Shown: true}}, "open", "plan.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != url+"\nThe page is in the sidebar of the open kapi tab.\n" || len(*opened) != 0 {
+		t.Errorf("output %q, opened %v; want the URL, a sidebar note and no browser", out, *opened)
+	}
+}
+
 func TestOpenReportsABrowserFailure(t *testing.T) {
 	failed := errors.New("no browser")
 	stubBrowser(t, failed)

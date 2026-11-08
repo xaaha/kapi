@@ -558,6 +558,21 @@ a.nb-sheet:hover {
   white-space: nowrap;
 }
 
+.nb-new {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--kapi-blue-solid);
+  color: var(--kapi-on-solid);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.nb-card[data-new] {
+  border-color: var(--kapi-blue-border);
+  box-shadow: 0 0 0 3px var(--kapi-blue-tint);
+}
+
 .nb-card-title {
   margin: 16px 0 6px;
   font: 400 19px/1.25 var(--kapi-font-body);

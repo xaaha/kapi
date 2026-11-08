@@ -1,5 +1,5 @@
 import { h, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, folderOf, inFolder, legend, liveliest, matches, redraw, stateLabel, watch } from "./pages.js";
+import { ago, base, byFolder, folderOf, inFolder, legend, liveliest, matches, newIDs, onVisit, redraw, stateLabel, watch } from "./pages.js";
 
 const SHOWN_PER_PROJECT = 3;
 
@@ -42,12 +42,13 @@ function projectList(groups, pick) {
   return list;
 }
 
-function card(p, picked) {
+function card(p, picked, fresh) {
   const folder = picked ?? folderOf(p);
-  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-dim": dim(p) },
+  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-dim": dim(p), "data-new": fresh },
     h("span", { class: "nb-card-top" },
       h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...p.title.trim()][0]?.toUpperCase() ?? "?" }),
       h("span", { class: "nb-card-folder", text: base(folder) }),
+      fresh ? h("span", { class: "nb-new", text: "New" }) : null,
       pageDot(p)),
     h("span", { class: "nb-card-title", text: p.title }),
     p.summary ? h("span", { class: "nb-card-summary", text: p.summary }) : null,
@@ -84,6 +85,7 @@ export function showHome(main) {
     h("footer", { class: "nb-foot" }, h("span", { text: "kapi" }), h("em", { text: "A notebook you share with your agents." }))));
 
   let pages = [];
+  let fresh = new Set();
   let picked = null;
   const pick = (folder) => {
     picked = picked === folder ? null : folder;
@@ -101,7 +103,7 @@ ${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base
     chips.hidden = groups.size < 2;
     const shown = pages.filter((p) => (!picked || inFolder(p, picked)) && matches(p, search.value));
     libraryNote.textContent = shown.length === pages.length ? plural(pages.length, "page") : `${shown.length} of ${pages.length}`;
-    grid.replaceChildren(...(shown.length ? shown.map((p) => card(p, picked)) : [h("p", { class: "nb-empty", text: pages.length ? "No page matches." : "No pages yet." })]));
+    grid.replaceChildren(...(shown.length ? shown.map((p) => card(p, picked, fresh.has(p.id))) : [h("p", { class: "nb-empty", text: pages.length ? "No page matches." : "No pages yet." })]));
   });
   const draw = () => redraw(main, () => {
     const groups = byFolder(pages);
@@ -114,6 +116,10 @@ ${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base
     drawLibrary();
   });
   search.addEventListener("input", drawLibrary);
+  onVisit(() => {
+    fresh = newIDs(pages, null);
+    drawLibrary();
+  });
   document.addEventListener("keydown", (e) => {
     if (document.activeElement !== search && (shortcuts.is("searchCommand", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea")))) {
       e.preventDefault();
@@ -127,6 +133,7 @@ ${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base
   });
   watch((next) => {
     pages = next;
+    fresh = newIDs(pages, null);
     main.removeAttribute("data-error");
     draw();
   }, () => main.setAttribute("data-error", ""));
