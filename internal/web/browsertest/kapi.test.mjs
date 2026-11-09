@@ -1409,7 +1409,7 @@ test("the toolbar is one row and stays fully in view for a block at the bottom o
   assert.deepEqual(await page.eval(OVERLAPS), []);
 });
 
-test("in a narrow window the toolbar floats at the block's top right edge, and docks when the block's top scrolls away", async () => {
+test("in a narrow window the toolbar floats at the block's top right edge, and pins to the top when the block's top scrolls away", async () => {
   const narrow = await browser.open(server.url, { width: 900, height: 700 });
   try {
     await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
@@ -1424,9 +1424,9 @@ test("in a narrow window the toolbar floats at the block's top right edge, and d
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
     await narrow.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
-    await narrow.waitFor(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`);
+    await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "pinned"`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
-    assert.equal(await narrow.eval(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").checkVisibility()`), true);
+    assert.equal(await narrow.eval(`(b => b.checkVisibility() && b.getBoundingClientRect().top >= 0)(document.querySelector(".kapi-bar"))`), true);
   } finally {
     await narrow.close();
   }
