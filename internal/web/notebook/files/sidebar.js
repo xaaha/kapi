@@ -1,22 +1,91 @@
 import { h, pageID, prefs, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, markVisited, matches, newIDs, onVisit, redraw, stateLabel, watch } from "./pages.js";
+import { ago, byFolder, folderCollapsed, folderTitle, markVisited, matches, movePage, newIDs, onLayout, onVisit, pageTitle, redraw, renameFolder, renamePage, setFolderCollapsed, stateLabel, watch } from "./pages.js";
 
 const OPEN_KEY = "kapi-notebook-open";
 const docked = matchMedia("(min-width: 1100px)");
+let dragging = null;
 
-function link(p, folder, fresh) {
-  return h("a", {
+function editName(container, current, save) {
+  if (container.hasAttribute("data-editing")) return;
+  container.setAttribute("data-editing", "");
+  const input = h("input", { class: "kapi-nb-rename-input", value: current, "aria-label": "New name" });
+  container.append(input);
+  input.focus();
+  input.select();
+  let cancelled = false;
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelled = true;
+      input.blur();
+    }
+  });
+  input.addEventListener("blur", () => {
+    container.removeAttribute("data-editing");
+    input.remove();
+    if (!cancelled) save(input.value.trim());
+  }, { once: true });
+}
+
+function pageRow(p, folder, fresh) {
+  const title = pageTitle(p);
+  const link = h("a", {
     class: "kapi-nb-page",
     "data-key": `${folder}\n${p.id}`,
     href: `${root}p/${p.id}/`,
-    title: `${p.path}\n${stateLabel(p)} \u00b7 ${ago(p.changed)}`,
+    title: `${p.path}\n${stateLabel(p)} · ${ago(p.changed)}`,
     "aria-current": p.id === pageID ? "page" : false,
     "data-ended": p.state === "ended",
-    "data-missing": p.missing || false,
     "data-new": fresh || false,
-  }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }),
+    draggable: "false",
+  }, h("span", { class: "nb-dot", "data-state": p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: title }),
   h("time", { class: "kapi-nb-when", datetime: p.changed, text: ago(p.changed) }),
   fresh ? h("span", { class: "kapi-nb-new", text: "New" }) : null);
+  const rename = h("button", { class: "kapi-nb-rename", type: "button", title: `Rename ${title}`, "aria-label": `Rename ${title}`, text: "✎" });
+  const row = h("div", { class: "kapi-nb-row", draggable: "true", "data-page": p.id, title: "Drag to reorder" }, link, rename);
+  rename.addEventListener("click", () => editName(row, title, (name) => renamePage(p.id, name)));
+  row.addEventListener("dragstart", (e) => {
+    dragging = { folder, id: p.id };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", p.id);
+    row.setAttribute("data-dragging", "");
+  });
+  row.addEventListener("dragend", () => {
+    dragging = null;
+    row.removeAttribute("data-dragging");
+    document.querySelectorAll(".kapi-nb-row[data-drop]").forEach((el) => el.removeAttribute("data-drop"));
+  });
+  row.addEventListener("dragover", (e) => {
+    if (!dragging || dragging.folder !== folder || dragging.id === p.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    row.dataset.drop = e.clientY >= row.getBoundingClientRect().top + row.offsetHeight / 2 ? "after" : "before";
+  });
+  row.addEventListener("dragleave", () => row.removeAttribute("data-drop"));
+  row.addEventListener("drop", (e) => {
+    if (!dragging || dragging.folder !== folder || dragging.id === p.id) return;
+    e.preventDefault();
+    const ids = [...row.parentElement.querySelectorAll(":scope > .kapi-nb-row")].map((el) => el.dataset.page);
+    movePage(folder, ids, dragging.id, p.id, row.dataset.drop === "after");
+    dragging = null;
+  });
+  return row;
+}
+
+function folderGroup(folder, items, fresh) {
+  const name = folderTitle(folder);
+  const collapsed = folderCollapsed(folder);
+  const toggle = h("button", { class: "kapi-nb-folder-toggle", type: "button", "aria-expanded": String(!collapsed), title: folder, "data-key": `folder\n${folder}` },
+    h("span", { class: "kapi-nb-chevron", "aria-hidden": "true" }), h("span", { class: "kapi-nb-folder-name", text: name }), h("span", { class: "kapi-nb-count", text: String(items.length) }));
+  const rename = h("button", { class: "kapi-nb-rename", type: "button", title: `Rename ${name}`, "aria-label": `Rename ${name}`, text: "✎" });
+  const head = h("h2", { class: "kapi-nb-folder" }, toggle, rename);
+  const body = h("div", { class: "kapi-nb-folder-pages", hidden: collapsed }, ...items.map((p) => pageRow(p, folder, fresh.has(p.id))));
+  toggle.addEventListener("click", () => setFolderCollapsed(folder, !collapsed));
+  rename.addEventListener("click", () => editName(head, name, (next) => renameFolder(folder, next)));
+  return h("section", { class: "kapi-nb-group", "data-folder": folder, "data-collapsed": collapsed || false }, head, body);
 }
 
 function render(list, pages, query, fresh) {
@@ -26,11 +95,7 @@ function render(list, pages, query, fresh) {
     list.append(h("p", { class: "kapi-nb-empty", text: pages.length ? "No page matches." : "No pages yet." }));
     return;
   }
-  for (const [folder, items] of found) {
-    list.append(h("section", { class: "kapi-nb-group" },
-      h("h2", { class: "kapi-nb-folder", title: folder, text: base(folder) }),
-      ...items.map((p) => link(p, folder, fresh.has(p.id)))));
-  }
+  for (const [folder, items] of found) list.append(folderGroup(folder, items, fresh));
 }
 
 export function showSidebar() {
@@ -44,6 +109,7 @@ export function showSidebar() {
   let fresh = new Set();
   const draw = () => redraw(list, () => render(list, pages, filter.value, fresh));
   filter.addEventListener("input", draw);
+  onLayout(draw);
   onVisit(() => {
     fresh = newIDs(pages, pageID);
     toggle.toggleAttribute("data-new", fresh.size > 0);

@@ -2,12 +2,10 @@
 package notebook
 
 import (
-	"cmp"
 	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
-	"slices"
 
 	"github.com/xaaha/kapi/internal/web/app"
 )
@@ -46,7 +44,6 @@ func (s *Service) pages(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	slices.SortStableFunc(pages, func(a, b app.Page) int { return cmp.Or(b.Changed.Compare(a.Changed), cmp.Compare(a.Path, b.Path)) })
 	if pages == nil {
 		pages = []app.Page{}
 	}

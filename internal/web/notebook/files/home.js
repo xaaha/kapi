@@ -1,5 +1,5 @@
 import { h, root, shortcuts } from "../../static/core.js";
-import { ago, base, byFolder, folderOf, inFolder, legend, liveliest, matches, newIDs, onVisit, redraw, stateLabel, watch } from "./pages.js";
+import { ago, byFolder, folderOf, folderTitle, inFolder, legend, liveliest, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, watch } from "./pages.js";
 
 const SHOWN_PER_PROJECT = 3;
 
@@ -20,9 +20,9 @@ function sheet(p) {
   return h("a", { class: "nb-sheet", "data-key": "sheet", href: href(p), "data-state": p.state },
     h("div", { class: "nb-sheet-meta" },
       pageDot(p),
-      h("span", { text: `${stateLabel(p)} \u00b7 ${base(folder)}` }),
+      h("span", { text: `${stateLabel(p)} \u00b7 ${folderTitle(folder)}` }),
       h("time", { datetime: p.changed, text: ago(p.changed) })),
-    h("h2", { text: p.title }),
+    h("h2", { text: pageTitle(p) }),
     p.summary ? h("p", { text: p.summary }) : null,
     h("span", { class: "nb-continue", text: "Continue ↗" }));
 }
@@ -32,11 +32,11 @@ function projectList(groups, pick) {
   for (const [folder, items] of groups) {
     const button = h("button", { type: "button", class: "nb-project", "data-key": `project\n${folder}`, title: `Show every page in ${folder}` },
       dot(liveliest(items), `Most active page: ${stateLabel({ state: liveliest(items) })}`),
-      h("span", { class: "nb-project-name", text: base(folder) }),
+      h("span", { class: "nb-project-name", text: folderTitle(folder) }),
       h("span", { class: "nb-project-count", text: plural(items.length, "page") }));
     button.addEventListener("click", () => pick(folder));
     const recent = h("ul", { class: "nb-project-pages" }, ...items.slice(0, SHOWN_PER_PROJECT).map((p) =>
-      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, pageDot(p), h("span", { text: p.title }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
+      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, pageDot(p), h("span", { text: pageTitle(p) }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
     list.append(h("li", { class: "nb-project-item" }, button, recent));
   }
   return list;
@@ -44,13 +44,14 @@ function projectList(groups, pick) {
 
 function card(p, picked, fresh) {
   const folder = picked ?? folderOf(p);
+  const title = pageTitle(p);
   return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-dim": dim(p), "data-new": fresh },
     h("span", { class: "nb-card-top" },
-      h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...p.title.trim()][0]?.toUpperCase() ?? "?" }),
-      h("span", { class: "nb-card-folder", text: base(folder) }),
+      h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...title.trim()][0]?.toUpperCase() ?? "?" }),
+      h("span", { class: "nb-card-folder", text: folderTitle(folder) }),
       fresh ? h("span", { class: "nb-new", text: "New" }) : null,
       pageDot(p)),
-    h("span", { class: "nb-card-title", text: p.title }),
+    h("span", { class: "nb-card-title", text: title }),
     p.summary ? h("span", { class: "nb-card-summary", text: p.summary }) : null,
     h("span", { class: "nb-card-foot", text: [stateLabel(p), ago(p.changed)].filter(Boolean).join(" · ") }));
 }
@@ -96,7 +97,7 @@ export function showHome(main) {
     const groups = byFolder(pages);
     chips.replaceChildren(...[null, ...groups.keys()].map((folder) => {
       const chip = h("button", { type: "button", class: "nb-chip", "data-key": `chip
-${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base(folder) : "All" });
+${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? folderTitle(folder) : "All" });
       chip.addEventListener("click", () => pick(folder));
       return chip;
     }));
@@ -116,6 +117,7 @@ ${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? base
     drawLibrary();
   });
   search.addEventListener("input", drawLibrary);
+  onLayout(draw);
   onVisit(() => {
     fresh = newIDs(pages, null);
     drawLibrary();
