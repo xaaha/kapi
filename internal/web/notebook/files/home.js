@@ -1,141 +1,108 @@
 import { h, root, shortcuts } from "../../static/core.js";
-import { ago, byFolder, folderOf, folderTitle, inFolder, legend, liveliest, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, watch } from "./pages.js";
+import { ago, folderOf, folderTitle, inFolder, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, watch } from "./pages.js";
 
-const SHOWN_PER_PROJECT = 3;
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const href = (p) => `${root}p/${p.id}/`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-const dot = (state, label) => h("span", { class: "nb-dot", "data-state": state, title: label, "aria-label": label, role: "img" });
-const pageDot = (p) => dot(p.missing ? "ended" : p.state, stateLabel(p));
-const dim = (p) => p.missing || p.state === "ended";
-
-function sheet(p) {
-  if (!p) {
-    return h("div", { class: "nb-sheet nb-sheet-empty" },
-      h("h2", { text: "Nothing on your desk yet." }),
-      h("p", { text: "Ask an agent to make a page, or run kapi open notes.html in any folder. It shows up here." }));
-  }
-  const folder = folderOf(p);
-  return h("a", { class: "nb-sheet", "data-key": "sheet", href: href(p), "data-state": p.state },
-    h("div", { class: "nb-sheet-meta" },
-      pageDot(p),
-      h("span", { text: `${stateLabel(p)} \u00b7 ${folderTitle(folder)}` }),
-      h("time", { datetime: p.changed, text: ago(p.changed) })),
-    h("h2", { text: pageTitle(p) }),
-    p.summary ? h("p", { text: p.summary }) : null,
-    h("span", { class: "nb-continue", text: "Continue ↗" }));
-}
-
-function projectList(groups, pick) {
-  const list = h("ul", { class: "nb-projects" });
-  for (const [folder, items] of groups) {
-    const button = h("button", { type: "button", class: "nb-project", "data-key": `project\n${folder}`, title: `Show every page in ${folder}` },
-      dot(liveliest(items), `Most active page: ${stateLabel({ state: liveliest(items) })}`),
-      h("span", { class: "nb-project-name", text: folderTitle(folder) }),
-      h("span", { class: "nb-project-count", text: plural(items.length, "page") }));
-    button.addEventListener("click", () => pick(folder));
-    const recent = h("ul", { class: "nb-project-pages" }, ...items.slice(0, SHOWN_PER_PROJECT).map((p) =>
-      h("li", {}, h("a", { href: href(p), title: p.path, "data-key": `recent\n${folder}\n${p.id}` }, pageDot(p), h("span", { text: pageTitle(p) }), h("time", { datetime: p.changed, text: ago(p.changed) })))));
-    list.append(h("li", { class: "nb-project-item" }, button, recent));
-  }
-  return list;
-}
-
-function card(p, picked, fresh) {
-  const folder = picked ?? folderOf(p);
+function card(p, fresh) {
   const title = pageTitle(p);
-  return h("a", { class: "nb-card", "data-key": `card\n${p.id}`, href: href(p), title: p.path, "data-dim": dim(p), "data-new": fresh },
-    h("span", { class: "nb-card-top" },
-      h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...title.trim()][0]?.toUpperCase() ?? "?" }),
-      h("span", { class: "nb-card-folder", text: folderTitle(folder) }),
-      fresh ? h("span", { class: "nb-new", text: "New" }) : null,
-      pageDot(p)),
-    h("span", { class: "nb-card-title", text: title }),
-    p.summary ? h("span", { class: "nb-card-summary", text: p.summary }) : null,
-    h("span", { class: "nb-card-foot", text: [stateLabel(p), ago(p.changed)].filter(Boolean).join(" · ") }));
+  return h("a", {
+    class: "nb-card",
+    "data-key": `card\n${p.id}`,
+    href: href(p),
+    title: p.path,
+    "data-ended": p.state === "ended",
+    "data-new": fresh || false,
+  },
+  h("span", { class: "nb-card-top" },
+    h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...title.trim()][0]?.toUpperCase() ?? "?" }),
+    h("span", { class: "nb-card-project", text: folderTitle(folderOf(p)) }),
+    h("span", { class: "nb-dot", "data-state": p.state, title: stateLabel(p), "aria-label": stateLabel(p), role: "img" })),
+  h("strong", { class: "nb-card-title", text: title }),
+  h("span", { class: "nb-card-summary", text: p.summary || "No summary yet." }),
+  h("span", { class: "nb-card-foot" },
+    h("span", { text: stateLabel(p) }),
+    h("time", { datetime: p.changed, text: ago(p.changed) }),
+    fresh ? h("span", { class: "nb-new", text: "New" }) : null));
 }
 
-function heading(title, note) {
-  return h("div", { class: "nb-heading" }, h("h2", { text: title }), note ? h("span", { text: note }) : null);
+function statusMatches(p, status) {
+  if (status === "active") return p.state === "live" || p.state === "waiting";
+  if (status === "inactive") return p.state === "idle";
+  if (status === "ended") return p.state === "ended";
+  return true;
 }
 
 export function showHome(main) {
-  document.title = "Notebook · kapi";
-  const search = h("input", { class: "nb-search", type: "search", placeholder: "Search pages", "aria-label": "Search pages", autocomplete: "off" });
-  const top = h("header", { class: "nb-top" },
-    h("a", { class: "nb-brand", href: root }, h("span", { class: "nb-logo", "aria-hidden": "true" }), h("span", { text: "Kapi" })),
-    h("label", { class: "nb-search-box" }, h("span", { class: "nb-search-icon", "aria-hidden": "true" }), search,
-      h("kbd", { text: shortcuts.key("searchCommand").hint })));
-  const eyebrow = h("p", { class: "nb-eyebrow" });
-  const hero = h("section", { class: "nb-hero" },
-    h("div", {}, eyebrow, h("h1", {}, "Pick up ", h("br"), h("em", { text: "where you left off." }))),
-    h("p", { class: "nb-hero-note", text: "Every page you and your agents wrote, kept in one notebook." }));
-  const desk = h("div", { class: "nb-desk-slot" });
-  const projects = h("div", { class: "nb-projects-slot" });
-  const chips = h("div", { class: "nb-chips", role: "group", "aria-label": "Project" });
+  document.title = "kapi";
+  const search = h("input", { class: "nb-search", type: "search", placeholder: "Search notes", "aria-label": "Search notes", autocomplete: "off" });
+  const project = h("select", { class: "nb-select", "aria-label": "Project" }, h("option", { value: "", text: "All projects" }));
+  const status = h("div", { class: "nb-status", role: "group", "aria-label": "Status" });
+  const count = h("span", { class: "nb-count" });
   const grid = h("div", { class: "nb-grid" });
-  const libraryNote = h("span");
-  const library = h("section", { class: "nb-library", "aria-label": "Every page" },
-    h("div", { class: "nb-heading" }, h("h2", { text: "Every page" }), libraryNote), h("div", { class: "nb-filters" }, chips, legend(h)), grid);
-  main.append(h("div", { class: "nb-home" }, top, hero,
-    h("section", { class: "nb-desk" },
-      h("div", {}, heading("On your desk", "The open page that changed last"), desk),
-      h("div", {}, heading("Projects", "Where your pages were opened"), projects)),
-    library,
-    h("footer", { class: "nb-foot" }, h("span", { text: "kapi" }), h("em", { text: "A notebook you share with your agents." }))));
+  const empty = h("p", { class: "nb-empty" });
+  const statuses = [["", "All"], ["active", "Active"], ["inactive", "Inactive"], ["ended", "Ended"]];
+  let pickedStatus = "";
+  const statusButtons = statuses.map(([value, label]) => {
+    const button = h("button", { type: "button", class: "nb-status-button", "aria-pressed": String(value === pickedStatus), text: label });
+    button.addEventListener("click", () => {
+      pickedStatus = value;
+      for (const item of statusButtons) item.setAttribute("aria-pressed", String(item === button));
+      draw();
+    });
+    return button;
+  });
+  status.append(...statusButtons);
+
+  const brand = h("a", { class: "nb-brand", href: root }, h("span", { class: "nb-logo", "aria-hidden": "true" }), h("span", { text: "Kapi" }));
+  const top = h("header", { class: "nb-top" }, brand,
+    h("label", { class: "nb-search-box" }, h("span", { class: "nb-search-icon", "aria-hidden": "true" }), search, h("kbd", { text: shortcuts.key("searchPage").hint })));
+  const toolbar = h("div", { class: "nb-toolbar" }, status, h("div", { class: "nb-toolbar-right" }, project, count));
+  const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your temporary workspace" }), h("h1", { text: "All notes" })), h("p", { class: "nb-intro", text: "Recent work from you and your agents, in one searchable place." }));
+  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, grid, empty);
+  main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)));
 
   let pages = [];
   let fresh = new Set();
-  let picked = null;
-  const pick = (folder) => {
-    picked = picked === folder ? null : folder;
-    drawLibrary();
-    if (picked) library.scrollIntoView({ behavior: "smooth", block: "start" });
+  const updateProjects = () => {
+    const folders = new Set(pages.flatMap((p) => p.folders?.length ? p.folders : [folderOf(p)]));
+    const selected = project.value;
+    project.replaceChildren(h("option", { value: "", text: "All projects" }), ...[...folders].map((folder) => h("option", { value: folder, text: folderTitle(folder) })));
+    if ([...folders].includes(selected)) project.value = selected;
   };
-  const drawLibrary = () => redraw(library, () => {
-    const groups = byFolder(pages);
-    chips.replaceChildren(...[null, ...groups.keys()].map((folder) => {
-      const chip = h("button", { type: "button", class: "nb-chip", "data-key": `chip
-${folder ?? ""}`, "aria-pressed": String(picked === folder), text: folder ? folderTitle(folder) : "All" });
-      chip.addEventListener("click", () => pick(folder));
-      return chip;
-    }));
-    chips.hidden = groups.size < 2;
-    const shown = pages.filter((p) => (!picked || inFolder(p, picked)) && matches(p, search.value));
-    libraryNote.textContent = shown.length === pages.length ? plural(pages.length, "page") : `${shown.length} of ${pages.length}`;
-    grid.replaceChildren(...(shown.length ? shown.map((p) => card(p, picked, fresh.has(p.id))) : [h("p", { class: "nb-empty", text: pages.length ? "No page matches." : "No pages yet." })]));
+  const draw = () => redraw(library, () => {
+    const shown = pages.filter((p) => matches(p, search.value) && (!project.value || inFolder(p, project.value)) && statusMatches(p, pickedStatus));
+    count.textContent = plural(shown.length, "note");
+    grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id))));
+    empty.hidden = shown.length > 0;
+    empty.textContent = pages.length ? "No note matches these filters." : "No notes yet. Ask an agent to create one, or run kapi open notes.html.";
   });
-  const draw = () => redraw(main, () => {
-    const groups = byFolder(pages);
-    if (picked && !groups.has(picked)) picked = null;
-    const day = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-    const live = pages.filter((p) => p.state === "live").length;
-    eyebrow.textContent = [day, plural(pages.length, "page"), plural(groups.size, "project"), live ? `${live} live` : ""].filter(Boolean).join(" · ");
-    desk.replaceChildren(h("article", { class: "nb-desk-card" }, h("div", { class: "nb-sheet-under", "aria-hidden": "true" }), sheet(pages.find((p) => !dim(p)) ?? pages[0])));
-    projects.replaceChildren(h("article", { class: "nb-projects-card" }, groups.size ? projectList(groups, pick) : h("p", { class: "nb-empty", text: "Projects appear once a page is opened." })));
-    drawLibrary();
+
+  search.addEventListener("input", draw);
+  project.addEventListener("change", draw);
+  onLayout(() => {
+    updateProjects();
+    draw();
   });
-  search.addEventListener("input", drawLibrary);
-  onLayout(draw);
   onVisit(() => {
     fresh = newIDs(pages, null);
-    drawLibrary();
+    draw();
   });
   document.addEventListener("keydown", (e) => {
-    if (document.activeElement !== search && (shortcuts.is("searchCommand", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea")))) {
+    if (document.activeElement !== search && (shortcuts.is("searchPage", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea, select")))) {
       e.preventDefault();
       search.focus();
       search.select();
     } else if (document.activeElement === search && shortcuts.is("dismiss", e)) {
       search.value = "";
       search.blur();
-      drawLibrary();
+      draw();
     }
   });
   watch((next) => {
     pages = next;
     fresh = newIDs(pages, null);
+    updateProjects();
     main.removeAttribute("data-error");
     draw();
   }, () => main.setAttribute("data-error", ""));
