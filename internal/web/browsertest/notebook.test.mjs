@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -140,6 +140,22 @@ test("on a phone the sidebar starts closed, opens over the page and nothing scro
   } finally {
     await s.close();
     await h.close();
+  }
+});
+
+test("deleted pages disappear from the sidebar instead of opening an error", async () => {
+  const path = join(projectA, "temporary.html");
+  write(path, "Temporary page", "Delete me.");
+  kapi(projectA, "open", "temporary.html");
+  const s = await withSidebar();
+  try {
+    await refresh(s);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-title")].some((t) => t.textContent === "Temporary page")`);
+    unlinkSync(path);
+    await refresh(s);
+    await s.waitFor(`![...document.querySelectorAll(".kapi-nb-title")].some((t) => t.textContent === "Temporary page")`);
+  } finally {
+    await s.close();
   }
 });
 

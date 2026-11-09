@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,17 +12,21 @@ import (
 	"github.com/xaaha/kapi/internal/web/app"
 )
 
-func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
+func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
 	dir := t.TempDir()
 	titled := filepath.Join(dir, "rollout.html")
 	plain := filepath.Join(dir, "notes.html")
 	gone := filepath.Join(dir, "gone.html")
+	notAFile := filepath.Join(dir, ".kapi")
 	for path, src := range map[string]string{titled: "<h1>Rollout plan</h1><p>Two steps.</p>", plain: "<p>no heading</p>", gone: "<h1>Gone</h1>"} {
 		if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	_, s := homeWith(t, "ki", []pageCount{{titled, 0}, {plain, 0}, {gone, 0}})
+	if err := os.Mkdir(notAFile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, s := homeWith(t, "ki", []pageCount{{titled, 0}, {plain, 0}, {gone, 0}, {notAFile, 0}})
 	if err := s.addOpener(titled, dir); err != nil {
 		t.Fatal(err)
 	}
@@ -39,8 +44,8 @@ func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
 			t.Errorf("%s: id %q, want %q", p.Path, p.ID, page.ID(p.Path))
 		}
 	}
-	if len(pages) != 3 {
-		t.Fatalf("pages = %+v", pages)
+	if len(pages) != 2 {
+		t.Fatalf("pages = %+v, want only the two files that still exist", pages)
 	}
 	if p := pages[byPath[titled]]; p.Title != "Rollout plan" || p.Summary != "Two steps." || len(p.Folders) != 1 || p.Folders[0] != resolved(dir) || p.Missing || p.Changed.IsZero() {
 		t.Errorf("titled page = %+v", p)
@@ -48,8 +53,67 @@ func TestIndexTitlesPagesByHeadingAndMarksMovedFiles(t *testing.T) {
 	if p := pages[byPath[plain]]; p.Title != "notes" || p.Missing {
 		t.Errorf("plain page = %+v", p)
 	}
-	if p := pages[byPath[gone]]; !p.Missing || p.Title != "gone" {
-		t.Errorf("moved page = %+v", p)
+	if _, ok := byPath[gone]; ok {
+		t.Errorf("deleted page is still in the index: %+v", pages)
+	}
+	if _, ok := byPath[notAFile]; ok {
+		t.Errorf("directory is still in the index: %+v", pages)
+	}
+}
+
+func TestIndexOrdersUsefulPagesFirstAndThenByMostRecentChange(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "live.html")
+	waiting := filepath.Join(dir, "waiting.html")
+	recent := filepath.Join(dir, "recent.html")
+	old := filepath.Join(dir, "old.html")
+	ended := filepath.Join(dir, "ended.html")
+	paths := []string{live, waiting, recent, old, ended}
+	changed := map[string]int{live: 1, waiting: 2, old: 3, recent: 4, ended: 5}
+	for _, path := range paths {
+		if err := os.WriteFile(path, []byte("<h1>"+filepath.Base(path)+"</h1>"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		at := time.Date(2030, 1, changed[path], 0, 0, 0, 0, time.UTC)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	home, err := os.MkdirTemp("", "ko")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	s := New(home)
+	for _, path := range paths {
+		l, err := s.page(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if path == waiting {
+			if _, err := l.Append(&eventlog.Event{Author: "human", Kind: "message", Text: "please review"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if path == ended {
+			if _, err := l.End("human"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	s.setAttached(live, "agent", true)
+
+	pages, err := s.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range pages {
+		got = append(got, p.Path)
+	}
+	want := []string{live, waiting, recent, old, ended}
+	if !slices.Equal(got, want) {
+		t.Errorf("page order = %v, want %v", got, want)
 	}
 }
 
@@ -93,6 +157,9 @@ func TestIndexStateFollowsTheSessionForAnyAgentReader(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(home) })
 	first := New(home)
 	for path, reader := range map[string]string{quiet: "", asked: "", readByCodex: "codex", readByAgent: "agent", watched: "", ended: ""} {
+		if err := os.WriteFile(path, []byte("<p>page</p>"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 		l, err := first.page(path)
 		if err != nil {
 			t.Fatal(err)

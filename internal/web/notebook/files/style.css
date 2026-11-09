@@ -138,6 +138,14 @@ html[data-kapi-notebook] .kapi-nb {
   white-space: nowrap;
 }
 
+.kapi-nb-when {
+  flex: none;
+  margin-left: auto;
+  color: var(--kapi-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .kapi-nb-empty {
   padding: 0 6px;
   color: var(--kapi-muted);
@@ -206,7 +214,6 @@ body > .kapi-nb-toggle {
 
 .kapi-nb-new {
   flex: none;
-  margin-left: auto;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--kapi-blue-solid);

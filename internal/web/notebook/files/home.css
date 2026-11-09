@@ -11,7 +11,7 @@ body:has(#kapi-home) {
 .nb-dot[data-state="live"],
 .nb-sheet[data-state="live"] { --nb-state: var(--kapi-green-solid); }
 .nb-dot[data-state="waiting"],
-.nb-sheet[data-state="waiting"] { --nb-state: var(--kapi-orange-solid); }
+.nb-sheet[data-state="waiting"] { --nb-state: var(--kapi-yellow-text); }
 .nb-dot[data-state="idle"],
 .nb-sheet[data-state="idle"] { --nb-state: var(--kapi-grey-solid); }
 .nb-dot[data-state="ended"],

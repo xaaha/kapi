@@ -15,6 +15,7 @@ function link(p, folder, fresh) {
     "data-missing": p.missing || false,
     "data-new": fresh || false,
   }, h("span", { class: "nb-dot", "data-state": p.missing ? "ended" : p.state, "aria-hidden": "true" }), h("span", { class: "kapi-nb-title", text: p.title }),
+  h("time", { class: "kapi-nb-when", datetime: p.changed, text: ago(p.changed) }),
   fresh ? h("span", { class: "kapi-nb-new", text: "New" }) : null);
 }
 
