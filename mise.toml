@@ -6,6 +6,41 @@ run = "go test ./... -race -timeout 120s"
 description = "Run golangci-lint"
 run = "golangci-lint run"
 
+[tasks."install:local"]
+description = "Build this checkout over the kapi on PATH and restart the daemon"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+home=${KAPI_HOME:-$HOME/.kapi}
+if [ -n "${KAPI_INSTALL_DIR:-}" ]; then
+  dest=$KAPI_INSTALL_DIR/kapi
+elif current=$(command -v kapi); then
+  dest=$current
+else
+  dest=$HOME/.local/bin/kapi
+fi
+mkdir -p "$(dirname "$dest")"
+tmp=$(mktemp "$dest.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+go build -o "$tmp" ./cmd/kapi
+if pids=$(lsof -t "$home/kapi.lock" 2>/dev/null); then
+  kill -TERM $pids
+  for _ in $(seq 100); do
+    lsof -t "$home/kapi.lock" >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+  if lsof -t "$home/kapi.lock" >/dev/null 2>&1; then
+    echo "daemon $pids did not stop within 10s" >&2
+    exit 1
+  fi
+fi
+# rename, not overwrite: macOS kills processes still running a binary rewritten in place
+mv "$tmp" "$dest"
+trap - EXIT
+"$dest" daemon --spawn
+echo "installed $("$dest" version) at $dest"
+'''
+
 [tasks.release]
 description = "Tag and push a release (e.g. mise run release v0.1.1)"
 run = '''
