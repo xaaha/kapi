@@ -68,6 +68,7 @@ func (s *Server) shell(w http.ResponseWriter, root, title, main string) {
 	b.WriteString("</head>\n<body>\n")
 	b.WriteString(main)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/shortcuts.js\" defer></script>\n", root)
+	fmt.Fprintf(&b, "<script src=\"%sstatic/search.js\" defer></script>\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/tables.js\" defer></script>\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/kapi.js\" defer></script>\n", root)
 	for _, svc := range s.services {

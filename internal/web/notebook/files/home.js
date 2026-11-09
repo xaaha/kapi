@@ -36,7 +36,7 @@ function statusMatches(p, status) {
 export function showHome(main) {
   document.title = "kapi";
   const search = h("input", { class: "nb-search", type: "search", placeholder: "Search notes", "aria-label": "Search notes", autocomplete: "off" });
-  const project = h("select", { class: "nb-select", "aria-label": "Project" }, h("option", { value: "", text: "All projects" }));
+  const project = h("select", { class: "nb-select", "aria-label": "Folder" }, h("option", { value: "", text: "All folders" }));
   const status = h("div", { class: "nb-status", role: "group", "aria-label": "Status" });
   const count = h("span", { class: "nb-count" });
   const grid = h("div", { class: "nb-grid" });
@@ -67,7 +67,7 @@ export function showHome(main) {
   const updateProjects = () => {
     const folders = new Set(pages.flatMap((p) => p.folders?.length ? p.folders : [folderOf(p)]));
     const selected = project.value;
-    project.replaceChildren(h("option", { value: "", text: "All projects" }), ...[...folders].map((folder) => h("option", { value: folder, text: folderTitle(folder) })));
+    project.replaceChildren(h("option", { value: "", text: "All folders" }), ...[...folders].map((folder) => h("option", { value: folder, text: folderTitle(folder) })));
     if ([...folders].includes(selected)) project.value = selected;
   };
   const draw = () => redraw(library, () => {
@@ -79,6 +79,13 @@ export function showHome(main) {
   });
 
   search.addEventListener("input", draw);
+  search.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+    const first = grid.querySelector(".nb-card");
+    if (!first) return;
+    e.preventDefault();
+    first.focus();
+  });
   project.addEventListener("change", draw);
   onLayout(() => {
     updateProjects();

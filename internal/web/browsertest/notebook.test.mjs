@@ -97,12 +97,25 @@ test("the centered switcher shows current context and each destination once", as
   }
 });
 
-test("searching the switcher narrows destinations and arrow keys enter the results", async () => {
+test("note search uses word matching and selects the first result for Enter", async () => {
   const p = await withSwitcher();
   try {
     await openSwitcher(p);
-    await p.eval(`(() => { const s = document.querySelector(".kapi-switcher-search"); s.value = "bug"; s.dispatchEvent(new Event("input", { bubbles: true })); s.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); })()`);
+    await p.eval(`(() => { const s = document.querySelector(".kapi-switcher-search"); s.value = "projects opened"; s.dispatchEvent(new Event("input", { bubbles: true })); })()`);
     assert.equal(await p.eval(`document.querySelectorAll(".kapi-switcher-row").length`), 1);
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row").textContent.includes("Shared notes")`), true);
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row").getAttribute("aria-selected")`), "true");
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-search").getAttribute("aria-activedescendant") === document.querySelector(".kapi-switcher-row").id`), true);
+  } finally {
+    await p.close();
+  }
+});
+
+test("Enter from home search focuses the first matching note", async () => {
+  const p = await home();
+  try {
+    await p.eval(`(() => { const s = document.querySelector(".nb-search"); s.value = "list bug"; s.dispatchEvent(new Event("input", { bubbles: true })); s.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+    assert.equal(await p.eval(`document.activeElement.classList.contains("nb-card")`), true);
     assert.equal(await p.eval(`document.activeElement.textContent.includes("Bug list")`), true);
   } finally {
     await p.close();
@@ -132,6 +145,15 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
   } finally {
     await s.close();
     await h.close();
+  }
+});
+
+test("the Kapi brand on a note links home", async () => {
+  const p = await withSwitcher();
+  try {
+    assert.equal(await p.eval(`document.querySelector(".kapi-site-home").getAttribute("href")`), new URL(base).pathname);
+  } finally {
+    await p.close();
   }
 });
 

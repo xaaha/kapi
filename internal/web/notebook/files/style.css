@@ -177,7 +177,8 @@
   text-decoration: none;
 }
 
-.kapi-switcher-row:is(:hover, :focus-visible) {
+.kapi-switcher-row:is(:hover, :focus-visible),
+.kapi-switcher-row[aria-selected="true"] {
   outline: 0;
   background: var(--kapi-blue-tint);
 }

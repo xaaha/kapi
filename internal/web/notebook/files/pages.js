@@ -104,8 +104,8 @@ export function ago(iso) {
 }
 
 export function matches(p, query) {
-  const q = query.trim().toLowerCase();
-  return !q || [pageTitle(p), p.title, p.summary ?? "", p.path, ...foldersOf(p).map(folderTitle)].some((s) => s.toLowerCase().includes(q));
+  const text = [pageTitle(p), p.title, p.summary ?? "", p.path, ...foldersOf(p).map(folderTitle)].join("\n");
+  return window.kapiTextSearch.test(text, query);
 }
 
 export function byFolder(pages) {

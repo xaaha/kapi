@@ -114,6 +114,10 @@ body:has(#kapi-home) {
   font: 14px var(--kapi-font);
 }
 
+.nb-home .nb-search:focus-visible {
+  outline: 0;
+}
+
 .nb-search-box kbd {
   padding: 2px 5px;
   border: 1px solid var(--kapi-border);

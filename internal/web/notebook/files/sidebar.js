@@ -9,6 +9,9 @@ const href = (p) => `${root}p/${p.id}/`;
 function noteRow(p, fresh) {
   return h("a", {
     class: "kapi-switcher-row",
+    id: `kapi-switcher-page-${p.id}`,
+    role: "option",
+    "aria-selected": "false",
     "data-key": `page\n${p.id}`,
     href: href(p),
     title: `${p.path}\n${stateLabel(p)} · ${ago(p.changed)}`,
@@ -57,9 +60,9 @@ export function showSidebar() {
     title: `Switch notes (${shortcuts.key("switchNote").hint})`,
   }, h("span", { class: "kapi-switcher-logo", "aria-hidden": "true" }), h("span", { text: "Kapi" }), h("span", { class: "kapi-switcher-chevron", "aria-hidden": "true" }));
   const scrim = h("div", { class: "kapi-switcher-scrim", hidden: "" });
-  const search = h("input", { class: "kapi-switcher-search", type: "search", placeholder: "Search notes…", "aria-label": "Search notes", autocomplete: "off" });
+  const search = h("input", { class: "kapi-switcher-search", type: "search", placeholder: "Search notes…", "aria-label": "Search notes", autocomplete: "off", role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" });
   const current = h("span", { class: "kapi-switcher-current" });
-  const list = h("div", { class: "kapi-switcher-list" });
+  const list = h("div", { class: "kapi-switcher-list", id: "kapi-switcher-list", role: "listbox" });
   const home = h("a", { class: "kapi-switcher-home", href: root }, h("span", { text: "Home · All notes" }), h("span", { "aria-hidden": "true", text: "↗" }));
   const dialog = h("div", { class: "kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Switch notes", hidden: "" },
     h("div", { class: "kapi-switcher-search-box" }, search, h("kbd", { text: shortcuts.key("switchNote").hint })),
@@ -70,7 +73,18 @@ export function showSidebar() {
   let pages = [];
   let fresh = new Set();
   let before = null;
-  const draw = () => redraw(list, () => render(list, pages, search.value, fresh));
+  let activeID = null;
+  const rows = () => [...list.querySelectorAll(".kapi-switcher-row")];
+  const setActive = (row) => {
+    for (const item of rows()) item.setAttribute("aria-selected", String(item === row));
+    activeID = row?.id ?? null;
+    if (row) search.setAttribute("aria-activedescendant", row.id);
+    else search.removeAttribute("aria-activedescendant");
+  };
+  const draw = () => {
+    redraw(list, () => render(list, pages, search.value, fresh));
+    setActive((activeID && document.getElementById(activeID)) || rows()[0] || null);
+  };
   const isOpen = () => !dialog.hidden;
   const setOpen = (open) => {
     if (open === isOpen()) return;
@@ -92,21 +106,30 @@ export function showSidebar() {
 
   search.addEventListener("input", draw);
   search.addEventListener("keydown", (e) => {
-    const rows = [...list.querySelectorAll(".kapi-switcher-row")];
-    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
+    const items = rows();
+    const active = items.findIndex((row) => row.id === activeID);
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
       e.preventDefault();
-      rows[e.key === "ArrowDown" ? 0 : rows.length - 1].focus();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive(items[(active + step + items.length) % items.length]);
+    } else if (e.key === "Enter" && active >= 0) {
+      e.preventDefault();
+      location.href = items[active].href;
     }
   });
   list.addEventListener("keydown", (e) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    const rows = [...list.querySelectorAll(".kapi-switcher-row")];
-    const at = rows.indexOf(document.activeElement);
+    const items = rows();
+    const at = items.indexOf(document.activeElement);
     if (at < 0) return;
     e.preventDefault();
     const next = at + (e.key === "ArrowDown" ? 1 : -1);
     if (next < 0) search.focus();
-    else rows[Math.min(next, rows.length - 1)].focus();
+    else items[Math.min(next, items.length - 1)].focus();
+  });
+  list.addEventListener("pointermove", (e) => {
+    const row = e.target.closest?.(".kapi-switcher-row");
+    if (row) setActive(row);
   });
   launcher.addEventListener("click", () => setOpen(!isOpen()));
   scrim.addEventListener("click", () => setOpen(false));
