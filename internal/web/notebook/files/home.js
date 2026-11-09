@@ -21,8 +21,7 @@ function card(p, fresh) {
   h("strong", { class: "nb-card-title", text: title }),
   h("span", { class: "nb-card-summary", text: p.summary || "No summary yet." }),
   h("span", { class: "nb-card-foot" },
-    h("span", { text: stateLabel(p) }),
-    h("time", { datetime: p.changed, text: ago(p.changed) }),
+    h("span", { class: "nb-card-activity", text: `${stateLabel(p)} · ${ago(p.changed)}` }),
     fresh ? h("span", { class: "nb-new", text: "New" }) : null));
 }
 

@@ -120,7 +120,7 @@ export function byFolder(pages) {
   return out;
 }
 
-const LABELS = { live: "Active", waiting: "Active", idle: "Inactive", ended: "Session ended" };
+const LABELS = { live: "active", waiting: "active", idle: "inactive", ended: "ended" };
 const RANK = ["live", "waiting", "idle", "ended"];
 
 export const stateLabel = (p) => (p.missing ? "File moved or deleted" : LABELS[p.state] ?? "");

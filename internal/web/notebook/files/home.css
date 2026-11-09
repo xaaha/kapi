@@ -310,11 +310,8 @@ body:has(#kapi-home) {
   font-size: 11px;
 }
 
-.nb-card-foot time {
-  margin-left: auto;
-}
-
 .nb-new {
+  margin-left: auto;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--kapi-blue-solid);
