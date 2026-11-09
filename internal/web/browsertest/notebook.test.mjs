@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -74,8 +74,8 @@ test("a page opened from two projects shows under both", async () => {
       await p.eval(`[...document.querySelectorAll(".nb-chip")].find((c) => c.textContent === ${JSON.stringify(project)}).click()`);
       return p.eval(`[...document.querySelectorAll(".nb-card-title")].map((t) => t.textContent).sort().join("|")`);
     };
-    assert.equal(await titlesIn("alpha"), "Rollout plan|Shared notes");
-    assert.equal(await titlesIn("beta"), "Bug list|Shared notes");
+    assert.equal(await titlesIn("Alpha"), "Rollout plan|Shared notes");
+    assert.equal(await titlesIn("Beta"), "Bug list|Shared notes");
     await p.eval(`[...document.querySelectorAll(".nb-chip")].find((c) => c.textContent === "All").click()`);
     assert.equal(await p.eval(`document.querySelectorAll(".nb-card").length`), 3, "All lists the shared page once");
   } finally {
@@ -83,8 +83,8 @@ test("a page opened from two projects shows under both", async () => {
   }
   const s = await withSidebar();
   try {
-    const groups = await s.eval(`JSON.stringify([...document.querySelectorAll(".kapi-nb-group")].map((g) => [g.querySelector("h2").textContent, [...g.querySelectorAll(".kapi-nb-title")].map((t) => t.textContent).sort()]))`);
-    assert.deepEqual(Object.fromEntries(JSON.parse(groups)), { alpha: ["Rollout plan", "Shared notes"], beta: ["Bug list", "Shared notes"] });
+    const groups = await s.eval(`JSON.stringify([...document.querySelectorAll(".kapi-nb-group")].map((g) => [g.querySelector(".kapi-nb-folder-name").textContent, [...g.querySelectorAll(".kapi-nb-title")].map((t) => t.textContent).sort()]))`);
+    assert.deepEqual(Object.fromEntries(JSON.parse(groups)), { Alpha: ["Rollout plan", "Shared notes"], Beta: ["Bug list", "Shared notes"] });
   } finally {
     await s.close();
   }
@@ -140,6 +140,58 @@ test("on a phone the sidebar starts closed, opens over the page and nothing scro
   } finally {
     await s.close();
     await h.close();
+  }
+});
+
+test("folders have friendly names and can be renamed, collapsed, and reordered", async () => {
+  const hidden = join(projectA, ".kapi");
+  const first = join(hidden, "first.html");
+  const second = join(hidden, "second.html");
+  const third = join(hidden, "third.html");
+  mkdirSync(hidden);
+  write(first, "First hidden page", "One.");
+  write(second, "Second hidden page", "Two.");
+  write(third, "Third other page", "Three.");
+  kapi(hidden, "open", "first.html");
+  kapi(hidden, "open", "second.html");
+  kapi(hidden, "open", "third.html");
+  const s = await withSidebar();
+  try {
+    await refresh(s);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-folder-name")].some((n) => n.textContent === "Alpha pages")`);
+    await s.eval(`[...document.querySelectorAll(".kapi-nb-folder-name")].find((n) => n.textContent === "Alpha pages").closest(".kapi-nb-folder").querySelector(".kapi-nb-rename").click()`);
+    await s.eval(`(() => { const i = document.querySelector('.kapi-nb-folder .kapi-nb-rename-input'); i.value = "Agent work"; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-folder-name")].some((n) => n.textContent === "Agent work")`);
+
+    await s.eval(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); window.kapiOrderBefore = [...g.querySelectorAll(".kapi-nb-title")].map((n) => n.textContent); const filter = document.querySelector(".kapi-nb-filter"); filter.value = "hidden"; filter.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+    await s.waitFor(`document.querySelectorAll(".kapi-nb-row").length === 2`);
+    await s.eval(`(() => { const rows = [...document.querySelectorAll(".kapi-nb-row")]; const source = rows[1]; const target = rows[0]; const moved = source.querySelector(".kapi-nb-title").textContent; const before = window.kapiOrderBefore.filter((title) => title !== moved); before.splice(before.indexOf(target.querySelector(".kapi-nb-title").textContent), 0, moved); window.kapiDragExpected = JSON.stringify(before); const dataTransfer = new DataTransfer(); source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer })); const y = target.getBoundingClientRect().top + 1; target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); const filter = document.querySelector(".kapi-nb-filter"); filter.value = ""; filter.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+    await s.waitFor(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); return JSON.stringify([...g.querySelectorAll(".kapi-nb-title")].map((n) => n.textContent)) === window.kapiDragExpected; })()`);
+
+    await s.eval(`(() => { const r = [...document.querySelectorAll(".kapi-nb-row")].find((r) => r.textContent.includes("First hidden page")); r.querySelector(".kapi-nb-rename").click(); const i = r.querySelector(".kapi-nb-rename-input"); i.value = "My first page"; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-title")].some((n) => n.textContent === "My first page")`);
+
+    await s.eval(`[...document.querySelectorAll(".kapi-nb-folder-name")].find((n) => n.textContent === "Agent work").closest("button").click()`);
+    assert.equal(await s.eval(`[...document.querySelectorAll(".kapi-nb-folder-name")].find((n) => n.textContent === "Agent work").closest(".kapi-nb-group").querySelector(".kapi-nb-folder-pages").hidden`), true);
+  } finally {
+    await s.close();
+    rmSync(hidden, { recursive: true, force: true });
+  }
+});
+
+test("deleted pages disappear from the sidebar instead of opening an error", async () => {
+  const path = join(projectA, "temporary.html");
+  write(path, "Temporary page", "Delete me.");
+  kapi(projectA, "open", "temporary.html");
+  const s = await withSidebar();
+  try {
+    await refresh(s);
+    await s.waitFor(`[...document.querySelectorAll(".kapi-nb-title")].some((t) => t.textContent === "Temporary page")`);
+    unlinkSync(path);
+    await refresh(s);
+    await s.waitFor(`![...document.querySelectorAll(".kapi-nb-title")].some((t) => t.textContent === "Temporary page")`);
+  } finally {
+    await s.close();
   }
 });
 

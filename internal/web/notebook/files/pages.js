@@ -9,6 +9,91 @@ export const foldersOf = (p) => (p.folders?.length ? p.folders : [dirname(p.path
 export const folderOf = (p) => foldersOf(p)[0];
 export const inFolder = (p, folder) => foldersOf(p).includes(folder);
 
+const META_KEY = "kapi-notebook-layout";
+const META_EVENT = "kapi-notebook-layout";
+
+function metadata() {
+  try {
+    const value = JSON.parse(prefs.get(META_KEY));
+    if (value && typeof value === "object") return value;
+  } catch {}
+  return {};
+}
+
+function updateMetadata(change) {
+  const value = metadata();
+  change(value);
+  prefs.set(META_KEY, JSON.stringify(value));
+  dispatchEvent(new Event(META_EVENT));
+}
+
+const friendly = (name) => name.replace(/[._-]+/g, " ").trim().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+
+export function folderTitle(folder) {
+  const custom = metadata().folders?.[folder];
+  if (custom) return custom;
+  const name = base(folder);
+  if (name.startsWith(".")) return `${friendly(base(dirname(folder))) || "Project"} pages`;
+  return friendly(name) || "Pages";
+}
+
+export const pageTitle = (p) => metadata().pages?.[p.id] || p.title;
+
+export function renameFolder(folder, name) {
+  updateMetadata((value) => {
+    value.folders ??= {};
+    if (name) value.folders[folder] = name;
+    else delete value.folders[folder];
+  });
+}
+
+export function renamePage(id, name) {
+  updateMetadata((value) => {
+    value.pages ??= {};
+    if (name) value.pages[id] = name;
+    else delete value.pages[id];
+  });
+}
+
+export const folderCollapsed = (folder) => metadata().collapsed?.[folder] === true;
+
+export function setFolderCollapsed(folder, collapsed) {
+  updateMetadata((value) => {
+    value.collapsed ??= {};
+    if (collapsed) value.collapsed[folder] = true;
+    else delete value.collapsed[folder];
+  });
+}
+
+function orderPages(folder, pages) {
+  const order = metadata().order?.[folder] ?? [];
+  if (!order.length) return pages;
+  const positions = new Map(order.map((id, i) => [id, i]));
+  return pages.map((p, i) => ({ p, i })).sort((a, b) => {
+    const ai = positions.get(a.p.id);
+    const bi = positions.get(b.p.id);
+    if (ai == null && bi == null) return a.i - b.i;
+    if (ai == null) return -1;
+    if (bi == null) return 1;
+    return ai - bi;
+  }).map(({ p }) => p);
+}
+
+export function movePage(folder, ids, moved, target, after) {
+  const order = ids.filter((id) => id !== moved);
+  const at = order.indexOf(target);
+  order.splice(at < 0 ? order.length : at + (after ? 1 : 0), 0, moved);
+  updateMetadata((value) => {
+    value.order ??= {};
+    value.order[folder] = order;
+  });
+}
+
+export function onLayout(run) {
+  addEventListener(META_EVENT, run);
+  addEventListener("storage", (e) => e.key === META_KEY && run());
+}
+
 export function ago(iso) {
   if (!iso) return "";
   const secs = (Date.parse(iso) - Date.now()) / 1000;
@@ -20,7 +105,7 @@ export function ago(iso) {
 
 export function matches(p, query) {
   const q = query.trim().toLowerCase();
-  return !q || [p.title, p.summary ?? "", p.path].some((s) => s.toLowerCase().includes(q));
+  return !q || [pageTitle(p), p.title, p.summary ?? "", p.path, ...foldersOf(p).map(folderTitle)].some((s) => s.toLowerCase().includes(q));
 }
 
 export function byFolder(pages) {
@@ -31,10 +116,11 @@ export function byFolder(pages) {
       out.get(folder).push(p);
     }
   }
+  for (const [folder, items] of out) out.set(folder, orderPages(folder, items));
   return out;
 }
 
-const LABELS = { live: "Agent watching", waiting: "Waiting on the agent", idle: "Idle", ended: "Session ended" };
+const LABELS = { live: "Active · agent listening", waiting: "Active · agent not listening", idle: "Inactive", ended: "Session ended" };
 const RANK = ["live", "waiting", "idle", "ended"];
 
 export const stateLabel = (p) => (p.missing ? "File moved or deleted" : LABELS[p.state] ?? "");

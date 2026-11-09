@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -19,7 +20,7 @@ type stamp struct {
 
 func stampOf(path string) (stamp, bool) {
 	fi, err := os.Stat(path)
-	if err != nil {
+	if err != nil || !fi.Mode().IsRegular() {
 		return stamp{}, false
 	}
 	return stamp{fi.Size(), fi.ModTime()}, true
@@ -52,20 +53,43 @@ func (s *Server) Index() ([]app.Page, error) {
 		if d.err != nil {
 			continue
 		}
-		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir), Opened: s.openedAt(d.path)}
-		if at, ok := stampOf(d.path); ok {
-			p.Changed = at.mod
-			title, summary := s.preview(d.path, at)
-			p.Title, p.Summary = cmp.Or(title, p.Title), summary
-		} else {
-			p.Missing = true
+		at, ok := stampOf(d.path)
+		if !ok {
+			continue
 		}
+		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir), Opened: s.openedAt(d.path), Changed: at.mod}
+		title, summary := s.preview(d.path, at)
+		p.Title, p.Summary = cmp.Or(title, p.Title), summary
 		if at, ok := stampOf(filepath.Join(d.dir, "events.ndjson")); ok && at.mod.After(p.Changed) {
 			p.Changed = at.mod
 		}
 		out = append(out, p)
 	}
+	slices.SortStableFunc(out, func(a, b app.Page) int {
+		if d := cmp.Compare(stateRank(a.State), stateRank(b.State)); d != 0 {
+			return d
+		}
+		if d := b.Changed.Compare(a.Changed); d != 0 {
+			return d
+		}
+		return cmp.Compare(a.Title, b.Title)
+	})
 	return out, nil
+}
+
+func stateRank(state string) int {
+	switch state {
+	case app.Live:
+		return 0
+	case app.Waiting:
+		return 1
+	case app.Idle:
+		return 2
+	case app.Ended:
+		return 3
+	default:
+		return 4
+	}
 }
 
 func (s *Server) preview(path string, at stamp) (title, summary string) {
