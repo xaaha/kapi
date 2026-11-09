@@ -30,7 +30,7 @@ function editName(container, current, save) {
   }, { once: true });
 }
 
-function pageRow(p, folder, fresh) {
+function pageRow(p, folder, fresh, ids) {
   const title = pageTitle(p);
   const link = h("a", {
     class: "kapi-nb-page",
@@ -68,34 +68,34 @@ function pageRow(p, folder, fresh) {
   row.addEventListener("drop", (e) => {
     if (!dragging || dragging.folder !== folder || dragging.id === p.id) return;
     e.preventDefault();
-    const ids = [...row.parentElement.querySelectorAll(":scope > .kapi-nb-row")].map((el) => el.dataset.page);
     movePage(folder, ids, dragging.id, p.id, row.dataset.drop === "after");
     dragging = null;
   });
   return row;
 }
 
-function folderGroup(folder, items, fresh) {
+function folderGroup(folder, items, fresh, ids) {
   const name = folderTitle(folder);
   const collapsed = folderCollapsed(folder);
   const toggle = h("button", { class: "kapi-nb-folder-toggle", type: "button", "aria-expanded": String(!collapsed), title: folder, "data-key": `folder\n${folder}` },
     h("span", { class: "kapi-nb-chevron", "aria-hidden": "true" }), h("span", { class: "kapi-nb-folder-name", text: name }), h("span", { class: "kapi-nb-count", text: String(items.length) }));
   const rename = h("button", { class: "kapi-nb-rename", type: "button", title: `Rename ${name}`, "aria-label": `Rename ${name}`, text: "✎" });
   const head = h("h2", { class: "kapi-nb-folder" }, toggle, rename);
-  const body = h("div", { class: "kapi-nb-folder-pages", hidden: collapsed }, ...items.map((p) => pageRow(p, folder, fresh.has(p.id))));
+  const body = h("div", { class: "kapi-nb-folder-pages", hidden: collapsed }, ...items.map((p) => pageRow(p, folder, fresh.has(p.id), ids)));
   toggle.addEventListener("click", () => setFolderCollapsed(folder, !collapsed));
   rename.addEventListener("click", () => editName(head, name, (next) => renameFolder(folder, next)));
   return h("section", { class: "kapi-nb-group", "data-folder": folder, "data-collapsed": collapsed || false }, head, body);
 }
 
 function render(list, pages, query, fresh) {
+  const groups = byFolder(pages);
   const found = byFolder(pages.filter((p) => matches(p, query)));
   list.replaceChildren();
   if (!found.size) {
     list.append(h("p", { class: "kapi-nb-empty", text: pages.length ? "No page matches." : "No pages yet." }));
     return;
   }
-  for (const [folder, items] of found) list.append(folderGroup(folder, items, fresh));
+  for (const [folder, items] of found) list.append(folderGroup(folder, items, fresh, groups.get(folder).map((p) => p.id)));
 }
 
 export function showSidebar() {

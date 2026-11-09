@@ -147,11 +147,14 @@ test("folders have friendly names and can be renamed, collapsed, and reordered",
   const hidden = join(projectA, ".kapi");
   const first = join(hidden, "first.html");
   const second = join(hidden, "second.html");
+  const third = join(hidden, "third.html");
   mkdirSync(hidden);
   write(first, "First hidden page", "One.");
   write(second, "Second hidden page", "Two.");
+  write(third, "Third other page", "Three.");
   kapi(hidden, "open", "first.html");
   kapi(hidden, "open", "second.html");
+  kapi(hidden, "open", "third.html");
   const s = await withSidebar();
   try {
     await refresh(s);
@@ -160,11 +163,13 @@ test("folders have friendly names and can be renamed, collapsed, and reordered",
     await s.eval(`(() => { const i = document.querySelector('.kapi-nb-folder .kapi-nb-rename-input'); i.value = "Agent work"; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
     await s.waitFor(`[...document.querySelectorAll(".kapi-nb-folder-name")].some((n) => n.textContent === "Agent work")`);
 
+    await s.eval(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); window.kapiOrderBefore = [...g.querySelectorAll(".kapi-nb-title")].map((n) => n.textContent); const filter = document.querySelector(".kapi-nb-filter"); filter.value = "hidden"; filter.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+    await s.waitFor(`document.querySelectorAll(".kapi-nb-row").length === 2`);
+    await s.eval(`(() => { const rows = [...document.querySelectorAll(".kapi-nb-row")]; const source = rows[1]; const target = rows[0]; const moved = source.querySelector(".kapi-nb-title").textContent; const before = window.kapiOrderBefore.filter((title) => title !== moved); before.splice(before.indexOf(target.querySelector(".kapi-nb-title").textContent), 0, moved); window.kapiDragExpected = JSON.stringify(before); const dataTransfer = new DataTransfer(); source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer })); const y = target.getBoundingClientRect().top + 1; target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); const filter = document.querySelector(".kapi-nb-filter"); filter.value = ""; filter.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+    await s.waitFor(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); return JSON.stringify([...g.querySelectorAll(".kapi-nb-title")].map((n) => n.textContent)) === window.kapiDragExpected; })()`);
+
     await s.eval(`(() => { const r = [...document.querySelectorAll(".kapi-nb-row")].find((r) => r.textContent.includes("First hidden page")); r.querySelector(".kapi-nb-rename").click(); const i = r.querySelector(".kapi-nb-rename-input"); i.value = "My first page"; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
     await s.waitFor(`[...document.querySelectorAll(".kapi-nb-title")].some((n) => n.textContent === "My first page")`);
-
-    await s.eval(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); const rows = [...g.querySelectorAll(".kapi-nb-row")]; const source = rows[1]; const target = rows[0]; window.kapiDragExpected = source.querySelector(".kapi-nb-title").textContent; const dataTransfer = new DataTransfer(); source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer })); const y = target.getBoundingClientRect().top + 1; target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientY: y, dataTransfer })); })()`);
-    await s.waitFor(`(() => { const g = [...document.querySelectorAll(".kapi-nb-group")].find((g) => g.querySelector(".kapi-nb-folder-name").textContent === "Agent work"); return g.querySelector(".kapi-nb-title").textContent === window.kapiDragExpected; })()`);
 
     await s.eval(`[...document.querySelectorAll(".kapi-nb-folder-name")].find((n) => n.textContent === "Agent work").closest("button").click()`);
     assert.equal(await s.eval(`[...document.querySelectorAll(".kapi-nb-folder-name")].find((n) => n.textContent === "Agent work").closest(".kapi-nb-group").querySelector(".kapi-nb-folder-pages").hidden`), true);
