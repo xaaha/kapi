@@ -220,6 +220,8 @@
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
   const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": `${keyWords("search")} ${keyWords("searchPage")}`, "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
+  const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Collapse conversation", title: "Collapse conversation", "data-tip": "Collapse conversation", onclick: () => setPanelCollapsed(true) }, icon("caret"));
+  const restorePanelButton = h("button", { type: "button", class: "kapi-panel-restore", "aria-label": "Restore conversation", title: "Restore conversation", "data-tip": "Restore conversation", onclick: () => setPanelCollapsed(false) }, icon("caret"));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
@@ -297,16 +299,62 @@
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu), tabs,
+    h("header", { class: "kapi-panel-head" }, collapsePanelButton, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu), tabs,
     restartBox, notice, chat, notesView, outlineView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, copyButton, tableFrame, search, backChip);
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, restorePanelButton, copyButton, tableFrame, search, backChip);
   const phone = matchMedia("(max-width: 760px)");
+  const PANEL_KEY = "kapi-panel-collapsed";
+  let panelCollapsed = (() => {
+    try {
+      return localStorage.getItem(PANEL_KEY) === "true";
+    } catch {
+      return false;
+    }
+  })();
+  const panelIsCollapsed = () => panelCollapsed && !phone.matches;
+  const pageAreaRight = () => document.documentElement.clientWidth - (panelIsCollapsed() ? 0 : panel.getBoundingClientRect().width);
+
+  function markPanelUnread(on) {
+    restorePanelButton.toggleAttribute("data-unread", on);
+    chatTab.toggleAttribute("data-unread", on);
+    restorePanelButton.setAttribute("aria-label", on ? "Restore conversation, new reply" : "Restore conversation");
+  }
+
+  function syncPanel(focus = false) {
+    const collapsed = panelIsCollapsed();
+    root.toggleAttribute("data-panel-collapsed", collapsed);
+    document.documentElement.toggleAttribute("data-kapi-panel-collapsed", collapsed);
+    panel.inert = collapsed;
+    panel.toggleAttribute("aria-hidden", collapsed);
+    if (!collapsed && !panel.hasAttribute("data-notes") && !panel.hasAttribute("data-outline")) markPanelUnread(false);
+    if (focus) (collapsed ? restorePanelButton : collapsePanelButton).focus({ preventScroll: true });
+    requestAnimationFrame(() => {
+      placeBar();
+      placeAsk();
+      placePop();
+      paintRail();
+    });
+  }
+
+  function setPanelCollapsed(on) {
+    if (phone.matches) return;
+    panelCollapsed = on;
+    try {
+      localStorage.setItem(PANEL_KEY, String(on));
+    } catch {}
+    syncPanel(true);
+  }
+
+  syncPanel();
   const diagramZoom = new WeakMap();
-  phone.addEventListener("change", () => renderBar());
+  phone.addEventListener("change", () => {
+    syncPanel();
+    renderBar();
+  });
   const BAR_GAP = 8;
   const POINT_PAD = 10;
   const POINT_GAP = 16;
@@ -526,7 +574,7 @@
     const text = !editing && !!textRange;
     if (phone.matches || bar.hidden || (!text && !target?.isConnected)) return dockBar(false);
     dockBar(true);
-    const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    const areaRight = pageAreaRight();
     const { width, height } = bar.getBoundingClientRect();
     const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight;
     const p = pointRect();
@@ -1405,7 +1453,7 @@
     const live = asking.range?.getClientRects().length ? asking.range : find(asking.anchor.target.split(",")[0]);
     const r = live?.isConnected === false ? asking.at : (live?.getBoundingClientRect() ?? asking.at);
     asking.at = r;
-    const areaRight = document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    const areaRight = pageAreaRight();
     const { width, height } = asking.box.getBoundingClientRect();
     const x = Math.min(Math.max(r.left, 8), areaRight - width - 8);
     const below = r.bottom + BAR_GAP;
@@ -1928,7 +1976,7 @@
     if (!pop) return;
     const a = pop.anchor?.isConnected ? pop.anchor.getBoundingClientRect() : null;
     const { width, height } = pop.box.getBoundingClientRect();
-    const areaRight = phone.matches ? innerWidth : document.documentElement.clientWidth - panel.getBoundingClientRect().width;
+    const areaRight = phone.matches ? innerWidth : pageAreaRight();
     if (!a) {
       pop.box.style.left = `${Math.max(8, (areaRight - width) / 2)}px`;
       pop.box.style.top = `${Math.max(8, (innerHeight - height) / 3)}px`;
@@ -2052,6 +2100,7 @@
     chatTab.setAttribute("aria-selected", String(!notesOn));
     notesTab.setAttribute("aria-selected", String(notesOn));
     panel.toggleAttribute("data-notes", notesOn);
+    if (!notesOn && !panelIsCollapsed() && !panel.hasAttribute("data-outline")) markPanelUnread(false);
   }
 
   function setSheet(open) {
@@ -2260,7 +2309,10 @@
         setEnded(false);
       } else {
         lastReply = ev.seq;
-        if (outlineOpen && !phone.matches && new Date(ev.time) >= loadedAt) markChatUnread(true);
+        if (new Date(ev.time) >= loadedAt) {
+          if (panelIsCollapsed()) markPanelUnread(true);
+          if (outlineOpen && !phone.matches) markChatUnread(true);
+        }
       }
       markRead();
     } else if (ev.kind === "revision") onRevision(ev);
@@ -2568,7 +2620,10 @@
 
   function syncOutline() {
     panel.toggleAttribute("data-outline", outlineOpen && !phone.matches);
-    if (!outlineOpen || phone.matches) markChatUnread(false);
+    if (!outlineOpen || phone.matches) {
+      markChatUnread(false);
+      if (!panelIsCollapsed() && !panel.hasAttribute("data-notes")) markPanelUnread(false);
+    }
     root.toggleAttribute("data-outline-sheet", outlineSheet && phone.matches);
     outlineButton.setAttribute("aria-pressed", String(outlineShown()));
     trackOutline();
@@ -2576,6 +2631,7 @@
 
   function showChat() {
     if (outlineOpen && !phone.matches) setOutline(false);
+    if (!panelIsCollapsed() && !panel.hasAttribute("data-notes")) markPanelUnread(false);
   }
 
   function markChatUnread(on) {

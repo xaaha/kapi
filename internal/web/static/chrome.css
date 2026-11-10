@@ -32,11 +32,16 @@
 
 :root {
   --kapi-panel-width: 340px;
+  --kapi-panel-gutter: var(--kapi-panel-width);
+}
+
+html[data-kapi-panel-collapsed] {
+  --kapi-panel-gutter: 0px;
 }
 
 @media screen and (min-width: 761px) {
   html {
-    padding-right: var(--kapi-panel-width);
+    padding-right: var(--kapi-panel-gutter);
   }
 }
 
@@ -289,6 +294,10 @@
   background: var(--kapi-panel);
 }
 
+#kapi-chrome[data-panel-collapsed] .kapi-panel {
+  display: none;
+}
+
 #kapi-chrome .kapi-panel-head {
   display: flex;
   align-items: center;
@@ -299,6 +308,61 @@
 
 #kapi-chrome .kapi-panel-head .kapi-search-button {
   margin-left: auto;
+}
+
+#kapi-chrome .kapi-panel-collapse,
+#kapi-chrome .kapi-panel-restore {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  padding: 4px;
+}
+
+#kapi-chrome .kapi-panel-collapse svg,
+#kapi-chrome .kapi-panel-restore svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+#kapi-chrome .kapi-panel-collapse svg {
+  transform: rotate(180deg);
+}
+
+#kapi-chrome .kapi-panel-restore {
+  position: fixed;
+  z-index: 2147483001;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: 10px;
+  background: var(--kapi-surface);
+  color: var(--kapi-muted);
+  box-shadow: var(--kapi-shadow);
+}
+
+#kapi-chrome:not([data-panel-collapsed]) .kapi-panel-restore {
+  display: none;
+}
+
+#kapi-chrome .kapi-panel-restore:hover {
+  color: var(--kapi-fg);
+}
+
+#kapi-chrome .kapi-panel-restore[data-unread]::after,
+#kapi-chrome .kapi-tabs button[data-unread]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--kapi-surface);
+  border-radius: 50%;
+  background: var(--kapi-blue-text);
 }
 
 #kapi-chrome .kapi-panel-head button {
@@ -1399,6 +1463,7 @@
 }
 
 #kapi-chrome .kapi-tabs button {
+  position: relative;
   padding: 4px 12px;
   border-radius: var(--kapi-radius-sm);
   color: var(--kapi-muted);
@@ -1544,7 +1609,7 @@
   z-index: 2147482997;
   top: 16px;
   bottom: 16px;
-  right: calc(var(--kapi-panel-width) + 6px);
+  right: calc(var(--kapi-panel-gutter) + 6px);
   width: 10px;
 }
 
@@ -1603,6 +1668,11 @@
     height: 46px;
     padding: 0 0.9rem;
     background: var(--kapi-bg);
+  }
+
+  #kapi-chrome .kapi-panel-collapse,
+  #kapi-chrome .kapi-panel-restore {
+    display: none;
   }
 
   #kapi-chrome .kapi-panel-head {
@@ -2251,9 +2321,9 @@
   position: fixed;
   z-index: 2147482999;
   bottom: 20px;
-  left: calc((100vw - var(--kapi-panel-width)) / 2);
+  left: calc((100vw - var(--kapi-panel-gutter)) / 2);
   transform: translateX(-50%);
-  max-width: min(440px, calc(100vw - var(--kapi-panel-width) - 32px));
+  max-width: min(440px, calc(100vw - var(--kapi-panel-gutter) - 32px));
   gap: 8px;
   padding: 7px 10px 7px 12px;
   border-radius: 999px;

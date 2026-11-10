@@ -1103,11 +1103,57 @@ test("the selection ring wraps the whole element, list markers included", async 
   assert.ok(box.left - ring.left <= 8 && ring.right - box.right <= 8, JSON.stringify({ ring, box }));
 });
 
-test("chat is always docked on the right on wide screens, with no hide control", async () => {
-  const [r, w, hgt] = await page.eval(`[(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-panel").getBoundingClientRect()), document.documentElement.clientWidth, document.documentElement.clientHeight]`);
-  assert.deepEqual(r, { left: w - 340, right: w, top: 0, bottom: hgt });
+test("desktop conversation panel collapses without losing its working state", async () => {
+  await page.eval(`localStorage.removeItem("kapi-panel-collapsed")`);
+  const before = await page.eval(`(() => {
+    const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
+    const page = document.getElementById("kapi-page").getBoundingClientRect();
+    const scroll = document.querySelector(".kapi-scroll");
+    document.querySelector(".kapi-composer textarea").value = "unfinished draft";
+    document.querySelector('.kapi-tabs [role="tab"]:last-child').click();
+    scroll.scrollTop = 0;
+    return { panel: { left: panel.left, right: panel.right }, pageCenter: (page.left + page.right) / 2, scrollTop: scroll.scrollTop };
+  })()`);
+  assert.equal(before.panel.right - before.panel.left, 340);
+  await click(".kapi-panel-collapse");
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+  const collapsed = await page.eval(`(() => {
+    const page = document.getElementById("kapi-page").getBoundingClientRect();
+    return {
+      padding: getComputedStyle(document.documentElement).paddingRight,
+      pageCenter: (page.left + page.right) / 2,
+      panel: document.querySelector(".kapi-panel").checkVisibility(),
+      restore: document.querySelector(".kapi-panel-restore").checkVisibility(),
+      draft: document.querySelector(".kapi-composer textarea").value,
+      notes: document.querySelector(".kapi-panel").hasAttribute("data-notes"),
+      scrollTop: document.querySelector(".kapi-scroll").scrollTop,
+    };
+  })()`);
+  assert.equal(collapsed.padding, "0px");
+  assert.equal(collapsed.panel, false);
+  assert.equal(collapsed.restore, true);
+  assert.equal(collapsed.draft, "unfinished draft");
+  assert.equal(collapsed.notes, true);
+  assert.equal(collapsed.scrollTop, before.scrollTop);
+  assert.ok(collapsed.pageCenter > before.pageCenter + 100, JSON.stringify({ before, collapsed }));
+
+  await click(".kapi-panel-restore");
   assert.equal(await page.eval(`getComputedStyle(document.documentElement).paddingRight`), "340px");
-  assert.equal(await page.eval(`document.querySelectorAll('#kapi-chrome [data-action="collapse"], #kapi-chrome [data-action="expand"]').length`), 0);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "unfinished draft");
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel").hasAttribute("data-notes")`), true);
+
+  await click('.kapi-tabs [role="tab"]:first-child');
+  await click(".kapi-panel-collapse");
+  const rev = await page.eval(`document.getElementById("kapi-page").dataset.rev`);
+  const same = await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').outerHTML`);
+  server.agentEdit("bbbbbbbb", same);
+  await page.waitFor(`document.getElementById("kapi-page").dataset.rev !== ${JSON.stringify(rev)}`);
+  assert.equal(await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") && document.querySelector(".kapi-composer textarea").value`), "unfinished draft");
+  server.push({ author: "agent", kind: "message", text: "reply while collapsed" });
+  await page.waitFor(`document.querySelector(".kapi-panel-restore").hasAttribute("data-unread")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel-restore").getAttribute("aria-label")`), "Restore conversation, new reply");
+  await click(".kapi-panel-restore");
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel-restore").hasAttribute("data-unread")`), false);
 });
 
 test("on phones chat is a composer bar that expands to 40% and collapses back", async () => {
@@ -1136,7 +1182,7 @@ test("on phones chat is a composer bar that expands to 40% and collapses back", 
 });
 
 test("Undo renders as a quiet bordered button", async () => {
-  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-outline-button, .kapi-search-button)")].map((b) => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-outline-button, .kapi-search-button, .kapi-panel-collapse)")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
