@@ -14,7 +14,7 @@ body {
   box-sizing: border-box;
   max-width: var(--kapi-measure);
   margin: 0 auto;
-  padding: 2.5rem 1.25rem 5rem;
+  padding: 4.5rem 1.25rem 7rem;
   overflow-wrap: break-word;
 }
 
@@ -23,20 +23,28 @@ body {
 
 :where(#kapi-page) :where(h1, h2, h3, h4, h5, h6) {
   color: var(--kapi-fg);
-  line-height: 1.25;
+  font-family: var(--kapi-font-body);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+:where(#kapi-page) h1 {
+  margin: 0 0 1.6rem;
+  font-size: clamp(3rem, 5vw, 4rem);
   font-weight: 650;
-  letter-spacing: -0.015em;
+  line-height: 1.02;
+  letter-spacing: -0.045em;
 }
-:where(#kapi-page) h1 { font-size: 2rem; margin: 0 0 1rem; font-weight: 700; letter-spacing: -0.02em; }
 :where(#kapi-page) h2 {
-  font-size: 1.4rem;
-  margin: 2.75rem 0 0.75rem;
+  margin: 3.5rem 0 1rem;
+  font-size: 2rem;
 }
-:where(#kapi-page) h3 { font-size: 1.13rem; margin: 1.9rem 0 0.5rem; }
-:where(#kapi-page) :where(h4, h5, h6) { font-size: 1rem; margin: 1.5rem 0 0.4rem; }
-:where(#kapi-page) p { margin: 0.75rem 0; }
-:where(#kapi-page) :where(ul, ol) { margin: 0.75rem 0; padding-left: 1.5rem; }
-:where(#kapi-page) li { margin: 0.3rem 0; }
+:where(#kapi-page) h3 { margin: 2.4rem 0 0.75rem; font-size: 1.45rem; }
+:where(#kapi-page) :where(h4, h5, h6) { margin: 1.8rem 0 0.55rem; font-size: 1.1rem; }
+:where(#kapi-page) p { margin: 1rem 0; }
+:where(#kapi-page) :where(ul, ol) { margin: 1rem 0; padding-left: 1.6rem; }
+:where(#kapi-page) li { margin: 0.4rem 0; }
 :where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
 :where(#kapi-page) li::marker { color: var(--kapi-faint); }
 :where(#kapi-page) a {
@@ -72,10 +80,11 @@ body {
   tab-size: 4;
 }
 :where(#kapi-page) blockquote {
-  margin: 1.25rem 0;
-  padding: 0.1rem 0 0.1rem 1rem;
-  border-left: 3px solid var(--kapi-blue-border);
-  color: var(--kapi-muted);
+  margin: 2rem 0;
+  padding: 1.25rem 1.5rem;
+  border-left: 3px solid var(--kapi-green-solid);
+  background: color-mix(in srgb, var(--kapi-card) 72%, transparent);
+  color: var(--kapi-fg);
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
@@ -237,7 +246,8 @@ body {
 .kapi-callout-body,
 .kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) {
   font-family: var(--kapi-font-body);
-  font-size: 1.125rem;
+  font-size: 1.2rem;
+  line-height: 1.72;
 }
 
 .kapi-details {
@@ -616,9 +626,13 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
     text-transform: uppercase;
   }
   body { font-size: 15.5px; }
-  :where(#kapi-page) { padding: 1.25rem 0.9rem 4rem; }
-  :where(#kapi-page) h1 { font-size: 1.6rem; }
-  :where(#kapi-page) h2 { font-size: 1.25rem; margin-top: 2rem; }
+  :where(#kapi-page) { padding: 2.5rem 1.05rem 4.5rem; }
+  :where(#kapi-page) h1 { font-size: 2.65rem; }
+  :where(#kapi-page) h2 { margin-top: 2.6rem; font-size: 1.7rem; }
+  :where(#kapi-page) h3 { font-size: 1.3rem; }
+  :where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),
+  .kapi-callout-body,
+  .kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) { font-size: 1.1rem; line-height: 1.65; }
   pre.kapi-hl, :where(#kapi-page) pre { font-size: 12px; }
   .kapi-ln { padding: 0 0.6rem 0 0.5rem; }
   .kapi-plan-item { gap: 0.6rem; padding: 0.6rem 0.7rem; }

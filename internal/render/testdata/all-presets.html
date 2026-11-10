@@ -7,22 +7,22 @@
 <style>
 :root {
   color-scheme: light dark;
-  --kapi-bg: light-dark(#ffffff, #000000);
-  --kapi-surface: light-dark(#ffffff, #0d0d0f);
-  --kapi-card: light-dark(#f5f5f7, #1c1c1e);
-  --kapi-panel: light-dark(#e8ebf0, #141518);
-  --kapi-raised: light-dark(#ffffff, #2c2c2e);
-  --kapi-lift: drop-shadow(0 1px 1.5px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.6))) drop-shadow(0 4px 10px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.4)));
-  --kapi-subtle: light-dark(#ebebef, #2a2a2d);
-  --kapi-fg: light-dark(#1d1d1f, #f2f2f4);
-  --kapi-muted: light-dark(#515154, #aeaeb4);
-  --kapi-faint: light-dark(#66666b, #98989f);
-  --kapi-border: light-dark(#e2e2e7, #303034);
-  --kapi-border-strong: light-dark(#d2d2d7, #45454a);
+  --kapi-bg: light-dark(#f4f0e7, #151513);
+  --kapi-surface: light-dark(#fffefa, #1c1b18);
+  --kapi-card: light-dark(#ebe5da, #24221e);
+  --kapi-panel: light-dark(#dce0e1, #292d32);
+  --kapi-raised: light-dark(#fffefa, #2c2a25);
+  --kapi-lift: drop-shadow(0 1px 1.5px light-dark(rgb(64 54 39 / 0.1), rgb(0 0 0 / 0.6))) drop-shadow(0 4px 10px light-dark(rgb(64 54 39 / 0.08), rgb(0 0 0 / 0.4)));
+  --kapi-subtle: light-dark(#e7e1d6, #2d2b27);
+  --kapi-fg: light-dark(#292823, #eeece6);
+  --kapi-muted: light-dark(#666158, #b3afa6);
+  --kapi-faint: light-dark(#625e56, #aaa69d);
+  --kapi-border: light-dark(#ddd6c9, #373530);
+  --kapi-border-strong: light-dark(#c9c1b3, #4b4841);
   --kapi-on-solid: #ffffff;
-  --kapi-shadow: 0 1px 2px light-dark(rgb(16 24 40 / 0.05), rgb(0 0 0 / 0.3)), 0 8px 24px light-dark(rgb(16 24 40 / 0.08), rgb(0 0 0 / 0.4));
-  --kapi-shadow-ink: light-dark(#000000, #000000);
-  --kapi-card-shadow: 0 1px 2px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 4%, transparent), rgb(0 0 0 / 0.5)), 0 4px 16px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 4%, transparent), rgb(0 0 0 / 0.3));
+  --kapi-shadow: 0 1px 2px light-dark(rgb(64 54 39 / 0.06), rgb(0 0 0 / 0.3)), 0 8px 24px light-dark(rgb(64 54 39 / 0.1), rgb(0 0 0 / 0.4));
+  --kapi-shadow-ink: light-dark(#403627, #000000);
+  --kapi-card-shadow: 0 1px 2px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 5%, transparent), rgb(0 0 0 / 0.5)), 0 4px 16px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 5%, transparent), rgb(0 0 0 / 0.3));
 
   --kapi-red-fill: light-dark(#fef1f2, #36222a);
   --kapi-red-border: light-dark(#fbc8d0, #7a3b4a);
@@ -72,7 +72,7 @@
   --kapi-font: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --kapi-font-body: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
   --kapi-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --kapi-measure: 48rem;
+  --kapi-measure: 46rem;
 }
 
 :root[data-theme="light"] { color-scheme: light; }
@@ -155,7 +155,7 @@ body {
   box-sizing: border-box;
   max-width: var(--kapi-measure);
   margin: 0 auto;
-  padding: 2.5rem 1.25rem 5rem;
+  padding: 4.5rem 1.25rem 7rem;
   overflow-wrap: break-word;
 }
 
@@ -164,20 +164,28 @@ body {
 
 :where(#kapi-page) :where(h1, h2, h3, h4, h5, h6) {
   color: var(--kapi-fg);
-  line-height: 1.25;
+  font-family: var(--kapi-font-body);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+:where(#kapi-page) h1 {
+  margin: 0 0 1.6rem;
+  font-size: clamp(3rem, 5vw, 4rem);
   font-weight: 650;
-  letter-spacing: -0.015em;
+  line-height: 1.02;
+  letter-spacing: -0.045em;
 }
-:where(#kapi-page) h1 { font-size: 2rem; margin: 0 0 1rem; font-weight: 700; letter-spacing: -0.02em; }
 :where(#kapi-page) h2 {
-  font-size: 1.4rem;
-  margin: 2.75rem 0 0.75rem;
+  margin: 3.5rem 0 1rem;
+  font-size: 2rem;
 }
-:where(#kapi-page) h3 { font-size: 1.13rem; margin: 1.9rem 0 0.5rem; }
-:where(#kapi-page) :where(h4, h5, h6) { font-size: 1rem; margin: 1.5rem 0 0.4rem; }
-:where(#kapi-page) p { margin: 0.75rem 0; }
-:where(#kapi-page) :where(ul, ol) { margin: 0.75rem 0; padding-left: 1.5rem; }
-:where(#kapi-page) li { margin: 0.3rem 0; }
+:where(#kapi-page) h3 { margin: 2.4rem 0 0.75rem; font-size: 1.45rem; }
+:where(#kapi-page) :where(h4, h5, h6) { margin: 1.8rem 0 0.55rem; font-size: 1.1rem; }
+:where(#kapi-page) p { margin: 1rem 0; }
+:where(#kapi-page) :where(ul, ol) { margin: 1rem 0; padding-left: 1.6rem; }
+:where(#kapi-page) li { margin: 0.4rem 0; }
 :where(#kapi-page) li > :where(ul, ol) { margin: 0.25rem 0; }
 :where(#kapi-page) li::marker { color: var(--kapi-faint); }
 :where(#kapi-page) a {
@@ -213,10 +221,11 @@ body {
   tab-size: 4;
 }
 :where(#kapi-page) blockquote {
-  margin: 1.25rem 0;
-  padding: 0.1rem 0 0.1rem 1rem;
-  border-left: 3px solid var(--kapi-blue-border);
-  color: var(--kapi-muted);
+  margin: 2rem 0;
+  padding: 1.25rem 1.5rem;
+  border-left: 3px solid var(--kapi-green-solid);
+  background: color-mix(in srgb, var(--kapi-card) 72%, transparent);
+  color: var(--kapi-fg);
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
@@ -378,7 +387,8 @@ body {
 .kapi-callout-body,
 .kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) {
   font-family: var(--kapi-font-body);
-  font-size: 1.125rem;
+  font-size: 1.2rem;
+  line-height: 1.72;
 }
 
 .kapi-details {
@@ -757,9 +767,13 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
     text-transform: uppercase;
   }
   body { font-size: 15.5px; }
-  :where(#kapi-page) { padding: 1.25rem 0.9rem 4rem; }
-  :where(#kapi-page) h1 { font-size: 1.6rem; }
-  :where(#kapi-page) h2 { font-size: 1.25rem; margin-top: 2rem; }
+  :where(#kapi-page) { padding: 2.5rem 1.05rem 4.5rem; }
+  :where(#kapi-page) h1 { font-size: 2.65rem; }
+  :where(#kapi-page) h2 { margin-top: 2.6rem; font-size: 1.7rem; }
+  :where(#kapi-page) h3 { font-size: 1.3rem; }
+  :where(#kapi-page) > :is(p, ul, ol, blockquote):not([data-kapi-preset]),
+  .kapi-callout-body,
+  .kapi-details-body > :is(p, ul, ol, blockquote):not([data-kapi-preset]) { font-size: 1.1rem; line-height: 1.65; }
   pre.kapi-hl, :where(#kapi-page) pre { font-size: 12px; }
   .kapi-ln { padding: 0 0.6rem 0 0.5rem; }
   .kapi-plan-item { gap: 0.6rem; padding: 0.6rem 0.7rem; }

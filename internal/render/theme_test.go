@@ -299,11 +299,11 @@ func TestContentBlocksAreBorderlessCards(t *testing.T) {
 		}
 	}
 	tokens := themeTokens(t)
-	if l, d := lightDark(t, "card", tokens["card"]); l != "#f5f5f7" || d != "#1c1c1e" {
-		t.Errorf("--kapi-card = %s, %s; want #f5f5f7 in light and #1c1c1e in dark", l, d)
+	if l, d := lightDark(t, "card", tokens["card"]); l != "#ebe5da" || d != "#24221e" {
+		t.Errorf("--kapi-card = %s, %s; want #ebe5da in light and #24221e in dark", l, d)
 	}
-	if l, d := lightDark(t, "bg", tokens["bg"]); l != "#ffffff" || d != "#000000" {
-		t.Errorf("--kapi-bg = %s, %s; want white in light and black in dark", l, d)
+	if l, d := lightDark(t, "bg", tokens["bg"]); l != "#f4f0e7" || d != "#151513" {
+		t.Errorf("--kapi-bg = %s, %s; want #f4f0e7 in light and #151513 in dark", l, d)
 	}
 }
 
