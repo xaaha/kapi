@@ -199,6 +199,10 @@ export function markVisited(id, pages) {
   prefs.set(VISITS_KEY, JSON.stringify(v));
 }
 
+export function visitTimes() {
+  return visits().ids;
+}
+
 export function newIDs(pages, current) {
   const v = visits();
   return new Set(pages.filter((p) => p.id !== current && p.opened && Date.parse(p.opened) > Math.max(v.ids[p.id] ?? 0, v.since)).map((p) => p.id));

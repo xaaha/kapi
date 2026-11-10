@@ -1,5 +1,5 @@
 import { h, pageID, root, shortcuts } from "../../static/core.js";
-import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, watch } from "./pages.js";
+import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, visitTimes, watch } from "./pages.js";
 
 const WORKING = new Set(["live", "waiting"]);
 const RECENT_LIMIT = 7;
@@ -44,12 +44,15 @@ function render(list, pages, query, fresh) {
     list.append(section("Results", available, fresh));
     return;
   }
-  const newPages = available.filter((p) => fresh.has(p.id));
+  const seen = visitTimes();
+  const recentlyViewed = available.filter((p) => seen[p.id] > 0).sort((a, b) => seen[b.id] - seen[a.id]).slice(0, 3);
+  const recentIDs = new Set(recentlyViewed.map((p) => p.id));
+  const newPages = available.filter((p) => !recentIDs.has(p.id) && fresh.has(p.id));
   const newPageIDs = new Set(newPages.map((p) => p.id));
-  const working = available.filter((p) => !newPageIDs.has(p.id) && WORKING.has(p.state));
+  const working = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && WORKING.has(p.state));
   const workingIDs = new Set(working.map((p) => p.id));
-  const others = available.filter((p) => !newPageIDs.has(p.id) && !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
-  list.append(...[section("New", newPages, fresh), section("Working now", working, fresh), section("Other notes", others, fresh)].filter(Boolean));
+  const others = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
+  list.append(...[section("Recently viewed", recentlyViewed, fresh), section("New", newPages, fresh), section("Working now", working, fresh), section("Other notes", others, fresh)].filter(Boolean));
 }
 
 export function showSidebar() {

@@ -103,6 +103,25 @@ test("the centered switcher shows current context and each destination once", as
   }
 });
 
+test("Cmd or Ctrl+period then Enter returns to the most recently viewed note", async () => {
+  const p = await withSwitcher();
+  try {
+    await openSwitcher(p);
+    const bug = await p.eval(`[...document.querySelectorAll(".kapi-switcher-row")].find((row) => row.textContent.includes("Bug list")).href`);
+    await p.eval(`location.href = ${JSON.stringify(bug)}`);
+    await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Bug list"`, 5000);
+    const mod = (await p.eval(`/Mac|iPhone|iPad/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true };
+    await p.key(".", mod);
+    await p.waitFor(`!document.querySelector(".kapi-switcher").hidden`);
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-section h2").textContent`), "Recently viewed");
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row strong").textContent`), "Rollout plan");
+    await p.key("Enter");
+    await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Rollout plan"`, 5000);
+  } finally {
+    await p.close();
+  }
+});
+
 test("note search uses word matching and selects the first result for Enter", async () => {
   const p = await withSwitcher();
   try {
@@ -145,8 +164,10 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
     await refresh(s);
     await s.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("More notes"))`);
     const groups = await s.eval(`[...document.querySelectorAll(".kapi-switcher-section")].map((section) => [section.querySelector("h2").textContent, [...section.querySelectorAll(".kapi-switcher-row")].map((row) => row.textContent)])`);
-    assert.equal(groups[0][0], "New");
-    assert.equal(groups[0][1].some((text) => text.includes("More notes")), true);
+    const newAt = groups.findIndex(([title]) => title === "New");
+    const workingAt = groups.findIndex(([title]) => title === "Working now");
+    assert.ok(newAt >= 0 && (workingAt < 0 || newAt < workingAt), JSON.stringify(groups));
+    assert.equal(groups[newAt][1].some((text) => text.includes("More notes")), true);
     assert.equal(groups.some(([title]) => title === "Recent"), false);
     assert.equal(groups.some(([title]) => title === "Other notes"), true);
     await refresh(h);
