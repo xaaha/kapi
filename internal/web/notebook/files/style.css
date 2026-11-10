@@ -6,12 +6,12 @@
   bottom: 18px;
   left: 18px;
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   padding: 0;
   border: 1px solid var(--kapi-border-strong);
-  border-radius: 11px;
+  border-radius: 9px;
   background: var(--kapi-surface);
   color: var(--kapi-fg);
   box-shadow: var(--kapi-shadow);
@@ -25,8 +25,8 @@
 }
 
 .kapi-switcher-launcher-icon {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   margin-right: 3px;
   border-top: 2px solid currentColor;
   border-right: 2px solid currentColor;
@@ -61,11 +61,11 @@
 .kapi-switcher-launcher[data-new]::after {
   content: "";
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 7px;
-  height: 7px;
-  border: 2px solid var(--kapi-surface);
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid var(--kapi-surface);
   border-radius: 50%;
   background: var(--kapi-blue-solid);
 }
