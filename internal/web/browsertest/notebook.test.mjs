@@ -65,6 +65,7 @@ test("the token root without a trailing slash opens the notes home", async () =>
     assert.equal(await p.eval("document.title"), "kapi");
     assert.equal(await p.eval("document.querySelector('h1').textContent"), "All notes");
     assert.ok(await p.eval("document.querySelectorAll('.nb-card').length") >= 3);
+    assert.equal(await p.eval("document.querySelector('.nb-glyph')"), null);
   } finally {
     await p.close();
   }
@@ -92,6 +93,11 @@ test("the centered switcher shows current context and each destination once", as
     assert.equal(await p.eval(`[...document.querySelectorAll(".kapi-switcher-row")].filter((r) => r.textContent.includes("Shared notes")).length`), 1);
     assert.equal(await p.eval(`getComputedStyle(document.querySelector(".kapi-switcher")).position`), "fixed");
     assert.equal(await p.eval(`document.querySelector(".kapi-switcher-home").textContent.includes("Home")`), true);
+    await p.eval(`document.querySelector(".kapi-switcher-home").focus()`);
+    await p.key("Tab");
+    assert.equal(await p.eval(`document.activeElement.className`), "kapi-switcher-search");
+    await p.key("Tab", { shift: true });
+    assert.equal(await p.eval(`document.activeElement.className`), "kapi-switcher-home");
   } finally {
     await p.close();
   }

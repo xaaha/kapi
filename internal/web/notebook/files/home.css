@@ -256,20 +256,7 @@ body:has(#kapi-home) {
   gap: 9px;
 }
 
-.nb-glyph {
-  display: grid;
-  width: 39px;
-  height: 39px;
-  flex: none;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--kapi-green-fill);
-  color: var(--kapi-green-text);
-  font: 500 21px/1 var(--kapi-font-body);
-}
-
 .nb-card-project {
-  margin-left: auto;
   overflow: hidden;
   color: var(--kapi-faint);
   font-size: 10px;
@@ -278,6 +265,10 @@ body:has(#kapi-home) {
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.nb-card-top .nb-dot {
+  margin-left: auto;
 }
 
 .nb-card-title {

@@ -15,7 +15,6 @@ function card(p, fresh) {
     "data-new": fresh || false,
   },
   h("span", { class: "nb-card-top" },
-    h("span", { class: "nb-glyph", "aria-hidden": "true", text: [...title.trim()][0]?.toUpperCase() ?? "?" }),
     h("span", { class: "nb-card-project", text: folderTitle(folderOf(p)) }),
     h("span", { class: "nb-dot", "data-state": p.state, title: stateLabel(p), "aria-label": stateLabel(p), role: "img" })),
   h("strong", { class: "nb-card-title", text: title }),

@@ -134,6 +134,15 @@ export function showSidebar() {
   launcher.addEventListener("click", () => setOpen(!isOpen()));
   scrim.addEventListener("click", () => setOpen(false));
   dialog.addEventListener("click", (e) => e.stopPropagation());
+  dialog.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const stops = [search, ...rows(), home];
+    const at = stops.indexOf(document.activeElement);
+    if ((!e.shiftKey && at === stops.length - 1) || (e.shiftKey && at <= 0)) {
+      e.preventDefault();
+      stops[e.shiftKey ? stops.length - 1 : 0].focus();
+    }
+  });
   onLayout(draw);
   onVisit(() => {
     fresh = newIDs(pages, pageID);
