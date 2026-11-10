@@ -446,7 +446,7 @@ func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
 	}
-	for _, p := range []string{"/static/tables.js", "/static/kapi.js", "/static/chrome.css", "/static/tables.css", "/static/logo.svg", "/static/favicon.svg"} {
+	for _, p := range []string{"/static/search.js", "/static/tables.js", "/static/kapi.js", "/static/chrome.css", "/static/tables.css", "/static/logo.svg", "/static/favicon.svg"} {
 		if resp := s.get(p); resp.code != http.StatusOK {
 			t.Errorf("GET %s: %d", p, resp.code)
 		}

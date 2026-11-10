@@ -219,7 +219,7 @@
   const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
-  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": `${keyWords("search")} ${keyWords("searchCommand")}`, "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
+  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": `${keyWords("search")} ${keyWords("searchPage")}`, "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
@@ -314,7 +314,8 @@
   document.body.append(root);
   showUndo(main.dataset.undo);
   const siteHead = h("header", { class: "kapi-site-head" },
-    h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" }));
+    h("a", { class: "kapi-site-home", href: base.replace(/p\/[^/]+$/, ""), "aria-label": "Kapi home" },
+      h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
   main.before(siteHead);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -2681,8 +2682,7 @@
 
   const KINDS = { P: "text", UL: "list", OL: "list", BLOCKQUOTE: "quote", PRE: "code", TABLE: "table", FIGURE: "image", DETAILS: "details", HR: "rule" };
   const kindOf = (el) => (levelOf(el) ? "heading" : el.getAttribute("data-kapi-preset")?.replace(/^kapi-/, "") || KINDS[el.tagName] || "block");
-  const lower = (text) => text.replace(/[\s\S]/gu, (c) => (c.toLowerCase().length === c.length ? c.toLowerCase() : c));
-  const WORD = /[\p{L}\p{N}]+/gu;
+  const TEXT_SEARCH = window.kapiTextSearch;
   const SEARCH_LIMIT = 60;
   let searchEntries = null;
   let searchHits = [];
@@ -2707,54 +2707,14 @@
         section = { el, level, title: text.trim() || "Untitled", path: stack.filter((s) => !titled || s.level > 1).map((s) => s.title) };
         stack.push(section);
       }
-      const low = lower(text);
-      searchEntries.push({ el, section, heading: !!level, kind: kindOf(el), text, words: [...low.matchAll(WORD)].map((m) => [m[0], m.index]), low, order: searchEntries.length });
+      searchEntries.push({ el, section, heading: !!level, kind: kindOf(el), ...TEXT_SEARCH.index(text), order: searchEntries.length });
     }
     return searchEntries;
   }
 
-  function nearOne(a, b) {
-    if (Math.abs(a.length - b.length) > 1) return false;
-    let i = 0;
-    let j = 0;
-    let edits = 0;
-    while (i < a.length && j < b.length) {
-      if (a[i] === b[j]) {
-        i++;
-        j++;
-        continue;
-      }
-      if (++edits > 1) return false;
-      if (a.length >= b.length) i++;
-      if (a.length <= b.length) j++;
-    }
-    return edits + (a.length - i) + (b.length - j) <= 1;
-  }
-
-  function matchEntry(entry, terms, phrase) {
-    let score = 0;
-    const spans = [];
-    for (const q of terms) {
-      let best = 0;
-      for (const [w, at] of entry.words) {
-        const tier = w === q ? 3 : w.startsWith(q) ? 2 : q.length >= 5 && nearOne(q, w) ? 1 : 0;
-        if (!tier) continue;
-        spans.push([at, tier === 1 ? w.length : q.length]);
-        best = Math.max(best, tier);
-      }
-      if (!best) return null;
-      score += best;
-    }
-    const whole = terms.length > 1 ? entry.low.indexOf(phrase) : -1;
-    if (whole >= 0) spans.push([whole, phrase.length]);
-    spans.sort((a, b) => a[0] - b[0]);
-    const merged = [];
-    for (const [at, len] of spans) {
-      const last = merged.at(-1);
-      if (last && at <= last[0] + last[1]) last[1] = Math.max(last[1], at + len - last[0]);
-      else merged.push([at, len]);
-    }
-    return { entry, spans: merged, score: (entry.heading ? 1000 : 0) + (whole >= 0 ? 100 : 0) + score };
+  function matchEntry(entry, query) {
+    const match = TEXT_SEARCH.match(entry, query);
+    return match && { entry, spans: match.spans, score: (entry.heading ? 1000 : 0) + match.score };
   }
 
   function marked(text, spans, from = 0, to = text.length) {
@@ -2785,10 +2745,8 @@
   function runSearch(keep = false) {
     const kept = keep && searchRows[searchActive] ? searchRowId(searchRows[searchActive]) : null;
     const scroll = searchResults.scrollTop;
-    const low = lower(searchInput.value);
-    const terms = [...low.matchAll(WORD)].map((m) => m[0]);
-    const phrase = low.replace(/\s+/g, " ").trim();
-    searchHits = terms.length ? searchIndex().map((e) => matchEntry(e, terms, phrase)).filter(Boolean) : [];
+    const query = TEXT_SEARCH.compile(searchInput.value);
+    searchHits = query.terms.length ? searchIndex().map((e) => matchEntry(e, query)).filter(Boolean) : [];
     const groups = new Map();
     for (const hit of searchHits) {
       const key = hit.entry.section;
@@ -2826,7 +2784,7 @@
     searchResults.replaceChildren(...blocks);
     const sections = sorted.length;
     const shown = sorted.reduce((n, g) => n + g.hits.length + (g.head ? 1 : 0), 0);
-    searchStatus.textContent = !terms.length ? "Search the headings and text on this page" : !shown ? "No matches on this page"
+    searchStatus.textContent = !query.terms.length ? "Search the headings and text on this page" : !shown ? "No matches on this page"
       : `${shown} match${shown === 1 ? "" : "es"} in ${sections} section${sections === 1 ? "" : "s"}${searchHits.length > shown ? `, first ${shown} shown` : ""}`;
     if (keep) searchResults.scrollTop = scroll;
     const at = kept ? searchRows.findIndex((r) => searchRowId(r) === kept) : -1;
@@ -3103,7 +3061,7 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
-    if (free && (SHORTCUTS.is("search", e) || (!e.shiftKey && SHORTCUTS.is("searchCommand", e)))) {
+    if (free && (SHORTCUTS.is("search", e) || (!e.shiftKey && SHORTCUTS.is("searchPage", e)))) {
       e.preventDefault();
       return openSearch();
     }

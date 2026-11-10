@@ -1144,6 +1144,8 @@ test("Undo renders as a quiet bordered button", async () => {
 });
 
 const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-theme [role=menuitemradio]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.themeChoice).join()]`);
+const LIGHT_BG = "rgb(244, 240, 231)";
+const DARK_BG = "rgb(21, 21, 19)";
 const prefer = async (scheme) => {
   await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
   await page.waitFor(`matchMedia("(prefers-color-scheme: ${scheme})").matches`);
@@ -1159,14 +1161,14 @@ const reload = async () => {
 
 test("the theme toggle switches light and dark and remembers the choice across a reload", async () => {
   await prefer("light");
-  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await expectTheme(["light", LIGHT_BG, "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
+  await expectTheme(["dark", DARK_BG, "dark"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
   await reload();
-  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
+  await expectTheme(["dark", DARK_BG, "dark"]);
   await click('.kapi-theme [data-theme-choice="system"]');
-  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await expectTheme(["light", LIGHT_BG, "system"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
 });
 
@@ -1186,8 +1188,8 @@ test("Theme in the menu lists Default and Paper, recolours the page in both mode
     await click(`.kapi-menu [data-palette=${id}]`);
   };
   await prefer("light");
-  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
-  await expectState(["default", [["Default", "true"], ["Paper", "false"]], "rgb(255, 255, 255)"]);
+  await expectTheme(["light", LIGHT_BG, "system"]);
+  await expectState(["default", [["Default", "true"], ["Paper", "false"]], LIGHT_BG]);
   await pick("paper");
   await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(250, 248, 243)"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), "paper");
@@ -1197,7 +1199,7 @@ test("Theme in the menu lists Default and Paper, recolours the page in both mode
   await reload();
   await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(22, 25, 31)"]);
   await pick("default");
-  await expectState(["default", [["Default", "true"], ["Paper", "false"]], "rgb(0, 0, 0)"]);
+  await expectState(["default", [["Default", "true"], ["Paper", "false"]], DARK_BG]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), null);
 });
 
@@ -1229,13 +1231,13 @@ test("the theme is set before the first paint, not after the chat panel loads", 
 
 test("System follows the OS colour scheme live, and an explicit choice ignores it", async () => {
   await prefer("light");
-  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await expectTheme(["light", LIGHT_BG, "system"]);
   await prefer("dark");
-  await expectTheme(["dark", "rgb(0, 0, 0)", "system"]);
+  await expectTheme(["dark", DARK_BG, "system"]);
   await click('.kapi-theme [data-theme-choice="light"]');
   await prefer("light");
   await prefer("dark");
-  await expectTheme(["light", "rgb(255, 255, 255)", "light"]);
+  await expectTheme(["light", LIGHT_BG, "light"]);
 });
 
 test("the theme toggle still works when storage is blocked", async () => {
@@ -1244,18 +1246,18 @@ test("the theme toggle still works when storage is blocked", async () => {
   });
   await prefer("light");
   await reload();
-  await expectTheme(["light", "rgb(255, 255, 255)", "system"]);
+  await expectTheme(["light", LIGHT_BG, "system"]);
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
+  await expectTheme(["dark", DARK_BG, "dark"]);
 });
 
 test("printing stays light when the dark theme is on", async () => {
   await click('.kapi-theme [data-theme-choice="dark"]');
-  await expectTheme(["dark", "rgb(0, 0, 0)", "dark"]);
+  await expectTheme(["dark", DARK_BG, "dark"]);
   await page.call("Emulation.setEmulatedMedia", { media: "print" });
   const bg = await page.eval(`getComputedStyle(document.body).backgroundColor`);
   await page.call("Emulation.setEmulatedMedia", { media: "" });
-  assert.equal(bg, "rgb(255, 255, 255)");
+  assert.equal(bg, LIGHT_BG);
 });
 
 test("printing hides all chrome and the space it reserves", async () => {
