@@ -58,7 +58,7 @@ export function showSidebar() {
     "aria-haspopup": "dialog",
     "aria-expanded": "false",
     title: `Switch notes (${shortcuts.key("switchNote").hint})`,
-  }, h("span", { class: "kapi-switcher-logo", "aria-hidden": "true" }), h("span", { text: "Kapi" }), h("span", { class: "kapi-switcher-chevron", "aria-hidden": "true" }));
+  }, h("span", { class: "kapi-switcher-launcher-icon", "aria-hidden": "true" }));
   const scrim = h("div", { class: "kapi-switcher-scrim", hidden: "" });
   const search = h("input", { class: "kapi-switcher-search", type: "search", placeholder: "Search notes…", "aria-label": "Search notes", autocomplete: "off", role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" });
   const current = h("span", { class: "kapi-switcher-current" });
