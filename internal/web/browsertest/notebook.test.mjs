@@ -144,6 +144,11 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
     kapi(projectB, "open", "more.html");
     await refresh(s);
     await s.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("More notes"))`);
+    const groups = await s.eval(`[...document.querySelectorAll(".kapi-switcher-section")].map((section) => [section.querySelector("h2").textContent, [...section.querySelectorAll(".kapi-switcher-row")].map((row) => row.textContent)])`);
+    assert.equal(groups[0][0], "New");
+    assert.equal(groups[0][1].some((text) => text.includes("More notes")), true);
+    assert.equal(groups.some(([title]) => title === "Recent"), false);
+    assert.equal(groups.some(([title]) => title === "Other notes"), true);
     await refresh(h);
     await h.waitFor(`[...document.querySelectorAll(".nb-card-title")].some((t) => t.textContent === "More notes")`);
     assert.equal(await s.eval("document.activeElement.dataset.key"), key);

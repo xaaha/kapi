@@ -44,10 +44,12 @@ function render(list, pages, query, fresh) {
     list.append(section("Results", available, fresh));
     return;
   }
-  const working = available.filter((p) => WORKING.has(p.state));
+  const newPages = available.filter((p) => fresh.has(p.id));
+  const newPageIDs = new Set(newPages.map((p) => p.id));
+  const working = available.filter((p) => !newPageIDs.has(p.id) && WORKING.has(p.state));
   const workingIDs = new Set(working.map((p) => p.id));
-  const recent = available.filter((p) => !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
-  list.append(...[section("Working now", working, fresh), section("Recent", recent, fresh)].filter(Boolean));
+  const others = available.filter((p) => !newPageIDs.has(p.id) && !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
+  list.append(...[section("New", newPages, fresh), section("Working now", working, fresh), section("Other notes", others, fresh)].filter(Boolean));
 }
 
 export function showSidebar() {
