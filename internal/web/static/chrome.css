@@ -336,10 +336,17 @@
 .kapi-site-home {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border-radius: var(--kapi-radius-sm);
-  color: inherit;
+  gap: 7px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 11px;
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+  font-weight: 700;
   text-decoration: none;
+}
+
+.kapi-site-home:hover {
+  opacity: 0.86;
 }
 
 .kapi-site-home:focus-visible {
@@ -353,12 +360,20 @@
 }
 
 .kapi-site-head .kapi-logo {
+  display: block;
   width: 24px;
   height: 24px;
   flex: none;
+}
+
+.kapi-site-head .kapi-logo::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
   background: currentColor;
-  -webkit-mask: url("logo.svg") center / contain no-repeat;
-  mask: url("logo.svg") center / contain no-repeat;
+  -webkit-mask: url("logo.svg") center / 22px 22px no-repeat;
+  mask: url("logo.svg") center / 22px 22px no-repeat;
 }
 
 #kapi-chrome .kapi-theme {
