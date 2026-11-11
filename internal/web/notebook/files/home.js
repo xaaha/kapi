@@ -39,13 +39,14 @@ export function showHome(main) {
   const count = h("span", { class: "nb-count" });
   const grid = h("div", { class: "nb-grid" });
   const empty = h("p", { class: "nb-empty" });
-  const statuses = [["", "All"], ["active", "Active"], ["inactive", "Inactive"], ["ended", "Ended"]];
-  let pickedStatus = "";
+  const statuses = [["active", "Active"], ["inactive", "Inactive"], ["ended", "Ended"], ["", "All"]];
+  let pickedStatus = "active";
   const statusButtons = statuses.map(([value, label]) => {
     const button = h("button", { type: "button", class: "nb-status-button", "aria-pressed": String(value === pickedStatus), text: label });
     button.addEventListener("click", () => {
       pickedStatus = value;
       for (const item of statusButtons) item.setAttribute("aria-pressed", String(item === button));
+      updateProjects();
       draw();
     });
     return button;
@@ -63,7 +64,7 @@ export function showHome(main) {
   let pages = [];
   let fresh = new Set();
   const updateProjects = () => {
-    const folders = new Set(pages.flatMap((p) => p.folders?.length ? p.folders : [folderOf(p)]));
+    const folders = new Set(pages.filter((p) => statusMatches(p, pickedStatus)).flatMap((p) => p.folders?.length ? p.folders : [folderOf(p)]));
     const selected = project.value;
     project.replaceChildren(h("option", { value: "", text: "All folders" }), ...[...folders].map((folder) => h("option", { value: folder, text: folderTitle(folder) })));
     if ([...folders].includes(selected)) project.value = selected;

@@ -50,7 +50,7 @@ after(async () => {
   rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
-const home = (url = base, opts = {}) => browser.open(url, { ready: "document.querySelectorAll('.nb-card').length > 0", ...opts });
+const home = (url = base, opts = {}) => browser.open(url, { ready: "!!document.querySelector('.nb-home') && document.querySelector('.nb-count').textContent !== ''", ...opts });
 const withSwitcher = (opts = {}) => browser.open(pageURL, { ready: "!!document.getElementById('kapi-chrome') && document.querySelectorAll('.kapi-switcher-row').length > 0", width: 1440, ...opts });
 const refresh = async (p) => {
   await p.call("Page.bringToFront");
@@ -64,6 +64,8 @@ test("the token root without a trailing slash opens the notes home", async () =>
     assert.equal(await p.eval("location.pathname.endsWith('/')"), true);
     assert.equal(await p.eval("document.title"), "kapi");
     assert.equal(await p.eval("document.querySelector('h1').textContent"), "All notes");
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Active", "true"], ["Inactive", "false"], ["Ended", "false"], ["All", "false"]]);
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     assert.ok(await p.eval("document.querySelectorAll('.nb-card').length") >= 3);
     assert.equal(await p.eval("document.querySelector('.nb-glyph')"), null);
   } finally {
@@ -74,6 +76,7 @@ test("the token root without a trailing slash opens the notes home", async () =>
 test("home filters the library by project and status", async () => {
   const p = await home();
   try {
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     const titlesIn = async (name) => p.eval(`(() => { const s = document.querySelector(".nb-select"); s.value = [...s.options].find((o) => o.textContent === ${JSON.stringify(name)}).value; s.dispatchEvent(new Event("change", { bubbles: true })); return [...document.querySelectorAll(".nb-card-title")].map((t) => t.textContent).sort().join("|"); })()`);
     assert.equal(await titlesIn("Alpha"), "Rollout plan|Shared notes");
     assert.equal(await titlesIn("Beta"), "Bug list|Shared notes");
@@ -103,6 +106,25 @@ test("the centered switcher shows current context and each destination once", as
   }
 });
 
+test("Cmd or Ctrl+period then Enter returns to the most recently viewed note", async () => {
+  const p = await withSwitcher();
+  try {
+    await openSwitcher(p);
+    const bug = await p.eval(`[...document.querySelectorAll(".kapi-switcher-row")].find((row) => row.textContent.includes("Bug list")).href`);
+    await p.eval(`location.href = ${JSON.stringify(bug)}`);
+    await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Bug list"`, 5000);
+    const mod = (await p.eval(`/Mac|iPhone|iPad/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true };
+    await p.key(".", mod);
+    await p.waitFor(`!document.querySelector(".kapi-switcher").hidden`);
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-section h2").textContent`), "Recently viewed");
+    assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row strong").textContent`), "Rollout plan");
+    await p.key("Enter");
+    await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Rollout plan"`, 5000);
+  } finally {
+    await p.close();
+  }
+});
+
 test("note search uses word matching and selects the first result for Enter", async () => {
   const p = await withSwitcher();
   try {
@@ -120,6 +142,7 @@ test("note search uses word matching and selects the first result for Enter", as
 test("Enter from home search focuses the first matching note", async () => {
   const p = await home();
   try {
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     await p.eval(`(() => { const s = document.querySelector(".nb-search"); s.value = "list bug"; s.dispatchEvent(new Event("input", { bubbles: true })); s.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
     assert.equal(await p.eval(`document.activeElement.classList.contains("nb-card")`), true);
     assert.equal(await p.eval(`document.activeElement.textContent.includes("Bug list")`), true);
@@ -133,6 +156,7 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
   const h = await home();
   try {
     await openSwitcher(s);
+    await h.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     const key = await s.eval(`(() => { const a = [...document.querySelectorAll(".kapi-switcher-row")].find((l) => l.textContent.includes("Bug list")); a.focus(); return a.dataset.key; })()`);
     const card = await h.eval(`(() => { const c = [...document.querySelectorAll(".nb-card")].find((l) => l.textContent.includes("Bug list")); c.focus(); return c.dataset.key; })()`);
     await refresh(s);
@@ -144,6 +168,13 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
     kapi(projectB, "open", "more.html");
     await refresh(s);
     await s.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("More notes"))`);
+    const groups = await s.eval(`[...document.querySelectorAll(".kapi-switcher-section")].map((section) => [section.querySelector("h2").textContent, [...section.querySelectorAll(".kapi-switcher-row")].map((row) => row.textContent)])`);
+    const newAt = groups.findIndex(([title]) => title === "New");
+    const workingAt = groups.findIndex(([title]) => title === "Working now");
+    assert.ok(newAt >= 0 && (workingAt < 0 || newAt < workingAt), JSON.stringify(groups));
+    assert.equal(groups[newAt][1].some((text) => text.includes("More notes")), true);
+    assert.equal(groups.some(([title]) => title === "Recent"), false);
+    assert.equal(groups.some(([title]) => title === "Other notes"), true);
     await refresh(h);
     await h.waitFor(`[...document.querySelectorAll(".nb-card-title")].some((t) => t.textContent === "More notes")`);
     assert.equal(await s.eval("document.activeElement.dataset.key"), key);
@@ -197,6 +228,7 @@ test("deleted notes disappear from the switcher and home", async () => {
   const p = await withSwitcher();
   const h = await home();
   try {
+    await h.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     await refresh(p);
     await p.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("Temporary note"))`);
     unlinkSync(path);
