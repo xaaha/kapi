@@ -60,7 +60,7 @@ func renderHTMLComponent(b *bytes.Buffer, n *html.Node) bool {
 		}
 		writeStart(b, "li", componentAttrs(n, "kapi-task", "task"))
 		attrs := proseAttrs(box, allowedTags["input"])
-		attrs = setHTMLAttr(attrs, "aria-label", nativeTaskText(n, box))
+		attrs = setHTMLAttr(attrs, "aria-label", nativeTaskText(box))
 		writeStart(b, "input", attrs)
 		writeStart(b, "span", bodyAttrs(n, "kapi-task-body"))
 		for c := box.NextSibling; c != nil; c = c.NextSibling {
@@ -195,7 +195,7 @@ func nativeTaskBox(n *html.Node) *html.Node {
 	return nil
 }
 
-func nativeTaskText(n, box *html.Node) string {
+func nativeTaskText(box *html.Node) string {
 	var sb strings.Builder
 	for c := box.NextSibling; c != nil; c = c.NextSibling {
 		if c.Type == html.TextNode {

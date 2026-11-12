@@ -4,8 +4,6 @@ import "strings"
 
 var tones = []string{"red", "orange", "yellow", "green", "blue", "purple", "grey"}
 
-const toneList = "red, orange, yellow, green, blue, purple or grey"
-
 var toneAliases = map[string]string{
 	"gray": "grey", "slate": "grey", "neutral": "grey", "black": "grey", "white": "grey", "brown": "grey",
 	"amber": "orange", "gold": "yellow", "lime": "green", "teal": "blue", "cyan": "blue", "navy": "blue",
