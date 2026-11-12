@@ -5,13 +5,16 @@ import (
 	"testing"
 )
 
-func TestKapiSkillPromptsProactiveVisuals(t *testing.T) {
+func TestKapiSkillIsConciseAndVisual(t *testing.T) {
 	skill := string(Kapi)
+	if words := len(strings.Fields(skill)); words > 350 {
+		t.Fatalf("embedded skill has %d words; want at most 350", words)
+	}
 	for _, want := range []string{
-		"Do not wait for the user to ask for a visual",
-		"Use `kapi-diagram` for flows, sequences, architecture, dependencies, state changes, and relationships",
-		"Use `kapi-render` with ordinary HTML and CSS",
-		"never as a substitute for a diagram or visual interface",
+		"Add visuals without being asked",
+		"Use `kapi-diagram`",
+		"Use `kapi-render`",
+		"never instead of a diagram or interface",
 	} {
 		if !strings.Contains(skill, want) {
 			t.Errorf("embedded skill is missing %q", want)
