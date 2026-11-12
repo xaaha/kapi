@@ -99,7 +99,7 @@ func proseOnly(t *testing.T, out string, isPreset func(*html.Node) bool) string 
 
 func renderedPreset(n *html.Node) bool { _, ok := attr(n, "data-kapi-preset"); return ok }
 
-func sourcePreset(n *html.Node) bool { return strings.HasPrefix(n.Data, "kapi-") }
+func sourcePreset(n *html.Node) bool { return n.Data == "table" || strings.HasPrefix(n.Data, "kapi-") }
 
 func checkCanonical(t *testing.T, name, src string) {
 	t.Helper()
@@ -157,7 +157,7 @@ func TestCanonical(t *testing.T) {
 
 func TestCanonicalProseIsRender(t *testing.T) {
 	for _, src := range messySources {
-		if strings.Contains(src, "kapi-") {
+		if strings.Contains(src, "kapi-") || strings.Contains(src, "<table") {
 			continue
 		}
 		if c, r := canonical(t, src), unmarked(render(t, src)); c != r {

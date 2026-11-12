@@ -935,7 +935,7 @@
     renderBar();
   }
 
-  const tables = window.kapiCreateTables({ main, siteHead, idOf });
+  const tables = window.kapiCreateTables({ main, siteHead, idOf, rightEdge: pageAreaRight });
   const media = window.kapiCreateMedia({ main });
 
   function expandTable(on) {

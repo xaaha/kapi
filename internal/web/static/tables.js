@@ -1,4 +1,4 @@
-window.kapiCreateTables = ({ main, siteHead, idOf }) => {
+window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
   const selector = '[data-kapi-preset="table"], table[data-kapi-id]';
   const SHORT_TEXT = 24;
   const BREAKOUT_GUTTER = 24;
@@ -16,7 +16,7 @@ window.kapiCreateTables = ({ main, siteHead, idOf }) => {
   const closest = (el, query) => el && Element.prototype.closest.call(el, query);
   const matches = (el) => !!el?.matches(selector);
   const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
-  const canWiden = (box) => box.matches(".kapi-table") && !cardMode.matches;
+  const canWiden = (box) => box.matches(".kapi-table, table[data-kapi-id]") && !cardMode.matches;
   const rowsOf = (table) => [...table.querySelectorAll("tr")].filter((tr) => closest(tr, "table") === table);
   const headRow = (table) => table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
   const isHeadRow = (tr) => {
@@ -24,8 +24,26 @@ window.kapiCreateTables = ({ main, siteHead, idOf }) => {
     return tr.parentElement === table.tHead || tr === headRow(table);
   };
 
+  function normalizeTables(scope) {
+    const nested = scope.querySelectorAll ? [...scope.querySelectorAll("table[data-kapi-id]")] : [];
+    const tables = [scope.matches?.("table[data-kapi-id]") ? scope : null, ...nested].filter(Boolean);
+    for (const table of tables) {
+      if (table.parentElement?.matches(".kapi-table")) continue;
+      const wrapper = document.createElement("div");
+      wrapper.className = "kapi-table";
+      wrapper.dataset.kapiPreset = "table";
+      for (const name of ["data-kapi-id", "data-kapi-state", "data-kapi-archived-with"]) {
+        if (!table.hasAttribute(name)) continue;
+        wrapper.setAttribute(name, table.getAttribute(name));
+        table.removeAttribute(name);
+      }
+      table.replaceWith(wrapper);
+      wrapper.append(table);
+    }
+  }
+
   function labelCells(scope) {
-    const tables = scope.matches?.("table[data-kapi-id]") ? [scope] : [...scope.querySelectorAll('[data-kapi-preset="table"] > table, table[data-kapi-id]')];
+    const tables = scope.matches?.("table") ? [scope] : [...scope.querySelectorAll('[data-kapi-preset="table"] > table')];
     for (const table of tables) {
       const rows = rowsOf(table);
       const head = headRow(table);
@@ -73,7 +91,7 @@ window.kapiCreateTables = ({ main, siteHead, idOf }) => {
     return width;
   }
 
-  const breakoutBounds = () => [BREAKOUT_GUTTER, document.body.clientWidth - BREAKOUT_GUTTER];
+  const breakoutBounds = () => [BREAKOUT_GUTTER, rightEdge() - BREAKOUT_GUTTER];
 
   function hideLogo() {
     const logo = siteHead.getBoundingClientRect();
@@ -243,7 +261,8 @@ window.kapiCreateTables = ({ main, siteHead, idOf }) => {
   };
 
   function prepare(scope = main) {
-    labelCells(scope);
+    normalizeTables(scope);
+    labelCells(main);
     tableSizes.disconnect();
     for (const table of main.querySelectorAll(".kapi-table > table")) tableSizes.observe(table);
     layout();

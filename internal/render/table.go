@@ -3,6 +3,7 @@ package render
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -22,7 +23,25 @@ func renderTable(b *bytes.Buffer, n *html.Node) error {
 		}
 	}
 	writeStart(b, "div", outerAttrs(n, "kapi-table"))
-	renderNode(b, kids[0])
+	renderTableElement(b, kids[0])
 	writeEnd(b, "div")
 	return nil
+}
+
+// renderProseTable gives an ordinary HTML table the same browser contract as
+// kapi-table while keeping the authored source as standard HTML.
+func renderProseTable(b *bytes.Buffer, n *html.Node) {
+	writeStart(b, "div", outerAttrs(n, "kapi-table"))
+	renderTableElement(b, n)
+	writeEnd(b, "div")
+}
+
+func renderTableElement(b *bytes.Buffer, n *html.Node) {
+	attrs := proseAttrs(n, allowedTags["table"])
+	attrs = slices.DeleteFunc(attrs, func(a html.Attribute) bool { return a.Key == "data-kapi-id" })
+	writeStart(b, "table", attrs)
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		renderNode(b, c)
+	}
+	writeEnd(b, "table")
 }

@@ -716,6 +716,23 @@ test("W widens a selected table into the margins and W again puts it back in the
   await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
 });
 
+test("a plain prose table gets the same wrapper and expansion as kapi-table", async () => {
+  const original = server.state.blocks.find((block) => block.id === "gggggggg").html;
+  server.agentEdit("gggggggg", '<table data-kapi-id="gggggggg" data-kapi-text="gggggggg"><thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody></table>');
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]')`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] > table')?.hasAttribute("data-kapi-id")`), false);
+  const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
+  await select("gggggggg");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
+  const column = await width();
+  await page.key("w");
+  await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="collapse"]')`);
+  assert.ok((await width()) > column + 100, `expanded to ${await width()} from ${column}`);
+  await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
+  server.agentEdit("gggggggg", original);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"] table tbody tr')?.cells[0].textContent === "beta"`);
+});
+
 test("the floating block toolbar is larger than the surrounding chrome", async () => {
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
@@ -1972,9 +1989,14 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
     await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
     await p.key("w");
     await p.waitFor(`document.querySelector('[data-kapi-id="vvvvvvvv"]').style.width !== ""`);
-    const [after, fits] = await p.eval(`(r => [r.width, r.left >= 0 && r.right <= document.body.clientWidth])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect())`);
+    const [after, fits] = await p.eval(`((r, panel) => [r.width, r.left >= 0 && r.right <= panel.left])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect(), document.querySelector(".kapi-panel").getBoundingClientRect())`);
     assert.ok(after > before + 100, `expanded from ${before}px to ${after}px`);
     assert.equal(fits, true);
+
+    await p.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+    await p.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") && document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect().width > ${after + 100}`);
+    await p.eval(`document.querySelector(".kapi-panel-restore").click()`);
+    await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed") && ((table, panel) => table.getBoundingClientRect().right <= panel.getBoundingClientRect().left)(document.querySelector('[data-kapi-id="vvvvvvvv"]'), document.querySelector(".kapi-panel"))`);
     await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });

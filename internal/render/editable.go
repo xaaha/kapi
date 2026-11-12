@@ -52,6 +52,9 @@ var textAttrs = map[string]string{
 func TextAttr(tag string) string { return textAttrs[tag] }
 
 func TextOf(tag string) TextPart {
+	if tag == "table" {
+		return CellText
+	}
 	if !strings.HasPrefix(tag, "kapi-") {
 		return BodyText
 	}
@@ -82,6 +85,8 @@ func markText(root *html.Node) {
 			id := attrVal(c, "data-kapi-id")
 			switch {
 			case id == "":
+			case c.Data == "table" && n == root:
+				markTableCells(c, id)
 			case !isPreset(c) && n == root:
 				setAttrs(c, textAttr, id)
 			case TextOf(c.Data) == RawText:
@@ -101,6 +106,10 @@ func markCells(n *html.Node, id string) {
 	if len(kids) != 1 || kids[0].Data != "table" {
 		return
 	}
+	markTableCells(kids[0], id)
+}
+
+func markTableCells(table *html.Node, id string) {
 	row := 0
 	var walk func(p *html.Node)
 	walk = func(p *html.Node) {
@@ -123,7 +132,7 @@ func markCells(n *html.Node, id string) {
 			}
 		}
 	}
-	walk(kids[0])
+	walk(table)
 }
 
 func unmark(n *html.Node) {

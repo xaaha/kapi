@@ -140,8 +140,11 @@ func TestProseRendersAsItsSource(t *testing.T) {
 <!-- a comment -->
 <pre data-kapi-id="gggggggg">  indented
     code</pre>`
-	if got := unmarked(render(t, src)); got != src {
-		t.Errorf("prose did not render as its source\ngot:\n%s\nwant:\n%s", got, src)
+	want := strings.Replace(src,
+		`<table data-kapi-id="dddddddd"><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table>`,
+		`<div class="kapi-table" data-kapi-preset="table" data-kapi-id="dddddddd"><table><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table></div>`, 1)
+	if got := unmarked(render(t, src)); got != want {
+		t.Errorf("prose did not render as its source except for the table wrapper\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 

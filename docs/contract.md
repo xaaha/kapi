@@ -23,8 +23,10 @@ resolved by keeping every line.
 
 A page is an HTML fragment file the agent writes, for example `plan.html`. It
 contains plain prose tags (`h1` to `h3`, `p`, `ul`, `ol`, `li`, `a`, `code`,
-`em`, `strong`, `table`) and the preset elements below. No `<script>`, no
-`<style>`, no `style=` attributes: the renderer drops them.
+`em`, `strong`, `table`) and the preset elements below. An ordinary `<table>`
+is rendered through Kapi's table component, gaining the same sorting, responsive
+layout, cell editing and expansion controls as legacy `<kapi-table>` pages. No
+`<script>`, no `<style>`, no `style=` attributes: the renderer drops them.
 
 Every top-level element and every preset element carries `data-kapi-id`. The
 agent may omit it; the page store adds one (8 lowercase base32 chars) on first
@@ -37,7 +39,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` or its alias `alert` (red), `success` (green) | prose |
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
-| `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |
+| `<kapi-table>` | legacy wrapper retained for compatibility; new pages should write an ordinary `<table>` directly | one plain `<table>` |
 | `<kapi-gallery>` | none; double-clicking an image opens one blurred preview with previous and next controls | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
 | `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
@@ -58,7 +60,9 @@ Unknown or malformed `kapi-*` elements render a small warning and keep their saf
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
 rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
 direction it was drawn in. Prose elements render to the same HTML as their
-source, plus the `data-kapi-text` mark on top-level blocks described below.
+source, plus the `data-kapi-text` mark on top-level blocks described below. A
+plain table is the exception: the renderer adds the internal table wrapper used
+for shared formatting and controls while the source remains ordinary HTML.
 
 ### Editing
 
@@ -71,7 +75,7 @@ parts are text:
 | body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task`, `kapi-badge` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
 | attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
-| cells | `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
+| cells | plain `table`, `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
 | raw | `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
 | none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist`, `kapi-gallery` | nothing | through the parts inside it |
 

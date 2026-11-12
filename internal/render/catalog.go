@@ -48,17 +48,15 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-table",
-		Summary: "A styled plain table that readers can sort by clicking a column header",
-		Example: `<!-- Body: exactly one plain <table> with a <thead>. Every column header sorts in the browser; the file never changes. -->
-<kapi-table>
-  <table>
-    <thead><tr><th>Endpoint</th><th>p50 ms</th><th>p99 ms</th></tr></thead>
-    <tbody>
-      <tr><td>GET /p/{id}/</td><td>4</td><td>11</td></tr>
-      <tr><td>POST /p/{id}/ops</td><td>6</td><td>19</td></tr>
-    </tbody>
-  </table>
-</kapi-table>`,
+		Summary: "A plain HTML table with Kapi styling, sorting, responsive layout and expansion",
+		Example: `<!-- Write an ordinary table with a <thead>. Kapi gives every table the same formatting and controls; kapi-table remains supported for older pages. -->
+<table>
+  <thead><tr><th>Endpoint</th><th>p50 ms</th><th>p99 ms</th></tr></thead>
+  <tbody>
+    <tr><td>GET /p/{id}/</td><td>4</td><td>11</td></tr>
+    <tr><td>POST /p/{id}/ops</td><td>6</td><td>19</td></tr>
+  </tbody>
+</table>`,
 	},
 	{
 		Name:    "kapi-gallery",

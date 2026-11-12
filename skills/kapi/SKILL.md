@@ -26,7 +26,7 @@ Add visuals without being asked when they clarify the work.
 
 - Use `kapi-diagram` for flows, sequences, architecture, dependencies, states, and relationships. Include meaningful nodes and edges.
 - Use `kapi-render` for HTML/CSS mockups, dashboards, cards, charts, timelines, and spatial layouts. Prefer Kapi theme variables.
-- Use tables, comparisons, plans, key/value lists, and checklists for structured facts. Combine presets when useful.
+- Use tables, comparisons, plans, key/value lists, and checklists for structured facts. Write tables as ordinary `<table>` elements with a `<thead>`; Kapi supplies sorting, responsive formatting and expansion. Combine presets when useful.
 - Use `kapi attach <page> <image...>` for images; multiple images form a gallery.
 - Use ASCII only for literal source or terminal output, never instead of a diagram or interface.
 
