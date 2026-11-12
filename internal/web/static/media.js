@@ -61,6 +61,7 @@ window.kapiCreateMedia = ({ main }) => {
     previous.hidden = next.hidden = all.length < 2;
   };
   const isOpen = () => !viewer.hidden;
+  const closest = (target, selector) => target instanceof Element ? Element.prototype.closest.call(target, selector) : null;
   const openImage = (img) => {
     const all = images();
     const at = all.indexOf(img);
@@ -94,7 +95,7 @@ window.kapiCreateMedia = ({ main }) => {
     event.stopImmediatePropagation();
   }, true);
   document.addEventListener("click", (event) => {
-    const link = event.target.closest("a.kapi-thumb");
+    const link = closest(event.target, "a.kapi-thumb");
     if (!link) return;
     const img = link.querySelector("img[src]");
     if (!img) return;
@@ -102,7 +103,7 @@ window.kapiCreateMedia = ({ main }) => {
     openImage(img);
   }, true);
   document.addEventListener("dblclick", (event) => {
-    const img = event.target.closest(imageSelector);
+    const img = closest(event.target, imageSelector);
     if (!img || !main.contains(img)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
