@@ -220,7 +220,7 @@
   const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
-  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": `${keyWords("search")} ${keyWords("searchPage")}`, "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
+  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": keyWords("search"), "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
   const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Collapse conversation", title: "Collapse conversation", "data-tip": "Collapse conversation", onclick: () => setPanelCollapsed(true) }, icon("caret"));
   const restorePanelButton = h("button", { type: "button", class: "kapi-panel-restore", "aria-label": "Restore conversation", title: "Restore conversation", "data-tip": "Restore conversation", onclick: () => setPanelCollapsed(false) }, icon("caret"));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
@@ -3123,7 +3123,7 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
-    if (free && (SHORTCUTS.is("search", e) || (!e.shiftKey && SHORTCUTS.is("searchPage", e)))) {
+    if (free && SHORTCUTS.is("search", e)) {
       e.preventDefault();
       return openSearch();
     }

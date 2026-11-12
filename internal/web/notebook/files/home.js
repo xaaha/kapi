@@ -1,5 +1,6 @@
 import { h, root, shortcuts } from "../../static/core.js";
 import { ago, folderOf, folderTitle, inFolder, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, watch } from "./pages.js";
+import { noteSearch } from "./searchbox.js";
 
 const href = (p) => `${root}p/${p.id}/`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -33,7 +34,7 @@ function statusMatches(p, status) {
 
 export function showHome(main) {
   document.title = "kapi";
-  const search = h("input", { class: "nb-search", type: "search", placeholder: "Search notes", "aria-label": "Search notes", autocomplete: "off" });
+  const { box: searchBox, input: search } = noteSearch();
   const project = h("select", { class: "nb-select", "aria-label": "Folder" }, h("option", { value: "", text: "All folders" }));
   const status = h("div", { class: "nb-status", role: "group", "aria-label": "Status" });
   const count = h("span", { class: "nb-count" });
@@ -54,8 +55,7 @@ export function showHome(main) {
   status.append(...statusButtons);
 
   const brand = h("a", { class: "nb-brand", href: root }, h("span", { class: "nb-logo", "aria-hidden": "true" }), h("span", { text: "Kapi" }));
-  const top = h("header", { class: "nb-top" }, brand,
-    h("label", { class: "nb-search-box" }, h("span", { class: "nb-search-icon", "aria-hidden": "true" }), search, h("kbd", { text: shortcuts.key("searchPage").hint })));
+  const top = h("header", { class: "nb-top" }, brand, searchBox);
   const toolbar = h("div", { class: "nb-toolbar" }, status, h("div", { class: "nb-toolbar-right" }, project, count));
   const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your temporary workspace" }), h("h1", { text: "All notes" })), h("p", { class: "nb-intro", text: "Recent work from you and your agents, in one searchable place." }));
   const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, grid, empty);
@@ -95,7 +95,7 @@ export function showHome(main) {
     draw();
   });
   document.addEventListener("keydown", (e) => {
-    if (document.activeElement !== search && (shortcuts.is("searchPage", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea, select")))) {
+    if (document.activeElement !== search && (shortcuts.is("switchNote", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea, select")))) {
       e.preventDefault();
       search.focus();
       search.select();

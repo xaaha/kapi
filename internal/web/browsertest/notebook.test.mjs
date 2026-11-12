@@ -98,7 +98,7 @@ test("the centered switcher shows current context and each destination once", as
     assert.equal(await p.eval(`document.querySelector(".kapi-switcher-home").textContent.includes("Home")`), true);
     await p.eval(`document.querySelector(".kapi-switcher-home").focus()`);
     await p.key("Tab");
-    assert.equal(await p.eval(`document.activeElement.className`), "kapi-switcher-search");
+    assert.equal(await p.eval(`document.activeElement.classList.contains("kapi-switcher-search")`), true);
     await p.key("Tab", { shift: true });
     assert.equal(await p.eval(`document.activeElement.className`), "kapi-switcher-home");
   } finally {
@@ -106,7 +106,7 @@ test("the centered switcher shows current context and each destination once", as
   }
 });
 
-test("Cmd or Ctrl+period then Enter returns to the most recently viewed note", async () => {
+test("Cmd or Ctrl+K then Enter returns to the most recently viewed note", async () => {
   const p = await withSwitcher();
   try {
     await openSwitcher(p);
@@ -114,7 +114,7 @@ test("Cmd or Ctrl+period then Enter returns to the most recently viewed note", a
     await p.eval(`location.href = ${JSON.stringify(bug)}`);
     await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Bug list"`, 5000);
     const mod = (await p.eval(`/Mac|iPhone|iPad/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true };
-    await p.key(".", mod);
+    await p.key("k", mod);
     await p.waitFor(`!document.querySelector(".kapi-switcher").hidden`);
     assert.equal(await p.eval(`document.querySelector(".kapi-switcher-section h2").textContent`), "Recently viewed");
     assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row strong").textContent`), "Rollout plan");
@@ -122,6 +122,21 @@ test("Cmd or Ctrl+period then Enter returns to the most recently viewed note", a
     await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Rollout plan"`, 5000);
   } finally {
     await p.close();
+  }
+});
+
+test("home and switcher share the note search component", async () => {
+  const h = await home();
+  const s = await withSwitcher();
+  try {
+    await openSwitcher(s);
+    const shape = `(box => ({children: [...box.children].map((child) => child.tagName), height: getComputedStyle(box).height, radius: getComputedStyle(box).borderRadius}))(document.querySelector(".nb-search-box"))`;
+    assert.deepEqual(await h.eval(shape), await s.eval(shape));
+    assert.equal(await h.eval(`document.querySelector(".nb-search-box kbd").textContent.endsWith("K")`), true);
+    assert.equal(await s.eval(`document.querySelector(".nb-search-box kbd").textContent.endsWith("K")`), true);
+  } finally {
+    await h.close();
+    await s.close();
   }
 });
 
