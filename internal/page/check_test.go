@@ -61,6 +61,15 @@ func TestNativeChecklistItemsReceiveIDs(t *testing.T) {
 	}
 }
 
+func TestAMixedListDoesNotCreateANativeTask(t *testing.T) {
+	home, path := newPage(t, `<ul><li><input type="checkbox">Task</li><li>Note</li></ul>`+"\n")
+	_ = open(t, home, path)
+	got := onDisk(t, path)
+	if strings.Count(got, `data-kapi-id=`) != 1 {
+		t.Errorf("only the mixed list should receive an id:\n%s", got)
+	}
+}
+
 func TestCheckRefusesAnythingButATask(t *testing.T) {
 	home, path := newPage(t, checklist)
 	s := open(t, home, path)

@@ -275,6 +275,17 @@ func TestATextOpSetsRawBodiesByteForByte(t *testing.T) {
 	}
 }
 
+func TestATextOpEditsOnlyTheCodeInsideAPlainPre(t *testing.T) {
+	const src = `<pre data-kapi-id="aaaaaaaa"><code class="language-go">old()</code></pre>` + "\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "new()"}}})
+	want := `<pre data-kapi-id="aaaaaaaa"><code class="language-go">new()</code></pre>` + "\n"
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestEveryTextPartOfTheGalleryEditsInPlaceAndKeepsTheRest(t *testing.T) {
 	gallery, err := os.ReadFile("../render/testdata/gallery.html")
 	if err != nil {

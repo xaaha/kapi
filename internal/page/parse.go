@@ -149,9 +149,13 @@ func Outer(src []byte, id string) ([]byte, error) {
 }
 
 func Inner(src []byte, id string) ([]byte, error) {
-	e, err := find(parse(src), id)
+	els := parse(src)
+	e, err := find(els, id)
 	if err != nil {
 		return nil, err
+	}
+	if from, to, ok := nativeCodeRange(src, els, e); ok {
+		return src[from:to], nil
 	}
 	return src[e.tagEnd:e.closeStart], nil
 }
@@ -228,6 +232,27 @@ type idToken struct {
 }
 
 func nativeChecklistTask(els []element, i int) bool {
+	if !nativeCheckboxItem(els, i) {
+		return false
+	}
+	list := els[i].parent
+	if list < 0 || els[list].name != "ul" {
+		return false
+	}
+	count := 0
+	for j := range els {
+		if els[j].parent != list {
+			continue
+		}
+		if !nativeCheckboxItem(els, j) {
+			return false
+		}
+		count++
+	}
+	return count > 0
+}
+
+func nativeCheckboxItem(els []element, i int) bool {
 	if i < 0 || i >= len(els) || els[i].name != "li" {
 		return false
 	}
@@ -239,6 +264,33 @@ func nativeChecklistTask(els []element, i int) bool {
 		return els[j].name == "input" && strings.EqualFold(kind, "checkbox")
 	}
 	return false
+}
+
+func nativeCodeRange(src []byte, els []element, pre *element) (int, int, bool) {
+	if pre.name != "pre" {
+		return 0, 0, false
+	}
+	index := -1
+	for i := range els {
+		if &els[i] == pre {
+			index = i
+			break
+		}
+	}
+	var code *element
+	for i := range els {
+		if els[i].parent != index {
+			continue
+		}
+		if code != nil || els[i].name != "code" {
+			return 0, 0, false
+		}
+		code = &els[i]
+	}
+	if code == nil || strings.TrimSpace(string(src[pre.tagEnd:code.start])) != "" || strings.TrimSpace(string(src[code.end:pre.closeStart])) != "" {
+		return 0, 0, false
+	}
+	return code.tagEnd, code.closeStart, true
 }
 
 func nativeTaskInput(els []element, task *element) (*element, bool) {

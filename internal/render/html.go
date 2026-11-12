@@ -54,6 +54,9 @@ func renderHTMLComponent(b *bytes.Buffer, n *html.Node) bool {
 		writeEnd(b, "ul")
 		return true
 	case "li":
+		if n.Parent == nil || n.Parent.Data != "ul" || !nativeChecklist(n.Parent) {
+			return false
+		}
 		box := nativeTaskBox(n)
 		if box == nil {
 			return false

@@ -92,7 +92,7 @@ func markText(root *html.Node) {
 				markTableCells(c, id)
 			case c.Data == "pre":
 				setAttrs(c, textAttr, id, rawAttr, "")
-			case nativeTaskBox(c) != nil:
+			case c.Parent != nil && c.Parent.Data == "ul" && nativeChecklist(c.Parent) && nativeTaskBox(c) != nil:
 				setAttrs(c, textAttr, id)
 			case c.Data == "ul" && nativeChecklist(c):
 			case !isPreset(c) && n == root:

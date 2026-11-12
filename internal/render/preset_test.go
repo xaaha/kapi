@@ -67,6 +67,13 @@ func TestStandardHTMLGetsComponentFormatting(t *testing.T) {
 	}
 }
 
+func TestAMixedListDoesNotPartlyBecomeAChecklist(t *testing.T) {
+	out := render(t, `<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox">task</li><li>note</li></ul>`)
+	if strings.Contains(out, "kapi-checklist") || strings.Contains(out, "kapi-task") || strings.Contains(out, `data-kapi-text="tasktask"`) {
+		t.Errorf("a mixed list was partly enhanced as a checklist: %s", out)
+	}
+}
+
 func TestBadgeStaysInlineAndPushesBlocksOut(t *testing.T) {
 	out := render(t, `<table><tr><td>a <kapi-badge tone="blue">open</kapi-badge></td></tr></table>`)
 	if !strings.Contains(out, `<td>a <span class="kapi-badge kapi-tone-blue" data-kapi-preset="badge">open</span></td>`) {
