@@ -37,6 +37,9 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 	if !strings.Contains(string(controller), `event.stopImmediatePropagation()`) {
 		t.Error("double-clicking an image does not take precedence over block editing")
 	}
+	if strings.Count(string(controller), "paths.chevron") != 2 {
+		t.Error("previous and next do not use the same chevron geometry")
+	}
 	if !strings.Contains(string(page), `tool("expand", "Open image", "preview")`) {
 		t.Error("the toolbar does not use the familiar expand icon and Open image label")
 	}

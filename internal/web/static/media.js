@@ -22,8 +22,7 @@ window.kapiCreateMedia = ({ main }) => {
 
   const paths = {
     close: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
-    left: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
-    right: "M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z",
+    chevron: "M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z",
   };
 
   const scrim = document.createElement("div");
@@ -37,8 +36,8 @@ window.kapiCreateMedia = ({ main }) => {
   viewer.tabIndex = -1;
   viewer.hidden = true;
   const close = button("kapi-media-close", "Close image preview", paths.close);
-  const previous = button("kapi-media-previous", "Previous image", paths.left);
-  const next = button("kapi-media-next", "Next image", paths.right);
+  const previous = button("kapi-media-previous", "Previous image", paths.chevron);
+  const next = button("kapi-media-next", "Next image", paths.chevron);
   const picture = document.createElement("img");
   picture.className = "kapi-media-image";
   const caption = document.createElement("div");

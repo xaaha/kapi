@@ -128,6 +128,7 @@
 }
 
 .kapi-media-previous { grid-column: 1; grid-row: 1; justify-self: start; }
+.kapi-media-previous svg { transform: rotate(180deg); }
 .kapi-media-next { grid-column: 3; grid-row: 1; justify-self: end; }
 
 .kapi-media-image {
