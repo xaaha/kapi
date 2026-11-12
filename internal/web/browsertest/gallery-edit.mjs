@@ -70,7 +70,7 @@ try {
       await page.key("Escape").catch(() => {});
     }
   }
-  const blocks = await page.eval(`[...document.querySelectorAll("#kapi-page > [data-kapi-id]")].filter((b) => !b.matches("[data-kapi-raw]")).map((b) => b.dataset.kapiId)`);
+  const blocks = await page.eval(`[...document.querySelectorAll("#kapi-page > [data-kapi-id]")].filter((b) => !b.matches("[data-kapi-raw], [data-kapi-preset=gallery]")).map((b) => b.dataset.kapiId)`);
   for (const id of blocks) {
     const block = `document.querySelector('[data-kapi-id="${id}"]')`;
     try {

@@ -99,7 +99,7 @@ code { font-family: var(--kapi-mono); }
     .card { padding:16px; border:1px solid var(--kapi-border); border-radius:var(--kapi-radius-lg); background:var(--kapi-surface) }
   </style><main><h1>Funding</h1><section class=&quot;cards&quot;><article class=&quot;card&quot;><h2>Current</h2><p>No card.</p></article><article class=&quot;card&quot;><h2>Proposed</h2><button>Submit a fee</button></article></section></main>
 </body></html>"></iframe></figure>
-<div class="kapi-gallery" data-kapi-preset="gallery" data-kapi-id="gaaaaaaa" data-kapi-text="gaaaaaaa" data-kapi-raw="">
+<div class="kapi-gallery" data-kapi-preset="gallery" data-kapi-id="gaaaaaaa">
   <figure><img src="data:image/png;base64,AAAA" alt="Before"><figcaption>Before</figcaption></figure>
   <figure><img src="data:image/png;base64,BBBB" alt="After"><figcaption>After</figcaption></figure>
 </div>

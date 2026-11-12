@@ -102,6 +102,13 @@ window.kapiCreateMedia = ({ main }) => {
     event.preventDefault();
     openImage(img);
   }, true);
+  document.addEventListener("dblclick", (event) => {
+    const img = event.target.closest(imageSelector);
+    if (!img || !main.contains(img)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openImage(img);
+  }, true);
 
   function fitFrame(frame) {
     try {
@@ -124,6 +131,10 @@ window.kapiCreateMedia = ({ main }) => {
   }
 
   function prepare(scope = main) {
+    const galleryImages = scope.matches?.(imageSelector) ? [scope] : [...scope.querySelectorAll(imageSelector)];
+    for (const img of galleryImages) {
+      if (!img.title) img.title = "Double-click to open · P";
+    }
     const frames = scope.matches?.("iframe.kapi-render-frame") ? [scope] : [...scope.querySelectorAll("iframe.kapi-render-frame")];
     for (const frame of frames) {
       if (frame.dataset.kapiMediaReady) continue;

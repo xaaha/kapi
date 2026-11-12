@@ -38,7 +38,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |
-| `<kapi-gallery>` | none; images open in one blurred preview with previous and next controls | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
+| `<kapi-gallery>` | none; double-clicking an image opens one blurred preview with previous and next controls | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
 | `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
@@ -72,8 +72,8 @@ parts are text:
 | attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
-| raw | `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render`, `kapi-gallery` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
-| none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist` | nothing | through the parts inside it |
+| raw | `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist`, `kapi-gallery` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the
 text, such as a badge in a cell or a code block in a callout, stays one piece

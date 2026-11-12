@@ -62,7 +62,7 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-gallery",
-		Summary: "Images side by side; the reader can preview them together with previous and next controls",
+		Summary: "Images side by side; double-click one to open it with previous and next controls",
 		Example: `<!-- Body: figures containing images and optional captions. Use kapi attach with several image paths to create this automatically. -->
 <kapi-gallery>
   <figure><img src="./review.files/before.png" alt="Before"><figcaption>Before</figcaption></figure>

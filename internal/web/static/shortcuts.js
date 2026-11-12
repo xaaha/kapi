@@ -13,7 +13,7 @@ window.kapiShortcuts = (() => {
     delete: { keys: ["Backspace", "Delete"], mod: false, hint: mac ? "⌫" : "Del", words: "Delete" },
     edit: null,
     download: null,
-    preview: null,
+    preview: letter("p"),
     "zoom-in": null,
     "zoom-out": null,
     flip: null,

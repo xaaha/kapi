@@ -14,6 +14,10 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	shortcuts, err := static.ReadFile("static/shortcuts.js")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	owned := []string{
 		`kapi-media-viewer`,
@@ -29,6 +33,28 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 		if strings.Contains(string(page), marker) {
 			t.Errorf("kapi.js duplicates media-controller detail %q", marker)
 		}
+	}
+	if !strings.Contains(string(controller), `event.stopImmediatePropagation()`) {
+		t.Error("double-clicking an image does not take precedence over block editing")
+	}
+	if !strings.Contains(string(page), `tool("expand", "Open image", "preview")`) {
+		t.Error("the toolbar does not use the familiar expand icon and Open image label")
+	}
+	if strings.Contains(string(page), `tool("eyes"`) {
+		t.Error("the toolbar still uses the ambiguous Eyes icon")
+	}
+	if !strings.Contains(string(shortcuts), `preview: letter("p")`) {
+		t.Error("image preview is not on the central P toolbar shortcut")
+	}
+}
+
+func TestGalleryThumbnailsStayMinimal(t *testing.T) {
+	css := string(mustStatic(t, "static/media.css"))
+	if strings.Contains(css, ".kapi-gallery img {\n  display: block;\n  width: 100%;\n  aspect-ratio") {
+		t.Error("gallery images are forced into a letterboxed aspect ratio")
+	}
+	if !strings.Contains(css, "cursor: zoom-in") || !strings.Contains(css, "border-radius: var(--kapi-radius-sm)") {
+		t.Error("gallery thumbnails do not have the minimal zoom affordance")
 	}
 }
 
