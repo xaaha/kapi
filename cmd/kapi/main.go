@@ -429,16 +429,46 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 				return err
 			}
 			dir := pkgpage.FilesDir(pg)
-			_, existed := os.Stat(dir)
-			var names []string
+			_, dirErr := os.Stat(dir)
+			dirExisted := !errors.Is(dirErr, os.ErrNotExist)
+			type pendingImage struct {
+				path    string
+				data    []byte
+				file    attach.File
+				created bool
+			}
+			images := make([]pendingImage, 0, len(args)-1)
 			for _, image := range args[1:] {
 				data, readErr := os.ReadFile(image)
 				if readErr != nil {
 					return readErr
 				}
-				f, saveErr := attach.Save(dir, data)
+				f, validErr := attach.Validate(data)
+				if validErr != nil {
+					return fmt.Errorf("%s: %w", image, validErr)
+				}
+				_, statErr := os.Stat(filepath.Join(dir, f.Name))
+				images = append(images, pendingImage{path: image, data: data, file: f, created: errors.Is(statErr, os.ErrNotExist)})
+			}
+			committed := false
+			defer func() {
+				if committed {
+					return
+				}
+				for _, image := range images {
+					if image.created && !referenced(pg, image.file.Name) {
+						os.Remove(filepath.Join(dir, image.file.Name))
+					}
+				}
+				if !dirExisted {
+					os.Remove(dir)
+				}
+			}()
+			var names []string
+			for _, image := range images {
+				f, saveErr := attach.Save(dir, image.data)
 				if saveErr != nil {
-					return fmt.Errorf("%s: %w", image, saveErr)
+					return fmt.Errorf("%s: %w", image.path, saveErr)
 				}
 				names = append(names, f.Name)
 			}
@@ -448,16 +478,9 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 			}
 			resp, err := c.Do(req)
 			if err != nil {
-				for _, name := range names {
-					if !referenced(pg, name) {
-						os.Remove(filepath.Join(dir, name))
-					}
-				}
-				if existed != nil {
-					os.Remove(dir)
-				}
 				return err
 			}
+			committed = true
 			_, err = fmt.Fprintf(out, "added #%s (%s)\n", resp.Event.Target, resp.Event.Text)
 			return err
 		},

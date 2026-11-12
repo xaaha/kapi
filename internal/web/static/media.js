@@ -1,6 +1,8 @@
 window.kapiCreateMedia = ({ main }) => {
   const imageSelector = 'figure > img[src], [data-kapi-preset="gallery"] img[src]';
   let current = -1;
+  let before = null;
+  let inerted = [];
 
   const svg = (path) => {
     const el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -62,13 +64,27 @@ window.kapiCreateMedia = ({ main }) => {
   };
   const isOpen = () => !viewer.hidden;
   const closest = (target, selector) => target instanceof Element ? Element.prototype.closest.call(target, selector) : null;
+  const focusable = () => [close, previous, next].filter((el) => !el.hidden);
+  const setBackgroundInert = (inert) => {
+    if (inert) {
+      inerted = [...document.body.children].filter((el) => el !== viewer && el !== scrim && !el.inert);
+      for (const el of inerted) el.inert = true;
+      return;
+    }
+    for (const el of inerted) el.inert = false;
+    inerted = [];
+  };
   const openImage = (img) => {
     const all = images();
     const at = all.indexOf(img);
     if (at < 0) return;
-    viewer.hidden = false;
-    scrim.hidden = false;
-    document.documentElement.setAttribute("data-kapi-media-open", "");
+    if (!isOpen()) {
+      before = document.activeElement;
+      viewer.hidden = false;
+      scrim.hidden = false;
+      setBackgroundInert(true);
+      document.documentElement.setAttribute("data-kapi-media-open", "");
+    }
     show(at);
     close.focus();
   };
@@ -78,6 +94,9 @@ window.kapiCreateMedia = ({ main }) => {
     scrim.hidden = true;
     picture.removeAttribute("src");
     document.documentElement.removeAttribute("data-kapi-media-open");
+    setBackgroundInert(false);
+    if (before?.isConnected) before.focus({ preventScroll: true });
+    before = null;
   }
   const step = (by) => isOpen() && show(current + by);
 
@@ -87,11 +106,22 @@ window.kapiCreateMedia = ({ main }) => {
   scrim.addEventListener("click", closeViewer);
   document.addEventListener("keydown", (event) => {
     if (!isOpen()) return;
-    if (event.key === "Escape") closeViewer();
-    else if (event.key === "ArrowLeft") step(-1);
-    else if (event.key === "ArrowRight") step(1);
-    else return;
-    event.preventDefault();
+    if (event.key === "Escape") {
+      closeViewer();
+      event.preventDefault();
+    } else if (event.key === "ArrowLeft") {
+      step(-1);
+      event.preventDefault();
+    } else if (event.key === "ArrowRight") {
+      step(1);
+      event.preventDefault();
+    } else if (event.key === "Tab") {
+      const items = focusable();
+      const at = items.indexOf(document.activeElement);
+      const nextAt = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+      event.preventDefault();
+      items[nextAt].focus();
+    }
     event.stopImmediatePropagation();
   }, true);
   document.addEventListener("click", (event) => {

@@ -673,8 +673,13 @@ func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
-	img := filepath.Join(t.TempDir(), "chart.png")
+	imgDir := t.TempDir()
+	img := filepath.Join(imgDir, "chart.png")
 	if err := os.WriteFile(img, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bad := filepath.Join(imgDir, "not-an-image.txt")
+	if err := os.WriteFile(bad, []byte("hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Dir(e.page)
@@ -687,6 +692,7 @@ func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
 		want string
 	}{
 		{[]string{"attach", filepath.Join(dir, "typo.html"), img}, missingFileText},
+		{[]string{"attach", e.page, img, bad}, "only PNG, JPEG, GIF and WebP"},
 		{[]string{"attach", "--after", "zzzzzzzz", e.page, img}, "no such element"},
 		{[]string{"attach", notes, img}, "not an HTML page"},
 		{[]string{"attach", "--reader", "", e.page, img}, "cannot be empty"},

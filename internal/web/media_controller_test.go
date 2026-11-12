@@ -35,7 +35,16 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 		}
 	}
 	if !strings.Contains(string(controller), `event.stopImmediatePropagation()`) {
-		t.Error("double-clicking an image does not take precedence over block editing")
+		t.Error("the media viewer does not take precedence over page shortcuts and block editing")
+	}
+	for marker, problem := range map[string]string{
+		`el.inert = true`:     "the media viewer does not make the background inert",
+		`event.key === "Tab"`: "the media viewer does not trap keyboard focus",
+		`before.focus({`:      "the media viewer does not restore focus when it closes",
+	} {
+		if !strings.Contains(string(controller), marker) {
+			t.Error(problem)
+		}
 	}
 	if strings.Count(string(controller), "paths.chevron") != 2 {
 		t.Error("previous and next do not use the same chevron geometry")
