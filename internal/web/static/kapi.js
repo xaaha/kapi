@@ -112,74 +112,8 @@
   }
 
   function themeToggle() {
-    const theme = window.kapiTheme;
-    if (!theme) return [];
-    const names = { light: "Light", dark: "Dark", system: "System" };
-    const toggle = h("button", { type: "button", class: "kapi-theme-button", "aria-label": "Theme", "data-tip": "Theme", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("theme"));
-    const items = ["light", "dark", "system"].filter((c) => theme.choices.includes(c)).map((c) =>
-      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-theme-choice": c, onclick: () => (theme.set(c), close(wrap.contains(document.activeElement))) },
-        icon("check"), h("span", { class: "kapi-menu-label", text: names[c] }), icon(c)));
-    const list = h("div", { class: "kapi-theme-menu", role: "menu", "aria-label": "Theme", hidden: "" }, ...items);
-    const wrap = h("div", { class: "kapi-theme" }, toggle, list);
-    let hovered = false;
-    let timer = 0;
-    const open = (focus) => {
-      clearTimeout(timer);
-      list.hidden = false;
-      toggle.setAttribute("aria-expanded", "true");
-      if (focus) (items.find((b) => b.getAttribute("aria-checked") === "true") ?? items[0]).focus();
-    };
-    function close(refocus) {
-      clearTimeout(timer);
-      hovered = false;
-      if (list.hidden) return;
-      list.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      if (refocus) toggle.focus();
-    }
-    toggle.addEventListener("click", () => {
-      if (hovered) hovered = false;
-      else if (list.hidden) open(false);
-      else close(false);
-    });
-    toggle.addEventListener("keydown", (e) => {
-      if (!SHORTCUTS.is("menuOpen", e) && !SHORTCUTS.is("menuNext", e)) return;
-      e.preventDefault();
-      open(true);
-    });
-    wrap.addEventListener("pointerenter", (e) => {
-      if (e.pointerType !== "mouse") return;
-      clearTimeout(timer);
-      if (!list.hidden) return;
-      open(false);
-      hovered = true;
-    });
-    wrap.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "mouse" || !hovered) return;
-      timer = setTimeout(() => close(list.contains(document.activeElement)), 250);
-    });
-    list.addEventListener("keydown", (e) => {
-      if (!SHORTCUTS.is("menuLeave", e)) e.stopPropagation();
-      const at = items.indexOf(document.activeElement);
-      const to = SHORTCUTS.is("menuNext", e) ? at + 1 : SHORTCUTS.is("menuPrevious", e) ? at - 1 : SHORTCUTS.is("menuFirst", e) ? 0 : SHORTCUTS.is("menuLast", e) ? items.length - 1 : undefined;
-      if (to !== undefined) {
-        e.preventDefault();
-        items[(to + items.length) % items.length].focus();
-      } else if (SHORTCUTS.is("dismiss", e) || SHORTCUTS.is("menuBack", e)) {
-        e.preventDefault();
-        close(true);
-      } else if (SHORTCUTS.is("menuLeave", e)) close(false);
-    });
-    document.addEventListener("pointerdown", (e) => {
-      if (!wrap.contains(e.target)) close(false);
-    }, true);
-    const sync = () => {
-      for (const b of items) b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme.get()));
-      toggle.dataset.tip = `Theme: ${names[theme.get()]}`;
-    };
-    document.addEventListener("kapi-theme", sync);
-    sync();
-    return [wrap];
+    const control = window.kapiTheme?.control?.();
+    return control ? [control] : [];
   }
 
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -299,8 +233,7 @@
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
-  const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, collapsePanelButton, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu), tabs,
+  const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" }, tabs,
     restartBox, notice, chat, notesView, outlineView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
@@ -360,12 +293,13 @@
   const POINT_PAD = 10;
   const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
-  document.body.append(root);
   showUndo(main.dataset.undo);
   const siteHead = h("header", { class: "kapi-site-head" },
     h("a", { class: "kapi-site-home", href: base.replace(/p\/[^/]+$/, ""), "aria-label": "Kapi home" },
-      h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
-  main.before(siteHead);
+      h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })),
+    h("div", { class: "kapi-panel-head kapi-site-actions" }, collapsePanelButton, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu));
+  root.prepend(siteHead);
+  main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
@@ -2881,7 +2815,7 @@
       search.style.removeProperty("max-height");
       return;
     }
-    const head = searchButton.closest(".kapi-panel-head").getBoundingClientRect();
+    const head = siteHead.getBoundingClientRect();
     const r = searchButton.getBoundingClientRect();
     const top = Math.round(head.bottom + 6);
     search.style.top = `${top}px`;

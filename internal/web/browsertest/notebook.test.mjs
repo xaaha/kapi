@@ -67,7 +67,22 @@ test("the token root without a trailing slash opens the notes home", async () =>
     assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Active", "true"], ["Inactive", "false"], ["Ended", "false"], ["All", "false"]]);
     await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     assert.ok(await p.eval("document.querySelectorAll('.nb-card').length") >= 3);
-    assert.equal(await p.eval("document.querySelector('.nb-glyph')"), null);
+    assert.equal(await p.eval("document.querySelector('.nb-glyph') !== null"), true);
+  } finally {
+    await p.close();
+  }
+});
+
+test("home keeps the universal theme control in the top menu without page search", async () => {
+  const p = await home();
+  try {
+    assert.equal(await p.eval(`document.querySelector(".nb-top .kapi-theme-button") !== null`), true);
+    assert.equal(await p.eval(`document.querySelector(".nb-top .kapi-search-button")`), null);
+    await p.eval(`document.querySelector(".nb-top .kapi-theme-button").click()`);
+    await p.waitFor(`!document.querySelector(".nb-top .kapi-theme-menu").hidden`);
+    await p.eval(`document.querySelector('.nb-top [data-theme-choice="dark"]').click()`);
+    await p.waitFor(`document.documentElement.dataset.theme === "dark"`);
+    await p.eval(`document.querySelector(".nb-top .kapi-theme-button").click(); document.querySelector('.nb-top [data-theme-choice="system"]').click()`);
   } finally {
     await p.close();
   }
@@ -80,6 +95,7 @@ test("home filters the library by project and status", async () => {
     const titlesIn = async (name) => p.eval(`(() => { const s = document.querySelector(".nb-select"); s.value = [...s.options].find((o) => o.textContent === ${JSON.stringify(name)}).value; s.dispatchEvent(new Event("change", { bubbles: true })); return [...document.querySelectorAll(".nb-card-title")].map((t) => t.textContent).sort().join("|"); })()`);
     assert.equal(await titlesIn("Alpha"), "Rollout plan|Shared notes");
     assert.equal(await titlesIn("Beta"), "Bug list|Shared notes");
+    assert.equal(await p.eval(`[...document.querySelectorAll(".nb-card")].find((card) => card.textContent.includes("Shared notes")).querySelector(".nb-card-project").textContent`), "Beta");
     await p.eval(`(() => { const s = document.querySelector(".nb-select"); s.value = ""; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
     assert.equal(await p.eval(`document.querySelectorAll(".nb-card").length`), 3);
   } finally {
@@ -120,6 +136,22 @@ test("Cmd or Ctrl+K then Enter returns to the most recently viewed note", async 
     assert.equal(await p.eval(`document.querySelector(".kapi-switcher-row strong").textContent`), "Rollout plan");
     await p.key("Enter");
     await p.waitFor(`document.querySelector(".kapi-switcher-current")?.textContent === "Current · Rollout plan"`, 5000);
+  } finally {
+    await p.close();
+  }
+});
+
+test("the switcher traps focus and makes the page inert", async () => {
+  const p = await withSwitcher();
+  try {
+    await openSwitcher(p);
+    assert.equal(await p.eval(`document.querySelector("#kapi-page").inert`), true);
+    await p.eval(`(() => { const last = document.querySelector(".kapi-switcher-home"); last.focus(); last.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })); })()`);
+    assert.equal(await p.eval(`document.activeElement.classList.contains("kapi-switcher-search")`), true);
+    await p.eval(`(() => { const first = document.querySelector(".kapi-switcher-search"); first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })); })()`);
+    assert.equal(await p.eval(`document.activeElement.classList.contains("kapi-switcher-home")`), true);
+    await p.eval(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))`);
+    assert.equal(await p.eval(`document.querySelector("#kapi-page").inert`), false);
   } finally {
     await p.close();
   }
@@ -275,5 +307,37 @@ test("an ended session is red and can be isolated on home", async () => {
   } finally {
     await p.close();
     await h.close();
+  }
+});
+
+test("home organization can rename, collapse, and reorder notes", async () => {
+  const hidden = join(projectA, ".kapi");
+  const first = join(hidden, "first.html");
+  const second = join(hidden, "second.html");
+  mkdirSync(hidden);
+  write(first, "First hidden note", "One.");
+  write(second, "Second hidden note", "Two.");
+  kapi(hidden, "open", "first.html");
+  kapi(hidden, "open", "second.html");
+  const p = await home();
+  try {
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
+    await refresh(p);
+    await p.waitFor(`[...document.querySelectorAll(".nb-card-title")].some((n) => n.textContent === "Second hidden note")`);
+    await p.eval(`document.querySelector(".nb-organize").click()`);
+    await p.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder-toggle strong")].some((n) => n.textContent === "Alpha pages")`);
+    await p.eval(`(() => { const head = [...document.querySelectorAll(".kapi-organizer-folder-head")].find((el) => el.textContent.includes("Alpha pages")); head.querySelector(".kapi-organizer-rename").click(); const input = head.querySelector(".kapi-organizer-rename-input"); input.value = "Agent work"; input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+    await p.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder-toggle strong")].some((n) => n.textContent === "Agent work")`);
+
+    await p.eval(`(() => { const group = [...document.querySelectorAll(".kapi-organizer-folder")].find((el) => el.textContent.includes("Agent work")); const rows = [...group.querySelectorAll(".kapi-organizer-page")]; const source = rows[1]; const target = rows[0]; const moved = source.querySelector(".kapi-organizer-page-title").textContent; const expected = rows.map((row) => row.querySelector(".kapi-organizer-page-title").textContent).filter((title) => title !== moved); expected.splice(0, 0, moved); window.organizerOrder = JSON.stringify(expected); const transfer = new DataTransfer(); source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer })); target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, clientY: target.getBoundingClientRect().top, dataTransfer: transfer })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientY: target.getBoundingClientRect().top, dataTransfer: transfer })); })()`);
+    await p.waitFor(`(() => { const group = [...document.querySelectorAll(".kapi-organizer-folder")].find((el) => el.textContent.includes("Agent work")); return JSON.stringify([...group.querySelectorAll(".kapi-organizer-page-title")].map((n) => n.textContent)) === window.organizerOrder; })()`);
+
+    await p.eval(`(() => { const row = [...document.querySelectorAll(".kapi-organizer-page")].find((el) => el.textContent.includes("First hidden note")); row.querySelector(".kapi-organizer-rename").click(); const input = row.querySelector(".kapi-organizer-rename-input"); input.value = "My first note"; input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+    await p.waitFor(`[...document.querySelectorAll(".kapi-organizer-page-title")].some((n) => n.textContent === "My first note")`);
+    await p.eval(`[...document.querySelectorAll(".kapi-organizer-folder-toggle strong")].find((n) => n.textContent === "Agent work").closest("button").click()`);
+    assert.equal(await p.eval(`[...document.querySelectorAll(".kapi-organizer-folder")].find((el) => el.textContent.includes("Agent work")).querySelector(".kapi-organizer-pages").hidden`), true);
+  } finally {
+    await p.close();
+    rmSync(hidden, { recursive: true, force: true });
   }
 });

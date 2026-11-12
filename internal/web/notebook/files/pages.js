@@ -120,15 +120,6 @@ export function byFolder(pages) {
   return out;
 }
 
-const LABELS = { live: "active", waiting: "active", idle: "inactive", ended: "ended" };
-const RANK = ["live", "waiting", "idle", "ended"];
-
-export const stateLabel = (p) => (p.missing ? "File moved or deleted" : LABELS[p.state] ?? "");
-
-export const liveliest = (pages) => RANK.find((s) => pages.some((p) => p.state === s)) ?? "idle";
-
-export const legend = (h) => h("span", { class: "nb-legend" }, ...RANK.map((s) => h("span", {}, h("span", { class: "nb-dot", "data-state": s, "aria-hidden": "true" }), LABELS[s])));
-
 export function redraw(container, build) {
   const key = container.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;
   build();

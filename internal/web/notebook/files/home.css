@@ -6,10 +6,10 @@ body:has(#kapi-home) {
   background: var(--kapi-bg);
 }
 
-.nb-dot[data-state="live"] { --nb-state: var(--kapi-green-solid); }
-.nb-dot[data-state="waiting"] { --nb-state: var(--kapi-yellow-solid); }
-.nb-dot[data-state="idle"] { --nb-state: var(--kapi-grey-solid); }
-.nb-dot[data-state="ended"] { --nb-state: var(--kapi-red-solid); }
+.nb-dot[data-tone="green"] { --nb-state: var(--kapi-green-solid); }
+.nb-dot[data-tone="yellow"] { --nb-state: var(--kapi-yellow-solid); }
+.nb-dot[data-tone="grey"] { --nb-state: var(--kapi-grey-solid); }
+.nb-dot[data-tone="red"] { --nb-state: var(--kapi-red-solid); }
 
 .nb-dot {
   display: inline-block;
@@ -20,7 +20,7 @@ body:has(#kapi-home) {
   background: var(--nb-state, var(--kapi-grey-solid));
 }
 
-.nb-dot[data-state="live"] {
+.nb-dot[data-tone="green"] {
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--kapi-green-solid) 45%, transparent);
   animation: nb-live 2.4s ease-out infinite;
 }
@@ -47,22 +47,121 @@ body:has(#kapi-home) {
 }
 
 .nb-top {
-  display: flex;
-  align-items: center;
-  gap: 24px;
   max-width: 1220px;
   height: 74px;
   margin: 0 auto;
   padding: 0 36px;
-  border-bottom: 1px solid var(--kapi-border);
 }
 
-.nb-brand {
+.nb-top-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 1;
+}
+
+.nb-top .kapi-site-home {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.nb-top .kapi-logo {
+  width: 27px;
+  height: 27px;
+}
+
+.nb-top .kapi-theme {
+  position: relative;
   display: inline-flex;
+  flex: none;
+}
+
+.nb-top .kapi-theme-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--kapi-border);
+  border-radius: 8px;
+  background: var(--kapi-surface);
+  color: var(--kapi-muted);
+  cursor: pointer;
+}
+
+.nb-top .kapi-theme-button:hover,
+.nb-top .kapi-theme-button[aria-expanded="true"] {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+.nb-top .kapi-theme-button svg,
+.nb-top .kapi-theme-menu svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+.nb-top .kapi-theme-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  box-sizing: border-box;
+  width: 168px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-shadow);
+}
+
+.nb-top .kapi-theme-menu[hidden] {
+  display: none;
+}
+
+.nb-top .kapi-theme-menu::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: 0;
+  left: 0;
+  height: 8px;
+}
+
+.nb-top .kapi-theme-menu button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  font-weight: 700;
-  font-size: 18px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: transparent;
+  color: var(--kapi-fg);
+  font: 13.5px var(--kapi-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nb-top .kapi-theme-menu button:is(:hover, :focus-visible) {
+  outline: 0;
+  background: var(--kapi-blue-fill);
+}
+
+.nb-top .kapi-theme-menu [aria-checked="false"] svg:first-child {
+  visibility: hidden;
+}
+
+.nb-top .kapi-theme-menu [aria-checked] svg:last-child {
+  color: var(--kapi-faint);
 }
 
 .nb-top > .nb-search-box {
@@ -126,6 +225,7 @@ body:has(#kapi-home) {
 }
 
 .nb-status-button,
+.nb-organize,
 .nb-select {
   border: 1px solid var(--kapi-border);
   border-radius: 999px;
@@ -134,12 +234,14 @@ body:has(#kapi-home) {
   font: 13px var(--kapi-font);
 }
 
-.nb-status-button {
+.nb-status-button,
+.nb-organize {
   padding: 8px 13px;
   cursor: pointer;
 }
 
-.nb-status-button:hover {
+.nb-status-button:hover,
+.nb-organize:hover {
   color: var(--kapi-fg);
 }
 
@@ -318,12 +420,12 @@ body:has(#kapi-home) {
     height: 64px;
   }
 
-  .nb-brand > span:last-child,
+  .nb-top .kapi-site-name,
   .nb-home .nb-search-box kbd {
     display: none;
   }
 
-  .nb-top > .nb-search-box {
+  .nb-top-actions .nb-search-box {
     width: 100%;
   }
 
@@ -351,7 +453,7 @@ body:has(#kapi-home) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nb-dot[data-state="live"] {
+  .nb-dot[data-tone="green"] {
     animation: none;
   }
 

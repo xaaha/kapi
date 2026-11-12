@@ -1,8 +1,8 @@
-import { h, pageID, root, shortcuts } from "../../static/core.js";
-import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, visitTimes, watch } from "./pages.js";
+import { h, modal, pageID, root, shortcuts } from "../../static/core.js";
+import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, visitTimes, watch } from "./pages.js";
 import { noteSearch } from "./searchbox.js";
+import { isWorking, stateLabel, stateTone } from "./states.js";
 
-const WORKING = new Set(["live", "waiting"]);
 const RECENT_LIMIT = 7;
 
 const href = (p) => `${root}p/${p.id}/`;
@@ -19,7 +19,7 @@ function noteRow(p, fresh) {
     "data-ended": p.state === "ended",
     "data-new": fresh || false,
   },
-  h("span", { class: "nb-dot", "data-state": p.state, "aria-hidden": "true" }),
+  h("span", { class: "nb-dot", "data-state": p.state, "data-tone": stateTone(p), "aria-hidden": "true" }),
   h("span", { class: "kapi-switcher-copy" },
     h("strong", { text: pageTitle(p) }),
     h("span", { text: p.summary || stateLabel(p) })),
@@ -50,7 +50,7 @@ function render(list, pages, query, fresh) {
   const recentIDs = new Set(recentlyViewed.map((p) => p.id));
   const newPages = available.filter((p) => !recentIDs.has(p.id) && fresh.has(p.id));
   const newPageIDs = new Set(newPages.map((p) => p.id));
-  const working = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && WORKING.has(p.state));
+  const working = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && isWorking(p));
   const workingIDs = new Set(working.map((p) => p.id));
   const others = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
   list.append(...[section("Recently viewed", recentlyViewed, fresh), section("New", newPages, fresh), section("Working now", working, fresh), section("Other notes", others, fresh)].filter(Boolean));
@@ -65,7 +65,7 @@ export function showSidebar() {
     "aria-expanded": "false",
     title: `Switch notes (${shortcuts.key("switchNote").hint})`,
   }, h("span", { class: "kapi-switcher-launcher-icon", "aria-hidden": "true" }));
-  const scrim = h("div", { class: "kapi-switcher-scrim", hidden: "" });
+  const scrim = h("div", { class: "kapi-modal-scrim kapi-switcher-scrim", hidden: "" });
   const { box: searchBox, input: search } = noteSearch({
     className: "kapi-switcher-search",
     attributes: { role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" },
@@ -73,7 +73,7 @@ export function showSidebar() {
   const current = h("span", { class: "kapi-switcher-current" });
   const list = h("div", { class: "kapi-switcher-list", id: "kapi-switcher-list", role: "listbox" });
   const home = h("a", { class: "kapi-switcher-home", href: root }, h("span", { text: "Home · All notes" }), h("span", { "aria-hidden": "true", text: "↗" }));
-  const dialog = h("div", { class: "kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Switch notes", hidden: "" },
+  const dialog = h("div", { class: "kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Switch notes", tabindex: "-1", hidden: "" },
     h("div", { class: "kapi-switcher-search-region" }, searchBox),
     current,
     list,
@@ -81,7 +81,6 @@ export function showSidebar() {
 
   let pages = [];
   let fresh = new Set();
-  let before = null;
   let activeID = null;
   const rows = () => [...list.querySelectorAll(".kapi-switcher-row")];
   const setActive = (row) => {
@@ -94,24 +93,21 @@ export function showSidebar() {
     redraw(list, () => render(list, pages, search.value, fresh));
     setActive((activeID && document.getElementById(activeID)) || rows()[0] || null);
   };
-  const isOpen = () => !dialog.hidden;
-  const setOpen = (open) => {
-    if (open === isOpen()) return;
-    dialog.hidden = !open;
-    scrim.hidden = !open;
-    launcher.setAttribute("aria-expanded", String(open));
-    document.documentElement.toggleAttribute("data-kapi-switcher", open);
-    if (open) {
-      before = document.activeElement;
-      search.focus();
+  const controller = modal({
+    dialog,
+    scrim,
+    trigger: launcher,
+    initialFocus: () => search,
+    onOpen: () => {
+      document.documentElement.setAttribute("data-kapi-switcher", "");
       search.select();
-    } else {
+    },
+    onClose: () => {
+      document.documentElement.removeAttribute("data-kapi-switcher");
       search.value = "";
       draw();
-      if (before?.isConnected) before.focus({ preventScroll: true });
-      else launcher.focus({ preventScroll: true });
-    }
-  };
+    },
+  });
 
   search.addEventListener("input", draw);
   search.addEventListener("keydown", (e) => {
@@ -140,18 +136,6 @@ export function showSidebar() {
     const row = e.target.closest?.(".kapi-switcher-row");
     if (row) setActive(row);
   });
-  launcher.addEventListener("click", () => setOpen(!isOpen()));
-  scrim.addEventListener("click", () => setOpen(false));
-  dialog.addEventListener("click", (e) => e.stopPropagation());
-  dialog.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const stops = [search, ...rows(), home];
-    const at = stops.indexOf(document.activeElement);
-    if ((!e.shiftKey && at === stops.length - 1) || (e.shiftKey && at <= 0)) {
-      e.preventDefault();
-      stops[e.shiftKey ? stops.length - 1 : 0].focus();
-    }
-  });
   onLayout(draw);
   onVisit(() => {
     fresh = newIDs(pages, pageID);
@@ -172,10 +156,7 @@ export function showSidebar() {
   document.addEventListener("keydown", (e) => {
     if (shortcuts.is("switchNote", e)) {
       e.preventDefault();
-      setOpen(!isOpen());
-    } else if (isOpen() && shortcuts.is("dismiss", e)) {
-      e.preventDefault();
-      setOpen(false);
+      controller.toggle();
     }
   });
   document.body.append(scrim, dialog, launcher);

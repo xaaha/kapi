@@ -299,14 +299,10 @@ html[data-kapi-panel-collapsed] {
 }
 
 #kapi-chrome .kapi-panel-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 10px 10px 12px;
-  border-bottom: 1px solid var(--kapi-border);
-}
-
-#kapi-chrome .kapi-panel-head .kapi-search-button {
   margin-left: auto;
 }
 
@@ -376,8 +372,13 @@ html[data-kapi-panel-collapsed] {
 .kapi-site-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 16px 20px 0;
+  justify-content: space-between;
+  gap: 20px;
+  box-sizing: border-box;
+  min-height: 58px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--kapi-border);
+  background: var(--kapi-bg);
   color: var(--kapi-fg);
   font: 600 15px/1 var(--kapi-font);
   letter-spacing: -0.01em;
@@ -386,10 +387,10 @@ html[data-kapi-panel-collapsed] {
 @media screen and (min-width: 1300px) {
   .kapi-site-head {
     position: fixed;
-    top: 0;
-    left: 0;
     z-index: 2147482000;
-    padding-top: 18px;
+    top: 0;
+    right: var(--kapi-panel-width);
+    left: 0;
   }
 }
 
@@ -1660,12 +1661,19 @@ html[data-kapi-panel-collapsed] {
     z-index: 2147481999;
   }
 
+  #kapi-chrome {
+    min-height: 46px;
+  }
+
   .kapi-site-head {
-    position: sticky;
-    top: 0;
+    position: fixed;
     z-index: 2147482000;
+    top: 0;
+    right: 0;
+    left: 0;
     box-sizing: border-box;
     height: 46px;
+    min-height: 46px;
     padding: 0 0.9rem;
     background: var(--kapi-bg);
   }
@@ -1676,13 +1684,17 @@ html[data-kapi-panel-collapsed] {
   }
 
   #kapi-chrome .kapi-panel-head {
-    position: fixed;
-    top: 0;
-    right: 0;
-    box-sizing: border-box;
-    height: 46px;
-    padding: 0 0.9rem;
+    position: relative;
+    top: auto;
+    right: auto;
+    height: auto;
+    padding: 0;
     border-bottom: 0;
+  }
+
+  #kapi-chrome .kapi-panel-head > .kapi-menu,
+  #kapi-chrome .kapi-panel-head .kapi-theme-menu {
+    top: calc(100% + 11px);
   }
 
   #kapi-chrome .kapi-panel {
