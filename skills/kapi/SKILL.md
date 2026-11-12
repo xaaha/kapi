@@ -16,13 +16,21 @@ Use kapi for substantial work that benefits from a shared visual page. The page 
 - Run `kapi` first. It lists active pages, unread work, and the next commands to use.
 - Use `kapi --help`, `kapi <command> --help`, and `kapi preset` as the current source of truth for commands and page structure.
 - Write only the plain HTML and kapi presets the CLI documents. Keep the page source reviewable and update it as the work changes.
-- Use `kapi-render` with ordinary HTML and CSS for UI mockups, dashboards, cards, charts, or other visual prototypes. Prefer Kapi theme variables, but preserve useful custom styling. Do not replace a visual interface with ASCII.
 - Use `kapi attach <page> <image...>` for images. Passing several images creates one side-by-side gallery and one previous/next preview sequence.
 - Follow the `writing:` rules `kapi preset` prints: the fact first, numbers instead of adjectives, each thing said once.
 - Keep one page per task. Add a section to the page you already have; make a new page only for unrelated work.
 - Keep `kapi wait <page>` running as a background task when the harness reliably wakes you after it exits; start it again after each event and before going idle. Use `kapi watch <page>` only when the harness reliably delivers every streamed line.
 - Acknowledge what you read with the CLI's current `say --seen`, `say --reply`, `seen`, or `pending` workflow.
 - Stop watching after the user ends the session.
+
+## Visual defaults
+
+Do not wait for the user to ask for a visual. Choose the clearest Kapi representation while creating or updating the page:
+
+- Use `kapi-diagram` for flows, sequences, architecture, dependencies, state changes, and relationships. Include the meaningful nodes and edges instead of reducing a complex system to bullets or an ASCII sketch.
+- Use `kapi-render` with ordinary HTML and CSS for UI mockups, dashboards, cards, charts, timelines, spatial layouts, and other visuals where prose or a basic table loses important structure. Prefer Kapi theme variables, but preserve useful custom styling.
+- Use semantic presets such as tables, comparisons, plans, key/value lists, and checklists for structured facts; combine them with diagrams or rendered HTML when that makes the page easier to understand.
+- Use ASCII only when it is literal source material or terminal output, never as a substitute for a diagram or visual interface.
 
 ## Do not
 
