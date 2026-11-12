@@ -94,8 +94,6 @@ func hasAllowedTag(tag string) bool {
 	return ok
 }
 
-func errorBox(b *bytes.Buffer, n *html.Node, msg string) { fallbackPreset(b, n, msg) }
-
 func fallbackPreset(b *bytes.Buffer, n *html.Node, msg string) {
 	tag := "div"
 	if p := renderedParent(n); p != nil && phrasing[p.Data] {

@@ -156,7 +156,7 @@ func writeRich(b *bytes.Buffer, n *html.Node, inSVG bool) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		writeRich(b, c, isSVG)
 	}
-	if allowed && !(renderVoidTags[n.Data] && !isSVG) {
+	if allowed && (!renderVoidTags[n.Data] || isSVG) {
 		writeEnd(b, n.Data)
 	}
 }
