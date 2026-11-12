@@ -86,6 +86,17 @@ func TestATextOpOnATableThatChangedIsStale(t *testing.T) {
 	}
 }
 
+func TestTextEditsANativeChecklistItemWithoutRemovingItsBox(t *testing.T) {
+	const src = `<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox" checked>Ship it</li></ul>` + "\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "tasktask", Parts: []Part{{ID: "tasktask", Inner: "Ship <strong>now</strong>"}}})
+	want := `<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox" checked>Ship <strong>now</strong></li></ul>` + "\n"
+	if got := onDisk(t, path); got != want {
+		t.Errorf("file:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestATextOpIsStaleOnlyWhenItsOwnTextChanged(t *testing.T) {
 	const src = "<kapi-checklist data-kapi-id=\"aaaaaaaa\"><kapi-task data-kapi-id=\"bbbbbbbb\">one</kapi-task><kapi-task data-kapi-id=\"cccccccc\">two</kapi-task></kapi-checklist>\n"
 	home, path := newPage(t, src)

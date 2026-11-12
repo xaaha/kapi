@@ -32,9 +32,38 @@ func TestBadgeTakesOneOfTheSevenTones(t *testing.T) {
 	if out := render(t, `<kapi-badge>draft</kapi-badge>`); !strings.Contains(out, "kapi-tone-grey") {
 		t.Errorf("a badge with no tone should be grey: %s", out)
 	}
-	out := render(t, `<p>x <kapi-badge tone="teal">y</kapi-badge></p>`)
-	if !strings.HasPrefix(out, `<p>x <span class="kapi-error"`) || !strings.Contains(out, "red, orange, yellow, green, blue, purple or grey") {
-		t.Errorf("an unknown tone should be an inline error box naming the tones: %s", out)
+	for tone, want := range map[string]string{"gray": "grey", "teal": "blue", "pink": "purple", "chartreuse": "grey"} {
+		out := render(t, `<p>x <kapi-badge tone="`+tone+`">y</kapi-badge></p>`)
+		if !strings.Contains(out, "kapi-tone-"+want) || strings.Contains(out, "kapi-error") {
+			t.Errorf("tone %q should safely normalize to %s: %s", tone, want, out)
+		}
+	}
+}
+
+func TestStandardHTMLGetsComponentFormatting(t *testing.T) {
+	src := `<details data-kapi-id="details1"><summary>Why?</summary><p>Because.</p></details>` +
+		`<pre data-kapi-id="codecode"><code class="language-go">fmt.Println("hi")</code></pre>` +
+		`<dl data-kapi-id="kvkvkvkv"><dt>Owner</dt><dd>Platform</dd></dl>` +
+		`<figure data-kapi-id="figure12"><img src="a.png" alt="A"><figcaption>Caption</figcaption></figure>` +
+		`<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox" checked>Ship <em>it</em></li></ul>`
+	out := render(t, src)
+	for _, want := range []string{
+		`class="kapi-details" data-kapi-component="details"`,
+		`class="kapi-code" data-kapi-preset="code" data-kapi-id="codecode" data-kapi-text="codecode" data-kapi-raw=""`,
+		`<span class="kapi-code-lang">go</span>`,
+		`class="kapi-kv" data-kapi-component="kv"`,
+		`class="kapi-figure" data-kapi-component="figure"`,
+		`class="kapi-checklist" data-kapi-component="checklist"`,
+		`class="kapi-task" data-kapi-component="task"`,
+		`<input type="checkbox" checked="" aria-label="Ship it">`,
+		`<span class="kapi-task-body" data-kapi-text="tasktask">Ship <em>it</em></span>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered standard HTML is missing %q:\n%s", want, out)
+		}
+	}
+	if got, want := canonical(t, src), strings.Replace(src, ` checked>`, ` checked="">`, 1); got != want {
+		t.Errorf("standard component source changed:\ngot  %s\nwant %s", got, want)
 	}
 }
 

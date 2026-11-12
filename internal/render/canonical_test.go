@@ -97,9 +97,15 @@ func proseOnly(t *testing.T, out string, isPreset func(*html.Node) bool) string 
 	return b.String()
 }
 
-func renderedPreset(n *html.Node) bool { _, ok := attr(n, "data-kapi-preset"); return ok }
+func renderedPreset(n *html.Node) bool {
+	_, preset := attr(n, "data-kapi-preset")
+	_, component := attr(n, "data-kapi-component")
+	return preset || component
+}
 
-func sourcePreset(n *html.Node) bool { return n.Data == "table" || strings.HasPrefix(n.Data, "kapi-") }
+func sourcePreset(n *html.Node) bool {
+	return n.Data == "table" || n.Data == "details" || n.Data == "pre" || n.Data == "dl" || n.Data == "figure" || nativeChecklist(n) || strings.HasPrefix(n.Data, "kapi-")
+}
 
 func checkCanonical(t *testing.T, name, src string) {
 	t.Helper()
@@ -157,7 +163,7 @@ func TestCanonical(t *testing.T) {
 
 func TestCanonicalProseIsRender(t *testing.T) {
 	for _, src := range messySources {
-		if strings.Contains(src, "kapi-") || strings.Contains(src, "<table") {
+		if strings.Contains(src, "kapi-") || strings.Contains(src, "<table") || strings.Contains(src, "<details") || strings.Contains(src, "<pre") || strings.Contains(src, "<dl") || strings.Contains(src, "<figure") || strings.Contains(src, `type="checkbox"`) {
 			continue
 		}
 		if c, r := canonical(t, src), unmarked(render(t, src)); c != r {

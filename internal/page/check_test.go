@@ -38,6 +38,29 @@ func TestCheckTicksAndUnticksATask(t *testing.T) {
 	}
 }
 
+func TestCheckTicksANativeChecklistItem(t *testing.T) {
+	const src = `<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox">Ship it</li></ul>` + "\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "check", ID: "tasktask", Done: true})
+	if got := onDisk(t, path); !strings.Contains(got, ` checked`) {
+		t.Errorf("checking a native item did not persist checked:\n%s", got)
+	}
+	mustApply(t, s, &Op{Kind: "check", ID: "tasktask", Done: false})
+	if got := onDisk(t, path); got != src {
+		t.Errorf("unchecking a native item did not restore its source:\ngot  %s\nwant %s", got, src)
+	}
+}
+
+func TestNativeChecklistItemsReceiveIDs(t *testing.T) {
+	home, path := newPage(t, `<ul><li><input type="checkbox">Ship it</li></ul>`+"\n")
+	_ = open(t, home, path)
+	got := onDisk(t, path)
+	if strings.Count(got, `data-kapi-id=`) != 2 {
+		t.Errorf("native checklist and its item should each receive an id:\n%s", got)
+	}
+}
+
 func TestCheckRefusesAnythingButATask(t *testing.T) {
 	home, path := newPage(t, checklist)
 	s := open(t, home, path)

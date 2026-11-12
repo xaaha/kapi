@@ -215,7 +215,7 @@ func assignIDs(src []byte, els []element, need map[int]bool, prev []byte) []byte
 	}
 	for i := len(els) - 1; i >= 0; i-- {
 		e := &els[i]
-		if (e.id != "" && keep[e.id] != i) || (e.id == "" && (need[i] || strings.HasPrefix(e.name, "kapi-"))) {
+		if (e.id != "" && keep[e.id] != i) || (e.id == "" && (need[i] || strings.HasPrefix(e.name, "kapi-") || nativeChecklistTask(els, i))) {
 			src = setAttr(src, e, idAttr, newID(taken))
 		}
 	}
@@ -225,6 +225,39 @@ func assignIDs(src []byte, els []element, need map[int]bool, prev []byte) []byte
 type idToken struct {
 	id, name string
 	top      bool
+}
+
+func nativeChecklistTask(els []element, i int) bool {
+	if i < 0 || i >= len(els) || els[i].name != "li" {
+		return false
+	}
+	for j := range els {
+		if els[j].parent != i {
+			continue
+		}
+		kind, _ := els[j].attr("type")
+		return els[j].name == "input" && strings.EqualFold(kind, "checkbox")
+	}
+	return false
+}
+
+func nativeTaskInput(els []element, task *element) (*element, bool) {
+	index := -1
+	for i := range els {
+		if &els[i] == task {
+			index = i
+			break
+		}
+	}
+	if index < 0 || !nativeChecklistTask(els, index) {
+		return nil, false
+	}
+	for i := range els {
+		if els[i].parent == index {
+			return &els[i], true
+		}
+	}
+	return nil, false
 }
 
 func idTokens(els []element, top map[int]bool) ([]idToken, []int) {

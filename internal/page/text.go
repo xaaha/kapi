@@ -143,6 +143,9 @@ func partRange(els []element, t *element, p Part) (int, int, error) {
 	if p.Lead {
 		return leadRange(els, t)
 	}
+	if box, ok := nativeTaskInput(els, t); ok {
+		return box.end, t.closeStart, nil
+	}
 	if kind := render.TextOf(t.name); (kind != render.BodyText && kind != render.RawText) || voidElements[t.name] || t.selfClosing {
 		return 0, 0, fmt.Errorf("%w: #%s is a <%s>", ErrNoText, t.id, t.name)
 	}

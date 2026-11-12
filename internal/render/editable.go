@@ -52,8 +52,11 @@ var textAttrs = map[string]string{
 func TextAttr(tag string) string { return textAttrs[tag] }
 
 func TextOf(tag string) TextPart {
-	if tag == "table" {
+	switch tag {
+	case "table":
 		return CellText
+	case "pre":
+		return RawText
 	}
 	if !strings.HasPrefix(tag, "kapi-") {
 		return BodyText
@@ -87,6 +90,11 @@ func markText(root *html.Node) {
 			case id == "":
 			case c.Data == "table" && n == root:
 				markTableCells(c, id)
+			case c.Data == "pre":
+				setAttrs(c, textAttr, id, rawAttr, "")
+			case nativeTaskBox(c) != nil:
+				setAttrs(c, textAttr, id)
+			case c.Data == "ul" && nativeChecklist(c):
 			case !isPreset(c) && n == root:
 				setAttrs(c, textAttr, id)
 			case TextOf(c.Data) == RawText:
