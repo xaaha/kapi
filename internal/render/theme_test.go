@@ -161,6 +161,12 @@ func TestThemeDefinesExactlyTheSharedTones(t *testing.T) {
 	}
 }
 
+func TestPageMeasureGrowsOnlyOnWideScreens(t *testing.T) {
+	if got, want := themeTokens(t)["measure"], "clamp(46rem, 58vw, 68rem)"; got != want {
+		t.Errorf("--kapi-measure = %q, want %q", got, want)
+	}
+}
+
 func TestToneTextIsReadableInBothThemes(t *testing.T) {
 	for palette, tokens := range paletteTokens(t) {
 		t.Run(palette, func(t *testing.T) { toneTextIsReadable(t, tokens) })

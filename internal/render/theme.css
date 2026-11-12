@@ -65,7 +65,7 @@
   --kapi-font: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --kapi-font-body: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
   --kapi-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --kapi-measure: 46rem;
+  --kapi-measure: clamp(46rem, 58vw, 68rem);
 }
 
 :root[data-theme="light"] { color-scheme: light; }
