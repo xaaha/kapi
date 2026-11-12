@@ -143,6 +143,16 @@ func (s *Store) Source() ([]byte, uint64) {
  }
 </kapi-diff>
 
+<h2>HTML mockup and image gallery</h2>
+<kapi-render title="Funding cards">
+  <style>.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:16px;border:1px solid var(--kapi-border);border-radius:var(--kapi-radius-lg);background:var(--kapi-surface)}</style>
+  <main><h1>Funding</h1><section class="cards"><article class="card"><h2>Current</h2><p>No card.</p></article><article class="card"><h2>Proposed</h2><button>Submit a fee</button></article></section></main>
+</kapi-render>
+<kapi-gallery>
+  <figure><img src="data:image/png;base64,AAAA" alt="Before"><figcaption>Before</figcaption></figure>
+  <figure><img src="data:image/png;base64,BBBB" alt="After"><figcaption>After</figcaption></figure>
+</kapi-gallery>
+
 <h2>Your call</h2>
 <kapi-form name="cutover">
   <kapi-choice name="window">When should the cutover run?

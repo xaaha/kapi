@@ -1764,6 +1764,33 @@ func TestAnImageOpAddsAFigureAfterTheTopLevelBlockOrAtTheEnd(t *testing.T) {
 	}
 }
 
+func TestGalleryOpAddsStoredImagesSideBySide(t *testing.T) {
+	home, path := newPage(t, "<h1 data-kapi-id=\"aaaaaaaa\">Review</h1>\n")
+	s := open(t, home, path)
+	names := []string{"0123456789abcdef0123456789abcdef.png", "fedcba9876543210fedcba9876543210.jpg"}
+	if err := os.MkdirAll(FilesDir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(FilesDir(path), name), []byte("image"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sum := mustApply(t, s, &Op{Kind: "gallery", ID: "aaaaaaaa", Srcs: names})
+	got := onDisk(t, path)
+	if len(sum.IDs) != 1 || !strings.Contains(got, `<kapi-gallery data-kapi-id="`+sum.IDs[0]+`">`) {
+		t.Fatalf("gallery summary %+v, source %q", sum, got)
+	}
+	for _, name := range names {
+		if !strings.Contains(got, name) {
+			t.Errorf("gallery does not contain %s: %q", name, got)
+		}
+	}
+	if strings.Count(got, "<figure>") != 2 || !strings.Contains(sum.Text, "image gallery") {
+		t.Errorf("gallery = %q, summary %q", got, sum.Text)
+	}
+}
+
 func TestImagesGoInsideTheBodyAndSurviveAColonInThePageName(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows reads a colon in a file name as a data stream")

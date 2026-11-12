@@ -1,0 +1,166 @@
+.kapi-render {
+  margin: 1.25rem 0;
+  overflow: hidden;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-card-shadow);
+}
+
+#kapi-page .kapi-render-title,
+.kapi-render-title {
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--kapi-border);
+  color: var(--kapi-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kapi-render-frame {
+  display: block;
+  width: 100%;
+  height: min(70vh, 48rem);
+  border: 0;
+  background: var(--kapi-bg);
+}
+
+.kapi-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+
+#kapi-page .kapi-gallery figure,
+.kapi-gallery figure {
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-card-shadow);
+}
+
+.kapi-gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
+  background: var(--kapi-subtle);
+}
+
+.kapi-gallery figcaption {
+  padding: 0.45rem 0.35rem 0.15rem;
+  color: var(--kapi-muted);
+  font-size: 0.82rem;
+}
+
+.kapi-fallback {
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px dashed var(--kapi-yellow-border);
+  border-radius: var(--kapi-radius-sm);
+  background: color-mix(in srgb, var(--kapi-yellow-fill) 45%, transparent);
+}
+
+.kapi-fallback-note {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--kapi-yellow-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.kapi-media-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483005;
+  background: rgb(8 11 16 / 0.68);
+  -webkit-backdrop-filter: blur(9px) saturate(70%);
+  backdrop-filter: blur(9px) saturate(70%);
+}
+
+.kapi-media-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483006;
+  display: grid;
+  grid-template-columns: minmax(3rem, 1fr) minmax(0, auto) minmax(3rem, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: clamp(3.5rem, 7vw, 6rem) clamp(1rem, 4vw, 4rem) 1.5rem;
+  pointer-events: none;
+}
+
+.kapi-media-viewer[hidden],
+.kapi-media-scrim[hidden] { display: none; }
+
+.kapi-media-viewer button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  border-radius: 13px;
+  background: rgb(22 26 33 / 0.82);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.28);
+  color: #eef2f7;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.kapi-media-viewer button:hover { background: rgb(35 41 51 / 0.96); }
+.kapi-media-viewer button:focus-visible { outline: 2px solid var(--kapi-blue-border); outline-offset: 3px; }
+.kapi-media-viewer button svg { width: 1.4rem; height: 1.4rem; fill: currentColor; }
+
+.kapi-media-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
+.kapi-media-previous { grid-column: 1; grid-row: 1; justify-self: start; }
+.kapi-media-next { grid-column: 3; grid-row: 1; justify-self: end; }
+
+.kapi-media-image {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  max-width: min(82vw, 88rem);
+  max-height: calc(100vh - 8rem);
+  border-radius: 12px;
+  background: var(--kapi-surface);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.5);
+  object-fit: contain;
+  pointer-events: auto;
+}
+
+.kapi-media-caption {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  max-width: min(80vw, 70rem);
+  color: #e4e9ef;
+  font-size: 0.82rem;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+}
+
+html[data-kapi-media-open] { overflow: hidden; }
+
+@media (max-width: 640px) {
+  .kapi-media-viewer { grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem; padding-inline: 0.5rem; }
+  .kapi-media-viewer button { width: 2.35rem; height: 2.35rem; border-radius: 11px; }
+  .kapi-media-image { max-width: 100%; }
+}
+
+@media print {
+  .kapi-media-viewer, .kapi-media-scrim { display: none !important; }
+  .kapi-render-frame { height: 45rem; }
+}

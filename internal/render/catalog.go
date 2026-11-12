@@ -61,6 +61,33 @@ func (s *Store) Source() ([]byte, uint64) {
 </kapi-table>`,
 	},
 	{
+		Name:    "kapi-gallery",
+		Summary: "Images side by side; the reader can preview them together with previous and next controls",
+		Example: `<!-- Body: figures containing images and optional captions. Use kapi attach with several image paths to create this automatically. -->
+<kapi-gallery>
+  <figure><img src="./review.files/before.png" alt="Before"><figcaption>Before</figcaption></figure>
+  <figure><img src="./review.files/after.png" alt="After"><figcaption>After</figcaption></figure>
+</kapi-gallery>`,
+	},
+	{
+		Name:    "kapi-render",
+		Summary: "A forgiving HTML and CSS mockup, isolated from the rest of the page and themed by Kapi",
+		Example: `<!-- title: label above the preview. Body: ordinary HTML and CSS. Scripts and unsafe attributes are removed; malformed or unknown markup degrades to visible content. -->
+<kapi-render title="Dashboard mockup">
+  <style>
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px }
+    .card { padding:20px; border:1px solid var(--kapi-border); border-radius:var(--kapi-radius-lg); background:var(--kapi-surface) }
+  </style>
+  <main>
+    <h1>Funding</h1>
+    <section class="cards">
+      <article class="card"><h2>Current</h2><p>No enrollment fee card.</p></article>
+      <article class="card"><h2>Proposed</h2><p>Submit a fee.</p><button>Submit a fee</button></article>
+    </section>
+  </main>
+</kapi-render>`,
+	},
+	{
 		Name:    "kapi-compare",
 		Summary: "Options side by side as cards, one per kapi-option",
 		Example: `<!-- Children: <kapi-option title="..."> each holding prose. Two to four options read best. -->

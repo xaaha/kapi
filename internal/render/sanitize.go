@@ -16,7 +16,7 @@ var dropped = set(
 
 var voidTags = set("br", "hr", "img", "wbr", "col")
 
-var rawPresets = set("kapi-code", "kapi-diff", "kapi-diagram")
+var rawPresets = set("kapi-code", "kapi-diff", "kapi-diagram", "kapi-render")
 
 var globalAttrs = set("id", "class", "title", "lang", "dir", "role")
 

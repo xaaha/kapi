@@ -60,6 +60,7 @@ func (s *Server) shell(w http.ResponseWriter, root, title, main string) {
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/chrome.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/tables.css\">\n", root)
+	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/media.css\">\n", root)
 	for _, svc := range s.services {
 		if ships(svc, "style.css") {
 			fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sassets/%s/style.css\">\n", root, svc.Name())
@@ -70,6 +71,7 @@ func (s *Server) shell(w http.ResponseWriter, root, title, main string) {
 	fmt.Fprintf(&b, "<script src=\"%sstatic/shortcuts.js\" defer></script>\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/search.js\" defer></script>\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/tables.js\" defer></script>\n", root)
+	fmt.Fprintf(&b, "<script src=\"%sstatic/media.js\" defer></script>\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/kapi.js\" defer></script>\n", root)
 	for _, svc := range s.services {
 		if ships(svc, "main.js") {

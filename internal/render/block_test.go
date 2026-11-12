@@ -93,22 +93,29 @@ func TestBlockUnknownID(t *testing.T) {
 	}
 }
 
-func TestBlockHidesWhatRenderHides(t *testing.T) {
+func TestBlockKeepsContentInsidePresetWarnings(t *testing.T) {
 	cases := map[string]string{
 		"inside an unknown preset":   `<kapi-chart><p data-kapi-id="aaaaaaaa">x</p></kapi-chart>`,
 		"inside an errored callout":  `<kapi-callout kind="bad"><p data-kapi-id="aaaaaaaa">x</p></kapi-callout>`,
 		"inside a misplaced step":    `<kapi-step><p data-kapi-id="aaaaaaaa">x</p></kapi-step>`,
 		"inside a form with no name": `<kapi-form><kapi-text name="t" data-kapi-id="aaaaaaaa">x</kapi-text></kapi-form>`,
 		"inside a table with prose":  `<kapi-table><p data-kapi-id="aaaaaaaa">x</p></kapi-table>`,
-		"inside a dropped element":   `<template><p data-kapi-id="aaaaaaaa">x</p></template>`,
 	}
 	for name, src := range cases {
-		if strings.Contains(render(t, src), "aaaaaaaa") {
-			t.Fatalf("%s: Render shows the element, the case is wrong", name)
+		if !strings.Contains(render(t, src), "aaaaaaaa") {
+			t.Fatalf("%s: Render dropped the recoverable content", name)
 		}
-		if got, err := Block([]byte(src), "aaaaaaaa"); !errors.Is(err, ErrNotFound) {
-			t.Errorf("%s: Block = %q, %v; want ErrNotFound because Render does not show it", name, got, err)
+		if got, err := Block([]byte(src), "aaaaaaaa"); err != nil || !strings.Contains(string(got), "x") {
+			t.Errorf("%s: Block = %q, %v; want the visible fallback content", name, got, err)
 		}
+	}
+
+	src := `<template><p data-kapi-id="aaaaaaaa">x</p></template>`
+	if strings.Contains(render(t, src), "aaaaaaaa") {
+		t.Fatal("a deliberately dropped element became visible")
+	}
+	if got, err := Block([]byte(src), "aaaaaaaa"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Block = %q, %v; want ErrNotFound for dropped content", got, err)
 	}
 }
 

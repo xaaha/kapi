@@ -44,6 +44,7 @@ type Request struct {
 	Seq    uint64   `json:"seq,omitempty"`
 	Re     []uint64 `json:"re,omitempty"`
 	Cut    []uint64 `json:"cut,omitempty"`
+	Files  []string `json:"files,omitempty"`
 }
 
 type Response struct {
@@ -512,7 +513,7 @@ func (s *Server) handle(conn net.Conn) {
 		}
 	}
 	switch req.Op {
-	case "image":
+	case "image", "gallery":
 		if err := eventlog.CheckReader(req.Author); err != nil {
 			reply(enc, &Response{Error: err.Error()})
 			return
@@ -525,7 +526,8 @@ func (s *Server) handle(conn net.Conn) {
 		var sum page.Summary
 		for range 3 {
 			_, rev := st.Source()
-			if _, sum, err = st.ApplyBy(req.Author, rev, &page.Op{Kind: "image", ID: req.Target, Src: req.Text}); !errors.Is(err, page.ErrStale) {
+			op := &page.Op{Kind: req.Op, ID: req.Target, Src: req.Text, Srcs: req.Files}
+			if _, sum, err = st.ApplyBy(req.Author, rev, op); !errors.Is(err, page.ErrStale) {
 				break
 			}
 		}

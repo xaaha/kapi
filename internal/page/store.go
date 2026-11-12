@@ -40,18 +40,19 @@ var (
 )
 
 type Op struct {
-	Kind    string  `json:"kind"`
-	ID      string  `json:"id"`
-	HTML    string  `json:"html,omitempty"`
-	Inner   *string `json:"inner,omitempty"`
-	Parts   []Part  `json:"parts,omitempty"`
-	Before  string  `json:"before,omitempty"`
-	Done    bool    `json:"done,omitempty"`
-	Dir     string  `json:"dir,omitempty"`
-	Section bool    `json:"section,omitempty"`
-	Src     string  `json:"src,omitempty"`
-	Row     *int    `json:"row,omitempty"`
-	Col     *int    `json:"col,omitempty"`
+	Kind    string   `json:"kind"`
+	ID      string   `json:"id"`
+	HTML    string   `json:"html,omitempty"`
+	Inner   *string  `json:"inner,omitempty"`
+	Parts   []Part   `json:"parts,omitempty"`
+	Before  string   `json:"before,omitempty"`
+	Done    bool     `json:"done,omitempty"`
+	Dir     string   `json:"dir,omitempty"`
+	Section bool     `json:"section,omitempty"`
+	Src     string   `json:"src,omitempty"`
+	Srcs    []string `json:"srcs,omitempty"`
+	Row     *int     `json:"row,omitempty"`
+	Col     *int     `json:"col,omitempty"`
 }
 
 type Summary struct {
@@ -545,15 +546,30 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 		}
 		return s.rev, sum, nil
 	}
-	if op.Kind == "image" {
-		if !attach.ValidName(op.Src) {
-			return s.rev, Summary{}, fmt.Errorf("%w: %q", ErrNoImage, op.Src)
+	if op.Kind == "image" || op.Kind == "gallery" {
+		names := op.Srcs
+		if op.Kind == "image" {
+			names = []string{op.Src}
 		}
-		if _, err := os.Stat(filepath.Join(FilesDir(s.path), op.Src)); err != nil {
-			return s.rev, Summary{}, fmt.Errorf("%w: %s", ErrNoImage, op.Src)
+		if len(names) == 0 {
+			return s.rev, Summary{}, fmt.Errorf("%w: no images", ErrNoImage)
 		}
-		src := "./" + url.PathEscape(filesName(s.path)) + "/" + op.Src
-		op = &Op{Kind: op.Kind, ID: op.ID, HTML: `<img src="` + html.EscapeString(src) + `" alt="">`}
+		var images strings.Builder
+		for _, name := range names {
+			if !attach.ValidName(name) {
+				return s.rev, Summary{}, fmt.Errorf("%w: %q", ErrNoImage, name)
+			}
+			if _, err := os.Stat(filepath.Join(FilesDir(s.path), name)); err != nil {
+				return s.rev, Summary{}, fmt.Errorf("%w: %s", ErrNoImage, name)
+			}
+			src := "./" + url.PathEscape(filesName(s.path)) + "/" + name
+			if op.Kind == "gallery" {
+				images.WriteString(`<figure><img src="` + html.EscapeString(src) + `" alt=""></figure>`)
+			} else {
+				images.WriteString(`<img src="` + html.EscapeString(src) + `" alt="">`)
+			}
+		}
+		op = &Op{Kind: op.Kind, ID: op.ID, HTML: images.String()}
 	}
 	src, sum, err := apply(s.src, op)
 	if err == nil {
@@ -592,7 +608,7 @@ func stale(err error) error {
 
 func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 	switch op.Kind {
-	case "image":
+	case "image", "gallery":
 		if op.ID == "" {
 			return true
 		}
@@ -1159,6 +1175,47 @@ func insertImage(src []byte, els []element, op *Op) ([]byte, Summary, error) {
 	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), sum, nil
 }
 
+func insertGallery(src []byte, els []element, op *Op) ([]byte, Summary, error) {
+	taken := map[string]bool{}
+	body := -1
+	for i := range els {
+		if els[i].id != "" {
+			taken[els[i].id] = true
+		}
+		if els[i].name == "body" && body < 0 {
+			body = i
+		}
+	}
+	id := newID(taken)
+	gallery := `<kapi-gallery data-kapi-id="` + id + `">` + op.HTML + `</kapi-gallery>`
+	sum := Summary{IDs: []string{id}}
+	if op.ID == "" {
+		at := len(src)
+		if body >= 0 {
+			at = els[body].closeStart
+		}
+		ins := gallery + "\n"
+		if at > 0 && src[at-1] != '\n' {
+			ins = "\n" + ins
+		}
+		sum.Text = "added an image gallery at the end"
+		return slices.Concat(src[:at], []byte(ins), src[at:]), sum, nil
+	}
+	e, err := find(els, op.ID)
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	for e.parent >= 0 && !transparent(els[e.parent].name) {
+		e = &els[e.parent]
+	}
+	ins := gallery
+	if ls, ownLine := lineStart(src, e.start); ownLine {
+		ins = "\n" + string(src[ls:e.start]) + gallery
+	}
+	sum.Text = "added an image gallery after " + describe(src, e)
+	return slices.Concat(src[:e.end], []byte(ins), src[e.end:]), sum, nil
+}
+
 const (
 	sectionArchiveAttr = "data-kapi-archive-section"
 	archivedWithAttr   = "data-kapi-archived-with"
@@ -1311,6 +1368,9 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 	els := parse(src)
 	if op.Kind == "image" {
 		return insertImage(src, els, op)
+	}
+	if op.Kind == "gallery" {
+		return insertGallery(src, els, op)
 	}
 	e, err := find(els, op.ID)
 	if err != nil {

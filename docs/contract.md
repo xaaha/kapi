@@ -38,6 +38,8 @@ load and writes the file back. Ids never change after that.
 | `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | none; every column header sorts in the browser and the file never changes | one plain `<table>` |
+| `<kapi-gallery>` | none; images open in one blurred preview with previous and next controls | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
+| `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
 | `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored |
@@ -51,7 +53,7 @@ The colours are the seven shared tones: `red`, `orange`, `yellow`, `green`,
 `blue`, `purple` and `grey`. Each is a `--kapi-<colour>-fill`, `-border`,
 `-text`, `-solid` and `-tint` token in `theme.css`, for light and dark.
 
-Unknown `kapi-*` elements render as a visible error box, never silently.
+Unknown or malformed `kapi-*` elements render a small warning and keep their safe body visible instead of replacing it. Known aliases such as `kind="warn"` are normalized.
 
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
 rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
@@ -70,7 +72,7 @@ parts are text:
 | attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
-| raw | `kapi-code`, `kapi-diff`, `kapi-diagram` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| raw | `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render`, `kapi-gallery` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
 | none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the
@@ -461,8 +463,8 @@ Ops reach the agent through the existing event log, so `kapi watch` shows
 with no new command. A note prints its part and quote after the target:
 `#13 human note on #k3f9a2bq (row 2, Owner) "Alice": why her? (answer with kapi say --reply 13)`.
 Each image on a note or message adds `[image <absolute path>]` after the
-text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image>`
-copies an image into the page's files folder and adds it with an `image` op
+text, so the agent can open it. `kapi attach [--after <id>] [--reader <name>] <page> <image...>`
+copies images into the page's files folder and adds one with an `image` op or several side by side with a `gallery` op,
 logged under the reader's name. `kapi export --md [--out <folder>|-] [--force] <page>` writes the
 same Markdown export as the browser into the folder (default `.`) and prints its path, or prints the
 Markdown with `--out -`, which it refuses for a zip when stdout is a terminal. It writes a temporary

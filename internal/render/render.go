@@ -90,7 +90,7 @@ func dropDuplicateIDs(n *html.Node, seen map[string]bool) {
 	}
 }
 
-var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form", "kapi-kv", "kapi-details", "kapi-checklist")
+var blockPresets = set("kapi-callout", "kapi-code", "kapi-diff", "kapi-table", "kapi-compare", "kapi-plan", "kapi-diagram", "kapi-form", "kapi-kv", "kapi-details", "kapi-checklist", "kapi-render", "kapi-gallery")
 
 var inlinePresets = set("kapi-badge")
 
@@ -148,7 +148,7 @@ func findBlock(n *html.Node, id string) *html.Node {
 	if v, ok := attr(n, "data-kapi-id"); ok && v == id {
 		return n
 	}
-	if rawPresets[n.Data] || (strings.HasPrefix(n.Data, "kapi-") && !presetRenders(n)) {
+	if rawPresets[n.Data] {
 		return nil
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

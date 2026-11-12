@@ -47,13 +47,15 @@ func init() {
 		"kapi-details":   renderDetails,
 		"kapi-checklist": renderChecklist,
 		"kapi-task":      renderTask,
+		"kapi-render":    renderRich,
+		"kapi-gallery":   renderGallery,
 	}
 }
 
 func renderPreset(b *bytes.Buffer, n *html.Node) {
 	var out bytes.Buffer
 	if err := tryPreset(&out, n); err != nil {
-		errorBox(b, n, err.Error())
+		fallbackPreset(b, n, err.Error())
 		return
 	}
 	b.Write(out.Bytes())
@@ -92,16 +94,24 @@ func hasAllowedTag(tag string) bool {
 	return ok
 }
 
-func errorBox(b *bytes.Buffer, n *html.Node, msg string) {
+func errorBox(b *bytes.Buffer, n *html.Node, msg string) { fallbackPreset(b, n, msg) }
+
+func fallbackPreset(b *bytes.Buffer, n *html.Node, msg string) {
 	tag := "div"
 	if p := renderedParent(n); p != nil && phrasing[p.Data] {
 		tag = "span"
 	}
-	writeStart(b, tag, outerAttrs(n, "kapi-error", "role", "alert"))
-	b.WriteString(`<span class="kapi-error-tag">`)
-	writeText(b, "<"+n.Data+">")
-	b.WriteString(`</span> `)
-	writeText(b, msg)
+	writeStart(b, tag, outerAttrs(n, "kapi-error", "title", msg))
+	b.WriteString(`<span class="kapi-error-tag" aria-label="Rendering warning">`)
+	writeText(b, "Could not style <"+n.Data+">: "+msg)
+	writeEnd(b, "span")
+	if rawPresets[n.Data] {
+		writeStart(b, "pre", nil)
+		writeText(b, rawText(n))
+		writeEnd(b, "pre")
+	} else {
+		renderChildren(b, n)
+	}
 	writeEnd(b, tag)
 }
 
@@ -126,10 +136,14 @@ var calloutKinds = map[string]calloutKind{
 func renderCallout(b *bytes.Buffer, n *html.Node) error {
 	kind := attrVal(n, "kind")
 	switch kind {
-	case "":
+	case "", "info":
 		kind = "note"
-	case "alert":
+	case "warn", "caution":
+		kind = "warning"
+	case "alert", "error", "critical":
 		kind = "danger"
+	case "ok", "done":
+		kind = "success"
 	}
 	k, ok := calloutKinds[kind]
 	if !ok {
@@ -140,6 +154,13 @@ func renderCallout(b *bytes.Buffer, n *html.Node) error {
 	writeStart(b, "div", bodyAttrs(n, "kapi-callout-body"))
 	renderChildren(b, n)
 	b.WriteString("</div></aside>")
+	return nil
+}
+
+func renderGallery(b *bytes.Buffer, n *html.Node) error {
+	writeStart(b, "div", outerAttrs(n, "kapi-gallery"))
+	renderChildren(b, n)
+	writeEnd(b, "div")
 	return nil
 }
 

@@ -640,6 +640,33 @@ func TestAttachAddsAnImageBlockAsTheAgent(t *testing.T) {
 	}
 }
 
+func TestAttachSeveralImagesCreatesOneGallery(t *testing.T) {
+	e := newE2E(t)
+	if err := os.WriteFile(e.page, []byte("<h1 data-kapi-id=\"aaaaaaaa\">Review</h1>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+	dir := t.TempDir()
+	before, after := filepath.Join(dir, "before.png"), filepath.Join(dir, "after.png")
+	if err := os.WriteFile(before, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(after, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := e.kapi("attach", e.page, before, after)
+	if !strings.Contains(got, "added an image gallery at the end") {
+		t.Fatalf("attach printed %q", got)
+	}
+	src, err := os.ReadFile(e.page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(src), "<kapi-gallery") != 1 || strings.Count(string(src), "<figure>") != 2 {
+		t.Fatalf("page source:\n%s", src)
+	}
+}
+
 func TestAttachLeavesNothingBehindWhenItFails(t *testing.T) {
 	e := newE2E(t)
 	if err := os.WriteFile(e.page, []byte("<p data-kapi-id=\"aaaaaaaa\">Text</p>\n"), 0o600); err != nil {
