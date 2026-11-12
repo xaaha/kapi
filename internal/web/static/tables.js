@@ -1,4 +1,4 @@
-window.kapiCreateTables = ({ main, siteHead, idOf }) => {
+window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
   const selector = '[data-kapi-preset="table"], table[data-kapi-id]';
   const SHORT_TEXT = 24;
   const BREAKOUT_GUTTER = 24;
@@ -73,7 +73,7 @@ window.kapiCreateTables = ({ main, siteHead, idOf }) => {
     return width;
   }
 
-  const breakoutBounds = () => [BREAKOUT_GUTTER, document.body.clientWidth - BREAKOUT_GUTTER];
+  const breakoutBounds = () => [BREAKOUT_GUTTER, rightEdge() - BREAKOUT_GUTTER];
 
   function hideLogo() {
     const logo = siteHead.getBoundingClientRect();

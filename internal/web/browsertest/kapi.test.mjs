@@ -1972,9 +1972,14 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
     await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
     await p.key("w");
     await p.waitFor(`document.querySelector('[data-kapi-id="vvvvvvvv"]').style.width !== ""`);
-    const [after, fits] = await p.eval(`(r => [r.width, r.left >= 0 && r.right <= document.body.clientWidth])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect())`);
+    const [after, fits] = await p.eval(`((r, panel) => [r.width, r.left >= 0 && r.right <= panel.left])(document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect(), document.querySelector(".kapi-panel").getBoundingClientRect())`);
     assert.ok(after > before + 100, `expanded from ${before}px to ${after}px`);
     assert.equal(fits, true);
+
+    await p.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+    await p.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") && document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect().width > ${after + 100}`);
+    await p.eval(`document.querySelector(".kapi-panel-restore").click()`);
+    await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed") && ((table, panel) => table.getBoundingClientRect().right <= panel.getBoundingClientRect().left)(document.querySelector('[data-kapi-id="vvvvvvvv"]'), document.querySelector(".kapi-panel"))`);
     await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });
