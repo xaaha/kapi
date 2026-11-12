@@ -61,7 +61,7 @@ func setText(src []byte, op *Op) ([]byte, error) {
 			}
 			continue
 		}
-		from, to, err := partRange(els, t, p)
+		from, to, err := partRange(src, els, t, p)
 		if err != nil {
 			return nil, err
 		}
@@ -121,14 +121,14 @@ func partSource(src []byte, p Part) (string, bool) {
 	if p.Attr != "" {
 		return t.attr(p.Attr)
 	}
-	from, to, err := partRange(els, t, p)
+	from, to, err := partRange(src, els, t, p)
 	if err != nil {
 		return "", false
 	}
 	return string(src[from:to]), true
 }
 
-func partRange(els []element, t *element, p Part) (int, int, error) {
+func partRange(src []byte, els []element, t *element, p Part) (int, int, error) {
 	if p.Row != nil {
 		if render.TextOf(t.name) != render.CellText {
 			return 0, 0, fmt.Errorf("a cell part needs a kapi-table, not <%s>", t.name)
@@ -142,6 +142,12 @@ func partRange(els []element, t *element, p Part) (int, int, error) {
 	}
 	if p.Lead {
 		return leadRange(els, t)
+	}
+	if from, to, ok := nativeCodeRange(src, els, t); ok {
+		return from, to, nil
+	}
+	if box, ok := nativeTaskInput(els, t); ok && strings.TrimSpace(string(src[t.tagEnd:box.start])) == "" {
+		return box.end, t.closeStart, nil
 	}
 	if kind := render.TextOf(t.name); (kind != render.BodyText && kind != render.RawText) || voidElements[t.name] || t.selfClosing {
 		return 0, 0, fmt.Errorf("%w: #%s is a <%s>", ErrNoText, t.id, t.name)

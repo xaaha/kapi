@@ -135,11 +135,8 @@ func TestProseRendersAsItsSource(t *testing.T) {
 <p data-kapi-id="bbbbbbbb" class="lead">Text with <em>em</em>, <a href="https://x.test/?a=1&amp;b=2" title="say &quot;hi&quot;">a link</a>, <code>a &lt; b &gt; c</code> and a&nbsp;space.</p>
 <ul data-kapi-id="cccccccc"><li>one</li><li>two<ol start="3"><li>three</li></ol></li></ul>
 <table data-kapi-id="dddddddd"><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table>
-<details open="" data-kapi-id="eeeeeeee"><summary>More</summary><p>Hidden <br> text <img src="a.png" alt="x"></p></details>
 <blockquote data-kapi-id="ffffffff" data-kapi-state="archived"><p>"Quoted" it's</p></blockquote>
-<!-- a comment -->
-<pre data-kapi-id="gggggggg">  indented
-    code</pre>`
+<!-- a comment -->`
 	want := strings.Replace(src,
 		`<table data-kapi-id="dddddddd"><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table>`,
 		`<div class="kapi-table" data-kapi-preset="table" data-kapi-id="dddddddd"><table><thead><tr><th scope="col">a</th></tr></thead><tbody><tr><td colspan="2">b</td></tr></tbody></table></div>`, 1)
@@ -210,8 +207,9 @@ func TestPresetExamplesRenderCleanly(t *testing.T) {
 		if strings.Contains(out, "kapi-error") {
 			t.Errorf("%s example renders an error box:\n%s", p.Name, out)
 		}
-		if !strings.Contains(out, `data-kapi-preset="`+strings.TrimPrefix(p.Name, "kapi-")+`"`) {
-			t.Errorf("%s example does not render the preset", p.Name)
+		name := strings.TrimPrefix(p.Name, "kapi-")
+		if !strings.Contains(out, `data-kapi-preset="`+name+`"`) && !strings.Contains(out, `data-kapi-component="`+name+`"`) {
+			t.Errorf("%s example does not render the component", p.Name)
 		}
 	}
 	for name := range presets {

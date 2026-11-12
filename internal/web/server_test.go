@@ -542,8 +542,8 @@ func TestSourceIsTheElementsOuterHTMLAsText(t *testing.T) {
 }
 
 func TestInnerSourceIsTheBodyByteForByte(t *testing.T) {
-	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">a <em>b</em></kapi-callout>\n<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n}</kapi-code>\n")
-	for id, want := range map[string]string{"aaaaaaaa": "a <em>b</em>", "bbbbbbbb": "if a < b && c {\n}"} {
+	s := newSite(t, "<kapi-callout data-kapi-id=\"aaaaaaaa\" kind=\"note\">a <em>b</em></kapi-callout>\n<kapi-code data-kapi-id=\"bbbbbbbb\" lang=\"go\">if a < b && c {\n}</kapi-code>\n<pre data-kapi-id=\"cccccccc\"><code class=\"language-go\">plain()</code></pre>\n")
+	for id, want := range map[string]string{"aaaaaaaa": "a <em>b</em>", "bbbbbbbb": "if a < b && c {\n}", "cccccccc": "plain()"} {
 		resp := s.get("/p/" + s.id + "/source/" + id + "?part=inner")
 		if resp.code != http.StatusOK || resp.header.Get("Kapi-Rev") != "1" || !strings.HasPrefix(resp.header.Get("Content-Type"), "text/plain") {
 			t.Fatalf("inner source: %d, Kapi-Rev %q, Content-Type %q", resp.code, resp.header.Get("Kapi-Rev"), resp.header.Get("Content-Type"))

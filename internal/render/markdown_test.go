@@ -46,6 +46,8 @@ func TestMarkdownEscapesTextAndKeepsEachConstructApart(t *testing.T) {
 			"4. four\n   - nested\n\n     para\n5. five\n\n<!-- -->\n\n1. again"},
 		{"a nested list that cannot interrupt a paragraph", `<ul><li>two<ol start="3"><li>three</li></ol></li></ul><ol><li>a<ol><li>b</li></ol></li></ol>`,
 			"- two\n\n  3. three\n\n1. a\n   1. b"},
+		{"native checklist", `<ul><li><input type="checkbox" checked>done</li><li><input type="checkbox">next</li></ul>`,
+			"- [x] done\n- [ ] next"},
 		{"list starts out of range", `<ol start="-3"><li>a</li></ol><ol start="12345678901"><li>b</li></ol><ol><li value="-1">c</li></ol>`,
 			"0. a\n\n<!-- -->\n\n999999999. b\n\n<!-- -->\n\n0. c"},
 		{"table cells", `<table><tr><th>a|b</th><th>c</th></tr><tr><td>1<br>2</td><td><p>x</p><p>y</p></td></tr></table>`,

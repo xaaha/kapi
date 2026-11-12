@@ -1426,13 +1426,18 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		e, _ = find(els, op.ID)
 		return removeAttr(out, e, archivedWithAttr), Summary{Text: text, IDs: one}, nil
 	case "check":
+		target, flag := e, "done"
 		if e.name != "kapi-task" {
-			return nil, Summary{}, fmt.Errorf("check needs a kapi-task, and #%s is a <%s>", op.ID, e.name)
+			var ok bool
+			if target, ok = nativeTaskInput(els, e); !ok {
+				return nil, Summary{}, fmt.Errorf("check needs a kapi-task or native checklist item, and #%s is a <%s>", op.ID, e.name)
+			}
+			flag = "checked"
 		}
 		if op.Done {
-			return setFlag(src, e, "done"), Summary{Text: "checked", IDs: one}, nil
+			return setFlag(src, target, flag), Summary{Text: "checked", IDs: one}, nil
 		}
-		return removeAttr(src, e, "done"), Summary{Text: "unchecked", IDs: one}, nil
+		return removeAttr(src, target, flag), Summary{Text: "unchecked", IDs: one}, nil
 	case "orient":
 		if t, _ := e.attr("type"); e.name != "kapi-diagram" || (t != "" && t != "flow" && t != "architecture") {
 			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram, and #%s is not one", op.ID)

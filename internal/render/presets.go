@@ -309,14 +309,7 @@ func renderTextField(b *bytes.Buffer, n *html.Node) error {
 }
 
 func toneAttr(n *html.Node) (string, error) {
-	tone := attrVal(n, "tone")
-	if tone == "" {
-		return "grey", nil
-	}
-	if !isTone(tone) {
-		return "", fmt.Errorf("tone must be %s, not %q", toneList, tone)
-	}
-	return tone, nil
+	return normalizeTone(attrVal(n, "tone")), nil
 }
 
 func renderBadge(b *bytes.Buffer, n *html.Node) error {
