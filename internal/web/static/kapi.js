@@ -3000,7 +3000,7 @@
   }, true);
   addEventListener("popstate", (e) => {
     if (typeof e.state?.kapiY === "number") {
-      if (searchBack && Math.abs(searchBack.y - e.state.kapiY) < 2) clearBack();
+      if (searchBack) clearBack();
       return scrollTo(0, e.state.kapiY);
     }
     const el = location.hash.length > 1 && find(decodeURIComponent(location.hash.slice(1)));
