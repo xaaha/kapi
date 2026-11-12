@@ -16,7 +16,7 @@ window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
   const closest = (el, query) => el && Element.prototype.closest.call(el, query);
   const matches = (el) => !!el?.matches(selector);
   const tableBox = (table) => (table.parentElement.matches(".kapi-table") ? table.parentElement : table);
-  const canWiden = (box) => box.matches(".kapi-table") && !cardMode.matches;
+  const canWiden = (box) => box.matches(".kapi-table, table[data-kapi-id]") && !cardMode.matches;
   const rowsOf = (table) => [...table.querySelectorAll("tr")].filter((tr) => closest(tr, "table") === table);
   const headRow = (table) => table.tHead?.rows[0] ?? rowsOf(table).find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH"));
   const isHeadRow = (tr) => {
