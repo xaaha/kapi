@@ -70,7 +70,11 @@ func setText(src []byte, op *Op) ([]byte, error) {
 		}
 		inner := p.Inner
 		if render.TextOf(t.name) != render.RawText {
-			if inner, err = cleanText(src, els, t.name, from, to, p.Inner); err != nil {
+			host := t.name
+			if p.Row != nil {
+				host = "td"
+			}
+			if inner, err = cleanText(src, els, host, from, to, p.Inner); err != nil {
 				return nil, err
 			}
 		}

@@ -52,6 +52,9 @@ var textAttrs = map[string]string{
 func TextAttr(tag string) string { return textAttrs[tag] }
 
 func TextOf(tag string) TextPart {
+	if tag == "table" {
+		return CellText
+	}
 	if !strings.HasPrefix(tag, "kapi-") {
 		return BodyText
 	}

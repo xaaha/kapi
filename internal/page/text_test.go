@@ -39,6 +39,16 @@ func TestATextOpSetsCellsAndKeepsTheirTags(t *testing.T) {
 	}
 }
 
+func TestATextOpSetsAPlainTableCell(t *testing.T) {
+	const src = `<table data-kapi-id="aaaaaaaa"><thead><tr><th>Name</th></tr></thead><tbody><tr><td>alpha</td></tr></tbody></table>`
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{cell(1, 0, "beta")}})
+	if got, want := onDisk(t, path), strings.Replace(src, "alpha", "beta", 1); got != want {
+		t.Errorf("file after text op:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestATextOpRefusesPartsItCannotEdit(t *testing.T) {
 	const page = tablePage + "<kapi-plan data-kapi-id=\"cccccccc\"><kapi-step data-kapi-id=\"dddddddd\">one</kapi-step></kapi-plan>\n"
 	for _, op := range []Op{
