@@ -4,4 +4,4 @@
   <div class="kapi-plan-item kapi-risk kapi-tone-yellow" data-kapi-preset="risk" data-kapi-id="p0000004"><span class="kapi-plan-mark">Risk</span><div class="kapi-plan-body" data-kapi-text="p0000004">Something can break.</div></div>
   <div class="kapi-plan-item kapi-question kapi-tone-blue" data-kapi-preset="question" data-kapi-id="p0000005"><span class="kapi-plan-mark">Question</span><div class="kapi-plan-body" data-kapi-text="p0000005">Open question?</div></div>
 </div>
-<div class="kapi-error" data-kapi-preset="step" role="alert" data-kapi-id="p0000006"><span class="kapi-error-tag">&lt;kapi-step&gt;</span> must be a direct child of &lt;kapi-plan&gt;</div>
+<div class="kapi-error" data-kapi-preset="step" title="must be a direct child of <kapi-plan>" data-kapi-id="p0000006"><span class="kapi-error-tag" aria-label="Rendering warning">Could not style &lt;kapi-step&gt;: must be a direct child of &lt;kapi-plan&gt;</span>Orphan step.</div>

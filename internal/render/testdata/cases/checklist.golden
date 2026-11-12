@@ -3,5 +3,5 @@
   <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000003"><input type="checkbox" aria-label="Flip reads to the new cluster"><span class="kapi-task-body" data-kapi-text="l0000003">Flip reads to the <code>new</code> cluster</span></li>
   <li class="kapi-task" data-kapi-preset="task" data-kapi-id="l0000004"><input type="checkbox" checked="" aria-label="Delete the old handler."><span class="kapi-task-body" data-kapi-text="l0000004"><p>Delete the old handler.</p></span></li>
 </ul>
-<div class="kapi-error" data-kapi-preset="checklist" role="alert" data-kapi-id="l0000005"><span class="kapi-error-tag">&lt;kapi-checklist&gt;</span> holds only &lt;kapi-task&gt; children, not &lt;li&gt;</div>
-<div class="kapi-error" data-kapi-preset="task" role="alert" data-kapi-id="l0000006"><span class="kapi-error-tag">&lt;kapi-task&gt;</span> must be a direct child of &lt;kapi-checklist&gt;</div>
+<div class="kapi-error" data-kapi-preset="checklist" title="holds only <kapi-task> children, not <li>" data-kapi-id="l0000005"><span class="kapi-error-tag" aria-label="Rendering warning">Could not style &lt;kapi-checklist&gt;: holds only &lt;kapi-task&gt; children, not &lt;li&gt;</span><li>not a task</li></div>
+<div class="kapi-error" data-kapi-preset="task" title="must be a direct child of <kapi-checklist>" data-kapi-id="l0000006"><span class="kapi-error-tag" aria-label="Rendering warning">Could not style &lt;kapi-task&gt;: must be a direct child of &lt;kapi-checklist&gt;</span>outside a checklist</div>

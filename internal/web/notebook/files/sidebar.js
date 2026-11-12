@@ -1,5 +1,6 @@
 import { h, pageID, root, shortcuts } from "../../static/core.js";
 import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, visitTimes, watch } from "./pages.js";
+import { noteSearch } from "./searchbox.js";
 
 const WORKING = new Set(["live", "waiting"]);
 const RECENT_LIMIT = 7;
@@ -65,12 +66,15 @@ export function showSidebar() {
     title: `Switch notes (${shortcuts.key("switchNote").hint})`,
   }, h("span", { class: "kapi-switcher-launcher-icon", "aria-hidden": "true" }));
   const scrim = h("div", { class: "kapi-switcher-scrim", hidden: "" });
-  const search = h("input", { class: "kapi-switcher-search", type: "search", placeholder: "Search notes…", "aria-label": "Search notes", autocomplete: "off", role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" });
+  const { box: searchBox, input: search } = noteSearch({
+    className: "kapi-switcher-search",
+    attributes: { role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" },
+  });
   const current = h("span", { class: "kapi-switcher-current" });
   const list = h("div", { class: "kapi-switcher-list", id: "kapi-switcher-list", role: "listbox" });
   const home = h("a", { class: "kapi-switcher-home", href: root }, h("span", { text: "Home · All notes" }), h("span", { "aria-hidden": "true", text: "↗" }));
   const dialog = h("div", { class: "kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Switch notes", hidden: "" },
-    h("div", { class: "kapi-switcher-search-box" }, search, h("kbd", { text: shortcuts.key("switchNote").hint })),
+    h("div", { class: "kapi-switcher-search-region" }, searchBox),
     current,
     list,
     home);

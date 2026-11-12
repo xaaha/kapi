@@ -405,13 +405,14 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 	reader := fs.String("reader", "agent", "Reader name to add the image as")
 	return &cli.Command{
 		Name:       "attach",
-		Short:      "Add an image to a page as a block",
-		Long:       "Copy a PNG, JPEG, GIF or WebP image of up to 10 MB into the folder next to the page (plan.files/ for plan.html) and add it to the page as a figure. Prints the new element's id.",
+		Short:      "Add one image, or several images side by side, to a page",
+		Long:       "Copy PNG, JPEG, GIF or WebP images of up to 10 MB each into the folder next to the page (plan.files/ for plan.html). One image becomes a figure; several become a side-by-side gallery with one preview sequence. Prints the new element's id.",
 		Flags:      fs,
 		FlagsFirst: true,
-		Args:       []cli.ArgDef{pageArg, {Name: "image", Required: true, Desc: "Image file to add"}},
+		Args:       []cli.ArgDef{pageArg, {Name: "image...", Required: true, Desc: "One or more image files to add"}},
 		Examples: []cli.Example{
 			{Command: "kapi attach --after k3f9a2bq plan.html chart.png", Description: "Add chart.png after one element"},
+			{Command: "kapi attach plan.html before.png after.png", Description: "Add two images side by side"},
 		},
 		Run: func(args []string) error {
 			pg, err := pagePath(args, 2, "attach")
@@ -427,26 +428,59 @@ func attachCmd(c api, out io.Writer) *cli.Command {
 			if _, err := os.Stat(pg); err != nil {
 				return err
 			}
-			data, err := os.ReadFile(args[1])
-			if err != nil {
-				return err
-			}
 			dir := pkgpage.FilesDir(pg)
-			_, existed := os.Stat(dir)
-			f, err := attach.Save(dir, data)
-			if err != nil {
-				return fmt.Errorf("%s: %w", args[1], err)
+			_, dirErr := os.Stat(dir)
+			dirExisted := !errors.Is(dirErr, os.ErrNotExist)
+			type pendingImage struct {
+				path    string
+				data    []byte
+				file    attach.File
+				created bool
 			}
-			resp, err := c.Do(&daemon.Request{Op: "image", Page: pg, Author: *reader, Target: *after, Text: f.Name})
-			if err != nil {
-				if !referenced(pg, f.Name) {
-					os.Remove(filepath.Join(dir, f.Name))
-					if existed != nil {
-						os.Remove(dir)
+			images := make([]pendingImage, 0, len(args)-1)
+			for _, image := range args[1:] {
+				data, readErr := os.ReadFile(image)
+				if readErr != nil {
+					return readErr
+				}
+				f, validErr := attach.Validate(data)
+				if validErr != nil {
+					return fmt.Errorf("%s: %w", image, validErr)
+				}
+				_, statErr := os.Stat(filepath.Join(dir, f.Name))
+				images = append(images, pendingImage{path: image, data: data, file: f, created: errors.Is(statErr, os.ErrNotExist)})
+			}
+			committed := false
+			defer func() {
+				if committed {
+					return
+				}
+				for _, image := range images {
+					if image.created && !referenced(pg, image.file.Name) {
+						os.Remove(filepath.Join(dir, image.file.Name))
 					}
 				}
+				if !dirExisted {
+					os.Remove(dir)
+				}
+			}()
+			var names []string
+			for _, image := range images {
+				f, saveErr := attach.Save(dir, image.data)
+				if saveErr != nil {
+					return fmt.Errorf("%s: %w", image.path, saveErr)
+				}
+				names = append(names, f.Name)
+			}
+			req := &daemon.Request{Op: "gallery", Page: pg, Author: *reader, Target: *after, Files: names}
+			if len(names) == 1 {
+				req.Op, req.Text, req.Files = "image", names[0], nil
+			}
+			resp, err := c.Do(req)
+			if err != nil {
 				return err
 			}
+			committed = true
 			_, err = fmt.Fprintf(out, "added #%s (%s)\n", resp.Event.Target, resp.Event.Text)
 			return err
 		},

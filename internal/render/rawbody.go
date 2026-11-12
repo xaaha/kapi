@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-var rawSource = set("kapi-code", "kapi-diff")
+var rawSource = set("kapi-code", "kapi-diff", "kapi-render")
 
 func rawBodies(src []byte) [][2]int {
 	var out [][2]int

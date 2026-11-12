@@ -22,6 +22,7 @@ var presetSourceAttrs = map[string]map[string]bool{
 	"kapi-item":    set("key"),
 	"kapi-details": set("summary", "open"),
 	"kapi-task":    set("done"),
+	"kapi-render":  set("title"),
 }
 
 var rawEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;")

@@ -540,6 +540,8 @@ func (m *mdWriter) preset(n *html.Node) []string {
 			out = append(out, label)
 		}
 		return append(out, fence("diff", diffDedent(trimBlankLines(rawText(n)))))
+	case "kapi-render":
+		return []string{fence("html", trimBlankLines(rawText(n)))}
 	case "kapi-diagram":
 		info := "kapi-diagram"
 		for _, k := range []string{"type", "dir"} {

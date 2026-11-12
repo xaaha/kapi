@@ -76,8 +76,10 @@ func sniff(data []byte) (File, error) {
 
 func ValidName(name string) bool { return namePattern.MatchString(name) }
 
+func Validate(data []byte) (File, error) { return sniff(data) }
+
 func Save(dir string, data []byte) (File, error) {
-	f, err := sniff(data)
+	f, err := Validate(data)
 	if err != nil {
 		return File{}, err
 	}

@@ -39,6 +39,8 @@ var textParts = map[string]TextPart{
 	"kapi-details":   BodyText,
 	"kapi-checklist": NoText,
 	"kapi-task":      BodyText,
+	"kapi-render":    RawText,
+	"kapi-gallery":   NoText,
 }
 
 var textAttrs = map[string]string{

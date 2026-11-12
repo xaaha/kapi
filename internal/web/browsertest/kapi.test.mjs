@@ -922,7 +922,7 @@ test("renders markup from events as literal text", async () => {
   server.push({ kind: "revision", target: "", text: evil });
   await page.waitFor(`document.querySelectorAll(".kapi-msg").length === 2`);
   await until(() => pageLoads() === 2);
-  assert.equal(await page.eval(`document.querySelectorAll("img").length`), 0);
+  assert.equal(await page.eval(`document.querySelectorAll("#kapi-page img, .kapi-message img, .kapi-answer img").length`), 0);
   assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-msg-text").textContent`), evil);
   assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-author").textContent`), evil);
   assert.equal(await page.eval(`document.querySelector(".kapi-message .kapi-ref").title`), `#${evil}`);
@@ -3638,7 +3638,7 @@ test("#30 an image dropped on a block goes in after it, selected, with a Downloa
   assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "image", id: "bbbbbbbb", src: name });
   await until(async () => (await figures()).join() === `bbbbbbbb>${name}`);
   await page.waitFor(`document.querySelector("[data-kapi-selected]")?.matches("figure")`);
-  assert.deepEqual(await barActions(), ["ask", "copy", "download", "archive", "delete"]);
+  assert.deepEqual(await barActions(), ["ask", "copy", "preview", "download", "archive", "delete"]);
   assert.equal(await page.eval(`document.querySelector("#kapi-page > figure > img").naturalWidth`), 1, "the image loads from the page's files folder");
   await page.eval(`window.downloaded = null; HTMLAnchorElement.prototype.click = function () { window.downloaded = [this.download, this.getAttribute("href")]; }`);
   await click('.kapi-bar [data-action="download"]');
@@ -3708,7 +3708,7 @@ test("#30 an image from another site has no Download tool", async () => {
   await withPage([{ id: "eeeeeeef", html: '<figure data-kapi-id="eeeeeeef"><img src="data:image/png;base64,' + PNG + '" alt=""></figure>' }], async (own, tab) => {
     await tab.eval(`document.querySelector('[data-kapi-id="eeeeeeef"]').click()`);
     await tab.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-    assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "archive", "delete"]);
+    assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "preview", "archive", "delete"]);
   });
 });
 
@@ -4271,9 +4271,9 @@ test("search finds text in folded sections and closed details, jumps there, and 
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
-test("search groups rank headings first, fold with the arrow keys, and Cmd+K opens it", async () => {
+test("search groups rank headings first and folds with the arrow keys", async () => {
   await reopenWith(LONG);
-  await page.key("k", { meta: true });
+  await page.key("/");
   await page.waitFor(`!document.querySelector(".kapi-search").hidden`);
   await page.type("search");
   await until(() => page.eval(`document.querySelectorAll(".kapi-search-section").length === 3`));

@@ -715,17 +715,33 @@ pre.kapi-hl {
 }
 .kapi-form-actions button:hover { background: color-mix(in srgb, var(--kapi-blue-solid) 88%, var(--kapi-fg)); }
 
+.kapi-render {
+  margin: 1.25rem 0;
+  overflow: hidden;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-card-shadow);
+}
+.kapi-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+.kapi-gallery figure { min-width: 0; margin: 0; }
+
 .kapi-error {
   margin: 1.25rem 0;
   padding: 0.65rem 0.9rem;
-  border: 1px solid var(--kapi-red-border);
+  border: 1px dashed var(--kapi-yellow-border);
   border-radius: var(--kapi-radius);
-  background: var(--kapi-red-fill);
-  color: var(--kapi-red-text);
+  background: color-mix(in srgb, var(--kapi-yellow-fill) 45%, transparent);
+  color: inherit;
   font-size: 0.92rem;
 }
 span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }
-.kapi-error-tag { font-family: var(--kapi-mono); font-weight: 700; }
+.kapi-error-tag { display: block; margin-bottom: 0.45rem; color: var(--kapi-yellow-text); font-family: var(--kapi-mono); font-size: 0.78rem; font-weight: 650; }
 
 @media (max-width: 640px) {
   .kapi-table { overflow: visible; border-radius: 0; background: none; box-shadow: none; }
@@ -955,8 +971,113 @@ span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; bo
   <label class="kapi-text" data-kapi-preset="text" data-kapi-field="notes" data-kapi-id="textaaaa"><span class="kapi-text-label" data-kapi-text="textaaaa">Anything else?</span><textarea name="notes" rows="3"></textarea></label>
 <div class="kapi-form-actions"><button type="submit">Send answers</button></div></form>
 
+<h2 data-kapi-id="h2rendera" data-kapi-text="h2rendera">HTML mockup</h2>
+<figure class="kapi-render" data-kapi-preset="render" data-kapi-id="renderaa" data-kapi-text="renderaa" data-kapi-raw=""><figcaption class="kapi-render-title">Funding cards</figcaption><iframe class="kapi-render-frame" title="Funding cards" sandbox="allow-same-origin" loading="lazy" srcdoc="<!doctype html><html><head><meta charset=&quot;utf-8&quot;><meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;><meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'&quot;><style>:root {
+  color-scheme: light dark;
+  --kapi-bg: light-dark(#f4f0e7, #151513);
+  --kapi-surface: light-dark(#fffefa, #1c1b18);
+  --kapi-card: light-dark(#ebe5da, #24221e);
+  --kapi-panel: light-dark(#dce0e1, #292d32);
+  --kapi-raised: light-dark(#fffefa, #2c2a25);
+  --kapi-lift: drop-shadow(0 1px 1.5px light-dark(rgb(64 54 39 / 0.1), rgb(0 0 0 / 0.6))) drop-shadow(0 4px 10px light-dark(rgb(64 54 39 / 0.08), rgb(0 0 0 / 0.4)));
+  --kapi-subtle: light-dark(#e7e1d6, #2d2b27);
+  --kapi-fg: light-dark(#292823, #eeece6);
+  --kapi-muted: light-dark(#666158, #b3afa6);
+  --kapi-faint: light-dark(#625e56, #aaa69d);
+  --kapi-border: light-dark(#ddd6c9, #373530);
+  --kapi-border-strong: light-dark(#c9c1b3, #4b4841);
+  --kapi-on-solid: #ffffff;
+  --kapi-shadow: 0 1px 2px light-dark(rgb(64 54 39 / 0.06), rgb(0 0 0 / 0.3)), 0 8px 24px light-dark(rgb(64 54 39 / 0.1), rgb(0 0 0 / 0.4));
+  --kapi-shadow-ink: light-dark(#403627, #000000);
+  --kapi-card-shadow: 0 1px 2px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 5%, transparent), rgb(0 0 0 / 0.5)), 0 4px 16px light-dark(color-mix(in srgb, var(--kapi-shadow-ink) 5%, transparent), rgb(0 0 0 / 0.3));
+
+  --kapi-red-fill: light-dark(#fef1f2, #36222a);
+  --kapi-red-border: light-dark(#fbc8d0, #7a3b4a);
+  --kapi-red-text: light-dark(#be123c, #fda4af);
+  --kapi-red-solid: light-dark(#be123c, #be123c);
+  --kapi-red-tint: light-dark(#ffe1e5, #3d1a24);
+
+  --kapi-orange-fill: light-dark(#fff5ec, #36261c);
+  --kapi-orange-border: light-dark(#fdd0a8, #7a4523);
+  --kapi-orange-text: light-dark(#a83c0a, #fdba74);
+  --kapi-orange-solid: light-dark(#c2410c, #b8410a);
+  --kapi-orange-tint: light-dark(#ffe6d1, #3e2515);
+
+  --kapi-yellow-fill: light-dark(#fefbe8, #302b18);
+  --kapi-yellow-border: light-dark(#f2d870, #6e5d1d);
+  --kapi-yellow-text: light-dark(#85530b, #fde047);
+  --kapi-yellow-solid: light-dark(#a16207, #9a5f06);
+  --kapi-yellow-tint: light-dark(#fcf0b8, #362e13);
+
+  --kapi-green-fill: light-dark(#ecfbf3, #15302a);
+  --kapi-green-border: light-dark(#a6ebc9, #23634f);
+  --kapi-green-text: light-dark(#036b4d, #6ee7b7);
+  --kapi-green-solid: light-dark(#047857, #08785a);
+  --kapi-green-tint: light-dark(#d3f5e3, #0f332b);
+
+  --kapi-blue-fill: light-dark(#eef7fd, #162a37);
+  --kapi-blue-border: light-dark(#b6defa, #255a77);
+  --kapi-blue-text: light-dark(#0368a0, #7cc8f5);
+  --kapi-blue-solid: light-dark(#0369a1, #0b6aa2);
+  --kapi-blue-tint: light-dark(#d9eefc, #0f2f3f);
+
+  --kapi-purple-fill: light-dark(#f5f3ff, #251f3a);
+  --kapi-purple-border: light-dark(#d9cffc, #4c3d80);
+  --kapi-purple-text: light-dark(#6d28d9, #c4b5fd);
+  --kapi-purple-solid: light-dark(#6d28d9, #7040e0);
+  --kapi-purple-tint: light-dark(#ebe5fe, #2a2246);
+
+  --kapi-grey-fill: light-dark(#f1f2f4, #23262d);
+  --kapi-grey-border: light-dark(#d4d4da, #3b404b);
+  --kapi-grey-text: light-dark(#3f3f46, #cfd3db);
+  --kapi-grey-solid: light-dark(#52525b, #5b6170);
+  --kapi-grey-tint: light-dark(#e8e9ed, #2a2d34);
+
+  --kapi-radius: 12px;
+  --kapi-radius-sm: 8px;
+  --kapi-radius-lg: 18px;
+  --kapi-font: &quot;Hanken Grotesk&quot;, ui-sans-serif, system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif;
+  --kapi-font-body: &quot;Source Serif 4&quot;, ui-serif, Georgia, &quot;Times New Roman&quot;, serif;
+  --kapi-mono: ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, monospace;
+  --kapi-measure: 46rem;
+}
+
+:root[data-theme=&quot;light&quot;] { color-scheme: light; }
+:root[data-theme=&quot;dark&quot;] { color-scheme: dark; }
+
+@media print {
+  :root:root { color-scheme: light; }
+}
+
+* { box-sizing: border-box; }
+html { color-scheme: light dark; background: var(--kapi-bg); }
+body { margin: 0; padding: 24px; background: var(--kapi-bg); color: inherit; font: 15px/1.55 var(--kapi-font); overflow-wrap: break-word; }
+h1, h2, h3, h4, h5, h6 { margin: 0 0 .65em; color: inherit; font-family: var(--kapi-font-body); line-height: 1.12; letter-spacing: -.02em; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); } h2 { font-size: 1.65rem; } h3 { font-size: 1.25rem; }
+p, ul, ol, table, blockquote, figure { margin: 0 0 1rem; }
+a { color: var(--kapi-blue-text); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, input, select, textarea { border: 1px solid var(--kapi-border-strong); border-radius: var(--kapi-radius-sm); background: var(--kapi-surface); }
+button { padding: .5rem .9rem; cursor: default; }
+input, select, textarea { padding: .5rem .65rem; }
+img, svg { max-width: 100%; height: auto; }
+figure { margin-inline: 0; }
+figcaption { margin-top: .4rem; color: var(--kapi-muted); font-size: .85rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: .6rem .75rem; border-bottom: 1px solid var(--kapi-border); text-align: left; }
+th { color: var(--kapi-muted); font-size: .75rem; text-transform: uppercase; }
+code { font-family: var(--kapi-mono); }
+:not(pre) > code { padding: .1em .3em; border: 1px solid var(--kapi-border); border-radius: 5px; background: var(--kapi-subtle); }
+</style></head><body><style>.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:16px;border:1px solid var(--kapi-border);border-radius:var(--kapi-radius-lg);background:var(--kapi-surface)}</style><main><h1>Funding</h1><section class=&quot;cards&quot;><article class=&quot;card&quot;><h2>Current</h2><p>No card.</p></article><article class=&quot;card&quot;><h2>Proposed</h2><button>Submit a fee</button></article></section></main>
+</body></html>"></iframe></figure>
+
+<div class="kapi-gallery" data-kapi-preset="gallery" data-kapi-id="gallerya">
+  <figure><img src="data:image/png;base64,AAAA" alt="Before"><figcaption>Before</figcaption></figure>
+  <figure><img src="data:image/png;base64,BBBB" alt="After"><figcaption>After</figcaption></figure>
+</div>
+
 <h2 data-kapi-id="h2gggggg" data-kapi-text="h2gggggg">Mistakes render visibly</h2>
-<div class="kapi-error" data-kapi-preset="chart" role="alert" data-kapi-id="erraaaaa"><span class="kapi-error-tag">&lt;kapi-chart&gt;</span> unknown preset element; run `kapi preset` to list the ones that exist</div>
+<div class="kapi-error" data-kapi-preset="chart" title="unknown preset element; run `kapi preset` to list the ones that exist" data-kapi-id="erraaaaa"><span class="kapi-error-tag" aria-label="Rendering warning">Could not style &lt;kapi-chart&gt;: unknown preset element; run `kapi preset` to list the ones that exist</span>bar chart</div>
 <p data-kapi-id="p3aaaaaa" data-kapi-text="p3aaaaaa">This paragraph had an <code>onclick</code> and a <code>style</code> in its source; both are gone.</p>
 <blockquote data-kapi-id="bqaaaaaa" data-kapi-text="bqaaaaaa"><p>Prose tags keep their meaning: quotes, <em>emphasis</em>, <strong>strong text</strong>, and lists.</p></blockquote>
 <ol data-kapi-id="olaaaaaa" data-kapi-text="olaaaaaa"><li>First</li><li>Second, with a nested list<ul><li>Nested item</li></ul></li></ol>
