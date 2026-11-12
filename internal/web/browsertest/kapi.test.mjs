@@ -716,21 +716,21 @@ test("W widens a selected table into the margins and W again puts it back in the
   await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
 });
 
-test("a plain prose table can expand like a kapi-table", async () => {
-  await page.eval(`(() => {
-    const table = document.createElement("table");
-    table.dataset.kapiId = "plainwid";
-    table.innerHTML = "<thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody>";
-    document.getElementById("kapi-page").append(table);
-  })()`);
-  const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="plainwid"]').getBoundingClientRect().width)`);
-  await select("plainwid");
+test("a plain prose table gets the same wrapper and expansion as kapi-table", async () => {
+  const original = server.state.blocks.find((block) => block.id === "gggggggg").html;
+  server.agentEdit("gggggggg", '<table data-kapi-id="gggggggg" data-kapi-text="gggggggg"><thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody></table>');
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]')`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] > table')?.hasAttribute("data-kapi-id")`), false);
+  const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
+  await select("gggggggg");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
   const column = await width();
   await page.key("w");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="collapse"]')`);
   assert.ok((await width()) > column + 100, `expanded to ${await width()} from ${column}`);
   await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
+  server.agentEdit("gggggggg", original);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"] table tbody tr')?.cells[0].textContent === "beta"`);
 });
 
 test("the floating block toolbar is larger than the surrounding chrome", async () => {

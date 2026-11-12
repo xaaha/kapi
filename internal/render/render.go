@@ -164,6 +164,10 @@ func renderNode(b *bytes.Buffer, n *html.Node) {
 		renderPreset(b, n)
 		return
 	}
+	if n.Type == html.ElementNode && n.Namespace == "" && n.Data == "table" {
+		renderProseTable(b, n)
+		return
+	}
 	writeProse(b, n, renderNode)
 }
 
