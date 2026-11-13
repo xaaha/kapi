@@ -21,7 +21,7 @@ func TestCalloutKindsMapToTones(t *testing.T) {
 	}
 }
 
-func TestBadgeTakesOneOfTheSevenTones(t *testing.T) {
+func TestBadgeAcceptsStandardAliasedAndFallbackTones(t *testing.T) {
 	for _, tone := range tones {
 		out := render(t, `<p>x <kapi-badge tone="`+tone+`">merged</kapi-badge></p>`)
 		want := `<p>x <span class="kapi-badge kapi-tone-` + tone + `" data-kapi-preset="badge">merged</span></p>`
@@ -32,9 +32,28 @@ func TestBadgeTakesOneOfTheSevenTones(t *testing.T) {
 	if out := render(t, `<kapi-badge>draft</kapi-badge>`); !strings.Contains(out, "kapi-tone-grey") {
 		t.Errorf("a badge with no tone should be grey: %s", out)
 	}
-	out := render(t, `<p>x <kapi-badge tone="teal">y</kapi-badge></p>`)
-	if !strings.HasPrefix(out, `<p>x <span class="kapi-error"`) || !strings.Contains(out, "red, orange, yellow, green, blue, purple or grey") {
-		t.Errorf("an unknown tone should be an inline error box naming the tones: %s", out)
+	for tone, want := range map[string]string{"gray": "grey", "violet": "purple", "teal": "blue", "GOLD": "yellow"} {
+		out := render(t, `<p><kapi-badge tone="`+tone+`">x</kapi-badge></p>`)
+		if !strings.Contains(out, "kapi-tone-"+want) || strings.Contains(out, "kapi-error") {
+			t.Errorf("tone %q should use %s: %s", tone, want, out)
+		}
+	}
+	out := render(t, `<p><kapi-badge tone="company-brand">x</kapi-badge></p>`)
+	if !strings.Contains(out, `class="kapi-badge kapi-tone-`) || strings.Contains(out, "kapi-error") || strings.Contains(out, `style=`) {
+		t.Errorf("an arbitrary named tone should fall back to a shared theme tone: %s", out)
+	}
+}
+
+func TestBadgeAcceptsHexTonesWithThemeAwareDerivedColours(t *testing.T) {
+	out := render(t, `<p><kapi-badge tone="#7c3aed">custom</kapi-badge></p>`)
+	for _, want := range []string{`class="kapi-badge kapi-tone-custom"`, `--kapi-tone-tint:color-mix(in srgb,#7c3aed 18%,var(--kapi-surface))`, `--kapi-tone-text:color-mix(in srgb,#7c3aed 45%,var(--kapi-fg))`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("custom tone lacks %q: %s", want, out)
+		}
+	}
+	out = render(t, `<p><kapi-badge tone="#bad;color:red">safe</kapi-badge></p>`)
+	if strings.Contains(out, `style=`) || strings.Contains(out, `color:red`) || strings.Contains(out, "kapi-error") {
+		t.Errorf("a malformed hex tone should safely fall back to a shared tone: %s", out)
 	}
 }
 

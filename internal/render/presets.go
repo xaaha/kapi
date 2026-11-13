@@ -308,37 +308,42 @@ func renderTextField(b *bytes.Buffer, n *html.Node) error {
 	return nil
 }
 
-func toneAttr(n *html.Node) (string, error) {
-	tone := attrVal(n, "tone")
+type badgeTone struct{ class, style string }
+
+func toneAttr(n *html.Node) badgeTone {
+	tone := strings.ToLower(strings.TrimSpace(attrVal(n, "tone")))
 	if tone == "" {
-		return "grey", nil
+		return badgeTone{class: "kapi-tone-grey"}
 	}
-	if !isTone(tone) {
-		return "", fmt.Errorf("tone must be %s, not %q", toneList, tone)
+	if hexColour(tone) {
+		return badgeTone{class: "kapi-tone-custom", style: customToneStyle(tone)}
 	}
-	return tone, nil
+	return badgeTone{class: "kapi-tone-" + namedTone(tone)}
 }
 
 func renderBadge(b *bytes.Buffer, n *html.Node) error {
-	tone, err := toneAttr(n)
-	if err != nil {
-		return err
-	}
+	tone := toneAttr(n)
 	icon, stated, err := stateAttr(n)
 	if err != nil {
 		return err
 	}
-	if stated && attrVal(n, "tone") == "" {
-		tone = icon.tone
+	if stated && strings.TrimSpace(attrVal(n, "tone")) == "" {
+		tone = badgeTone{class: "kapi-tone-" + icon.tone}
+	}
+	attrs := func(class string, extra ...string) []html.Attribute {
+		if tone.style != "" {
+			extra = append(extra, "style", tone.style)
+		}
+		return outerAttrs(n, class+" "+tone.class, extra...)
 	}
 	switch {
 	case !stated:
-		writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
+		writeStart(b, "span", attrs("kapi-badge"))
 	case hasContent(n):
-		writeStart(b, "span", outerAttrs(n, "kapi-badge kapi-tone-"+tone))
+		writeStart(b, "span", attrs("kapi-badge"))
 		b.WriteString(icon.svg())
 	default:
-		writeStart(b, "span", outerAttrs(n, "kapi-badge-icon kapi-tone-"+tone, "role", "img", "aria-label", icon.label))
+		writeStart(b, "span", attrs("kapi-badge-icon", "role", "img", "aria-label", icon.label))
 		b.WriteString(icon.svg())
 	}
 	if id, ok := attr(n, textAttr); ok && hasContent(n) {
