@@ -22,21 +22,31 @@ func TestPageIDMatchesTheDaemonLayout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- daemon.New(home).Serve(ctx) }()
+	daemonStopped := false
 	t.Cleanup(func() {
 		cancel()
-		<-done
+		if !daemonStopped {
+			if err := <-done; err != nil {
+				t.Errorf("daemon: %v", err)
+			}
+		}
 	})
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
 	for {
 		conn, err := net.Dial("unix", daemon.SocketPath(home))
 		if err == nil {
 			conn.Close()
 			break
 		}
-		if time.Now().After(deadline) {
+		select {
+		case err := <-done:
+			daemonStopped = true
+			t.Fatalf("daemon stopped before becoming reachable: %v", err)
+		case <-deadline.C:
 			t.Fatalf("daemon unreachable: %v", err)
+		case <-time.After(10 * time.Millisecond):
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 
 	page := filepath.Join(t.TempDir(), "plan.html")

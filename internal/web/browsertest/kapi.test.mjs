@@ -267,7 +267,7 @@ test("the delete notice goes away when undo stops being available", async () => 
   await deleteBlock("cccccccc");
   server.state.history = [];
   server.push({ kind: "revision", target: "", text: "file changed" });
-  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  await page.waitFor(`document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
   await page.waitFor(`!document.querySelector("#kapi-page .kapi-undo-note")`);
 });
 
@@ -788,28 +788,29 @@ test("a selected diagram has Phosphor zoom controls that resize only its SVG", a
 });
 
 test("Undo shows only when there is something to undo, on the left so the theme toggle never moves", async () => {
-  const undoShown = () => page.eval(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
-  const themeLeft = () => page.eval(`document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`);
+  const undoShown = () => page.eval(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
+  const themeLeft = () => page.eval(`document.querySelector(".kapi-site-actions .kapi-theme").getBoundingClientRect().left`);
   assert.equal(await undoShown(), false);
   const before = await themeLeft();
   await select("cccccccc");
   await click('.kapi-bar [data-action="archive"]');
-  await page.waitFor(`!document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  await page.waitFor(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
   assert.equal(await themeLeft(), before);
-  assert.ok(await page.eval(`document.querySelector('.kapi-panel [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-panel .kapi-theme").getBoundingClientRect().left`));
-  await click('.kapi-panel [data-action="undo"]');
-  await page.waitFor(`document.querySelector('.kapi-panel [data-action="undo"]').hidden`);
+  assert.ok(await page.eval(`document.querySelector('.kapi-site-actions [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-site-actions .kapi-theme").getBoundingClientRect().left`));
+  await click('.kapi-site-actions [data-action="undo"]');
+  await page.waitFor(`document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
 });
 
-test("the Kapi logo stays at the top left on wide desktops and scrolls away when there is no room", async () => {
+test("the full-width Kapi header stays visible while scrolling at desktop widths", async () => {
   const wide = await browser.open(server.url, { width: 1440, height: 700 });
   try {
     await wide.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
     await wide.waitFor(`scrollY >= 1200`);
     const [head, page] = await wide.eval(`[".kapi-site-head", "#kapi-page"].map((q) => (({ top, left, right, bottom }) => ({ top, left, right, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
     assert.ok(head.top >= 0 && head.bottom <= 80, JSON.stringify(head));
-    const textLeft = await wide.eval(`document.querySelector("#kapi-page").getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector("#kapi-page")).paddingLeft)`);
-    assert.ok(head.right <= textLeft, JSON.stringify({ head, page, textLeft }));
+    assert.equal(head.left, 0);
+    assert.ok(head.right > page.right, JSON.stringify({ head, page }));
+    assert.equal(head.right, await wide.eval(`document.documentElement.clientWidth`));
   } finally {
     await wide.close();
   }
@@ -817,7 +818,7 @@ test("the Kapi logo stays at the top left on wide desktops and scrolls away when
   try {
     await narrow.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
     await narrow.waitFor(`scrollY >= 1200`);
-    assert.ok(await narrow.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom < 0`));
+    assert.equal(await narrow.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().top`), 0);
   } finally {
     await narrow.close();
   }
@@ -950,7 +951,7 @@ test("renders markup from events as literal text", async () => {
 
 test("chrome styles do not reach page content that reuses chrome class names", async () => {
   const leaks = await page.eval(`(() => {
-    const names = [...new Set([...document.querySelectorAll("#kapi-chrome [class]")].flatMap((e) => [...e.classList]))];
+    const names = [...new Set([...document.querySelectorAll("#kapi-chrome [class]:not(.kapi-site-head):not(.kapi-site-head *)")].flatMap((e) => [...e.classList]))];
     const probe = document.createElement("div");
     document.getElementById("kapi-page").append(probe);
     const styles = () => {
@@ -1121,6 +1122,8 @@ test("the selection ring wraps the whole element, list markers included", async 
 });
 
 test("desktop conversation panel collapses without losing its working state", async () => {
+  server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", text: "Keep this note" });
+  await page.waitFor(`!document.querySelector(".kapi-tabs").hidden`);
   await page.eval(`localStorage.removeItem("kapi-panel-collapsed")`);
   const before = await page.eval(`(() => {
     const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
@@ -1131,7 +1134,7 @@ test("desktop conversation panel collapses without losing its working state", as
     scroll.scrollTop = 0;
     return { panel: { left: panel.left, right: panel.right }, pageCenter: (page.left + page.right) / 2, scrollTop: scroll.scrollTop };
   })()`);
-  assert.equal(before.panel.right - before.panel.left, 340);
+  assert.equal(before.panel.right - before.panel.left, 355);
   await click(".kapi-panel-collapse");
   await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
   const collapsed = await page.eval(`(() => {
@@ -1140,7 +1143,7 @@ test("desktop conversation panel collapses without losing its working state", as
       padding: getComputedStyle(document.documentElement).paddingRight,
       pageCenter: (page.left + page.right) / 2,
       panel: document.querySelector(".kapi-panel").checkVisibility(),
-      restore: document.querySelector(".kapi-panel-restore").checkVisibility(),
+      restore: document.querySelector(".kapi-chat-button").checkVisibility(),
       draft: document.querySelector(".kapi-composer textarea").value,
       notes: document.querySelector(".kapi-panel").hasAttribute("data-notes"),
       scrollTop: document.querySelector(".kapi-scroll").scrollTop,
@@ -1154,8 +1157,8 @@ test("desktop conversation panel collapses without losing its working state", as
   assert.equal(collapsed.scrollTop, before.scrollTop);
   assert.ok(collapsed.pageCenter > before.pageCenter + 100, JSON.stringify({ before, collapsed }));
 
-  await click(".kapi-panel-restore");
-  assert.equal(await page.eval(`getComputedStyle(document.documentElement).paddingRight`), "340px");
+  await click(".kapi-chat-button");
+  assert.equal(await page.eval(`getComputedStyle(document.documentElement).paddingRight`), "355px");
   assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "unfinished draft");
   assert.equal(await page.eval(`document.querySelector(".kapi-panel").hasAttribute("data-notes")`), true);
 
@@ -1167,31 +1170,26 @@ test("desktop conversation panel collapses without losing its working state", as
   await page.waitFor(`document.getElementById("kapi-page").dataset.rev !== ${JSON.stringify(rev)}`);
   assert.equal(await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") && document.querySelector(".kapi-composer textarea").value`), "unfinished draft");
   server.push({ author: "agent", kind: "message", text: "reply while collapsed" });
-  await page.waitFor(`document.querySelector(".kapi-panel-restore").hasAttribute("data-unread")`);
-  assert.equal(await page.eval(`document.querySelector(".kapi-panel-restore").getAttribute("aria-label")`), "Restore conversation, new reply");
-  await click(".kapi-panel-restore");
-  assert.equal(await page.eval(`document.querySelector(".kapi-panel-restore").hasAttribute("data-unread")`), false);
+  await page.waitFor(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").getAttribute("aria-label")`), "Chat, new reply");
+  await click(".kapi-chat-button");
+  assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
 });
 
-test("on phones chat is a composer bar that expands to 40% and collapses back", async () => {
+test("phone chat is an explicit drawer and closes with Escape without losing the draft", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
-    const box = () => phone.eval(`(({ top, height }) => ({ top, height }))(document.querySelector(".kapi-panel").getBoundingClientRect())`);
-    const visible = (sel) => phone.eval(`document.querySelector(${JSON.stringify(sel)}).checkVisibility()`);
-    const bar = await box();
-    assert.ok(bar.height <= 120, `bar height ${bar.height}`);
-    assert.equal(bar.top + bar.height, await phone.eval(`document.documentElement.clientHeight`));
-    assert.equal(await visible(".kapi-composer textarea"), true);
-    assert.equal(await visible(".kapi-scroll"), false);
-
-    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-panel").checkVisibility()`), true);
     await phone.waitFor(`document.querySelector(".kapi-scroll").checkVisibility()`);
-    const open = await box();
-    assert.ok(open.height > bar.height && open.height <= 320, `open height ${open.height}`);
-
+    const box = await phone.eval(`(({ top, bottom, right, width }) => ({ top, bottom, right, width }))(document.querySelector(".kapi-panel").getBoundingClientRect())`);
+    assert.equal(box.top, 64);
+    assert.equal(box.bottom, 800);
+    assert.equal(box.right, await phone.eval(`document.documentElement.clientWidth`));
+    assert.ok(box.width <= 365);
+    await phone.eval(`document.querySelector(".kapi-composer textarea").value = "draft"`);
     await phone.key("Escape");
-    await phone.waitFor(`!document.querySelector(".kapi-scroll").checkVisibility()`);
-    assert.deepEqual(await box(), bar);
+    await phone.waitFor(`!document.querySelector(".kapi-panel").checkVisibility()`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-composer textarea").value`), "draft");
     assert.deepEqual(phone.errors, []);
   } finally {
     await phone.close();
@@ -1199,14 +1197,14 @@ test("on phones chat is a composer bar that expands to 40% and collapses back", 
 });
 
 test("Undo renders as a quiet bordered button", async () => {
-  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-outline-button, .kapi-search-button, .kapi-panel-collapse)")].map((b) => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-outline-button, .kapi-search-button, .kapi-panel-collapse, .kapi-chat-button)")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
   assert.deepEqual(styles, [["Undo", "1px", "solid"]]);
 });
 
-const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-theme [role=menuitemradio]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.themeChoice).join()]`);
+const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-theme [data-theme-choice]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.themeChoice).join()]`);
 const LIGHT_BG = "rgb(244, 240, 231)";
 const DARK_BG = "rgb(21, 21, 19)";
 const prefer = async (scheme) => {
@@ -1432,8 +1430,8 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1440`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1500`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
@@ -1448,8 +1446,8 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
 });
 
 test("on a tall block the toolbar stays in view while the block scrolls", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1440`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1500`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
@@ -1510,10 +1508,10 @@ test("the block toolbar never covers page content", async () => {
   try {
     await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-    assert.equal(await phone.eval(`document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`), true);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
     await phone.eval(`document.querySelector('.kapi-bar [data-action="edit"]').click()`);
-    await phone.waitFor(`!!document.querySelector('.kapi-panel .kapi-bar .kapi-primary[data-action="cancel"]')`);
-    await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-panel").getBoundingClientRect().height`);
+    await phone.waitFor(`!!document.querySelector('.kapi-bar .kapi-primary[data-action="cancel"]')`);
+    await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-bar").getBoundingClientRect().height`);
   } finally {
     await phone.close();
   }
@@ -1594,6 +1592,7 @@ for (const width of [390, 360]) {
       return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && !!at?.closest(${JSON.stringify(sel)});
     })()`;
     try {
+      await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
       await phone.eval(`document.getElementById("kapi-page").style.paddingBottom = "3000px"; scrollTo(0, 1500)`);
       await phone.waitFor(`scrollY > 1000`);
       assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
@@ -1629,14 +1628,15 @@ const tap = async (phone, selector) => {
 test("tapping the theme toggle on a phone does not expand the chat", async () => {
   const phone = await mobilePage(390);
   try {
+    await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
     await tap(phone, ".kapi-theme-button");
     await phone.waitFor(`!document.querySelector(".kapi-theme-menu").hidden`);
     await tap(phone, '.kapi-theme [data-theme-choice="dark"]');
     await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
     assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
     assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
-    await phone.eval(`document.querySelector(".kapi-composer textarea").focus()`);
-    await phone.waitFor(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`);
+    await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await phone.waitFor(`document.querySelector(".kapi-panel").checkVisibility()`);
   } finally {
     await phone.close();
   }
@@ -1935,6 +1935,7 @@ async function withPageStyles(width, fn) {
   const p = await browser.open(server.url, { width, height: 800 });
   try {
     await p.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+    if (width <= 760) await p.eval(`document.querySelector(".kapi-chat-button").click()`);
     await fn(p);
   } finally {
     await p.close();
@@ -1948,10 +1949,10 @@ test("on desktop a long table's header row sticks to the top of the window", asy
     await p.eval(`(t => { for (let i = 0; i < 60; i++) t.tBodies[0].insertRow().append(...["row" + i, String(i)].map((v) => Object.assign(document.createElement("td"), { textContent: v }))); })(document.querySelector('[data-kapi-id="gggggggg"] table'))`);
     await p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="gggggggg"]'))`);
     const [top, band, bg] = await p.eval(`(th => [Math.round(th.getBoundingClientRect().top), getComputedStyle(th).backgroundColor, getComputedStyle(document.body).backgroundColor])(document.querySelector('[data-kapi-id="gggggggg"] thead th'))`);
-    assert.equal(top, 0);
+    assert.equal(top, 64);
     assert.notEqual(band, bg);
     assert.notEqual(band, "rgba(0, 0, 0, 0)");
-    assert.equal(await p.eval(`getComputedStyle(document.querySelector(".kapi-site-head")).position`), "static");
+    assert.equal(await p.eval(`getComputedStyle(document.querySelector(".kapi-site-head")).position`), "fixed");
   });
 });
 
@@ -1995,7 +1996,7 @@ test("a table too wide for the column scrolls inside it and keeps the sans face,
 
     await p.eval(`document.querySelector(".kapi-panel-collapse").click()`);
     await p.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") && document.querySelector('[data-kapi-id="vvvvvvvv"]').getBoundingClientRect().width > ${after + 100}`);
-    await p.eval(`document.querySelector(".kapi-panel-restore").click()`);
+    await p.eval(`document.querySelector(".kapi-chat-button").click()`);
     await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed") && ((table, panel) => table.getBoundingClientRect().right <= panel.getBoundingClientRect().left)(document.querySelector('[data-kapi-id="vvvvvvvv"]'), document.querySelector(".kapi-panel"))`);
     await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
@@ -2048,16 +2049,16 @@ test("a crowded table's header stays sticky before and after the table is expand
     const scrollToMiddle = () => p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="wwwwwwww"]'))`);
     const headTop = () => p.eval(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top)`);
     await scrollToMiddle();
-    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 0`);
-    assert.equal(await headTop(), 0);
+    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 64`);
+    assert.equal(await headTop(), 64);
 
     await p.eval(`document.querySelector('[data-kapi-id="wwwwwwww"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
     await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="expand"]')`);
     await p.key("w");
     await p.waitFor(`document.querySelector('[data-kapi-id="wwwwwwww"]').style.width !== ""`);
     await scrollToMiddle();
-    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 0`);
-    assert.equal(await headTop(), 0);
+    await p.waitFor(`Math.round(document.querySelector('[data-kapi-id="wwwwwwww"] thead th').getBoundingClientRect().top) === 64`);
+    assert.equal(await headTop(), 64);
     await p.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   });
 });
@@ -2133,7 +2134,7 @@ test("table body cells carry their column header as a label for the narrow card 
 test("the logo sits at the top left of the page as a site header, not in the chat panel", async () => {
   const [head, page_, inPanel, label] = await page.eval(`(() => {
     const box = (el) => (({ left, top, bottom }) => ({ left, top, bottom }))(el.getBoundingClientRect());
-    const head = document.querySelector("body > .kapi-site-head");
+    const head = document.querySelector("body > #kapi-chrome > .kapi-site-head");
     return [head && box(head), box(document.getElementById("kapi-page")), !!document.querySelector(".kapi-panel .kapi-logo"), head && [head.querySelector(".kapi-logo").getAttribute("aria-hidden"), head.querySelector(".kapi-logo").hasAttribute("role"), head.querySelector(".kapi-site-name").textContent]];
   })()`);
   assert.ok(head, "no site header");
@@ -2777,7 +2778,7 @@ test("#39 on a phone the docked toolbar offers Ask AI and the note opens at the 
     await phone.call("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
     await phone.waitFor(`matchMedia("(max-width: 760px)").matches`);
     await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
-    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.classList.contains("kapi-panel")`);
+    await phone.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
     assert.deepEqual(await phone.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "edit", "archive", "delete"]);
     await phone.eval(`document.querySelector('.kapi-bar [data-action="ask"]').click()`);
     await phone.waitFor(`!!document.querySelector(".kapi-ask")`);
@@ -3267,7 +3268,7 @@ test("#39 on a phone, a strip counts the notes and opens them in a sheet, and Ne
   try {
     await phone.waitFor(`!document.querySelector(".kapi-notes-strip").hidden`);
     assert.equal(await phone.eval(`document.querySelector(".kapi-strip-summary").textContent`), "2 notes · 1 changed");
-    assert.equal(await phone.eval(`getComputedStyle(document.querySelector(".kapi-tabs")).display`), "none");
+    assert.equal(await phone.eval(`document.querySelector(".kapi-tabs").checkVisibility()`), true);
     assert.equal(await phone.eval(`getComputedStyle(document.querySelector(".kapi-notes")).display`), "none");
     await phone.eval(`[...document.querySelectorAll(".kapi-notes-strip button")].find((b) => b.textContent === "Notes").click()`);
     await phone.waitFor(`getComputedStyle(document.querySelector(".kapi-notes")).position === "fixed"`);
@@ -4193,11 +4194,11 @@ const LONG = (() => {
 const outlineCurrent = () => page.eval(`document.querySelector(".kapi-outline-row[data-current] .kapi-outline-link")?.textContent ?? null`);
 const scrollToHeading = (id) => page.eval(`scrollTo(0, document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect().top + scrollY - 40)`);
 
-test("the outline lists the headings as a tree in the panel and its current row follows the scroll", async () => {
+test("the independent outline lists headings as a tree alongside chat and follows the scroll", async () => {
   await reopenWith(LONG);
   assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), false);
   await click(".kapi-outline-button");
-  await page.waitFor(`document.querySelector(".kapi-outline").checkVisibility() && !document.querySelector(".kapi-scroll").checkVisibility()`);
+  await page.waitFor(`document.querySelector(".kapi-outline").checkVisibility() && document.querySelector(".kapi-scroll").checkVisibility()`);
   assert.equal(await page.eval(`document.querySelector(".kapi-outline-button").getAttribute("aria-pressed")`), "true");
   assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-outline-link")].map((b) => [b.textContent, b.closest(".kapi-outline-kids")?.parentElement.dataset.outline ?? ""])`),
     [["Searching", ""], ["Linear search", "o1o1o1o1"], ["Binary search", "o1o1o1o1"], ["Exit condition", "o3o3o3o3"], ["Examples", "o1o1o1o1"]]);
@@ -4215,9 +4216,8 @@ test("the outline lists the headings as a tree in the panel and its current row 
   assert.equal(await page.eval(`document.querySelector('[data-outline="o4o4o4o4"]').checkVisibility()`), true);
 
   await page.eval(`location.reload()`);
-  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-outline-row")`);
-  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), true);
-  await click(".kapi-outline-button");
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-chat-button")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), false);
   await page.waitFor(`document.querySelector(".kapi-scroll").checkVisibility()`);
   assert.equal(await page.eval(`localStorage.getItem("kapi-outline")`), null);
 });
@@ -4231,7 +4231,7 @@ test("clicking an outline heading unfolds what hides it, scrolls there, and brow
   assert.equal(await page.eval(`document.querySelector('.kapi-outline-row:has([title="Binary search"]) .kapi-outline-folded').textContent`), "6 folded");
   await click('.kapi-outline-link[title="Exit condition"]');
   await page.waitFor(`document.querySelector('[data-kapi-id="o4o4o4o4"]').checkVisibility()`);
-  assert.equal(await page.eval(`Math.round(document.querySelector('[data-kapi-id="o4o4o4o4"]').getBoundingClientRect().top) <= 40`), true);
+  assert.equal(await page.eval(`Math.round(document.querySelector('[data-kapi-id="o4o4o4o4"]').getBoundingClientRect().top) <= 100`), true);
   assert.equal(await page.eval(`location.hash`), "#o4o4o4o4");
   assert.equal(await outlineCurrent(), "Exit condition");
   await page.eval(`history.back()`);
@@ -4245,7 +4245,7 @@ test("the theme button opens a Light, Dark and System menu on hover or by keys, 
   const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(".kapi-theme-button").getBoundingClientRect())`);
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   await until(async () => !(await list()));
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-theme-menu [role=menuitemradio]")].map((b) => [b.textContent, b.getAttribute("aria-checked")])`),
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-theme-menu [data-theme-choice]")].map((b) => [b.textContent, b.getAttribute("aria-checked")])`),
     [["Light", "false"], ["Dark", "false"], ["System", "true"]]);
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 400 });
   await until(list);
@@ -4347,24 +4347,30 @@ test("Ctrl+N and Ctrl+P move through search results without printing, and the hi
   assert.equal(await page.eval(`document.querySelector(".kapi-search-keys kbd").textContent`), "↑↓");
 });
 
-test("the search button sits in the panel head beside outline and theme, and its popover opens under it on the right", async () => {
+test("the shared header search opens one centered dialog in Notes scope with optional page search", async () => {
   const head = await page.eval(`(() => {
     const box = (s) => (({ top, height, width }) => [Math.round(top), Math.round(height), Math.round(width)])(document.querySelector(s).getBoundingClientRect());
     const order = [...document.querySelector(".kapi-panel-head").querySelectorAll(".kapi-search-button, .kapi-outline-button, .kapi-theme-button, .kapi-menu-button")].map((b) => b.className);
-    return { order, boxes: [".kapi-search-button", ".kapi-outline-button", ".kapi-theme-button", ".kapi-menu-button"].map(box), siteHead: document.querySelector(".kapi-site-head").textContent, tip: document.querySelector(".kapi-search-button").dataset.tip, text: document.querySelector(".kapi-search-button").textContent };
+    return { order, boxes: [".kapi-search-button", ".kapi-outline-button", ".kapi-theme-button", ".kapi-menu-button"].map(box), siteHead: document.querySelector(".kapi-site-home").textContent, tip: document.querySelector(".kapi-search-button").dataset.tip, text: document.querySelector(".kapi-search-button").textContent };
   })()`);
   assert.deepEqual(head.order, ["kapi-search-button", "kapi-outline-button", "kapi-theme-button", "kapi-menu-button"]);
-  assert.equal(new Set(head.boxes.map(String)).size, 1, JSON.stringify(head.boxes));
+  assert.ok(head.boxes.every(([top, height]) => Math.abs(top + height / 2 - 32) <= 1), JSON.stringify(head.boxes));
   assert.equal(head.siteHead, "Kapi");
-  assert.equal(head.tip, "Search /");
-  assert.equal(head.text, "");
+  assert.ok(head.tip.startsWith("Search ") && head.tip.endsWith("K"));
+  assert.ok(head.text.startsWith("Search"));
   await click(".kapi-search-button");
-  await page.waitFor(`!document.querySelector(".kapi-search").hidden && document.activeElement === document.querySelector(".kapi-search-input")`);
-  const [pop, button, panelHead] = await page.eval(`[".kapi-search", ".kapi-search-button", ".kapi-panel-head"].map((s) => (({ top, right, bottom }) => ({ top, right, bottom }))(document.querySelector(s).getBoundingClientRect()))`);
-  assert.ok(Math.abs(pop.right - button.right) < 1 && pop.top > panelHead.bottom && pop.top - panelHead.bottom < 12, JSON.stringify({ pop, button, panelHead }));
+  await page.waitFor(`!document.querySelector(".kapi-search-dialog").hidden && document.activeElement === document.querySelector(".kapi-search-input")`);
+  assert.equal(await page.eval(`document.querySelector('[data-search-scope="notes"]').getAttribute('aria-pressed')`), "true");
+  assert.equal(await page.eval(`document.querySelectorAll('.kapi-search-dialog').length`), 1);
+  assert.equal(await page.eval(`document.querySelectorAll('.kapi-search-dialog input').length`), 1);
+  const center = await page.eval(`(r => r.left + r.width / 2)(document.querySelector('.kapi-search-dialog').getBoundingClientRect())`);
+  assert.ok(Math.abs(center - await page.eval(`document.documentElement.clientWidth / 2`)) < 1);
+  await click('[data-search-scope="page"]');
+  assert.equal(await page.eval(`document.querySelector('.kapi-search').hidden`), false);
   assert.equal(await page.eval(`document.querySelector(".kapi-search-button").getAttribute("aria-expanded")`), "true");
-  await click(".kapi-search-button");
-  await page.waitFor(`document.querySelector(".kapi-search").hidden`);
+  await page.key("Escape");
+  await page.waitFor(`document.querySelector(".kapi-search-dialog").hidden`);
+  assert.equal(await page.eval(`document.activeElement === document.querySelector('.kapi-search-button')`), true);
 });
 
 async function searchJump(query) {
@@ -4431,24 +4437,13 @@ test("an agent edit keeps the chosen search result and the focused outline row",
   await until(async () => (await chosen()) === before);
 });
 
-test("an agent reply while the outline hides the chat marks the outline button, and sending shows the chat", async () => {
-  server.push({ author: "agent", kind: "message", text: "from before" });
-  await page.eval(`localStorage.setItem("kapi-outline", "open"); location.reload()`);
-  await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-outline").checkVisibility() && document.querySelectorAll(".kapi-msg").length === 1`);
-  const unread = () => page.eval(`document.querySelector(".kapi-outline-button").hasAttribute("data-unread")`);
-  assert.equal(await unread(), false);
+test("an agent reply marks closed chat without changing the independent outline", async () => {
+  await click(".kapi-outline-button");
+  await click(".kapi-chat-button");
   server.push({ author: "agent", kind: "message", text: "new one" });
-  await until(unread);
-  assert.equal(await page.eval(`document.querySelector(".kapi-outline-button").getAttribute("aria-label")`), "Outline, new reply in chat");
-  await click(".kapi-outline-button");
-  await until(async () => !(await unread()));
-  assert.equal(await page.eval(`document.querySelector(".kapi-chat").checkVisibility()`), true);
-
-  await click(".kapi-outline-button");
-  await page.waitFor(`!document.querySelector(".kapi-chat").checkVisibility()`);
-  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
-  await page.type("hello");
-  await page.key("Enter");
-  await page.waitFor(`document.querySelector(".kapi-chat").checkVisibility()`);
-  assert.equal(await page.eval(`localStorage.getItem("kapi-outline")`), null);
+  await page.waitFor(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), true);
+  await click(".kapi-chat-button");
+  assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility() && document.querySelector(".kapi-chat").checkVisibility()`), true);
 });

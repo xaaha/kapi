@@ -1,182 +1,121 @@
 import { h, pageID, root, shortcuts } from "../../static/core.js";
-import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, stateLabel, visitTimes, watch } from "./pages.js";
-import { noteSearch } from "./searchbox.js";
+import { searchDialog } from "../../static/search-dialog.js";
+import { ago, markVisited, matches, newIDs, onLayout, onVisit, pageTitle, redraw, noteGroups, watch } from "./pages.js";
+import { stateLabel, stateTone } from "./states.js";
 
-const WORKING = new Set(["live", "waiting"]);
 const RECENT_LIMIT = 7;
-
 const href = (p) => `${root}p/${p.id}/`;
+let notesSearch;
 
 function noteRow(p, fresh) {
   return h("a", {
-    class: "kapi-switcher-row",
-    id: `kapi-switcher-page-${p.id}`,
-    role: "option",
-    "aria-selected": "false",
-    "data-key": `page\n${p.id}`,
-    href: href(p),
-    title: `${p.path}\n${stateLabel(p)} · ${ago(p.changed)}`,
-    "data-ended": p.state === "ended",
-    "data-new": fresh || false,
+    class: "kapi-switcher-row", id: `kapi-switcher-page-${p.id}`, role: "option", "aria-selected": "false", "data-key": `page\n${p.id}`,
+    href: href(p), title: `${p.path}\n${stateLabel(p)} · ${ago(p.changed)}`, "data-ended": p.state === "ended", "data-new": fresh || false,
   },
-  h("span", { class: "nb-dot", "data-state": p.state, "aria-hidden": "true" }),
-  h("span", { class: "kapi-switcher-copy" },
-    h("strong", { text: pageTitle(p) }),
-    h("span", { text: p.summary || stateLabel(p) })),
+  h("span", { class: "nb-dot", "data-state": p.state, "data-tone": stateTone(p), "aria-hidden": "true" }),
+  h("span", { class: "kapi-switcher-copy" }, h("strong", { text: pageTitle(p) }), h("span", { text: p.summary || stateLabel(p) })),
   h("time", { datetime: p.changed, text: ago(p.changed) }));
 }
 
 function section(title, pages, fresh) {
-  if (!pages.length) return null;
-  return h("section", { class: "kapi-switcher-section" },
-    h("h2", { text: title }),
-    ...pages.map((p) => noteRow(p, fresh.has(p.id))));
+  return h("section", { class: "kapi-switcher-section" }, h("h2", { text: title }), ...pages.map((p) => noteRow(p, fresh.has(p.id))));
 }
 
 function render(list, pages, query, fresh) {
   const available = pages.filter((p) => p.id !== pageID && matches(p, query));
-  const searching = query.trim() !== "";
-  list.replaceChildren();
   if (!available.length) {
-    list.append(h("p", { class: "kapi-switcher-empty", text: pages.length ? "No note matches." : "No notes yet." }));
+    list.replaceChildren(h("p", { class: "kapi-switcher-empty", text: pages.length ? "No note matches." : "No notes yet." }));
     return;
   }
-  if (searching) {
-    list.append(section("Results", available, fresh));
-    return;
-  }
-  const seen = visitTimes();
-  const recentlyViewed = available.filter((p) => seen[p.id] > 0).sort((a, b) => seen[b.id] - seen[a.id]).slice(0, 3);
-  const recentIDs = new Set(recentlyViewed.map((p) => p.id));
-  const newPages = available.filter((p) => !recentIDs.has(p.id) && fresh.has(p.id));
-  const newPageIDs = new Set(newPages.map((p) => p.id));
-  const working = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && WORKING.has(p.state));
-  const workingIDs = new Set(working.map((p) => p.id));
-  const others = available.filter((p) => !recentIDs.has(p.id) && !newPageIDs.has(p.id) && !workingIDs.has(p.id)).slice(0, RECENT_LIMIT);
-  list.append(...[section("Recently viewed", recentlyViewed, fresh), section("New", newPages, fresh), section("Working now", working, fresh), section("Other notes", others, fresh)].filter(Boolean));
+  const groups = query.trim() ? [["Results", available]] : noteGroups(available, fresh, RECENT_LIMIT);
+  list.replaceChildren(...groups.map(([title, items]) => section(title, items, fresh)));
 }
 
-export function showSidebar() {
-  document.title = "kapi";
-  const launcher = h("button", {
-    class: "kapi-switcher-launcher",
-    type: "button",
-    "aria-haspopup": "dialog",
-    "aria-expanded": "false",
-    title: `Switch notes (${shortcuts.key("switchNote").hint})`,
-  }, h("span", { class: "kapi-switcher-launcher-icon", "aria-hidden": "true" }));
-  const scrim = h("div", { class: "kapi-switcher-scrim", hidden: "" });
-  const { box: searchBox, input: search } = noteSearch({
-    className: "kapi-switcher-search",
-    attributes: { role: "combobox", "aria-controls": "kapi-switcher-list", "aria-autocomplete": "list" },
-  });
+// Notes are a provider of the shared dialog, not a second search UI.
+export function registerNotesSearch() {
+  if (notesSearch) return notesSearch;
+  const search = searchDialog();
   const current = h("span", { class: "kapi-switcher-current" });
-  const list = h("div", { class: "kapi-switcher-list", id: "kapi-switcher-list", role: "listbox" });
-  const home = h("a", { class: "kapi-switcher-home", href: root }, h("span", { text: "Home · All notes" }), h("span", { "aria-hidden": "true", text: "↗" }));
-  const dialog = h("div", { class: "kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Switch notes", hidden: "" },
-    h("div", { class: "kapi-switcher-search-region" }, searchBox),
-    current,
-    list,
-    home);
-
+  const list = h("div", { class: "kapi-switcher-list", id: "kapi-switcher-list", role: "listbox", "aria-label": "Notes" });
+  const view = h("section", { class: "kapi-notes-search", "aria-label": "Notes search" }, current, list,
+    ...(pageID ? [h("a", { class: "kapi-switcher-home", href: root, text: "Home · All notes" })] : []));
   let pages = [];
   let fresh = new Set();
-  let before = null;
   let activeID = null;
+  const subscribers = new Set();
   const rows = () => [...list.querySelectorAll(".kapi-switcher-row")];
   const setActive = (row) => {
     for (const item of rows()) item.setAttribute("aria-selected", String(item === row));
     activeID = row?.id ?? null;
-    if (row) search.setAttribute("aria-activedescendant", row.id);
-    else search.removeAttribute("aria-activedescendant");
+    if (row) {
+      search.input.setAttribute("aria-activedescendant", row.id);
+      if (search.isOpen() && search.scope === "notes") row.scrollIntoView({ block: "nearest" });
+    } else search.input.removeAttribute("aria-activedescendant");
   };
   const draw = () => {
-    redraw(list, () => render(list, pages, search.value, fresh));
-    setActive((activeID && document.getElementById(activeID)) || rows()[0] || null);
+    const query = search.scope === "notes" ? search.input.value : "";
+    redraw(list, () => render(list, pages, query, fresh));
+    if (search.scope === "notes") setActive((activeID && document.getElementById(activeID)) || rows()[0] || null);
   };
-  const isOpen = () => !dialog.hidden;
-  const setOpen = (open) => {
-    if (open === isOpen()) return;
-    dialog.hidden = !open;
-    scrim.hidden = !open;
-    launcher.setAttribute("aria-expanded", String(open));
-    document.documentElement.toggleAttribute("data-kapi-switcher", open);
-    if (open) {
-      before = document.activeElement;
-      search.focus();
-      search.select();
-    } else {
-      search.value = "";
-      draw();
-      if (before?.isConnected) before.focus({ preventScroll: true });
-      else launcher.focus({ preventScroll: true });
+  const onKey = (e) => {
+    const items = rows();
+    const at = items.findIndex((row) => row.id === activeID);
+    const next = shortcuts.is("searchNext", e);
+    const previous = shortcuts.is("searchPrevious", e);
+    if ((next || previous) && items.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      setActive(items[(at + (next ? 1 : -1) + items.length) % items.length]);
+    } else if (shortcuts.is("searchJump", e) && at >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      location.href = items[at].href;
     }
   };
-
-  search.addEventListener("input", draw);
-  search.addEventListener("keydown", (e) => {
-    const items = rows();
-    const active = items.findIndex((row) => row.id === activeID);
-    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
-      e.preventDefault();
-      const step = e.key === "ArrowDown" ? 1 : -1;
-      setActive(items[(active + step + items.length) % items.length]);
-    } else if (e.key === "Enter" && active >= 0) {
-      e.preventDefault();
-      location.href = items[active].href;
-    }
-  });
-  list.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    const items = rows();
-    const at = items.indexOf(document.activeElement);
-    if (at < 0) return;
-    e.preventDefault();
-    const next = at + (e.key === "ArrowDown" ? 1 : -1);
-    if (next < 0) search.focus();
-    else items[Math.min(next, items.length - 1)].focus();
-  });
+  search.register("notes", { view, listID: list.id, onOpen: draw, onInput: draw, onKey });
+  list.addEventListener("keydown", onKey);
   list.addEventListener("pointermove", (e) => {
     const row = e.target.closest?.(".kapi-switcher-row");
     if (row) setActive(row);
   });
-  launcher.addEventListener("click", () => setOpen(!isOpen()));
-  scrim.addEventListener("click", () => setOpen(false));
-  dialog.addEventListener("click", (e) => e.stopPropagation());
-  dialog.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const stops = [search, ...rows(), home];
-    const at = stops.indexOf(document.activeElement);
-    if ((!e.shiftKey && at === stops.length - 1) || (e.shiftKey && at <= 0)) {
-      e.preventDefault();
-      stops[e.shiftKey ? stops.length - 1 : 0].focus();
-    }
-  });
-  onLayout(draw);
-  onVisit(() => {
-    fresh = newIDs(pages, pageID);
-    launcher.toggleAttribute("data-new", fresh.size > 0);
-    draw();
-  });
+  const notify = () => { for (const run of subscribers) run(pages, fresh); };
+  onLayout(() => { draw(); notify(); });
+  onVisit(() => { fresh = newIDs(pages, pageID); draw(); notify(); });
   watch((next) => {
     if (pageID) markVisited(pageID, next);
     pages = next;
     fresh = newIDs(pages, pageID);
     const here = pages.find((p) => p.id === pageID);
-    current.textContent = here ? `Current · ${pageTitle(here)}` : "Current note";
-    launcher.toggleAttribute("data-new", fresh.size > 0);
-    dialog.removeAttribute("data-error");
+    current.textContent = here ? `Current · ${pageTitle(here)}` : "All notes";
+    view.removeAttribute("data-error");
     draw();
-  }, () => dialog.setAttribute("data-error", ""));
+    notify();
+  }, () => view.setAttribute("data-error", ""));
+  notesSearch = { onUpdate(run) { subscribers.add(run); run(pages, fresh); } };
+  return notesSearch;
+}
 
-  document.addEventListener("keydown", (e) => {
-    if (shortcuts.is("switchNote", e)) {
-      e.preventDefault();
-      setOpen(!isOpen());
-    } else if (isOpen() && shortcuts.is("dismiss", e)) {
-      e.preventDefault();
-      setOpen(false);
-    }
+export function showSidebar() {
+  document.title = "kapi";
+  const notes = registerNotesSearch();
+  const launcher = h("button", { class: "kapi-switcher-launcher", type: "button", title: `Switch notes (${shortcuts.key("switchNote").hint})`, "aria-label": "Switch notes" },
+    h("span", { class: "kapi-switcher-launcher-icon", "aria-hidden": "true" }));
+  searchDialog().bind(launcher);
+  notes.onUpdate((pages, fresh) => {
+    launcher.toggleAttribute("data-new", fresh.size > 0);
+    const title = launcher.querySelector(".kapi-current-title");
+    const here = pages.find((p) => p.id === pageID);
+    if (title && here) title.textContent = pageTitle(here);
   });
-  document.body.append(scrim, dialog, launcher);
+  const mount = () => {
+    const title = document.querySelector(".kapi-breadcrumbs > .kapi-current-title");
+    if (!title) return false;
+    title.replaceWith(launcher);
+    launcher.prepend(title);
+    return true;
+  };
+  if (!mount()) {
+    const observer = new MutationObserver(() => { if (mount()) observer.disconnect(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 }

@@ -166,7 +166,8 @@ var catalog = []Preset{
 	{
 		Name:    "kapi-badge",
 		Summary: "A small coloured label or status icon, inside prose or a table cell",
-		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default). Common colour words map to the nearest tone; unknown words fall back to grey. Body: a word or two.
+		Example: `<!-- tone: red, orange, yellow, green, blue, purple or grey (default); gray and common colour names work too.
+     Any other name gets a stable theme colour. Hex colours such as #7c3aed derive readable light and dark variants. Body: a word or two.
      state: done (green check), failed or blocked (red x), progress (orange), waiting (grey clock) or info (blue).
      It leads the label with its icon and sets the tone unless tone is given. With no body it is the icon alone.
      Use it inline: inside a <p>, an <li> or a table cell. -->

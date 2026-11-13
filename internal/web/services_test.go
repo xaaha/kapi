@@ -133,6 +133,7 @@ func TestCrossingsCatchEveryWayOutOfAService(t *testing.T) {
 		bad       bool
 	}{
 		{"main.js", `import { h } from "../../static/core.js";`, false},
+		{"main.js", `import { searchDialog } from "../../static/search-dialog.js";`, false},
 		{"main.js", `import { list } from "./pages.js";`, false},
 		{"deep/view.js", `import { list } from "../pages.js";`, false},
 		{"main.js", `export { list } from "./pages.js";`, false},
@@ -208,7 +209,8 @@ func crossings(svc, name string, src []byte) []string {
 		}
 		to := path.Join(path.Dir(served), ref)
 		own := strings.HasPrefix(to, "assets/"+svc+"/")
-		core := to == "static/core.js" || (path.Ext(name) == ".css" && strings.HasPrefix(to, "static/"))
+		// Explicit public core components; page controllers remain private.
+		core := to == "static/core.js" || to == "static/search-dialog.js" || (path.Ext(name) == ".css" && strings.HasPrefix(to, "static/"))
 		if !own && !core {
 			problems = append(problems, fmt.Sprintf("%q resolves to %s, outside assets/%s/", ref, to, svc))
 		}

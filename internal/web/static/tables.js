@@ -93,16 +93,6 @@ window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
 
   const breakoutBounds = () => [BREAKOUT_GUTTER, rightEdge() - BREAKOUT_GUTTER];
 
-  function hideLogo() {
-    const logo = siteHead.getBoundingClientRect();
-    const overlaps = (box) => {
-      const r = box.getBoundingClientRect();
-      return r.left < logo.right && logo.left < r.right && r.top < logo.bottom && logo.top < r.bottom;
-    };
-    const covered = getComputedStyle(siteHead).position === "fixed" && [...main.querySelectorAll("table")].some((table) => tableBox(table).style.width && overlaps(tableBox(table)));
-    siteHead.toggleAttribute("data-covered", covered);
-  }
-
   function stickHeaders() {
     for (const table of main.querySelectorAll(".kapi-table > table")) {
       const head = table.tHead;
@@ -114,7 +104,8 @@ window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
       head.style.removeProperty("transform");
       const outer = box.getBoundingClientRect();
       const at = head.getBoundingClientRect();
-      const shift = Math.max(0, Math.min(-at.top, outer.bottom - at.bottom));
+      const offset = Math.max(0, siteHead.getBoundingClientRect().bottom);
+      const shift = Math.max(0, Math.min(offset - at.top, outer.bottom - at.bottom));
       if (shift) head.style.transform = `translateY(${shift}px)`;
     }
   }
@@ -139,7 +130,6 @@ window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
       }
       if (box !== table) box.toggleAttribute("data-kapi-wide", box.scrollWidth > box.clientWidth + 1);
     }
-    hideLogo();
     stickHeaders();
   }
 
@@ -272,7 +262,6 @@ window.kapiCreateTables = ({ main, siteHead, idOf, rightEdge }) => {
   let bodyWidth = 0;
 
   function start() {
-    addEventListener("scroll", hideLogo, { passive: true });
     addEventListener("scroll", stickHeaders, { passive: true });
     new ResizeObserver(layout).observe(main);
     new ResizeObserver(() => {

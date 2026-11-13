@@ -47,7 +47,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
 | `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored |
-| `<kapi-badge>` | optional `tone` = `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default); common colour aliases map to the nearest tone (`gray` → `grey`, `teal` → `blue`, `pink` → `purple`) and unknown words fall back to `grey`; optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
+| `<kapi-badge>` | optional `tone`: the shared `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default), common aliases such as `gray`, `violet` and `teal`, any other name (deterministically assigned a shared theme tone), or a hex colour; optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
 | `<kapi-kv>` | legacy wrapper; new pages should use `<dl>` with alternating `<dt>` and `<dd>` children | `<kapi-item key="...">` children, each prose |
 | `<kapi-details>` | legacy wrapper; new pages should use `<details><summary>…</summary>…</details>` | prose, hidden until the reader opens it; closed unless `open` is set |
 | `<kapi-checklist>` | legacy wrapper; new pages should use `<ul><li><input type="checkbox">…</li></ul>` | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Native checkboxes use `checked`. Ticking either form writes back to the file |
@@ -55,7 +55,10 @@ load and writes the file back. Ids never change after that.
 
 The colours are the seven shared tones: `red`, `orange`, `yellow`, `green`,
 `blue`, `purple` and `grey`. Each is a `--kapi-<colour>-fill`, `-border`,
-`-text`, `-solid` and `-tint` token in `theme.css`, for light and dark.
+`-text`, `-solid` and `-tint` token in `theme.css`, for light and dark. Badge
+aliases and arbitrary names resolve to these theme-aware tones. Hex badge tones
+derive the same roles with `color-mix()` against the active palette, so they
+adapt to light, dark and custom palettes.
 
 Unknown or malformed `kapi-*` elements render a small warning and keep their safe body visible instead of replacing it. Known aliases such as `kind="warn"` are normalized.
 

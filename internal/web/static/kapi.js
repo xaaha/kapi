@@ -1,9 +1,12 @@
-(() => {
+(async () => {
   "use strict";
 
   const main = document.getElementById("kapi-page");
   const base = location.pathname.match(/^(?:.*?\/)?p\/[^/]+(?=\/)/)?.[0];
   if (!main || !base) return;
+  const { searchDialog, searchTrigger } = await import(new URL("../../static/search-dialog.js", location.href));
+  const unifiedSearch = searchDialog();
+  const { icon: sharedIcon } = await import(new URL("../../static/core.js", location.href));
 
   const STATUS = {
     connecting: "Connecting to kapi\u2026",
@@ -75,14 +78,11 @@
     archive: "M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z",
     unarchive: "M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40ZM90.34,109.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,91.31V152a8,8,0,0,1-16,0V91.31l-18.34,18.35A8,8,0,0,1,90.34,109.66Z",
     android: "M176,148a12,12,0,1,1-12-12A12,12,0,0,1,176,148ZM92,136a12,12,0,1,0,12,12A12,12,0,0,0,92,136Zm148,24v24a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V161.13A113.38,113.38,0,0,1,51.4,78.72L26.34,53.66A8,8,0,0,1,37.66,42.34L63.82,68.5a111.43,111.43,0,0,1,128.55-.19l26-26a8,8,0,0,1,11.32,11.32L204.82,78.5c.75.71,1.5,1.43,2.24,2.17A111.25,111.25,0,0,1,240,160Zm-16,0a96,96,0,0,0-96-96h-.34C74.91,64.18,32,107.75,32,161.13V184H224Z",
-    x: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     download: "M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z",
     image: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
-    system: "M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z",
-    light: "M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
     checkCircle: "M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z",
     minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
@@ -90,18 +90,16 @@
     collapse: "M213.66,53.66,163.31,104H192a8,8,0,0,1,0,16H144a8,8,0,0,1-8-8V64a8,8,0,0,1,16,0V92.69l50.34-50.35a8,8,0,0,1,11.32,11.32ZM112,136H64a8,8,0,0,0,0,16H92.69L42.34,202.34a8,8,0,0,0,11.32,11.32L104,163.31V192a8,8,0,0,0,16,0V144A8,8,0,0,0,112,136Z",
     plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
-    check: "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z",
-    theme: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192V40a88,88,0,0,1,0,176Z",
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
     dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
     outline: "M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z",
-    search: "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z",
+    chat: "M128,24A104,104,0,0,0,37,178L24,224l46-13A104,104,0,1,0,128,24Zm0,192a87,87,0,0,1-52-17l-3-2-26,7,7-26-2-3A88,88,0,1,1,128,216Z",
     back: "M232,200a8,8,0,0,1-16,0,88.1,88.1,0,0,0-88-88H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,61.66L51.31,96H128A104.11,104.11,0,0,1,232,200Z",
-    dark: "M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z",
   };
 
   function icon(name) {
+    if (!Object.hasOwn(ICONS, name)) return sharedIcon(name);
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 256 256");
     svg.setAttribute("aria-hidden", "true");
@@ -112,74 +110,8 @@
   }
 
   function themeToggle() {
-    const theme = window.kapiTheme;
-    if (!theme) return [];
-    const names = { light: "Light", dark: "Dark", system: "System" };
-    const toggle = h("button", { type: "button", class: "kapi-theme-button", "aria-label": "Theme", "data-tip": "Theme", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("theme"));
-    const items = ["light", "dark", "system"].filter((c) => theme.choices.includes(c)).map((c) =>
-      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-theme-choice": c, onclick: () => (theme.set(c), close(wrap.contains(document.activeElement))) },
-        icon("check"), h("span", { class: "kapi-menu-label", text: names[c] }), icon(c)));
-    const list = h("div", { class: "kapi-theme-menu", role: "menu", "aria-label": "Theme", hidden: "" }, ...items);
-    const wrap = h("div", { class: "kapi-theme" }, toggle, list);
-    let hovered = false;
-    let timer = 0;
-    const open = (focus) => {
-      clearTimeout(timer);
-      list.hidden = false;
-      toggle.setAttribute("aria-expanded", "true");
-      if (focus) (items.find((b) => b.getAttribute("aria-checked") === "true") ?? items[0]).focus();
-    };
-    function close(refocus) {
-      clearTimeout(timer);
-      hovered = false;
-      if (list.hidden) return;
-      list.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      if (refocus) toggle.focus();
-    }
-    toggle.addEventListener("click", () => {
-      if (hovered) hovered = false;
-      else if (list.hidden) open(false);
-      else close(false);
-    });
-    toggle.addEventListener("keydown", (e) => {
-      if (!SHORTCUTS.is("menuOpen", e) && !SHORTCUTS.is("menuNext", e)) return;
-      e.preventDefault();
-      open(true);
-    });
-    wrap.addEventListener("pointerenter", (e) => {
-      if (e.pointerType !== "mouse") return;
-      clearTimeout(timer);
-      if (!list.hidden) return;
-      open(false);
-      hovered = true;
-    });
-    wrap.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "mouse" || !hovered) return;
-      timer = setTimeout(() => close(list.contains(document.activeElement)), 250);
-    });
-    list.addEventListener("keydown", (e) => {
-      if (!SHORTCUTS.is("menuLeave", e)) e.stopPropagation();
-      const at = items.indexOf(document.activeElement);
-      const to = SHORTCUTS.is("menuNext", e) ? at + 1 : SHORTCUTS.is("menuPrevious", e) ? at - 1 : SHORTCUTS.is("menuFirst", e) ? 0 : SHORTCUTS.is("menuLast", e) ? items.length - 1 : undefined;
-      if (to !== undefined) {
-        e.preventDefault();
-        items[(to + items.length) % items.length].focus();
-      } else if (SHORTCUTS.is("dismiss", e) || SHORTCUTS.is("menuBack", e)) {
-        e.preventDefault();
-        close(true);
-      } else if (SHORTCUTS.is("menuLeave", e)) close(false);
-    });
-    document.addEventListener("pointerdown", (e) => {
-      if (!wrap.contains(e.target)) close(false);
-    }, true);
-    const sync = () => {
-      for (const b of items) b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme.get()));
-      toggle.dataset.tip = `Theme: ${names[theme.get()]}`;
-    };
-    document.addEventListener("kapi-theme", sync);
-    sync();
-    return [wrap];
+    const control = window.kapiTheme?.control?.({ icon: sharedIcon, shortcuts: SHORTCUTS });
+    return control ? [control] : [];
   }
 
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -220,9 +152,8 @@
   const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
-  const searchButton = h("button", { type: "button", class: "kapi-search-button", "aria-label": "Search this page", "data-tip": `Search ${keyHint("search")}`, "aria-keyshortcuts": keyWords("search"), "aria-haspopup": "dialog", "aria-expanded": "false", onclick: () => (search.hidden ? openSearch() : closeSearch(true)) }, icon("search"));
-  const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Collapse conversation", title: "Collapse conversation", "data-tip": "Collapse conversation", onclick: () => setPanelCollapsed(true) }, icon("caret"));
-  const restorePanelButton = h("button", { type: "button", class: "kapi-panel-restore", "aria-label": "Restore conversation", title: "Restore conversation", "data-tip": "Restore conversation", onclick: () => setPanelCollapsed(false) }, icon("caret"));
+  const searchButton = searchTrigger();
+  const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Close chat", title: "Close chat", onclick: () => setPanelCollapsed(true) }, icon("x"));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
@@ -231,11 +162,10 @@
     h("div", { class: "kapi-outline-head" }, h("h2", { text: "Outline" }),
       h("button", { type: "button", class: "kapi-outline-close", "aria-label": "Close outline", onclick: () => setOutline(false) }, icon("x"))),
     outlineScroll);
-  const searchInput = h("input", { type: "search", class: "kapi-search-input", placeholder: "Search this page", "aria-label": "Search this page", role: "combobox", "aria-expanded": "true", "aria-controls": "kapi-search-results", "aria-autocomplete": "list", autocomplete: "off", spellcheck: "false" });
+  const searchInput = unifiedSearch.input;
   const searchStatus = h("p", { class: "kapi-search-status", role: "status" });
   const searchResults = h("div", { class: "kapi-search-results", id: "kapi-search-results", role: "listbox", "aria-label": "Results" });
-  const search = h("div", { class: "kapi-search", role: "dialog", "aria-label": "Search this page", hidden: "" },
-    h("div", { class: "kapi-search-field" }, icon("search"), searchInput),
+  const search = h("section", { class: "kapi-search", "aria-label": "Search this page", hidden: "" },
     searchStatus, searchResults,
     h("div", { class: "kapi-search-keys", "aria-hidden": "true" }, ...[[`${keyHint("searchPrevious")}${keyHint("searchNext")}`, "move"], [keyHint("searchJump"), "jump"],
       [`${keyHint("searchCollapse")}${keyHint("searchExpand")}`, "fold section"], [keyHint("dismiss"), "close"]].map(([k, what]) => h("span", {}, h("kbd", { text: k }), ` ${what}`))));
@@ -300,29 +230,29 @@
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("header", { class: "kapi-panel-head" }, collapsePanelButton, undoButton, searchButton, outlineButton, ...themeToggle(), menuButton, menu), tabs,
-    restartBox, notice, chat, notesView, outlineView,
+    h("div", { class: "kapi-chat-head" }, h("strong", {}, icon("chat"), "Agent chat"), collapsePanelButton), tabs,
+    restartBox, notice, chat, notesView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, restorePanelButton, copyButton, tableFrame, search, backChip);
+  const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
+  const drawerScrim = h("button", { type: "button", class: "kapi-drawer-scrim", "aria-label": "Close navigation panels", hidden: "", onclick: () => {
+    setPanelCollapsed(true);
+    setOutline(false);
+  } });
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, outlineView, drawerScrim, copyButton, tableFrame, backChip);
   const phone = matchMedia("(max-width: 760px)");
-  const PANEL_KEY = "kapi-panel-collapsed";
-  let panelCollapsed = (() => {
-    try {
-      return localStorage.getItem(PANEL_KEY) === "true";
-    } catch {
-      return false;
-    }
-  })();
-  const panelIsCollapsed = () => panelCollapsed && !phone.matches;
+  // Each page starts conversational; panel state does not leak between pages.
+  let panelCollapsed = false;
+  let phoneChatOpen = true;
+  const panelIsCollapsed = () => phone.matches ? !phoneChatOpen : panelCollapsed;
   const pageAreaRight = () => document.documentElement.clientWidth - (panelIsCollapsed() ? 0 : panel.getBoundingClientRect().width);
 
   function markPanelUnread(on) {
-    restorePanelButton.toggleAttribute("data-unread", on);
+    chatButton.toggleAttribute("data-unread", on);
     chatTab.toggleAttribute("data-unread", on);
-    restorePanelButton.setAttribute("aria-label", on ? "Restore conversation, new reply" : "Restore conversation");
+    chatButton.setAttribute("aria-label", on ? "Chat, new reply" : "Chat");
   }
 
   function syncPanel(focus = false) {
@@ -332,7 +262,9 @@
     panel.inert = collapsed;
     panel.toggleAttribute("aria-hidden", collapsed);
     if (!collapsed && !panel.hasAttribute("data-notes") && !panel.hasAttribute("data-outline")) markPanelUnread(false);
-    if (focus) (collapsed ? restorePanelButton : collapsePanelButton).focus({ preventScroll: true });
+    chatButton.setAttribute("aria-pressed", String(!collapsed));
+    drawerScrim.hidden = !phone.matches || collapsed;
+    if (focus) chatButton.focus({ preventScroll: true });
     requestAnimationFrame(() => {
       placeBar();
       placeAsk();
@@ -342,11 +274,12 @@
   }
 
   function setPanelCollapsed(on) {
-    if (phone.matches) return;
-    panelCollapsed = on;
-    try {
-      localStorage.setItem(PANEL_KEY, String(on));
-    } catch {}
+    if (phone.matches) {
+      phoneChatOpen = !on;
+      if (!on) setOutline(false);
+    } else {
+      panelCollapsed = on;
+    }
     syncPanel(true);
   }
 
@@ -360,12 +293,18 @@
   const POINT_PAD = 10;
   const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
-  document.body.append(root);
   showUndo(main.dataset.undo);
+  outlineButton.append(h("span", { class: "kapi-action-label", text: "Outline" }));
+  const homeURL = base.replace(/p\/[^/]+$/, "");
+  const pageTitle = h("span", { class: "kapi-current-title", text: main.querySelector("h1")?.textContent || document.title });
   const siteHead = h("header", { class: "kapi-site-head" },
     h("a", { class: "kapi-site-home", href: base.replace(/p\/[^/]+$/, ""), "aria-label": "Kapi home" },
-      h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })));
-  main.before(siteHead);
+      h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })),
+    h("nav", { class: "kapi-breadcrumbs", "aria-label": "Breadcrumb" },
+      h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
+    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, ...themeToggle(), menuButton, menu));
+  root.prepend(siteHead);
+  main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
@@ -537,6 +476,13 @@
   }
 
   function dockBar(floating) {
+    if (phone.matches) {
+      if (bar.parentElement !== root) root.append(bar);
+      bar.dataset.place = "mobile";
+      document.documentElement.style.paddingBottom = bar.hidden ? "" : `${Math.ceil(bar.getBoundingClientRect().height)}px`;
+      return;
+    }
+    document.documentElement.style.removeProperty("padding-bottom");
     if (floating && bar.parentElement !== root) root.append(bar);
     if (!floating && bar.parentElement !== panel) panel.insertBefore(bar, composer);
     if (!floating) bar.removeAttribute("data-place");
@@ -936,7 +882,7 @@
   }
 
   const tables = window.kapiCreateTables({ main, siteHead, idOf, rightEdge: pageAreaRight });
-  const media = window.kapiCreateMedia({ main });
+  const media = window.kapiCreateMedia({ main, icon: sharedIcon, shortcuts: SHORTCUTS });
 
   function expandTable(on) {
     tables.setExpanded(selected, on);
@@ -2317,7 +2263,6 @@
         lastReply = ev.seq;
         if (new Date(ev.time) >= loadedAt) {
           if (panelIsCollapsed()) markPanelUnread(true);
-          if (outlineOpen && !phone.matches) markChatUnread(true);
         }
       }
       markRead();
@@ -2594,14 +2539,7 @@
     return at;
   }
 
-  const OUTLINE_KEY = "kapi-outline";
-  let outlineOpen = (() => {
-    try {
-      return localStorage.getItem(OUTLINE_KEY) === "open";
-    } catch {
-      return false;
-    }
-  })();
+  let outlineOpen = false;
   let outlineSheet = false;
   let outlineNodes = [];
   let outlineDirty = true;
@@ -2613,37 +2551,33 @@
   const outlineShown = () => (phone.matches ? outlineSheet : outlineOpen);
 
   function setOutline(open) {
-    if (phone.matches) outlineSheet = open;
-    else {
-      outlineOpen = open;
-      try {
-        if (open) localStorage.setItem(OUTLINE_KEY, "open");
-        else localStorage.removeItem(OUTLINE_KEY);
-      } catch {}
+    if (phone.matches) {
+      outlineSheet = open;
+      if (open) {
+        phoneChatOpen = false;
+        syncPanel();
+      }
     }
+    else outlineOpen = open;
     syncOutline();
   }
 
   function syncOutline() {
-    panel.toggleAttribute("data-outline", outlineOpen && !phone.matches);
+    panel.removeAttribute("data-outline");
+    root.toggleAttribute("data-outline-open", outlineOpen && !phone.matches);
+    document.documentElement.toggleAttribute("data-kapi-outline-open", outlineOpen && !phone.matches);
     if (!outlineOpen || phone.matches) {
-      markChatUnread(false);
       if (!panelIsCollapsed() && !panel.hasAttribute("data-notes")) markPanelUnread(false);
     }
     root.toggleAttribute("data-outline-sheet", outlineSheet && phone.matches);
+    drawerScrim.hidden = !phone.matches || (!outlineSheet && !phoneChatOpen);
     outlineButton.setAttribute("aria-pressed", String(outlineShown()));
     trackOutline();
   }
 
   function showChat() {
-    if (outlineOpen && !phone.matches) setOutline(false);
+    if (phone.matches && !phoneChatOpen) setPanelCollapsed(false);
     if (!panelIsCollapsed() && !panel.hasAttribute("data-notes")) markPanelUnread(false);
-  }
-
-  function markChatUnread(on) {
-    outlineButton.toggleAttribute("data-unread", on);
-    outlineButton.setAttribute("aria-label", on ? "Outline, new reply in chat" : "Outline");
-    outlineButton.dataset.tip = on ? "New reply in chat" : "Outline";
   }
 
   function buildOutline() {
@@ -2751,7 +2685,6 @@
   let searchRows = [];
   let searchActive = -1;
   let searchBack = null;
-  let searchFocus = null;
   const searchCollapsed = new Set();
 
   function searchIndex() {
@@ -2874,39 +2807,8 @@
     setSearchActive(searchRows.findIndex((r) => r.key === row.key && r.node.classList.contains("kapi-search-section")));
   }
 
-  function placeSearch() {
-    if (phone.matches) {
-      search.style.removeProperty("top");
-      search.style.removeProperty("right");
-      search.style.removeProperty("max-height");
-      return;
-    }
-    const head = searchButton.closest(".kapi-panel-head").getBoundingClientRect();
-    const r = searchButton.getBoundingClientRect();
-    const top = Math.round(head.bottom + 6);
-    search.style.top = `${top}px`;
-    search.style.right = `${Math.round(Math.max(12, document.documentElement.clientWidth - r.right))}px`;
-    search.style.maxHeight = `calc(100vh - ${top + 24}px)`;
-  }
-
-  function openSearch() {
-    if (!search.hidden) return searchInput.select();
-    searchFocus = document.activeElement;
-    searchCollapsed.clear();
-    search.hidden = false;
-    searchButton.setAttribute("aria-expanded", "true");
-    placeSearch();
-    searchInput.focus();
-    searchInput.select();
-    runSearch();
-  }
-
-  function closeSearch(refocus) {
-    if (search.hidden) return;
-    search.hidden = true;
-    searchButton.setAttribute("aria-expanded", "false");
-    if (refocus && searchFocus?.isConnected && searchFocus !== document.body) searchFocus.focus();
-    else if (search.contains(document.activeElement)) document.activeElement.blur();
+  function closeSearch() {
+    unifiedSearch.close();
   }
 
   function markSearch(current) {
@@ -2967,8 +2869,7 @@
     clearSearchMarks();
   }
 
-  searchInput.addEventListener("input", () => runSearch());
-  searchInput.addEventListener("keydown", (e) => {
+  function searchKey(e) {
     if (e.isComposing || e.keyCode === 229) return;
     const row = searchRows[searchActive];
     const onSection = !!row?.node.classList.contains("kapi-search-section");
@@ -2986,6 +2887,17 @@
       closeSearch(true);
     } else return;
     e.stopPropagation();
+  }
+  let pageSearchSession = 0;
+  unifiedSearch.register("page", {
+    view: search,
+    listID: "kapi-search-results",
+    onOpen: (session) => {
+      if (pageSearchSession !== session) searchCollapsed.clear();
+      pageSearchSession = session;
+    },
+    onInput: () => runSearch(),
+    onKey: searchKey,
   });
   searchResults.addEventListener("click", (e) => {
     const i = searchRows.findIndex((r) => r.node.contains(e.target));
@@ -2995,7 +2907,6 @@
   });
   searchResults.addEventListener("pointerdown", (e) => e.preventDefault());
   document.addEventListener("pointerdown", (e) => {
-    if (!search.hidden && !search.contains(e.target) && !searchButton.contains(e.target)) closeSearch(false);
     if (outlineSheet && phone.matches && !outlineView.contains(e.target) && !outlineButton.contains(e.target)) setOutline(false);
   }, true);
   addEventListener("popstate", (e) => {
@@ -3012,7 +2923,6 @@
   addEventListener("resize", () => {
     outlineTops = null;
     scheduleOutline();
-    if (!search.hidden) placeSearch();
   });
 
   main.addEventListener("click", (e) => {
@@ -3118,15 +3028,12 @@
   });
 
   document.addEventListener("keydown", (e) => {
+    if (unifiedSearch.isOpen()) return;
     const focus = document.activeElement;
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
-    if (free && SHORTCUTS.is("search", e)) {
-      e.preventDefault();
-      return openSearch();
-    }
     if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;
@@ -3147,6 +3054,10 @@
       }
     }
     if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
+    if (SHORTCUTS.is("dismiss", e) && phoneChatOpen && phone.matches && !editing && !asking) {
+      input.blur();
+      return setPanelCollapsed(true);
+    }
     if (SHORTCUTS.is("dismiss", e) && (pop || sheetOpen)) {
       hidePop(true);
       setSheet(false);
@@ -3248,18 +3159,7 @@
     outlineTops = null;
     scheduleOutline();
   }).observe(main);
-  new ResizeObserver(() => {
-    if (!panel.classList.contains("kapi-expanded")) {
-      document.documentElement.style.setProperty("--kapi-bar-height", `${Math.ceil(panel.getBoundingClientRect().height)}px`);
-    }
-  }).observe(panel);
   notice.addEventListener("click", () => (notice.hidden = true));
-  panel.addEventListener("focusin", (e) => {
-    if (!e.target.closest(".kapi-panel-head")) panel.classList.add("kapi-expanded");
-  });
-  panel.addEventListener("focusout", (e) => {
-    if (!panel.contains(e.relatedTarget)) panel.classList.remove("kapi-expanded");
-  });
 
   labelArchived(main);
   tables.start();
