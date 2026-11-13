@@ -810,7 +810,7 @@ test("the full-width Kapi header stays visible while scrolling at desktop widths
     assert.ok(head.top >= 0 && head.bottom <= 80, JSON.stringify(head));
     assert.equal(head.left, 0);
     assert.ok(head.right > page.right, JSON.stringify({ head, page }));
-    assert.equal(head.right, 1440);
+    assert.equal(head.right, await wide.eval(`document.documentElement.clientWidth`));
   } finally {
     await wide.close();
   }
@@ -1184,7 +1184,7 @@ test("phone chat is an explicit drawer and closes with Escape without losing the
     const box = await phone.eval(`(({ top, bottom, right, width }) => ({ top, bottom, right, width }))(document.querySelector(".kapi-panel").getBoundingClientRect())`);
     assert.equal(box.top, 64);
     assert.equal(box.bottom, 800);
-    assert.equal(box.right, 390);
+    assert.equal(box.right, await phone.eval(`document.documentElement.clientWidth`));
     assert.ok(box.width <= 365);
     await phone.eval(`document.querySelector(".kapi-composer textarea").value = "draft"`);
     await phone.key("Escape");
@@ -1430,8 +1430,8 @@ const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, righ
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
 
 test("on wide screens the toolbar sits in the margin at the block's top right, and Save and Cancel take its place", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1440`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1500`);
   await select("bbbbbbbb");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
@@ -1446,8 +1446,8 @@ test("on wide screens the toolbar sits in the margin at the block's top right, a
 });
 
 test("on a tall block the toolbar stays in view while the block scrolls", async () => {
-  await page.call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 800, deviceScaleFactor: 2, mobile: false });
-  await page.waitFor(`innerWidth === 1440`);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
+  await page.waitFor(`innerWidth === 1500`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
   await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
@@ -4364,7 +4364,7 @@ test("the shared header search opens one centered dialog in Notes scope with opt
   assert.equal(await page.eval(`document.querySelectorAll('.kapi-search-dialog').length`), 1);
   assert.equal(await page.eval(`document.querySelectorAll('.kapi-search-dialog input').length`), 1);
   const center = await page.eval(`(r => r.left + r.width / 2)(document.querySelector('.kapi-search-dialog').getBoundingClientRect())`);
-  assert.ok(Math.abs(center - await page.eval(`innerWidth / 2`)) < 1);
+  assert.ok(Math.abs(center - await page.eval(`document.documentElement.clientWidth / 2`)) < 1);
   await click('[data-search-scope="page"]');
   assert.equal(await page.eval(`document.querySelector('.kapi-search').hidden`), false);
   assert.equal(await page.eval(`document.querySelector(".kapi-search-button").getAttribute("aria-expanded")`), "true");
