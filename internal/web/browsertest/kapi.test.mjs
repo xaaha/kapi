@@ -1176,6 +1176,48 @@ test("desktop conversation panel collapses without losing its working state", as
   assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
 });
 
+test("wide side panes toggle without moving the reading column", async () => {
+  const wide = await browser.open(server.url, { width: 1920, height: 800 });
+  try {
+    await wide.waitFor(`document.querySelector(".kapi-panel").checkVisibility()`);
+    const layout = () => wide.eval(`(() => {
+      const page = document.getElementById("kapi-page").getBoundingClientRect();
+      const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
+      const outline = document.querySelector("#kapi-chrome > .kapi-outline").getBoundingClientRect();
+      const html = getComputedStyle(document.documentElement);
+      return {
+        center: (page.left + page.right) / 2,
+        page: { left: page.left, right: page.right },
+        panel: { left: panel.left, right: panel.right },
+        outline: { left: outline.left, right: outline.right },
+        paddingLeft: html.paddingLeft,
+        paddingRight: html.paddingRight,
+      };
+    })()`);
+    const initial = await layout();
+    assert.equal(initial.paddingRight, "0px");
+
+    await wide.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-outline-open")`);
+    const outlineOnly = await layout();
+    assert.equal(outlineOnly.paddingLeft, "0px");
+    assert.ok(Math.abs(outlineOnly.center - initial.center) < 1, JSON.stringify({ initial, outlineOnly }));
+
+    await wide.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    const both = await layout();
+    assert.equal(both.paddingLeft, "0px");
+    assert.equal(both.paddingRight, "0px");
+    assert.ok(Math.abs(both.center - initial.center) < 1, JSON.stringify({ initial, both }));
+    assert.ok(both.outline.right <= both.page.left && both.page.right <= both.panel.left, JSON.stringify(both));
+    assert.deepEqual(wide.errors, []);
+  } finally {
+    await wide.close();
+  }
+});
+
 test("phone chat is an explicit drawer and closes with Escape without losing the draft", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
