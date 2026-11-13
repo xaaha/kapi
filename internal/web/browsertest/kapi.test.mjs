@@ -2297,7 +2297,7 @@ async function mouseClickAt(x, y) {
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
 }
 
-test("a real double click edits a block even when its toolbar appears under the pointer", async () => {
+test("a real double click edits a block at every desktop width", async () => {
   await reopenWith([{ id: "pppppppp", html: '<p data-kapi-id="pppppppp">Prose that the toolbar lands on.</p>' }]);
   for (const width of [1100, 1280, 1920]) {
     await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -2762,14 +2762,33 @@ test("#39 the x on a cell note widens it to the whole table", async () => {
   assert.deepEqual(requests("POST", "/notes")[0].body.notes[0], { target: "gggggggg", part: "", quote: "", prefix: "", suffix: "", text: "whole table" });
 });
 
-test("#39 a real click opens the toolbar beside the pointer, on the clicked line", async () => {
-  const { x, y } = await page.eval(`(r => ({ x: r.left + 40, y: r.top + r.height / 2 }))(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
-  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
-  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
-  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "point"`);
-  const b = await barBox();
-  assert.ok(b.left >= x + 8 && b.left <= x + 24, `bar left ${b.left} for a click at ${x}`);
-  assert.ok(Math.abs((b.top + b.bottom) / 2 - y) <= 2, `bar centre ${(b.top + b.bottom) / 2} for a click at ${y}`);
+test("#39 real block clicks anchor the toolbar to the block instead of following the pointer", async () => {
+  const points = await page.eval(`(r => [
+    { x: r.left + 40, y: r.top + 8 },
+    { x: r.right - 40, y: r.bottom - 8 },
+  ])(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
+  const boxes = [];
+  for (const { x, y } of points) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").dataset.place !== "point"`);
+    boxes.push(await barBox());
+  }
+  assert.deepEqual(boxes[1], boxes[0]);
+  assert.deepEqual(await page.eval(OVERLAPS), []);
+});
+
+test("#39 a clicked table cell uses the same outside toolbar placement as its table", async () => {
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
+  try {
+    await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
+    await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+    const [bar, table] = [await barBox(), await boxOf("gggggggg")];
+    assert.ok(bar.left >= table.right && bar.left - table.right <= 12, JSON.stringify({ bar, table }));
+    assert.deepEqual(await page.eval(OVERLAPS), []);
+  } finally {
+    await page.call("Emulation.clearDeviceMetricsOverride");
+  }
 });
 
 test("#39 on a phone the docked toolbar offers Ask AI and the note opens at the bottom", async () => {

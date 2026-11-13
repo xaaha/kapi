@@ -290,7 +290,6 @@
     renderBar();
   });
   const BAR_GAP = 8;
-  const POINT_PAD = 10;
   const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
   showUndo(main.dataset.undo);
@@ -507,15 +506,10 @@
     return hit(new DOMRect(t.x - 4, t.y - 4, t.width + 8, t.height + 8)) || within(main);
   }
 
-  function pointRect() {
-    if (editing) return null;
-    if (textRange) {
-      const rects = [...textRange.getClientRects()].filter((r) => r.width || r.height);
-      return (textBackward ? rects[0] : rects.at(-1)) ?? null;
-    }
-    if (lastPoint?.el !== selected) return null;
-    const r = selected.getBoundingClientRect();
-    return new DOMRect(r.left + lastPoint.dx, r.top + lastPoint.dy - POINT_PAD, 0, 2 * POINT_PAD);
+  function selectionRect() {
+    if (editing || !textRange) return null;
+    const rects = [...textRange.getClientRects()].filter((r) => r.width || r.height);
+    return (textBackward ? rects[0] : rects.at(-1)) ?? null;
   }
 
   function placeBar() {
@@ -526,13 +520,13 @@
     const areaRight = pageAreaRight();
     const { width, height } = bar.getBoundingClientRect();
     const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight;
-    const p = pointRect();
+    const p = selectionRect();
     const py = p && Math.min(Math.max(p.top + p.height / 2 - height / 2, 4), innerHeight - height - 4);
     const right = p && ["point", p.right + POINT_GAP, py];
     const left = p && ["point", p.left - POINT_GAP - width, py];
     const above = p && ["point", Math.min(Math.max(p.right - width / 2, 4), areaRight - 4 - width), p.top - BAR_GAP - height];
     const under = p && ["point", above[1], p.bottom + BAR_GAP];
-    const near = !p ? [] : text ? (textBackward ? [above, under, left, right] : [above, under, right, left]) : [right, left];
+    const near = !p ? [] : textBackward ? [above, under, left, right] : [above, under, right, left];
     let spot = near.find(([, x, y]) => fits(x, y));
     if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height), null)) {
       const host = closest(textRange.endContainer.nodeType === Node.ELEMENT_NODE ? textRange.endContainer : textRange.endContainer.parentElement, BLOCK);

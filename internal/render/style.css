@@ -87,7 +87,14 @@ body {
   color: var(--kapi-fg);
 }
 :where(#kapi-page) hr { border: 0; border-top: 1px solid var(--kapi-border); margin: 2.5rem 0; }
+:where(#kapi-page) { counter-reset: kapi-image; }
 :where(#kapi-page) img { max-width: 100%; height: auto; border-radius: var(--kapi-radius-sm); }
+:where(#kapi-page) figure:has(> img[src]) { counter-increment: kapi-image; }
+:where(#kapi-page) figure:has(> img[src]) > figcaption { text-align: center; }
+:where(#kapi-page) figure:has(> img[src]) > figcaption::before {
+  content: counter(kapi-image) ". ";
+  font-variant-numeric: tabular-nums;
+}
 :where(#kapi-page) figure:has(> img:only-child) { margin: 0 0 1rem; }
 :where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-yellow-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
 :where(#kapi-page) del { color: var(--kapi-muted); }
@@ -597,15 +604,24 @@ pre.kapi-hl {
 }
 .kapi-gallery figure { min-width: 0; margin: 0; }
 .kapi-figure {
-  margin: 1.25rem 0;
-  padding: 0.65rem;
+  margin: 1.5rem 0 2.25rem;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--kapi-border);
   border-radius: var(--kapi-radius-lg);
   background: var(--kapi-card);
   box-shadow: var(--kapi-card-shadow);
 }
 .kapi-figure > img { display: block; width: 100%; }
-.kapi-figure > figcaption { padding: 0.65rem 0.35rem 0.1rem; color: var(--kapi-muted); font-size: 0.875rem; }
+.kapi-figure > figcaption {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid var(--kapi-border);
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
 
 .kapi-error {
   margin: 1.25rem 0;
