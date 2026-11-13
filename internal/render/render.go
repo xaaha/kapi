@@ -164,6 +164,9 @@ func renderNode(b *bytes.Buffer, n *html.Node) {
 		renderPreset(b, n)
 		return
 	}
+	if renderHTMLComponent(b, n) {
+		return
+	}
 	if n.Type == html.ElementNode && n.Namespace == "" && n.Data == "table" {
 		renderProseTable(b, n)
 		return
@@ -197,6 +200,9 @@ func writeProse(b *bytes.Buffer, n *html.Node, child func(*bytes.Buffer, *html.N
 		return
 	}
 	allowed, ok := allowedTags[n.Data]
+	if n.Data == "input" && !strings.EqualFold(attrVal(n, "type"), "checkbox") {
+		return
+	}
 	if ok {
 		writeStart(b, n.Data, proseAttrs(n, allowed))
 		if voidTags[n.Data] {

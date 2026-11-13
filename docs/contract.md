@@ -23,10 +23,12 @@ resolved by keeping every line.
 
 A page is an HTML fragment file the agent writes, for example `plan.html`. It
 contains plain prose tags (`h1` to `h3`, `p`, `ul`, `ol`, `li`, `a`, `code`,
-`em`, `strong`, `table`) and the preset elements below. An ordinary `<table>`
-is rendered through Kapi's table component, gaining the same sorting, responsive
-layout, cell editing and expansion controls as legacy `<kapi-table>` pages. No
-`<script>`, no `<style>`, no `style=` attributes: the renderer drops them.
+`em`, `strong`, `table`) and the preset elements below. Kapi progressively
+enhances semantic HTML: `table`, `details`/`summary`, `pre`/`code`, `dl`/`dt`/`dd`,
+`figure`/`img`/`figcaption`, and lists whose items begin with checkbox inputs.
+These receive the corresponding formatting and controls while their source stays
+ordinary HTML. No `<script>`, no `<style>`, no `style=` attributes: the renderer
+drops them.
 
 Every top-level element and every preset element carries `data-kapi-id`. The
 agent may omit it; the page store adds one (8 lowercase base32 chars) on first
@@ -37,18 +39,18 @@ load and writes the file back. Ids never change after that.
 | Element | Attributes | Body |
 |---|---|---|
 | `<kapi-callout>` | `kind` = `note` (blue), `warning` (yellow), `key` (purple), `danger` or its alias `alert` (red), `success` (green) | prose |
-| `<kapi-code>` | `lang`, optional `file`, optional `lines` like `10-24` | raw source, HTML-escaped by the agent or inside CDATA-free text |
+| `<kapi-code>` | legacy wrapper for code needing `file` or `lines`; ordinary code should use `<pre><code class="language-go">` | raw source, HTML-escaped by the agent or inside CDATA-free text |
 | `<kapi-diff>` | optional `lang`, optional `file` | a unified diff |
 | `<kapi-table>` | legacy wrapper retained for compatibility; new pages should write an ordinary `<table>` directly | one plain `<table>` |
-| `<kapi-gallery>` | none; double-clicking an image opens one blurred preview with previous and next controls | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
+| `<kapi-gallery>` | groups several images for previous/next preview controls; a standalone image should use ordinary `<figure><img><figcaption>` | `<figure>` children containing images and optional captions; `kapi attach page.html one.png two.png` creates it |
 | `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
 | `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored |
 | `<kapi-badge>` | optional `tone`: the shared `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default), common aliases such as `gray`, `violet` and `teal`, any other name (deterministically assigned a shared theme tone), or a hex colour; optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
-| `<kapi-kv>` | none | `<kapi-item key="...">` children, each prose; renders as a definition list |
-| `<kapi-details>` | `summary`, optional `open` | prose, hidden until the reader opens it; closed unless `open` is set |
-| `<kapi-checklist>` | none | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Ticking a box in the browser sends a `check` op |
+| `<kapi-kv>` | legacy wrapper; new pages should use `<dl>` with alternating `<dt>` and `<dd>` children | `<kapi-item key="...">` children, each prose |
+| `<kapi-details>` | legacy wrapper; new pages should use `<details><summary>…</summary>…</details>` | prose, hidden until the reader opens it; closed unless `open` is set |
+| `<kapi-checklist>` | legacy wrapper; new pages should use `<ul><li><input type="checkbox">…</li></ul>` | `<kapi-task>` children, each prose; `<kapi-task done>` is ticked. Native checkboxes use `checked`. Ticking either form writes back to the file |
 | `<kapi-form>` | `name` | `<kapi-choice name="..." multiple?>` with `<kapi-opt value="...">label</kapi-opt>`, and `<kapi-text name="...">label</kapi-text>` |
 
 The colours are the seven shared tones: `red`, `orange`, `yellow`, `green`,
@@ -79,7 +81,8 @@ parts are text:
 | attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | plain `table`, `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
-| raw | `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| task body | native checkbox `li`, `kapi-task` | the task body carries `data-kapi-text="<task id>"`; native tasks retain their checkbox | in place, rich text |
+| raw | plain `pre`, `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
 | none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist`, `kapi-gallery` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the

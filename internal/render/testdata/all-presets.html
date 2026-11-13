@@ -376,6 +376,10 @@ body {
   padding: 0.7rem 1.1rem;
 }
 .kapi-kv-item + .kapi-kv-item { border-top: 1px solid var(--kapi-border); }
+.kapi-kv[data-kapi-component="kv"] > :is(dt, dd) { padding: 0.7rem 1.1rem; }
+.kapi-kv[data-kapi-component="kv"] > dt { grid-column: 1; margin: 0; border-top: 1px solid var(--kapi-border); }
+.kapi-kv[data-kapi-component="kv"] > dd { grid-column: 2; margin: 0; border-top: 1px solid var(--kapi-border); }
+.kapi-kv[data-kapi-component="kv"] > :is(dt, dd):first-of-type { border-top: 0; }
 #kapi-page .kapi-kv dt,
 .kapi-kv dt { margin: 0; color: var(--kapi-muted); font-size: 0.875rem; font-weight: 600; line-height: 1.65rem; }
 #kapi-page .kapi-kv dd,
@@ -424,6 +428,9 @@ body {
 .kapi-details-body { padding: 0.1rem 0 0.9rem 1.15rem; }
 .kapi-details-body > :first-child { margin-top: 0; }
 .kapi-details-body > :last-child { margin-bottom: 0; }
+.kapi-details[data-kapi-component="details"] > :not(summary) { margin-left: 1.15rem; }
+.kapi-details[data-kapi-component="details"] > summary + * { margin-top: 0.1rem; }
+.kapi-details[data-kapi-component="details"] > :last-child { margin-bottom: 0.9rem; }
 
 #kapi-page .kapi-checklist,
 .kapi-checklist {
@@ -730,6 +737,16 @@ pre.kapi-hl {
   margin: 1.25rem 0;
 }
 .kapi-gallery figure { min-width: 0; margin: 0; }
+.kapi-figure {
+  margin: 1.25rem 0;
+  padding: 0.65rem;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-card);
+  box-shadow: var(--kapi-card-shadow);
+}
+.kapi-figure > img { display: block; width: 100%; }
+.kapi-figure > figcaption { padding: 0.65rem 0.35rem 0.1rem; color: var(--kapi-muted); font-size: 0.875rem; }
 
 .kapi-error {
   margin: 1.25rem 0;

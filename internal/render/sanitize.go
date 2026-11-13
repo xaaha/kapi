@@ -10,11 +10,11 @@ var dropped = set(
 	"script", "style", "iframe", "frame", "frameset", "object", "embed", "applet",
 	"noscript", "noembed", "noframes", "template", "base", "link",
 	"meta", "title", "head", "textarea", "select", "option", "optgroup", "button",
-	"input", "xmp", "plaintext", "param", "source", "track", "audio", "video",
+	"xmp", "plaintext", "param", "source", "track", "audio", "video",
 	"canvas", "portal", "dialog", "slot", "datalist", "output", "keygen", "picture",
 )
 
-var voidTags = set("br", "hr", "img", "wbr", "col")
+var voidTags = set("br", "hr", "img", "input", "wbr", "col")
 
 var rawPresets = set("kapi-code", "kapi-diff", "kapi-diagram", "kapi-render")
 
@@ -27,7 +27,7 @@ var allowedTags = map[string]map[string]bool{
 	"details": set("open"), "dfn": nil, "div": nil, "dl": nil, "dt": nil, "em": nil,
 	"figcaption": nil, "figure": nil, "footer": nil, "h1": nil, "h2": nil, "h3": nil,
 	"h4": nil, "h5": nil, "h6": nil, "header": nil, "hr": nil, "i": nil,
-	"img": set("src", "alt", "width", "height"), "ins": set("cite", "datetime"),
+	"img": set("src", "alt", "width", "height"), "input": set("type", "checked", "disabled"), "ins": set("cite", "datetime"),
 	"kbd": nil, "li": set("value"), "mark": nil, "ol": set("start", "reversed", "type"),
 	"p": nil, "pre": nil, "q": set("cite"), "s": nil, "samp": nil, "section": nil,
 	"small": nil, "span": nil, "strong": nil, "sub": nil, "summary": nil, "sup": nil,

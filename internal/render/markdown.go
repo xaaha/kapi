@@ -170,7 +170,12 @@ func (m *mdWriter) list(n *html.Node) string {
 			body = nonEmpty(paragraph(m.inline(c, false)))
 		}
 		marker := "- "
-		if ordered {
+		if box := nativeTaskBox(c); box != nil {
+			marker = "- [ ] "
+			if _, checked := attr(box, "checked"); checked {
+				marker = "- [x] "
+			}
+		} else if ordered {
 			marker = strconv.Itoa(num) + ". "
 			num = listNumber(num + 1)
 		}

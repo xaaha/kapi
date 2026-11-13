@@ -32,6 +32,20 @@ func TestACheckOpTicksTheTaskInTheFile(t *testing.T) {
 	}
 }
 
+func TestACheckOpTicksANativeChecklistItem(t *testing.T) {
+	s := newSite(t, `<ul data-kapi-id="listlist"><li data-kapi-id="tasktask"><input type="checkbox">Copy</li></ul>`+"\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"check","id":"tasktask","done":true}}`)
+	if code != http.StatusOK || out["rev"] != 2.0 {
+		t.Fatalf("check: %d %v", code, out)
+	}
+	if b, _ := os.ReadFile(s.path); !strings.Contains(string(b), ` checked`) {
+		t.Errorf("file after check:\n%s", b)
+	}
+	if b := s.get("/p/" + s.id + "/blocks/tasktask"); b.code != http.StatusOK || !strings.Contains(b.body, `class="kapi-task"`) || !strings.Contains(b.body, `checked=""`) {
+		t.Errorf("block after check: %d %s", b.code, b.body)
+	}
+}
+
 func TestAnOrientOpFlipsTheDiagram(t *testing.T) {
 	s := newSite(t, "<kapi-diagram data-kapi-id=\"ffffffff\">\na -> b\n</kapi-diagram>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"orient","id":"ffffffff","dir":"lr"}}`)

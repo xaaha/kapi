@@ -9,17 +9,27 @@ var tones = []string{"red", "orange", "yellow", "green", "blue", "purple", "grey
 
 var toneAliases = map[string]string{
 	"aqua": "blue", "cyan": "blue", "navy": "blue", "teal": "blue",
-	"amber": "yellow", "gold": "yellow",
-	"bronze": "orange", "brown": "orange",
+	"amber": "orange", "bronze": "orange", "brown": "orange", "gold": "yellow",
 	"emerald": "green", "lime": "green", "mint": "green", "olive": "green",
 	"crimson": "red", "rose": "red", "scarlet": "red",
 	"indigo": "purple", "lavender": "purple", "lilac": "purple", "magenta": "purple", "pink": "purple", "violet": "purple",
-	"black": "grey", "charcoal": "grey", "gray": "grey", "silver": "grey", "slate": "grey", "white": "grey",
+	"black": "grey", "charcoal": "grey", "gray": "grey", "neutral": "grey", "silver": "grey", "slate": "grey", "white": "grey",
+}
+
+func normalizeTone(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if isTone(name) {
+		return name
+	}
+	if tone := toneAliases[name]; tone != "" {
+		return tone
+	}
+	return "grey"
 }
 
 func isTone(name string) bool {
-	for _, t := range tones {
-		if t == name {
+	for _, tone := range tones {
+		if name == tone {
 			return true
 		}
 	}

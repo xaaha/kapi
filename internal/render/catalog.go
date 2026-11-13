@@ -15,20 +15,11 @@ var catalog = []Preset{
 	},
 	{
 		Name:    "kapi-code",
-		Summary: "Highlighted source with line numbers and an optional file label",
-		Example: `<!-- lang: a language name (go, ts, python, sql, ...). file: label shown above, also picks the language when lang is missing.
-     lines: first-last line numbers in the original file, like 10-24; numbering starts at the first.
-     Body: the raw source exactly as it is; nothing needs escaping. Common indentation is removed. -->
-<kapi-code lang="go" file="internal/page/store.go" lines="41-47">
-func (s *Store) Source() ([]byte, uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.rev < 1 {
-		return nil, 0
-	}
-	return s.src, s.rev
-}
-</kapi-code>`,
+		Summary: "An ordinary pre and code block with syntax highlighting, line numbers and copy controls",
+		Example: `<!-- Write ordinary <pre><code> and put the language in class="language-...". Kapi supplies highlighting, line numbers and copy controls. -->
+<pre><code class="language-go">func main() {
+    fmt.Println("hello")
+}</code></pre>`,
 	},
 	{
 		Name:    "kapi-diff",
@@ -185,31 +176,31 @@ func (s *Store) Source() ([]byte, uint64) {
 	},
 	{
 		Name:    "kapi-kv",
-		Summary: "Key and value pairs, like owner, status and due date, as a definition list",
-		Example: `<!-- Children: <kapi-item key="..."> each holding prose. Keep keys to a word or two. -->
-<kapi-kv>
-  <kapi-item key="Owner">Pratik</kapi-item>
-  <kapi-item key="Status"><kapi-badge tone="yellow">in review</kapi-badge></kapi-item>
-  <kapi-item key="Rollback">Flip <code>KAPI_STORE</code> back and restart the daemon.</kapi-item>
-</kapi-kv>`,
+		Summary: "An ordinary definition list formatted as key and value pairs",
+		Example: `<!-- Write an ordinary <dl> containing alternating <dt> keys and <dd> values. -->
+<dl>
+  <dt>Owner</dt><dd>Pratik</dd>
+  <dt>Status</dt><dd><kapi-badge tone="yellow">in review</kapi-badge></dd>
+  <dt>Rollback</dt><dd>Flip <code>KAPI_STORE</code> back and restart the daemon.</dd>
+</dl>`,
 	},
 	{
 		Name:    "kapi-details",
-		Summary: "A collapsed section the reader opens, for detail most readers can skip",
-		Example: `<!-- summary: the line shown while closed. open: add it to start open. Body: prose. -->
-<kapi-details summary="Why copy before flipping reads?">
+		Summary: "An ordinary details and summary section formatted for information readers can skip",
+		Example: `<!-- Write ordinary <details><summary> markup. Add open to start expanded. -->
+<details>
+  <summary>Why copy before flipping reads?</summary>
   <p>Copying first lets us compare row counts before any reads move, so a bad copy never serves traffic.</p>
-</kapi-details>`,
+</details>`,
 	},
 	{
 		Name:    "kapi-checklist",
-		Summary: "Tasks with tick boxes; ticking one in the browser writes done back to the file",
-		Example: `<!-- Children: <kapi-task> each holding prose. Add done to a task that is finished.
-     When the reader ticks or unticks a box, kapi adds or removes done in the file and kapi watch reports it. -->
-<kapi-checklist>
-  <kapi-task done>Copy the session store to the new cluster</kapi-task>
-  <kapi-task>Compare row counts</kapi-task>
-  <kapi-task>Flip reads</kapi-task>
-</kapi-checklist>`,
+		Summary: "An ordinary list of checkbox tasks whose checked state is written back to the file",
+		Example: `<!-- Write an ordinary <ul>; begin every <li> with <input type="checkbox">. Add checked to completed tasks. -->
+<ul>
+  <li><input type="checkbox" checked>Copy the session store to the new cluster</li>
+  <li><input type="checkbox">Compare row counts</li>
+  <li><input type="checkbox">Flip reads</li>
+</ul>`,
 	},
 }
