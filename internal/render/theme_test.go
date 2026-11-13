@@ -12,6 +12,13 @@ import (
 	"testing"
 )
 
+func TestImageCaptionCounterSkipsArchivedFigures(t *testing.T) {
+	const selector = `figure:not([data-kapi-state="archived"]):has(> img[src]) { counter-increment: kapi-image; }`
+	if !bytes.Contains(CSS(), []byte(selector)) {
+		t.Fatalf("image counter must exclude archived figures: missing %q", selector)
+	}
+}
+
 var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
 var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "shadow-ink", "on-solid"}
