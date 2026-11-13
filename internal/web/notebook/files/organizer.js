@@ -1,4 +1,4 @@
-import { h, modal } from "../../static/core.js";
+import { h, icon, modal, shortcuts } from "../../static/core.js";
 import { byFolder, folderCollapsed, folderTitle, movePage, onLayout, pageTitle, renameFolder, renamePage, setFolderCollapsed } from "./pages.js";
 import { stateLabel, stateTone } from "./states.js";
 
@@ -7,16 +7,18 @@ let dragging = null;
 function editName(container, current, save) {
   if (container.hasAttribute("data-editing")) return;
   container.setAttribute("data-editing", "");
+  const draggable = container.getAttribute("draggable");
+  container.draggable = false;
   const input = h("input", { class: "kapi-organizer-rename-input", value: current, "aria-label": "New name" });
   container.append(input);
   input.focus();
   input.select();
   let cancelled = false;
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
+    if (shortcuts.is("send", event)) {
       event.preventDefault();
       input.blur();
-    } else if (event.key === "Escape") {
+    } else if (shortcuts.is("dismiss", event)) {
       event.preventDefault();
       event.stopPropagation();
       cancelled = true;
@@ -25,6 +27,8 @@ function editName(container, current, save) {
   });
   input.addEventListener("blur", () => {
     container.removeAttribute("data-editing");
+    if (draggable === null) container.removeAttribute("draggable");
+    else container.setAttribute("draggable", draggable);
     input.remove();
     if (!cancelled) save(input.value.trim());
   }, { once: true });
@@ -85,14 +89,14 @@ function folderGroup(folder, pages) {
 export function createOrganizer() {
   const button = h("button", { class: "nb-organize", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false", text: "Organize" });
   const scrim = h("div", { class: "kapi-modal-scrim kapi-organizer-scrim", hidden: "" });
-  const close = h("button", { class: "kapi-organizer-close", type: "button", "aria-label": "Close organizer", text: "Close" });
+  const close = h("button", { class: "kapi-organizer-close", type: "button", "aria-label": "Close organizer", title: "Close organizer" }, icon("x"));
   const list = h("div", { class: "kapi-organizer-list" });
   const dialog = h("div", { class: "kapi-organizer", role: "dialog", "aria-modal": "true", "aria-label": "Organize notes", tabindex: "-1", hidden: "" },
     h("header", { class: "kapi-organizer-head" }, h("div", {}, h("h2", { text: "Organize notes" }), h("p", { text: "Rename folders and notes, collapse groups, or drag notes into your preferred order." })), close),
     list);
   let pages = [];
   const render = () => {
-    if (!controller.isOpen()) return;
+    if (!controller.isOpen() || list.querySelector("[data-editing]")) return;
     const key = list.contains(document.activeElement) ? document.activeElement.dataset.key : null;
     const groups = byFolder(pages);
     list.replaceChildren(...(groups.size ? [...groups].map(([folder, items]) => folderGroup(folder, items)) : [h("p", { class: "kapi-organizer-empty", text: "No notes to organize." })]));

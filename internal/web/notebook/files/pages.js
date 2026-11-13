@@ -1,4 +1,5 @@
 import { getJSON, prefs, root } from "../../static/core.js";
+import { isWorking } from "./states.js";
 
 const REFRESH_MS = 10000;
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
@@ -192,6 +193,24 @@ export function markVisited(id, pages) {
 
 export function visitTimes() {
   return visits().ids;
+}
+
+// Shared priority for home and the note switcher. Never duplicate a note across groups.
+export function noteGroups(pages, fresh, otherLimit = Infinity) {
+  const seen = visitTimes();
+  const recent = pages.filter((p) => seen[p.id] > 0).sort((a, b) => seen[b.id] - seen[a.id]).slice(0, 3);
+  const picked = new Set(recent.map((p) => p.id));
+  const take = (test) => pages.filter((p) => {
+    if (picked.has(p.id) || !test(p)) return false;
+    picked.add(p.id);
+    return true;
+  });
+  return [
+    ["Recently viewed", recent],
+    ["New", take((p) => fresh.has(p.id))],
+    ["Working now", take(isWorking)],
+    ["Other notes", take(() => true).slice(0, otherLimit)],
+  ].filter(([, notes]) => notes.length);
 }
 
 export function newIDs(pages, current) {

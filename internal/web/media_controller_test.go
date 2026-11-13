@@ -21,8 +21,8 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 
 	owned := []string{
 		`kapi-media-viewer`,
-		`ArrowLeft`,
-		`ArrowRight`,
+		`shortcuts.is("previousImage", event)`,
+		`shortcuts.is("nextImage", event)`,
 		`function fitFrame`,
 		`a.kapi-thumb`,
 	}
@@ -38,16 +38,21 @@ func TestMediaBrowserBehaviorHasOneOwner(t *testing.T) {
 		t.Error("the media viewer does not take precedence over page shortcuts and block editing")
 	}
 	for marker, problem := range map[string]string{
-		`el.inert = true`:     "the media viewer does not make the background inert",
-		`event.key === "Tab"`: "the media viewer does not trap keyboard focus",
-		`before.focus({`:      "the media viewer does not restore focus when it closes",
+		`el.inert = true`:                   "the media viewer does not make the background inert",
+		`shortcuts.is("focusCycle", event)`: "the media viewer does not trap keyboard focus",
+		`before.focus({`:                    "the media viewer does not restore focus when it closes",
 	} {
 		if !strings.Contains(string(controller), marker) {
 			t.Error(problem)
 		}
 	}
-	if strings.Count(string(controller), "paths.chevron") != 2 {
-		t.Error("previous and next do not use the same chevron geometry")
+	if strings.Count(string(controller), `"chevron"`) != 2 || !strings.Contains(string(controller), "el.append(icon(glyph))") {
+		t.Error("previous and next do not use the shared chevron component")
+	}
+	for _, binding := range []string{`previousImage: { keys: ["ArrowLeft"] }`, `nextImage: { keys: ["ArrowRight"] }`, `focusCycle: { keys: ["Tab"] }`} {
+		if !strings.Contains(string(shortcuts), binding) {
+			t.Errorf("media keyboard binding is not centralized: %s", binding)
+		}
 	}
 	if !strings.Contains(string(page), `tool("expand", "Open image", "preview")`) {
 		t.Error("the toolbar does not use the familiar expand icon and Open image label")

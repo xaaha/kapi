@@ -1,7 +1,8 @@
-import { h, root, shortcuts } from "../../static/core.js";
+import { h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
-import { ago, byFolder, folderOf, folderTitle, foldersOf, matches, newIDs, onLayout, onVisit, pageTitle, redraw, watch } from "./pages.js";
-import { noteSearch } from "./searchbox.js";
+import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, pageTitle, redraw, noteGroups, watch } from "./pages.js";
+import { searchTrigger } from "../../static/search-dialog.js";
+import { registerNotesSearch } from "./sidebar.js";
 import { STATUS_FILTERS, stateLabel, stateMatches, stateTone } from "./states.js";
 
 const href = (p) => `${root}p/${p.id}/`;
@@ -30,15 +31,36 @@ function card(p, fresh, folder) {
 
 export function showHome(main) {
   document.title = "kapi";
-  const { box: searchBox, input: search } = noteSearch();
+  registerNotesSearch();
+  const searchButton = searchTrigger();
   const project = h("select", { class: "nb-select", "aria-label": "Folder" }, h("option", { value: "", text: "All folders" }));
   const status = h("div", { class: "nb-status", role: "group", "aria-label": "Status" });
   const count = h("span", { class: "nb-count" });
-  const grid = h("div", { class: "nb-grid" });
+  const grid = h("div", { class: "nb-grid", "data-view": prefs.get("kapi-home-view") === "list" ? "list" : "cards" });
+  const viewButtons = ["cards", "list"].map((view) => {
+    const button = h("button", { type: "button", class: "nb-view-button", "aria-pressed": String(grid.dataset.view === view), text: view === "cards" ? "Cards" : "List" });
+    button.addEventListener("click", () => {
+      grid.dataset.view = view;
+      prefs.set("kapi-home-view", view);
+      for (const item of viewButtons) item.setAttribute("aria-pressed", String(item === button));
+    });
+    return button;
+  });
+  const viewToggle = h("div", { class: "nb-view-toggle", role: "group", "aria-label": "Note view" }, ...viewButtons);
   const empty = h("p", { class: "nb-empty" });
   let pickedStatus = "active";
+  let initialized = false;
+  const filterCopy = {
+    active: ["Your current sessions", "Continue where you left off."],
+    inactive: ["Quiet for now", "Pick up a note when you’re ready."],
+    ended: ["Completed sessions", "Your pages and history are still here."],
+    "": ["All your notes", "Browse work from you and your agents."],
+  };
+  const filterTitle = h("strong");
+  const filterDescription = h("p");
+  const filterContext = h("div", { class: "nb-filter-context", role: "status" }, filterTitle, filterDescription);
   const statusButtons = STATUS_FILTERS.map(({ value, label }) => {
-    const button = h("button", { type: "button", class: "nb-status-button", "aria-pressed": String(value === pickedStatus), text: label });
+    const button = h("button", { type: "button", class: "nb-status-button", "data-status": value, "aria-pressed": String(value === pickedStatus), text: label });
     button.addEventListener("click", () => {
       pickedStatus = value;
       for (const item of statusButtons) item.setAttribute("aria-pressed", String(item === button));
@@ -50,13 +72,13 @@ export function showHome(main) {
   status.append(...statusButtons);
 
   const brand = h("a", { class: "kapi-site-home", href: root }, h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" }));
-  const theme = window.kapiTheme?.control?.();
+  const theme = window.kapiTheme?.control?.({ icon, shortcuts });
   const top = h("header", { class: "nb-top kapi-site-head" }, brand,
-    h("div", { class: "kapi-site-actions nb-top-actions" }, searchBox, theme));
+    h("div", { class: "kapi-site-actions nb-top-actions" }, searchButton, theme));
   const organizer = createOrganizer();
-  const toolbar = h("div", { class: "nb-toolbar" }, status, h("div", { class: "nb-toolbar-right" }, organizer.button, project, count));
+  const toolbar = h("div", { class: "nb-toolbar" }, status, h("div", { class: "nb-toolbar-right" }, viewToggle, organizer.button, h("span", { class: "nb-select-wrap" }, project, h("span", { class: "nb-select-caret", "aria-hidden": "true" })), count));
   const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your temporary workspace" }), h("h1", { text: "All notes" })), h("p", { class: "nb-intro", text: "Recent work from you and your agents, in one searchable place." }));
-  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, grid, empty);
+  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, filterContext, grid, empty);
   main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)));
 
   let pages = [];
@@ -69,21 +91,23 @@ export function showHome(main) {
   };
   const draw = () => redraw(library, () => {
     const candidates = project.value ? byFolder(pages).get(project.value) ?? [] : pages;
-    const shown = candidates.filter((p) => matches(p, search.value) && stateMatches(p, pickedStatus));
+    const matching = candidates;
+    const shown = matching.filter((p) => stateMatches(p, pickedStatus));
+    STATUS_FILTERS.forEach(({ value, label }, i) => {
+      const total = matching.filter((p) => stateMatches(p, value)).length;
+      statusButtons[i].textContent = label;
+      statusButtons[i].dataset.count = total;
+      statusButtons[i].setAttribute("aria-label", `${label} ${total}`);
+      statusButtons[i].setAttribute("aria-pressed", String(value === pickedStatus));
+    });
+    [filterTitle.textContent, filterDescription.textContent] = filterCopy[pickedStatus];
     count.textContent = plural(shown.length, "note");
-    grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
+    const ordered = noteGroups(shown, fresh).flatMap(([, notes]) => notes);
+    grid.replaceChildren(...ordered.map((p) => card(p, fresh.has(p.id), project.value || null)));
     empty.hidden = shown.length > 0;
     empty.textContent = pages.length ? "No note matches these filters." : "No notes yet. Ask an agent to create one, or run kapi open notes.html.";
   });
 
-  search.addEventListener("input", draw);
-  search.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
-    const first = grid.querySelector(".nb-card");
-    if (!first) return;
-    e.preventDefault();
-    first.focus();
-  });
   project.addEventListener("change", draw);
   onLayout(() => {
     updateProjects();
@@ -93,19 +117,12 @@ export function showHome(main) {
     fresh = newIDs(pages, null);
     draw();
   });
-  document.addEventListener("keydown", (e) => {
-    if (document.activeElement !== search && (shortcuts.is("switchNote", e) || (shortcuts.is("search", e) && !e.target.closest?.("input, textarea, select")))) {
-      e.preventDefault();
-      search.focus();
-      search.select();
-    } else if (document.activeElement === search && shortcuts.is("dismiss", e)) {
-      search.value = "";
-      search.blur();
-      draw();
-    }
-  });
   watch((next) => {
     pages = next;
+    if (!initialized) {
+      if (!pages.some((p) => stateMatches(p, "active"))) pickedStatus = "";
+      initialized = true;
+    }
     fresh = newIDs(pages, null);
     organizer.setPages(pages);
     updateProjects();

@@ -58,7 +58,18 @@
 }
 
 .kapi-organizer-close {
-  padding: 7px 10px;
+  display: inline-grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+}
+
+.kapi-organizer-close svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .kapi-organizer-rename {
@@ -183,6 +194,8 @@
 }
 
 .kapi-organizer-rename-input {
+  grid-column: 1 / -1;
+  flex: 1;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;

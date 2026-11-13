@@ -47,8 +47,9 @@ body:has(#kapi-home) {
 }
 
 .nb-top {
-  max-width: 1220px;
-  height: 74px;
+  position: static;
+  max-width: none;
+  height: 58px;
   margin: 0 auto;
   padding: 0 36px;
 }
@@ -63,6 +64,7 @@ body:has(#kapi-home) {
 }
 
 .nb-top .kapi-site-home {
+  color: var(--kapi-bg);
   font-size: 18px;
   font-weight: 700;
 }
@@ -164,11 +166,6 @@ body:has(#kapi-home) {
   color: var(--kapi-faint);
 }
 
-.nb-top > .nb-search-box {
-  width: min(360px, 100%);
-  margin-left: auto;
-}
-
 .nb-main {
   max-width: 1160px;
   margin: 0 auto;
@@ -177,9 +174,9 @@ body:has(#kapi-home) {
 
 .nb-title-row {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 40px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
   margin-bottom: 30px;
 }
 
@@ -194,19 +191,32 @@ body:has(#kapi-home) {
 
 .nb-title-row h1 {
   margin: 0;
-  font: 500 clamp(42px, 5vw, 62px) / 1 var(--kapi-font-body);
+  font: 700 clamp(42px, 5vw, 62px) / 1.1 var(--kapi-font);
   letter-spacing: -0.04em;
 }
 
 .nb-intro {
-  max-width: 390px;
+  max-width: 850px;
   margin: 0 0 5px;
   color: var(--kapi-muted);
-  font: 15px/1.65 var(--kapi-font-body);
+  font: 17px/1.6 var(--kapi-font);
 }
 
 .nb-library {
   min-width: 0;
+}
+
+.nb-filter-context {
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  border-radius: 14px;
+  background: var(--kapi-raised);
+  font-size: 14px;
+}
+
+.nb-filter-context p {
+  margin: 7px 0 0;
+  color: var(--kapi-muted);
 }
 
 .nb-toolbar {
@@ -240,6 +250,8 @@ body:has(#kapi-home) {
   cursor: pointer;
 }
 
+.nb-status-button::after { content: " " attr(data-count); font-variant-numeric: tabular-nums; }
+
 .nb-status-button:hover,
 .nb-organize:hover {
   color: var(--kapi-fg);
@@ -251,9 +263,27 @@ body:has(#kapi-home) {
   color: var(--kapi-bg);
 }
 
+.nb-select-wrap { position: relative; display: inline-flex; min-width: 0; }
+
 .nb-select {
+  appearance: none;
   min-width: 150px;
-  padding: 8px 32px 8px 13px;
+  max-width: 100%;
+  padding: 8px 38px 8px 13px;
+  cursor: pointer;
+}
+
+.nb-select-caret {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--kapi-muted);
+  border-bottom: 1.5px solid var(--kapi-muted);
+  transform: rotate(45deg);
+  pointer-events: none;
 }
 
 .nb-count {
@@ -261,6 +291,77 @@ body:has(#kapi-home) {
   color: var(--kapi-faint);
   font-size: 12px;
   text-align: right;
+}
+
+.nb-view-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--kapi-border);
+  border-radius: 24px;
+}
+
+.nb-view-button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--kapi-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.nb-view-button[aria-pressed="true"] {
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+}
+
+.nb-grid[data-view="list"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nb-grid[data-view="list"] .nb-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 20px;
+  min-height: 112px;
+  padding: 22px 26px;
+}
+
+.nb-grid[data-view="list"] .nb-card-top {
+  grid-column: 1;
+}
+
+.nb-grid[data-view="list"] .nb-card-top .nb-glyph,
+.nb-grid[data-view="list"] .nb-card-top .nb-dot {
+  display: none;
+}
+
+.nb-grid[data-view="list"] .nb-card-title {
+  grid-column: 1;
+  margin: 0;
+  font: 650 26px/1.2 var(--kapi-font);
+}
+
+.nb-grid[data-view="list"] .nb-card-summary {
+  grid-column: 1;
+  -webkit-line-clamp: 1;
+}
+
+.nb-grid[data-view="list"] .nb-card-foot {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 24px;
+  background: var(--kapi-raised);
+}
+
+@media (max-width: 540px) {
+  .nb-grid[data-view="list"] .nb-card { padding: 18px; gap: 8px; }
+  .nb-grid[data-view="list"] .nb-card-foot { grid-column: 1; grid-row: auto; justify-self: start; }
 }
 
 .nb-grid {
@@ -403,7 +504,11 @@ body:has(#kapi-home) {
 
   .nb-toolbar-right {
     width: 100%;
+    flex-wrap: wrap;
   }
+
+  .nb-select-wrap { flex: 1; min-width: 150px; }
+  .nb-count { margin-left: auto; }
 
   .nb-select {
     flex: 1;
@@ -418,15 +523,6 @@ body:has(#kapi-home) {
   .nb-top {
     gap: 12px;
     height: 64px;
-  }
-
-  .nb-top .kapi-site-name,
-  .nb-home .nb-search-box kbd {
-    display: none;
-  }
-
-  .nb-top-actions .nb-search-box {
-    width: 100%;
   }
 
   .nb-main {

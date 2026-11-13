@@ -27,6 +27,8 @@ async function doubleClick(target) {
     for (const d of document.querySelectorAll("details")) d.open = true;
     const n = ${target};
     n.scrollIntoView({ block: "center" });
+    const headerBottom = document.querySelector(".kapi-site-head").getBoundingClientRect().bottom;
+    if (n.getBoundingClientRect().top < headerBottom) scrollBy(0, n.getBoundingClientRect().top - headerBottom - 16);
     const r = [...n.getClientRects()].find((x) => x.width > 4 && x.height > 4) || n.getBoundingClientRect();
     return { x: r.x + Math.min(r.width / 2, 24), y: r.y + Math.min(r.height / 2, 12) };
   })()`);

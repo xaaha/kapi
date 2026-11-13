@@ -1,30 +1,16 @@
-window.kapiCreateMedia = ({ main }) => {
+window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
   const imageSelector = 'figure > img[src], [data-kapi-preset="gallery"] img[src]';
   let current = -1;
   let before = null;
   let inerted = [];
 
-  const svg = (path) => {
-    const el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    el.setAttribute("viewBox", "0 0 256 256");
-    el.setAttribute("aria-hidden", "true");
-    const p = document.createElementNS(el.namespaceURI, "path");
-    p.setAttribute("d", path);
-    el.append(p);
-    return el;
-  };
-  const button = (className, label, path) => {
+  const button = (className, label, glyph) => {
     const el = document.createElement("button");
     el.type = "button";
     el.className = className;
     el.setAttribute("aria-label", label);
-    el.append(svg(path));
+    el.append(icon(glyph));
     return el;
-  };
-
-  const paths = {
-    close: "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
-    chevron: "M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z",
   };
 
   const scrim = document.createElement("div");
@@ -37,9 +23,9 @@ window.kapiCreateMedia = ({ main }) => {
   viewer.setAttribute("aria-label", "Image preview");
   viewer.tabIndex = -1;
   viewer.hidden = true;
-  const close = button("kapi-media-close", "Close image preview", paths.close);
-  const previous = button("kapi-media-previous", "Previous image", paths.chevron);
-  const next = button("kapi-media-next", "Next image", paths.chevron);
+  const close = button("kapi-media-close", "Close image preview", "x");
+  const previous = button("kapi-media-previous", "Previous image", "chevron");
+  const next = button("kapi-media-next", "Next image", "chevron");
   const picture = document.createElement("img");
   picture.className = "kapi-media-image";
   const caption = document.createElement("div");
@@ -106,16 +92,16 @@ window.kapiCreateMedia = ({ main }) => {
   scrim.addEventListener("click", closeViewer);
   document.addEventListener("keydown", (event) => {
     if (!isOpen()) return;
-    if (event.key === "Escape") {
+    if (shortcuts.is("dismiss", event)) {
       closeViewer();
       event.preventDefault();
-    } else if (event.key === "ArrowLeft") {
+    } else if (shortcuts.is("previousImage", event)) {
       step(-1);
       event.preventDefault();
-    } else if (event.key === "ArrowRight") {
+    } else if (shortcuts.is("nextImage", event)) {
       step(1);
       event.preventDefault();
-    } else if (event.key === "Tab") {
+    } else if (shortcuts.is("focusCycle", event)) {
       const items = focusable();
       const at = items.indexOf(document.activeElement);
       const nextAt = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);

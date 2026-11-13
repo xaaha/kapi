@@ -1,3 +1,5 @@
+export { icon } from "./icons.js";
+
 export const root = location.pathname.match(/^\/[^/]+\//)[0];
 export const pageID = location.pathname.match(/^\/[^/]+\/p\/([0-9a-f]{16})\//)?.[1] ?? null;
 export const shortcuts = window.kapiShortcuts;
@@ -81,14 +83,14 @@ export function modal({ dialog, scrim, trigger, initialFocus, onOpen, onClose, s
 
   document.addEventListener("keydown", (event) => {
     if (!isOpen() || event.defaultPrevented) return;
-    if (event.key === "Escape") {
+    if (shortcuts.is("dismiss", event)) {
       if (!shouldDismiss(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setOpen(false);
       return;
     }
-    if (event.key !== "Tab") return;
+    if (!shortcuts.is("focusCycle", event)) return;
     const items = focusable();
     if (!items.length) {
       event.preventDefault();
