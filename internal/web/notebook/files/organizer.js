@@ -3,6 +3,7 @@ import { byFolder, folderCollapsed, folderTitle, movePage, onLayout, pageTitle, 
 import { stateLabel, stateTone } from "./states.js";
 
 let dragging = null;
+let requestedFocus = null;
 
 function editName(container, current, save) {
   if (container.hasAttribute("data-editing")) return;
@@ -30,13 +31,18 @@ function editName(container, current, save) {
     if (draggable === null) container.removeAttribute("draggable");
     else container.setAttribute("draggable", draggable);
     input.remove();
-    if (!cancelled) save(input.value.trim());
+    if (cancelled) {
+      container.querySelector('[data-organizer-focus="rename"]')?.focus({ preventScroll: true });
+      return;
+    }
+    requestedFocus = { key: container.dataset.key, control: "rename" };
+    save(input.value.trim());
   }, { once: true });
 }
 
 function pageRow(page, folder, ids) {
   const title = pageTitle(page);
-  const rename = h("button", { class: "kapi-organizer-rename", type: "button", "aria-label": `Rename ${title}`, text: "Rename" });
+  const rename = h("button", { class: "kapi-organizer-rename", type: "button", "data-organizer-focus": "rename", "aria-label": `Rename ${title}`, text: "Rename" });
   const row = h("div", { class: "kapi-organizer-page", draggable: "true", "data-key": `organizer-page\n${folder}\n${page.id}` },
     h("span", { class: "nb-dot", "data-state": page.state, "data-tone": stateTone(page), "aria-hidden": "true" }),
     h("span", { class: "kapi-organizer-page-title", text: title }),
@@ -73,11 +79,11 @@ function pageRow(page, folder, ids) {
 function folderGroup(folder, pages) {
   const name = folderTitle(folder);
   const collapsed = folderCollapsed(folder);
-  const toggle = h("button", { class: "kapi-organizer-folder-toggle", type: "button", "aria-expanded": String(!collapsed), title: folder },
+  const toggle = h("button", { class: "kapi-organizer-folder-toggle", type: "button", "data-organizer-focus": "toggle", "aria-expanded": String(!collapsed), title: folder },
     h("span", { class: "kapi-organizer-chevron", "aria-hidden": "true" }),
     h("strong", { text: name }),
     h("span", { text: String(pages.length) }));
-  const rename = h("button", { class: "kapi-organizer-rename", type: "button", "aria-label": `Rename ${name}`, text: "Rename" });
+  const rename = h("button", { class: "kapi-organizer-rename", type: "button", "data-organizer-focus": "rename", "aria-label": `Rename ${name}`, text: "Rename" });
   const head = h("div", { class: "kapi-organizer-folder-head", "data-key": `organizer-folder\n${folder}` }, toggle, rename);
   const ids = pages.map((page) => page.id);
   const body = h("div", { class: "kapi-organizer-pages", hidden: collapsed }, ...pages.map((page) => pageRow(page, folder, ids)));
@@ -97,10 +103,15 @@ export function createOrganizer() {
   let pages = [];
   const render = () => {
     if (!controller.isOpen() || list.querySelector("[data-editing]")) return;
-    const key = list.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+    const active = list.contains(document.activeElement) ? document.activeElement : null;
+    const owner = active?.closest("[data-key]");
+    const focus = requestedFocus ?? (owner && { key: owner.dataset.key, control: active.dataset.organizerFocus });
+    requestedFocus = null;
     const groups = byFolder(pages);
     list.replaceChildren(...(groups.size ? [...groups].map(([folder, items]) => folderGroup(folder, items)) : [h("p", { class: "kapi-organizer-empty", text: "No notes to organize." })]));
-    if (key) list.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+    if (focus?.key && focus.control) {
+      list.querySelector(`[data-key="${CSS.escape(focus.key)}"] [data-organizer-focus="${CSS.escape(focus.control)}"]`)?.focus({ preventScroll: true });
+    }
   };
   const controller = modal({
     dialog,

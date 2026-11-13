@@ -1,6 +1,6 @@
 import { h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
-import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, pageTitle, redraw, noteGroups, watch } from "./pages.js";
+import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, noteGroups, watch } from "./pages.js";
 import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
 import { STATUS_FILTERS, stateLabel, stateMatches, stateTone } from "./states.js";
@@ -90,7 +90,7 @@ export function showHome(main) {
     if ([...folders].includes(selected)) project.value = selected;
   };
   const draw = () => redraw(library, () => {
-    const candidates = project.value ? byFolder(pages).get(project.value) ?? [] : pages;
+    const candidates = project.value ? byFolder(pages).get(project.value) ?? [] : orderForHome(pages);
     const matching = candidates;
     const shown = matching.filter((p) => stateMatches(p, pickedStatus));
     STATUS_FILTERS.forEach(({ value, label }, i) => {
