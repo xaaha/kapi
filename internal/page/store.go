@@ -763,7 +763,7 @@ func replaceFile(path string, b, expect []byte) error {
 
 func replaceFileVia(tmp, path string, b, expect []byte) (*moved, error) {
 	mode := os.FileMode(0o600)
-	if fi, err := os.Stat(path); err == nil {
+	if fi, err := osfile.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
 	var f *os.File
@@ -1073,7 +1073,7 @@ type placement struct {
 }
 
 func capture(name string) (placement, error) {
-	fi, err := os.Stat(name)
+	fi, err := osfile.Stat(name)
 	if err != nil {
 		return placement{}, err
 	}
@@ -1102,7 +1102,7 @@ func tiedTmpIsNewer(tmp, path string, prev, placed placement) (bool, error) {
 }
 
 func stamp(name string, mine os.FileInfo, ours []byte) (time.Time, error) {
-	fi, err := os.Stat(name)
+	fi, err := osfile.Stat(name)
 	if err != nil || !os.SameFile(fi, mine) {
 		return fi.ModTime(), err
 	}

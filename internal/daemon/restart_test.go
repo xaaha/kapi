@@ -123,43 +123,55 @@ func freePort(t *testing.T) string {
 	return port
 }
 
-func TestOnlyAWellFormedHTTPURLHasItsPortReused(t *testing.T) {
+func TestAWellFormedHTTPURLHasItsPortReused(t *testing.T) {
 	const tok = "0123456789abcdef0123456789abcdef"
+	home := shortHome(t)
+	port := freePort(t)
+	if err := os.WriteFile(HTTPURLPath(home), []byte("http://127.0.0.1:"+port+"/"+tok+"/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stop := servingAt(t, home)
+	defer stop()
+	got, err := url.Parse(httpURL(t, home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Hostname() != "127.0.0.1" || got.Port() != port || strings.Contains(got.Path, tok) {
+		t.Fatalf("http.url = %s, want 127.0.0.1:%s and a fresh token", got, port)
+	}
+}
+
+func TestOnlyAWellFormedHTTPURLIsReused(t *testing.T) {
+	const tok = "0123456789abcdef0123456789abcdef"
+	const p = "41234"
 	for _, tc := range []struct {
 		name  string
-		saved func(port string) string
-		reuse bool
+		saved string
+		want  string
 	}{
-		{"well formed", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/\n" }, true},
-		{"all interfaces", func(p string) string { return "http://0.0.0.0:" + p + "/" + tok + "/\n" }, false},
-		{"ipv6 loopback", func(p string) string { return "http://[::1]:" + p + "/" + tok + "/\n" }, false},
-		{"localhost", func(p string) string { return "http://localhost:" + p + "/" + tok + "/\n" }, false},
-		{"short token", func(p string) string { return "http://127.0.0.1:" + p + "/0123abcd/\n" }, false},
-		{"non-hex token", func(p string) string { return "http://127.0.0.1:" + p + "/" + strings.Repeat("z", 32) + "/\n" }, false},
-		{"junk after the url", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/x\n" }, false},
-		{"junk after the newline", func(p string) string { return "http://127.0.0.1:" + p + "/" + tok + "/\njunk" }, false},
-		{"junk before the url", func(p string) string { return "x http://127.0.0.1:" + p + "/" + tok + "/\n" }, false},
-		{"https", func(p string) string { return "https://127.0.0.1:" + p + "/" + tok + "/\n" }, false},
+		{"well formed", "http://127.0.0.1:" + p + "/" + tok + "/\n", "127.0.0.1:" + p},
+		{"all interfaces", "http://0.0.0.0:" + p + "/" + tok + "/\n", "127.0.0.1:0"},
+		{"ipv6 loopback", "http://[::1]:" + p + "/" + tok + "/\n", "127.0.0.1:0"},
+		{"localhost", "http://localhost:" + p + "/" + tok + "/\n", "127.0.0.1:0"},
+		{"short token", "http://127.0.0.1:" + p + "/0123abcd/\n", "127.0.0.1:0"},
+		{"non-hex token", "http://127.0.0.1:" + p + "/" + strings.Repeat("z", 32) + "/\n", "127.0.0.1:0"},
+		{"junk after the url", "http://127.0.0.1:" + p + "/" + tok + "/x\n", "127.0.0.1:0"},
+		{"junk after the newline", "http://127.0.0.1:" + p + "/" + tok + "/\njunk", "127.0.0.1:0"},
+		{"junk before the url", "x http://127.0.0.1:" + p + "/" + tok + "/\n", "127.0.0.1:0"},
+		{"https", "https://127.0.0.1:" + p + "/" + tok + "/\n", "127.0.0.1:0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			home := shortHome(t)
-			port := freePort(t)
-			if err := os.WriteFile(HTTPURLPath(home), []byte(tc.saved(port)), 0o600); err != nil {
+			home := t.TempDir()
+			if err := os.WriteFile(HTTPURLPath(home), []byte(tc.saved), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, stop := servingAt(t, home)
-			defer stop()
-			got, err := url.Parse(httpURL(t, home))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got.Hostname() != "127.0.0.1" || strings.Contains(got.Path, tok) {
-				t.Fatalf("http.url = %s, want 127.0.0.1 and a fresh token", got)
-			}
-			if reused := got.Port() == port; reused != tc.reuse {
-				t.Errorf("from %q: http.url = %s, port reused = %v, want %v", tc.saved(port), got, reused, tc.reuse)
+			if got := savedAddr(home); got != tc.want {
+				t.Errorf("from %q: listen on %s, want %s", tc.saved, got, tc.want)
 			}
 		})
+	}
+	if got := savedAddr(t.TempDir()); got != "127.0.0.1:0" {
+		t.Errorf("with no saved URL: listen on %s, want 127.0.0.1:0", got)
 	}
 }
 
