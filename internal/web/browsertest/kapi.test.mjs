@@ -1763,8 +1763,17 @@ for (const width of [390, 360]) {
   });
 }
 
-const touchScroll = (phone, yDistance) =>
-  phone.call("Input.synthesizeScrollGesture", { x: 200, y: 400, yDistance, gestureSourceType: "touch", speed: 2000 });
+async function touchScroll(phone, yDistance) {
+  const steps = 12;
+  const from = yDistance < 0 ? 650 : 150;
+  const start = await phone.eval(`scrollY`);
+  await phone.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 200, y: from }] });
+  for (let i = 1; i <= steps; i++) {
+    await phone.call("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: from + (yDistance * i) / steps / 2 }] });
+  }
+  await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await phone.waitFor(`scrollY ${yDistance < 0 ? ">" : "<"} ${start}`);
+}
 
 const longPage = () => reopenWith(Array.from({ length: 40 }, (_, i) => ({ id: `long${String(i).padStart(4, "0")}`, html: `<p data-kapi-id="long${String(i).padStart(4, "0")}">Paragraph ${i} keeps the page long enough to scroll on a phone.</p>` })));
 
