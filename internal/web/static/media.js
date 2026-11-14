@@ -126,6 +126,24 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     openImage(img);
   }, true);
 
+  let paletteCSS;
+  function paletteRules() {
+    if (paletteCSS !== undefined) return paletteCSS;
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let list;
+      try {
+        list = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of list) if (rule.selectorText?.includes("[data-palette=")) rules.push(rule.cssText);
+    }
+    const css = rules.join("\n");
+    if (css) paletteCSS = css;
+    return css;
+  }
+
   function fitFrame(frame) {
     try {
       const doc = frame.contentDocument;
@@ -136,13 +154,19 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
       };
       fit();
       new ResizeObserver(fit).observe(doc.documentElement);
+      const palettes = doc.createElement("style");
+      palettes.textContent = paletteRules();
+      doc.head.append(palettes);
       const syncTheme = () => {
-        const theme = document.documentElement.dataset.theme;
-        if (theme) doc.documentElement.dataset.theme = theme;
-        else doc.documentElement.removeAttribute("data-theme");
+        for (const key of ["theme", "palette"]) {
+          const value = document.documentElement.dataset[key];
+          if (value) doc.documentElement.dataset[key] = value;
+          else delete doc.documentElement.dataset[key];
+        }
       };
       syncTheme();
       document.addEventListener("kapi-theme", syncTheme);
+      document.addEventListener("kapi-palette", syncTheme);
     } catch {}
   }
 
