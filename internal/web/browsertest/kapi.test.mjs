@@ -20,7 +20,6 @@ beforeEach(async () => {
   server = await startFakeServer();
   page = await browser.open(server.url);
   await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
-  await page.eval(`document.fonts.ready.then(() => true)`);
 });
 
 afterEach(async () => {

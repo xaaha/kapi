@@ -131,6 +131,7 @@ export async function launch() {
         close: () => send("Target.closeTarget", { targetId }),
       };
       await page.waitFor(`document.readyState === 'complete' && ${ready}`, 30000);
+      await page.eval(`document.fonts.ready.then(() => true)`);
       return page;
     },
     async close() {
