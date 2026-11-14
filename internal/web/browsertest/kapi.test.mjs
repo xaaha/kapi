@@ -792,6 +792,7 @@ test("Undo shows only when there is something to undo, on the left so the chat b
   const undoShown = () => page.eval(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
   const chatLeft = () => page.eval(`document.querySelector(".kapi-site-actions .kapi-chat-button").getBoundingClientRect().left`);
   assert.equal(await undoShown(), false);
+  await page.eval(`document.fonts.ready.then(() => true)`);
   const before = await chatLeft();
   await select("cccccccc");
   await click('.kapi-bar [data-action="archive"]');
@@ -1318,6 +1319,7 @@ test("Theme in the menu lists three recent palettes, recolours the page in both 
 });
 
 test("a failed save puts the theme back the way the server has it", async () => {
+  await prefer("light");
   server.state.settingsStatus = 500;
   await pickMode("dark");
   await until(() => requests("PATCH", "/settings").length === 1);
@@ -4522,6 +4524,7 @@ async function searchJump(query) {
   await page.key("Enter");
   await page.waitFor(`!document.querySelector(".kapi-back").hidden`);
   await until(() => page.eval(`scrollY > 600`));
+  await until(() => page.eval(`new Promise((done) => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => done(scrollY === y))); })`));
 }
 
 test("Esc closes a note popover opened after a search jump before it goes back", async () => {
@@ -4618,9 +4621,8 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
   assert.equal(requests("POST", "/ops").length, 0);
 
-  await page.close();
-  page = await browser.open(server.url);
-  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+  await page.call("Page.reload");
+  await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-panel .kapi-dot")?.dataset.state === "none"`, 5000);
   assert.equal(await writing(), true);
   assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
 });
