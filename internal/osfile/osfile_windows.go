@@ -41,44 +41,22 @@ func ReadFile(name string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-// Stat retries like ReadFile: a page being replaced by another program's rename briefly has no file at its path.
-func Stat(name string) (os.FileInfo, error) {
-	var fi os.FileInfo
-	err := retry(func() (err error) {
-		fi, err = os.Stat(name)
-		return err
-	})
-	return fi, err
-}
-
 // Rename retries while another program briefly holds the target open, as editors and virus scanners do.
 func Rename(oldpath, newpath string) error {
 	return retry(func() error { return os.Rename(oldpath, newpath) })
 }
 
-const (
-	busyWait    = 2 * time.Second
-	missingWait = 100 * time.Millisecond
-)
+const busyWait = 2 * time.Second
 
 func retry(f func() error) error {
 	start := time.Now()
 	for delay := time.Millisecond; ; delay = min(2*delay, 100*time.Millisecond) {
 		err := f()
-		if err == nil {
-			return nil
-		}
-		waited := time.Since(start)
-		retryable := busy(err) && waited < busyWait || missing(err) && waited < missingWait
-		if !retryable {
+		if err == nil || !busy(err) || time.Since(start) > busyWait {
 			return err
 		}
 		time.Sleep(delay)
 	}
-}
-
-func missing(err error) bool {
-	return errors.Is(err, windows.ERROR_FILE_NOT_FOUND)
 }
 
 func busy(err error) bool {

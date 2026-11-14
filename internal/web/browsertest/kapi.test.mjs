@@ -20,6 +20,7 @@ beforeEach(async () => {
   server = await startFakeServer();
   page = await browser.open(server.url);
   await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+  await page.eval(`document.fonts.ready.then(() => true)`);
 });
 
 afterEach(async () => {
@@ -4524,6 +4525,7 @@ async function searchJump(query) {
   await page.key("Enter");
   await page.waitFor(`!document.querySelector(".kapi-back").hidden`);
   await until(() => page.eval(`scrollY > 600`));
+  await until(() => page.eval(`new Promise((done) => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => done(scrollY === y))); })`));
 }
 
 test("Esc closes a note popover opened after a search jump before it goes back", async () => {
