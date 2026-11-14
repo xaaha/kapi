@@ -61,7 +61,11 @@ var catalog = []Preset{
 	{
 		Name:    "kapi-render",
 		Summary: "A forgiving HTML and CSS mockup, isolated from the rest of the page and themed by Kapi",
-		Example: `<!-- title: label above the preview. Body: ordinary HTML and CSS. Scripts and unsafe attributes are removed; malformed or unknown markup degrades to visible content. -->
+		Example: `<!-- title: label above the preview. Body: ordinary HTML and CSS. Scripts and unsafe attributes are removed; malformed or unknown markup degrades to visible content.
+     Use it for UI options too: one kapi-render per variant, a fixed-width box (about 390px) for a phone, CSS animation for motion.
+     Theme variables follow the reader's theme and mode: var(--kapi-bg), var(--kapi-fg), var(--kapi-muted), var(--kapi-surface), var(--kapi-subtle),
+     var(--kapi-border), var(--kapi-border-strong), var(--kapi-radius), var(--kapi-radius-lg), var(--kapi-shadow), var(--kapi-font), var(--kapi-mono),
+     and var(--kapi-<colour>-text|fill|border|solid) for blue, green, yellow, orange, red, purple and grey. -->
 <kapi-render title="Dashboard mockup">
   <style>
     .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px }
