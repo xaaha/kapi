@@ -480,6 +480,23 @@ html { scroll-padding-top: var(--kapi-header-height); }
     padding-left: 240px;
   }
 
+  /* Keep the reading column centred when the open panes fit in its side margins. */
+  @media (min-width: 1220px) {
+    html[data-kapi-panel-collapsed][data-kapi-outline-open] {
+      padding-left: 0;
+    }
+  }
+
+  @media (min-width: 1700px) {
+    html:not([data-kapi-panel-collapsed]) {
+      padding-right: 0;
+    }
+
+    html[data-kapi-outline-open] {
+      padding-left: 0;
+    }
+  }
+
   #kapi-chrome[data-outline-open] > .kapi-outline {
     display: flex;
     position: fixed;

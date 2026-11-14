@@ -130,7 +130,7 @@ export async function launch() {
         },
         close: () => send("Target.closeTarget", { targetId }),
       };
-      await page.waitFor(`document.readyState === 'complete' && ${ready}`, 5000);
+      await page.waitFor(`document.readyState === 'complete' && ${ready}`, 30000);
       return page;
     },
     async close() {
