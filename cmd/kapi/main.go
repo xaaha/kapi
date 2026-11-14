@@ -363,14 +363,32 @@ func daemonCmd() *cli.Command {
 	reopen := fs.Bool("reopen", false, "Reopen pages whose tab was open when the daemon last stopped; kapi sets this when it starts the daemon on demand")
 	except := fs.String("reopen-except", "", "Page id not to reopen, because the kapi open that starts the daemon opens it itself")
 	spawn := fs.Bool("spawn", false, "Start the daemon with --reopen in its own session, detached from this process, and exit; kapi runs this when it starts the daemon on demand")
+	port := fs.Int("port", -1, "Save a fixed port for this KAPI_HOME, used from the next start on; 0 goes back to a random port")
+	rotate := fs.Bool("new-token", false, "Replace the saved URL token on the next start, so every link to a page stops working")
 	return &cli.Command{
 		Name:  "daemon",
 		Short: "Run the daemon in the foreground",
 		Flags: fs,
 		Long: "Run the daemon in the foreground. Other commands start it on demand, so this is only for debugging.\n" +
 			"With --reopen, up to 5 pages whose browser tab was open when the daemon last stopped open again,\n" +
-			"unless KAPI_NO_BROWSER, CI, SSH_CONNECTION or SSH_TTY is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.",
+			"unless KAPI_NO_BROWSER, CI, SSH_CONNECTION or SSH_TTY is set or, on Linux, neither DISPLAY nor WAYLAND_DISPLAY is.\n" +
+			"By default the daemon reuses its last port when it is free and issues a new URL token on every start.\n" +
+			"With a port saved by --port, it always listens there, fails to start when the port is taken, and keeps\n" +
+			"one token across restarts in $KAPI_HOME/http.token, so open tabs and saved links keep working.\n" +
+			"While the daemon is down, any local program can bind that port and read a reconnecting tab's token;\n" +
+			"--new-token replaces it.",
 		Run: func([]string) error {
+			saved := *port >= 0 || *rotate
+			if *port >= 0 {
+				if err := daemon.SetPort(home(), *port); err != nil {
+					return err
+				}
+			}
+			if *rotate {
+				if err := os.Remove(daemon.TokenPath(home())); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
 			if *spawn {
 				return client.Spawn(home(), *except)
 			}
@@ -379,7 +397,11 @@ func daemonCmd() *cli.Command {
 			s := daemon.New(home())
 			s.Browser = daemonBrowser(*reopen, os.Getenv, runtime.GOOS)
 			s.ReopenExcept = *except
-			return s.Serve(ctx)
+			err := s.Serve(ctx)
+			if saved && errors.Is(err, daemon.ErrAlreadyRunning) {
+				return fmt.Errorf("%w; the new setting applies the next time it starts", err)
+			}
+			return err
 		},
 	}
 }

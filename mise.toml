@@ -7,11 +7,18 @@ description = "Run golangci-lint"
 run = "golangci-lint run"
 
 [tasks."install:local"]
-description = "Build this checkout over the kapi on PATH and restart the daemon"
+description = "Build this checkout over the kapi on PATH and restart the daemon; --force restarts it while pages are open"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 home=${KAPI_HOME:-$HOME/.kapi}
+if [ "${1:-}" != "--force" ] && lsof -t "$home/kapi.lock" >/dev/null 2>&1; then
+  open=$(find "$home/pages" -mindepth 2 -maxdepth 2 -name viewing 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$open" -gt 0 ]; then
+    echo "$open page(s) are open in a browser on the running daemon; rerun with --force to restart it anyway" >&2
+    exit 1
+  fi
+fi
 if [ -n "${KAPI_INSTALL_DIR:-}" ]; then
   dest=$KAPI_INSTALL_DIR/kapi
 elif current=$(command -v kapi); then
@@ -23,22 +30,43 @@ mkdir -p "$(dirname "$dest")"
 tmp=$(mktemp "$dest.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 go build -o "$tmp" ./cmd/kapi
-if pids=$(lsof -t "$home/kapi.lock" 2>/dev/null); then
-  kill -TERM $pids
-  for _ in $(seq 100); do
-    lsof -t "$home/kapi.lock" >/dev/null 2>&1 || break
-    sleep 0.1
-  done
-  if lsof -t "$home/kapi.lock" >/dev/null 2>&1; then
-    echo "daemon $pids did not stop within 10s" >&2
-    exit 1
-  fi
-fi
+scripts/stop-daemon.sh "$home"
 # rename, not overwrite: macOS kills processes still running a binary rewritten in place
 mv "$tmp" "$dest"
 trap - EXIT
 "$dest" daemon --spawn
 echo "installed $("$dest" version) at $dest"
+'''
+
+[tasks.dev]
+description = "Run kapi from this checkout against a scratch home, never ~/.kapi (e.g. mise run dev open plan.html)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+dir=/tmp/kapi-dev-$(printf %s "$PWD" | cksum | cut -d' ' -f1)
+mkdir -p "$dir/home"
+chmod 700 "$dir" "$dir/home"
+go build -o "$dir/kapi.new" ./cmd/kapi
+if cmp -s "$dir/kapi.new" "$dir/kapi"; then
+  rm "$dir/kapi.new"
+else
+  scripts/stop-daemon.sh "$dir/home"
+  mv "$dir/kapi.new" "$dir/kapi"
+fi
+cd "${MISE_ORIGINAL_CWD:-$PWD}"
+KAPI_HOME=$dir/home exec "$dir/kapi" "$@"
+'''
+
+[tasks."dev:clean"]
+description = "Stop the dev daemon for this checkout and delete its scratch home"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+dir=/tmp/kapi-dev-$(printf %s "$PWD" | cksum | cut -d' ' -f1)
+[ -d "$dir" ] || exit 0
+scripts/stop-daemon.sh "$dir/home"
+rm -rf "$dir"
+echo "removed $dir"
 '''
 
 [tasks.release]

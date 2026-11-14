@@ -3,7 +3,6 @@ package daemon
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -169,8 +168,12 @@ func (s *Server) Serve(ctx context.Context) error {
 		return fmt.Errorf("%w on %s", ErrAlreadyRunning, sock)
 	}
 	s.stopping = ctx.Done()
+	site, token, fresh, err := s.listenHTTP()
+	if err != nil {
+		return err
+	}
 	recent := s.takeViewedPages()
-	if s.Browser == nil {
+	if s.Browser == nil || !fresh {
 		recent = nil
 	}
 	s.mu.Lock()
@@ -179,7 +182,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 	defer s.settleStores()
-	stopHTTP, err := s.serveHTTP(ctx)
+	stopHTTP, err := s.serveHTTP(ctx, site, token)
 	if err != nil {
 		return err
 	}
@@ -246,34 +249,42 @@ func (s *Server) settleStores() {
 
 var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/[0-9a-f]{32}/\n$`)
 
-func (s *Server) listenHTTP() (net.Listener, string, error) {
+func (s *Server) listenHTTP() (ln net.Listener, token string, fresh bool, err error) {
+	if ln, err = listenFixed(s.home); err != nil {
+		return nil, "", false, err
+	}
+	if ln != nil {
+		if token, fresh, err = keptToken(s.home); err != nil {
+			ln.Close()
+			return nil, "", false, err
+		}
+		return ln, token, fresh, nil
+	}
+	if err := os.Remove(TokenPath(s.home)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, "", false, err
+	}
 	addr := "127.0.0.1:0"
 	if b, err := os.ReadFile(HTTPURLPath(s.home)); err == nil {
 		if m := savedURL.FindSubmatch(b); m != nil {
 			addr = string(m[1])
 		}
 	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err = net.Listen("tcp", addr)
 	if err != nil && addr != "127.0.0.1:0" {
 		log.Printf("http: %s is taken (%v); moving to a new port", addr, err)
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
+	if token, err = newToken(); err != nil {
 		ln.Close()
-		return nil, "", err
+		return nil, "", false, err
 	}
-	return ln, hex.EncodeToString(b), nil
+	return ln, token, true, nil
 }
 
-func (s *Server) serveHTTP(ctx context.Context) (func(), error) {
-	ln, token, err := s.listenHTTP()
-	if err != nil {
-		return nil, err
-	}
+func (s *Server) serveHTTP(ctx context.Context, ln net.Listener, token string) (func(), error) {
 	host := ln.Addr().String()
 	previous, err := rememberToken(s.home, token)
 	if err != nil {
@@ -321,7 +332,8 @@ func rememberToken(home, token string) ([][32]byte, error) {
 			previous = append(previous, [32]byte(h))
 		}
 	}
-	kept := slices.Concat(previous, [][32]byte{sha256.Sum256([]byte(token))})
+	kept := slices.DeleteFunc(slices.Clone(previous), func(h [32]byte) bool { return h == sha256.Sum256([]byte(token)) })
+	kept = append(kept, sha256.Sum256([]byte(token)))
 	kept = kept[max(0, len(kept)-keptTokens):]
 	var out strings.Builder
 	for _, h := range kept {
