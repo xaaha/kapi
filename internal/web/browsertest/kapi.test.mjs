@@ -792,6 +792,7 @@ test("Undo shows only when there is something to undo, on the left so the chat b
   const undoShown = () => page.eval(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
   const chatLeft = () => page.eval(`document.querySelector(".kapi-site-actions .kapi-chat-button").getBoundingClientRect().left`);
   assert.equal(await undoShown(), false);
+  await page.eval(`document.fonts.ready.then(() => true)`);
   const before = await chatLeft();
   await select("cccccccc");
   await click('.kapi-bar [data-action="archive"]');
@@ -1321,6 +1322,7 @@ test("Theme in the menu lists three recent palettes, recolours the page in both 
 });
 
 test("a failed save puts the theme back the way the server has it", async () => {
+  await prefer("light");
   server.state.settingsStatus = 500;
   await pickMode("dark");
   await until(() => requests("PATCH", "/settings").length === 1);
