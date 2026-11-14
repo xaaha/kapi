@@ -24,6 +24,8 @@ import (
 	"github.com/xaaha/kapi/internal/attach"
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
+	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/settings"
 	"github.com/xaaha/kapi/internal/web"
 )
 
@@ -294,7 +296,7 @@ func (s *Server) serveHTTP(ctx context.Context, ln net.Listener, token string) (
 	s.mu.Lock()
 	s.baseURL = "http://" + host + "/" + token + "/"
 	s.mu.Unlock()
-	h := web.New(s, token, host, previous)
+	h := web.New(s, settings.NewFile(filepath.Join(s.home, "settings.json"), render.HasPalette), token, host, previous)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() {
 		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {

@@ -30,6 +30,7 @@ import (
 	"github.com/xaaha/kapi/internal/eventlog"
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/settings"
 	"github.com/xaaha/kapi/internal/web/app"
 )
 
@@ -174,7 +175,7 @@ func newSiteNamed(t *testing.T, name, src string) *site {
 	pages := &fakePages{home: filepath.Join(dir, "home"), paths: map[string]string{id: path}, logs: map[string]*eventlog.Log{}, pages: map[string]*page.Store{}}
 	t.Cleanup(pages.close)
 	srv := httptest.NewUnstartedServer(nil)
-	web := New(pages, token, srv.Listener.Addr().String(), [][32]byte{sha256.Sum256([]byte(oldToken))})
+	web := New(pages, settings.NewFile(filepath.Join(dir, "settings.json"), render.HasPalette), token, srv.Listener.Addr().String(), [][32]byte{sha256.Sum256([]byte(oldToken))})
 	srv.Config.Handler = web
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -488,7 +489,7 @@ func TestThemeScriptRunsBeforeAnyStyle(t *testing.T) {
 	if resp.code != http.StatusOK || !strings.Contains(resp.header.Get("Content-Type"), "javascript") {
 		t.Fatalf("GET /static/theme.js: %d %q", resp.code, resp.header.Get("Content-Type"))
 	}
-	if !strings.Contains(resp.body, "prefers-color-scheme: dark") || !strings.Contains(resp.body, "localStorage") {
+	if !strings.Contains(resp.body, "prefers-color-scheme: dark") || !strings.Contains(resp.body, "themeChoice") {
 		t.Errorf("theme.js does not look like the theme script:\n%s", resp.body)
 	}
 }

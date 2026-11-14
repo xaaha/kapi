@@ -5,7 +5,10 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"path"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/alecthomas/chroma/v2"
@@ -24,12 +27,6 @@ var css = sync.OnceValue(func() []byte {
 	var b bytes.Buffer
 	b.Write(themeCSS)
 	b.WriteString("\n")
-	names, _ := fs.Glob(palettes, "palettes/*.css")
-	for _, name := range names {
-		p, _ := palettes.ReadFile(name)
-		b.Write(p)
-		b.WriteString("\n")
-	}
 	b.Write(baseCSS)
 	b.WriteString("\n")
 	tokenCSS(&b)
@@ -38,6 +35,34 @@ var css = sync.OnceValue(func() []byte {
 
 func CSS() []byte {
 	return bytes.Clone(css())
+}
+
+var paletteCSS = sync.OnceValue(func() []byte {
+	var b bytes.Buffer
+	names, _ := fs.Glob(palettes, "palettes/*.css")
+	for _, name := range names {
+		p, _ := palettes.ReadFile(name)
+		b.Write(p)
+		b.WriteString("\n")
+	}
+	return b.Bytes()
+})
+
+func PaletteCSS() []byte {
+	return bytes.Clone(paletteCSS())
+}
+
+var paletteIDs = sync.OnceValue(func() []string {
+	names, _ := fs.Glob(palettes, "palettes/*.css")
+	ids := []string{"default"}
+	for _, name := range names {
+		ids = append(ids, strings.TrimSuffix(path.Base(name), ".css"))
+	}
+	return ids
+})
+
+func HasPalette(id string) bool {
+	return slices.Contains(paletteIDs(), id)
 }
 
 func tokenCSS(b *bytes.Buffer) {

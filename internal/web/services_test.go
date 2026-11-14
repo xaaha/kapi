@@ -16,6 +16,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/settings"
 	"github.com/xaaha/kapi/internal/web/app"
 )
 
@@ -36,7 +38,7 @@ func (fakeService) Files() fs.FS {
 func TestAServiceGetsItsRoutesAssetsAndAPlaceInThePageShell(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
 	srv := httptest.NewUnstartedServer(nil)
-	srv.Config.Handler = newServer(s.pages, token, srv.Listener.Addr().String(), nil, []app.Service{fakeService{}})
+	srv.Config.Handler = newServer(s.pages, settings.NewFile(filepath.Join(t.TempDir(), "settings.json"), render.HasPalette), token, srv.Listener.Addr().String(), nil, []app.Service{fakeService{}})
 	srv.Start()
 	t.Cleanup(srv.Close)
 	s.srv = srv

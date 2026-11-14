@@ -1,5 +1,9 @@
 <figure class="kapi-render" data-kapi-preset="render" data-kapi-id="raaaaaaa" data-kapi-text="raaaaaaa" data-kapi-raw=""><figcaption class="kapi-render-title">Status cards</figcaption><iframe class="kapi-render-frame" title="Status cards" sandbox="allow-same-origin" loading="lazy" srcdoc="<!doctype html><html><head><meta charset=&quot;utf-8&quot;><meta name=&quot;viewport&quot; content=&quot;width=device-width,initial-scale=1&quot;><meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'&quot;><style>:root {
   color-scheme: light dark;
+}
+
+:root,
+[data-palette-preview=&quot;default&quot;] {
   --kapi-bg: light-dark(#f4f0e7, #151513);
   --kapi-surface: light-dark(#fffefa, #1c1b18);
   --kapi-card: light-dark(#ebe5da, #24221e);
