@@ -964,7 +964,7 @@
   }
 
   function writeTarget(el, e) {
-    if (!writing || e.metaKey || e.ctrlKey || !getSelection().isCollapsed || el.hasAttribute("data-kapi-raw") || closest(e.target, `${SOLID}, summary`)) return null;
+    if (!writing || e.metaKey || e.ctrlKey || !getSelection().isCollapsed || el.hasAttribute("data-kapi-raw") || closest(e.target, `${SOLID}, summary, label`)) return null;
     const host = partsOf(el).findLast((n) => n.contains(e.target));
     if (!host) return null;
     e.preventDefault();

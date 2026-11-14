@@ -4585,3 +4585,29 @@ test("in Write, dragging across text selects it for a note instead of editing, a
   await page.key("e", { ctrl: true });
   assert.equal(await writing(), true);
 });
+
+test("in Write, clicking a form option's text picks it instead of editing it", async () => {
+  await reopenWith([{
+    id: "ffffffff",
+    html: '<div class="kapi-form" data-kapi-preset="form" data-kapi-id="ffffffff"><form name="pick">' +
+      '<label class="kapi-opt" data-kapi-id="oooooooo"><input type="radio" name="when" value="now"><span data-kapi-text="oooooooo">Now</span></label>' +
+      '<button type="submit">Send answer</button></form></div>',
+  }]);
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-text="oooooooo"]');
+  assert.equal(await page.eval(`document.querySelector('input[value="now"]').checked`), true);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+});
+
+test("Cmd or Ctrl click on a link inside an open edit opens it in a new tab", async () => {
+  await page.eval(`window.open = (url, target) => { window.opened = [url, target]; }`);
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-id="dddddddd"] a');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd"`);
+  const { x, y } = await page.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(document.querySelector('[data-kapi-id="dddddddd"] a').getBoundingClientRect())`);
+  const modifiers = process.platform === "darwin" ? 4 : 2;
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
+  await page.waitFor(`!!window.opened`);
+  assert.deepEqual(await page.eval(`window.opened`), [new URL("#bbbbbbbb", server.url).href, "_blank"]);
+});
