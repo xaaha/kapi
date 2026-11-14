@@ -110,11 +110,6 @@
     return svg;
   }
 
-  function themeToggle() {
-    const control = window.kapiTheme?.control?.({ icon: sharedIcon, shortcuts: SHORTCUTS });
-    return control ? [control] : [];
-  }
-
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const MAX_IMAGES = 4;
   const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
@@ -226,15 +221,20 @@
   const themeItems = () => {
     const theme = window.kapiTheme;
     if (!theme?.setPalette) return [];
-    const items = theme.palettes.map(({ id, label }) =>
+    const modes = [["light", "Light"], ["dark", "Dark"], ["system", "System"]].map(([choice, label]) =>
+      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-theme-choice": choice, onclick: () => theme.set(choice) },
+        icon("check"), h("span", { class: "kapi-menu-label", text: label }), icon(choice)));
+    const palettes = theme.palettes.map(({ id, label }) =>
       h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-palette": id, onclick: () => theme.setPalette(id) },
         icon("check"), h("span", { class: "kapi-menu-label", text: label })));
     const sync = () => {
-      for (const b of items) b.setAttribute("aria-checked", String(b.dataset.palette === theme.palette()));
+      for (const b of modes) b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme.get()));
+      for (const b of palettes) b.setAttribute("aria-checked", String(b.dataset.palette === theme.palette()));
     };
+    document.addEventListener("kapi-theme", sync);
     document.addEventListener("kapi-palette", sync);
     sync();
-    return [submenuGroup("theme", "theme", "Theme", items)];
+    return [submenuGroup("theme", "theme", "Theme", [...modes, h("div", { class: "kapi-menu-sep", role: "separator" }), ...palettes])];
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
@@ -310,7 +310,7 @@
       h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })),
     h("nav", { class: "kapi-breadcrumbs", "aria-label": "Breadcrumb" },
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
-    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, ...themeToggle(), writeButton, menuButton, menu));
+    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, writeButton, menuButton, menu));
   root.prepend(siteHead);
   main.before(root);
 

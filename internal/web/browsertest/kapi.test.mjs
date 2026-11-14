@@ -787,16 +787,16 @@ test("a selected diagram has Phosphor zoom controls that resize only its SVG", a
   })()`);
 });
 
-test("Undo shows only when there is something to undo, on the left so the theme toggle never moves", async () => {
+test("Undo shows only when there is something to undo, on the left so the chat button never moves", async () => {
   const undoShown = () => page.eval(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
-  const themeLeft = () => page.eval(`document.querySelector(".kapi-site-actions .kapi-theme").getBoundingClientRect().left`);
+  const chatLeft = () => page.eval(`document.querySelector(".kapi-site-actions .kapi-chat-button").getBoundingClientRect().left`);
   assert.equal(await undoShown(), false);
-  const before = await themeLeft();
+  const before = await chatLeft();
   await select("cccccccc");
   await click('.kapi-bar [data-action="archive"]');
   await page.waitFor(`!document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
-  assert.equal(await themeLeft(), before);
-  assert.ok(await page.eval(`document.querySelector('.kapi-site-actions [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-site-actions .kapi-theme").getBoundingClientRect().left`));
+  assert.equal(await chatLeft(), before);
+  assert.ok(await page.eval(`document.querySelector('.kapi-site-actions [data-action="undo"]').getBoundingClientRect().right < document.querySelector(".kapi-site-actions .kapi-chat-button").getBoundingClientRect().left`));
   await click('.kapi-site-actions [data-action="undo"]');
   await page.waitFor(`document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
 });
@@ -1246,7 +1246,7 @@ test("Undo renders as a quiet bordered button", async () => {
   assert.deepEqual(styles, [["Undo", "1px", "solid"]]);
 });
 
-const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-theme [data-theme-choice]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.themeChoice).join()]`);
+const theme = () => page.eval(`[document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor, [...document.querySelectorAll(".kapi-menu [data-theme-choice]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.themeChoice).join()]`);
 const LIGHT_BG = "rgb(244, 240, 231)";
 const DARK_BG = "rgb(21, 21, 19)";
 const prefer = async (scheme) => {
@@ -1259,18 +1259,32 @@ const expectTheme = async (want) => {
 };
 const reload = async () => {
   await page.call("Page.reload");
-  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-theme")`, 5000);
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-menu [data-theme-choice]")`, 5000);
+};
+const openThemeMenu = async () => {
+  if (await page.eval(`document.querySelector(".kapi-menu").hidden`)) {
+    await click(".kapi-menu-button");
+    await page.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+  }
+  if (await page.eval(`document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").hidden`)) {
+    await click(".kapi-menu [data-menu=theme]");
+    await page.waitFor(`!document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").hidden`);
+  }
+};
+const pickMode = async (choice) => {
+  await openThemeMenu();
+  await click(`.kapi-menu [data-theme-choice="${choice}"]`);
 };
 
 test("the theme toggle switches light and dark and remembers the choice across a reload", async () => {
   await prefer("light");
   await expectTheme(["light", LIGHT_BG, "system"]);
-  await click('.kapi-theme [data-theme-choice="dark"]');
+  await pickMode("dark");
   await expectTheme(["dark", DARK_BG, "dark"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
   await reload();
   await expectTheme(["dark", DARK_BG, "dark"]);
-  await click('.kapi-theme [data-theme-choice="system"]');
+  await pickMode("system");
   await expectTheme(["light", LIGHT_BG, "system"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
 });
@@ -1282,12 +1296,7 @@ test("Theme in the menu lists Default and Paper, recolours the page in both mode
     assert.deepEqual(await state(), want);
   };
   const pick = async (id) => {
-    if (!(await menuOpen())) {
-      await click(".kapi-menu-button");
-      await until(menuOpen);
-    }
-    await click(".kapi-menu [data-menu=theme]");
-    await page.waitFor(`!document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").hidden`);
+    await openThemeMenu();
     await click(`.kapi-menu [data-palette=${id}]`);
   };
   await prefer("light");
@@ -1297,7 +1306,7 @@ test("Theme in the menu lists Default and Paper, recolours the page in both mode
   await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(250, 248, 243)"]);
   assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), "paper");
   await page.key("Escape");
-  await click('.kapi-theme [data-theme-choice="dark"]');
+  await pickMode("dark");
   await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(22, 25, 31)"]);
   await reload();
   await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(22, 25, 31)"]);
@@ -1313,9 +1322,11 @@ test("the Theme submenu opens by keys like Export, and opening one submenu close
   await pressKey("ArrowDown");
   assert.equal(await focusedItem(), "Theme");
   await pressKey("ArrowRight");
-  assert.equal(await focusedItem(), "Default");
-  await pressKey("ArrowDown");
-  assert.equal(await focusedItem(), "Paper");
+  assert.equal(await focusedItem(), "Light");
+  for (const want of ["Dark", "System", "Default", "Paper"]) {
+    await pressKey("ArrowDown");
+    assert.equal(await focusedItem(), want);
+  }
   await pressKey("ArrowLeft");
   assert.equal(await focusedItem(), "Theme");
   await click(".kapi-menu [data-menu=theme]");
@@ -1337,7 +1348,7 @@ test("System follows the OS colour scheme live, and an explicit choice ignores i
   await expectTheme(["light", LIGHT_BG, "system"]);
   await prefer("dark");
   await expectTheme(["dark", DARK_BG, "system"]);
-  await click('.kapi-theme [data-theme-choice="light"]');
+  await pickMode("light");
   await prefer("light");
   await prefer("dark");
   await expectTheme(["light", LIGHT_BG, "light"]);
@@ -1350,12 +1361,12 @@ test("the theme toggle still works when storage is blocked", async () => {
   await prefer("light");
   await reload();
   await expectTheme(["light", LIGHT_BG, "system"]);
-  await click('.kapi-theme [data-theme-choice="dark"]');
+  await pickMode("dark");
   await expectTheme(["dark", DARK_BG, "dark"]);
 });
 
 test("printing stays light when the dark theme is on", async () => {
-  await click('.kapi-theme [data-theme-choice="dark"]');
+  await pickMode("dark");
   await expectTheme(["dark", DARK_BG, "dark"]);
   await page.call("Emulation.setEmulatedMedia", { media: "print" });
   const bg = await page.eval(`getComputedStyle(document.body).backgroundColor`);
@@ -1626,7 +1637,7 @@ test("on phones Send sits to the right of the composer on the same row", async (
 });
 
 for (const width of [390, 360]) {
-  test(`on ${width} px phones the logo and theme toggle stay on screen while chat is collapsed`, async () => {
+  test(`on ${width} px phones the logo and the page menu's theme choices stay on screen while chat is collapsed`, async () => {
     const phone = await browser.open(server.url, { width, height: 800 });
     const hit = (sel) => `(() => {
       const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();
@@ -1640,10 +1651,11 @@ for (const width of [390, 360]) {
       assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
       assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
       assert.equal(await phone.eval(hit(".kapi-site-head .kapi-logo")), true);
-      assert.equal(await phone.eval(hit(".kapi-theme-button")), true);
-      await phone.eval(`document.querySelector(".kapi-theme-button").click()`);
-      assert.equal(await phone.eval(hit('.kapi-theme [data-theme-choice="dark"]')), true);
-      await phone.eval(`document.querySelector('.kapi-theme [data-theme-choice="dark"]').click()`);
+      assert.equal(await phone.eval(hit(".kapi-menu-button")), true);
+      await phone.eval(`document.querySelector(".kapi-menu-button").click()`);
+      await phone.eval(`document.querySelector(".kapi-menu [data-menu=theme]").click()`);
+      assert.equal(await phone.eval(hit('.kapi-menu [data-theme-choice="dark"]')), true);
+      await phone.eval(`document.querySelector('.kapi-menu [data-theme-choice="dark"]').click()`);
       await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
       assert.deepEqual(phone.errors, []);
     } finally {
@@ -1657,7 +1669,7 @@ async function mobilePage(width) {
   await phone.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 2, mobile: true });
   await phone.call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await phone.call("Page.navigate", { url: server.url });
-  await phone.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-theme") && innerWidth === ${width}`);
+  await phone.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-menu-button") && innerWidth === ${width}`);
   return phone;
 }
 
@@ -1667,13 +1679,15 @@ const tap = async (phone, selector) => {
   await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 };
 
-test("tapping the theme toggle on a phone does not expand the chat", async () => {
+test("tapping a theme in the page menu on a phone does not expand the chat", async () => {
   const phone = await mobilePage(390);
   try {
     await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
-    await tap(phone, ".kapi-theme-button");
-    await phone.waitFor(`!document.querySelector(".kapi-theme-menu").hidden`);
-    await tap(phone, '.kapi-theme [data-theme-choice="dark"]');
+    await tap(phone, ".kapi-menu-button");
+    await phone.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+    await tap(phone, ".kapi-menu [data-menu=theme]");
+    await phone.waitFor(`!document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").hidden`);
+    await tap(phone, '.kapi-menu [data-theme-choice="dark"]');
     await phone.waitFor(`document.documentElement.dataset.theme === "dark"`);
     assert.equal(await phone.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
     assert.ok(await phone.eval(`document.querySelector(".kapi-panel").getBoundingClientRect().height`) <= 80);
@@ -4300,34 +4314,18 @@ test("clicking an outline heading unfolds what hides it, scrolls there, and brow
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
-test("the theme button opens a Light, Dark and System menu on hover or by keys, and choosing closes it", async () => {
-  const list = () => page.eval(`document.querySelector(".kapi-theme-menu").hidden`);
-  assert.equal(await page.eval(`document.querySelectorAll(".kapi-panel-head .kapi-theme > button").length`), 1);
-  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(".kapi-theme-button").getBoundingClientRect())`);
-  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
-  await until(async () => !(await list()));
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-theme-menu [data-theme-choice]")].map((b) => [b.textContent, b.getAttribute("aria-checked")])`),
-    [["Light", "false"], ["Dark", "false"], ["System", "true"]]);
-  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 400 });
-  await until(list);
-
-  await page.eval(`document.querySelector(".kapi-theme-button").focus()`);
-  await page.key("Enter");
-  await until(async () => !(await list()));
-  assert.equal(await page.eval(`document.activeElement.dataset.themeChoice`), "system");
-  await page.key("ArrowUp");
-  await page.key("ArrowUp");
-  assert.equal(await page.eval(`document.activeElement.dataset.themeChoice`), "light");
-  await page.key("ArrowDown");
-  await page.key("Enter");
+test("a page keeps Theme only in its menu, with Light, Dark and System above the palettes", async () => {
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-site-head .kapi-theme, .kapi-site-head .kapi-theme-button").length`), 0);
+  await openThemeMenu();
+  assert.deepEqual(await page.eval(`[...document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").children].map((b) => b.getAttribute("role") === "separator" ? "|" : [b.textContent, b.getAttribute("aria-checked")].join(":"))`),
+    ["Light:false", "Dark:false", "System:true", "|", "Default:true", "Paper:false"]);
+  assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-menu [data-theme-choice="dark"] svg:last-child')).visibility`), "visible");
+  await pickMode("dark");
   await page.waitFor(`document.documentElement.dataset.theme === "dark"`);
-  assert.equal(await list(), true);
-  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-theme-button")`), true);
-  await page.key("Enter");
-  await until(async () => !(await list()));
+  assert.equal(await page.eval(`document.querySelector('.kapi-menu [data-theme-choice="dark"]').getAttribute("aria-checked")`), "true");
+  await pickMode("system");
   await page.key("Escape");
-  await until(list);
-  assert.equal(await page.eval(`document.querySelector(".kapi-panel").classList.contains("kapi-expanded")`), false);
+  await until(async () => !(await menuOpen()));
 });
 
 test("search finds text in folded sections and closed details, jumps there, and Esc returns", async () => {
@@ -4411,10 +4409,10 @@ test("Ctrl+N and Ctrl+P move through search results without printing, and the hi
 test("the shared header search opens one centered dialog in Notes scope with optional page search", async () => {
   const head = await page.eval(`(() => {
     const box = (s) => (({ top, height, width }) => [Math.round(top), Math.round(height), Math.round(width)])(document.querySelector(s).getBoundingClientRect());
-    const order = [...document.querySelector(".kapi-panel-head").querySelectorAll(".kapi-search-button, .kapi-outline-button, .kapi-theme-button, .kapi-menu-button")].map((b) => b.className);
-    return { order, boxes: [".kapi-search-button", ".kapi-outline-button", ".kapi-theme-button", ".kapi-menu-button"].map(box), siteHead: document.querySelector(".kapi-site-home").textContent, tip: document.querySelector(".kapi-search-button").dataset.tip, text: document.querySelector(".kapi-search-button").textContent };
+    const order = [...document.querySelector(".kapi-panel-head").querySelectorAll(".kapi-search-button, .kapi-outline-button, .kapi-menu-button")].map((b) => b.className);
+    return { order, boxes: [".kapi-search-button", ".kapi-outline-button", ".kapi-menu-button"].map(box), siteHead: document.querySelector(".kapi-site-home").textContent, tip: document.querySelector(".kapi-search-button").dataset.tip, text: document.querySelector(".kapi-search-button").textContent };
   })()`);
-  assert.deepEqual(head.order, ["kapi-search-button", "kapi-outline-button", "kapi-theme-button", "kapi-menu-button"]);
+  assert.deepEqual(head.order, ["kapi-search-button", "kapi-outline-button", "kapi-menu-button"]);
   assert.ok(head.boxes.every(([top, height]) => Math.abs(top + height / 2 - 32) <= 1), JSON.stringify(head.boxes));
   assert.equal(head.siteHead, "Kapi");
   assert.ok(head.tip.startsWith("Search ") && head.tip.endsWith("K"));
