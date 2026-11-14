@@ -288,7 +288,6 @@
   const POINT_GAP = 16;
   const SOLID = "input, img, svg, textarea, button, select, video, canvas, iframe";
   showUndo(main.dataset.undo);
-  outlineButton.append(h("span", { class: "kapi-action-label", text: "Outline" }));
   const homeURL = base.replace(/p\/[^/]+$/, "");
   const pageTitle = h("span", { class: "kapi-current-title", text: main.querySelector("h1")?.textContent || document.title });
   const siteHead = h("header", { class: "kapi-site-head" },
@@ -296,11 +295,53 @@
       h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })),
     h("nav", { class: "kapi-breadcrumbs", "aria-label": "Breadcrumb" },
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
-    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, writeButton, menuButton, menu));
+    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, chatButton, menuButton, menu));
+  const outlineTools = h("div", { class: "kapi-page-tools kapi-outline-tools" }, outlineButton);
+  const writeTools = h("div", { class: "kapi-page-tools kapi-write-tools" }, writeButton);
   root.prepend(siteHead);
+  root.append(outlineTools, writeTools);
   main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
+
+  function placePageTools() {
+    const r = main.getBoundingClientRect();
+    const pad = getComputedStyle(main);
+    const left = r.left + parseFloat(pad.paddingLeft);
+    const right = r.right - parseFloat(pad.paddingRight);
+    const panel = innerWidth - parseFloat(getComputedStyle(document.documentElement).paddingRight);
+    const html = document.documentElement.style;
+    html.setProperty("--kapi-page-left", `${left}px`);
+    html.setProperty("--kapi-page-right", `${right}px`);
+    document.documentElement.toggleAttribute("data-kapi-tools-tight", left < 60 || panel - right < 60);
+  }
+  new ResizeObserver(placePageTools).observe(main);
+  new MutationObserver(placePageTools).observe(document.documentElement, { attributes: true, attributeFilter: ["data-kapi-panel-collapsed", "data-kapi-outline-open"] });
+  addEventListener("resize", placePageTools);
+  placePageTools();
+
+  let headY = scrollY;
+  const headLocked = () => !search.hidden || menuButton.getAttribute("aria-expanded") === "true" || !!document.querySelector(".kapi-dialog:not([hidden])") ||
+    !!siteHead.querySelector(":focus-visible") || (phone.matches && typing(document.activeElement));
+  function hideHead(on) {
+    document.documentElement.toggleAttribute("data-kapi-head-hidden", on && !headLocked());
+  }
+  addEventListener("scroll", () => {
+    const y = scrollY;
+    if (y < 0 || y > document.documentElement.scrollHeight - innerHeight) return;
+    if (y <= siteHead.offsetHeight) {
+      headY = y;
+      return hideHead(false);
+    }
+    if (Math.abs(y - headY) < 8) return;
+    hideHead(y > headY);
+    headY = y;
+  }, { passive: true });
+  addEventListener("pointermove", (e) => {
+    if (e.pointerType === "mouse" && e.clientY < 24) hideHead(false);
+  }, { passive: true });
+  siteHead.addEventListener("focusin", () => hideHead(false));
+  new MutationObserver(() => headLocked() && hideHead(false)).observe(root, { subtree: true, attributes: true, attributeFilter: ["hidden", "aria-expanded"] });
   const closest = (node, selector) => Element.prototype.closest.call(node, selector);
   const idOf = (el) => el.getAttribute("data-kapi-id");
   const find = (id) => main.querySelector(`[data-kapi-id="${CSS.escape(id)}"]`);
@@ -473,10 +514,13 @@
     if (phone.matches) {
       if (bar.parentElement !== root) root.append(bar);
       bar.dataset.place = "mobile";
-      document.documentElement.style.paddingBottom = bar.hidden ? "" : `${Math.ceil(bar.getBoundingClientRect().height)}px`;
+      const space = bar.hidden ? 0 : Math.ceil(bar.getBoundingClientRect().height);
+      document.documentElement.style.paddingBottom = space ? `${space}px` : "";
+      document.documentElement.style.setProperty("--kapi-bar-space", `${space}px`);
       return;
     }
     document.documentElement.style.removeProperty("padding-bottom");
+    document.documentElement.style.removeProperty("--kapi-bar-space");
     if (floating && bar.parentElement !== root) root.append(bar);
     if (!floating && bar.parentElement !== panel) panel.insertBefore(bar, composer);
     if (!floating) bar.removeAttribute("data-place");
@@ -3006,7 +3050,7 @@
   document.addEventListener("pointerdown", (e) => {
     if (editing && !busy && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar);
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar) || path.includes(writeTools) || path.includes(outlineTools);
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
