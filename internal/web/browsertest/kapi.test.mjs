@@ -1348,6 +1348,17 @@ test("an HTML mockup takes the page's palette and mode, and follows a change", a
   }
 });
 
+test("a long badge wraps inside its container instead of running past it", async () => {
+  await reopenWith([...SAMPLE, { id: "badgewrp", html: `<p data-kapi-id="badgewrp" style="width: 140px">Cost <span class="kapi-badge kapi-tone-yellow">Weeks of work: may not be required</span> <span class="kapi-badge">new</span></p>` }]);
+  await page.eval(`document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(PAGE_STYLES)} }))`);
+  const edges = await page.eval(`(() => {
+    const p = document.querySelector('[data-kapi-id="badgewrp"]').getBoundingClientRect();
+    return [...document.querySelectorAll('[data-kapi-id="badgewrp"] .kapi-badge')].map((b) => { const r = b.getBoundingClientRect(); return { right: r.right - p.right, lines: Math.round(r.height / parseFloat(getComputedStyle(b).lineHeight)) }; });
+  })()`);
+  assert.ok(edges[0].right <= 0.5, `the long badge runs ${edges[0].right}px past its container`);
+  assert.equal(edges[1].lines, 1, "a short badge stays on one line");
+});
+
 test("a failed save puts the theme back the way the server has it", async () => {
   await prefer("light");
   server.state.settingsStatus = 500;
