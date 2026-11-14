@@ -2503,10 +2503,6 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
     top: auto;
     bottom: calc(16px + var(--kapi-bar-space) + env(safe-area-inset-bottom));
   }
-}
-
-
-@media (max-width: 760px) {
   #kapi-chrome .kapi-write-tools { left: auto; right: 16px; }
   #kapi-chrome .kapi-outline-tools { left: auto; right: 68px; }
   #kapi-chrome .kapi-page-tools > button { width: 44px; height: 44px; box-shadow: var(--kapi-shadow); }
