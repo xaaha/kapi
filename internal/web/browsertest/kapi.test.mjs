@@ -1239,7 +1239,7 @@ test("phone chat is an explicit drawer and closes with Escape without losing the
 });
 
 test("Undo renders as a quiet bordered button", async () => {
-  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-outline-button, .kapi-search-button, .kapi-panel-collapse, .kapi-chat-button)")].map((b) => {
+  const styles = await page.eval(`[...document.querySelectorAll(".kapi-panel-head > button:not(.kapi-menu-button, .kapi-write-button, .kapi-outline-button, .kapi-search-button, .kapi-panel-collapse, .kapi-chat-button)")].map((b) => {
     const s = getComputedStyle(b);
     return [b.textContent, s.borderTopWidth, s.borderTopStyle];
   })`);
@@ -4507,4 +4507,107 @@ test("an agent reply marks closed chat without changing the independent outline"
   await click(".kapi-chat-button");
   assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
   assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility() && document.querySelector(".kapi-chat").checkVisibility()`), true);
+});
+
+const writing = () => page.eval(`document.documentElement.hasAttribute("data-kapi-writing")`);
+const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
+
+test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
+  const button = `document.querySelector(".kapi-site-head .kapi-write-button")`;
+  assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),
+    ["Write", `Write ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
+  assert.equal(await writing(), false);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  assert.equal(await writing(), true);
+  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  const { x, y } = await page.eval(`(() => {
+    const r = document.createRange();
+    const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
+    r.setStart(t, 5);
+    r.setEnd(t, 6);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + 1, y: b.top + b.height / 2 };
+  })()`);
+  await mouseClickAt(x, y);
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  await page.type("X");
+  assert.equal(await text("bbbbbbbb"), "Move Xthe session store to the new cluster in two steps.");
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(requests("POST", "/ops").length, 0);
+
+  await page.close();
+  page = await browser.open(server.url);
+  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+  assert.equal(await writing(), true);
+  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+});
+
+test("in Write, clicking another block saves the open edit and starts editing the clicked block", async () => {
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  await page.type(" Then verify.");
+  await mouseClick('[data-kapi-id="aaaaaaaa"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op.parts, [{ id: "bbbbbbbb", inner: "Move the session store to the new cluster in two steps. Then verify." }]);
+  await until(async () => (await editingId()) === "aaaaaaaa");
+});
+
+test("in Write, a plain click on a link edits its text, and the shortcut switches back to Review and saves", async () => {
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-id="dddddddd"] a');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd"`);
+  assert.equal(await page.eval(`location.hash`), "");
+  await page.type("!");
+  await page.key("e", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.equal(await writing(), false);
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+});
+
+test("in Write, dragging across text selects it for a note instead of editing, and the shortcut does nothing in the chat box", async () => {
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  const r = await page.eval(`(r => ({ x: r.left + 4, y: r.top + r.height / 2, to: r.left + 120 }))(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x: r.x, y: r.y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.to, y: r.y, button: "left", buttons: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: r.to, y: r.y, button: "left", clickCount: 1 });
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+  assert.equal(await page.eval(`getSelection().isCollapsed`), false);
+
+  await page.key("Escape");
+  await mouseClick(".kapi-panel textarea");
+  await page.key("e", { ctrl: true });
+  assert.equal(await writing(), true);
+});
+
+test("in Write, clicking a form option's text picks it instead of editing it", async () => {
+  await reopenWith([{
+    id: "ffffffff",
+    html: '<div class="kapi-form" data-kapi-preset="form" data-kapi-id="ffffffff"><form name="pick">' +
+      '<label class="kapi-opt" data-kapi-id="oooooooo"><input type="radio" name="when" value="now"><span data-kapi-text="oooooooo">Now</span></label>' +
+      '<button type="submit">Send answer</button></form></div>',
+  }]);
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-text="oooooooo"]');
+  assert.equal(await page.eval(`document.querySelector('input[value="now"]').checked`), true);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+});
+
+test("Cmd or Ctrl click on a link inside an open edit opens it in a new tab", async () => {
+  await page.eval(`window.open = (url, target) => { window.opened = [url, target]; }`);
+  await mouseClick(".kapi-site-head .kapi-write-button");
+  await mouseClick('[data-kapi-id="dddddddd"] a');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd"`);
+  const { x, y } = await page.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(document.querySelector('[data-kapi-id="dddddddd"] a').getBoundingClientRect())`);
+  const modifiers = process.platform === "darwin" ? 4 : 2;
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
+  await page.waitFor(`!!window.opened`);
+  assert.deepEqual(await page.eval(`window.opened`), [new URL("#bbbbbbbb", server.url).href, "_blank"]);
 });

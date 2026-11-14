@@ -81,6 +81,7 @@
     trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     download: "M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z",
     image: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z",
+    book: "M224,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H32A16,16,0,0,0,16,64V192a16,16,0,0,0,16,16H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h64a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM96,192H32V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm128,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h64Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
@@ -192,6 +193,14 @@
   };
   const pagePath = main.dataset.path || "";
   const pageName = pagePath.split(/[\\/]/).pop() || document.title;
+  const writeKey = `kapi-write:${base.split("/").pop()}`;
+  let writing = false;
+  try {
+    writing = localStorage.getItem(writeKey) === "true";
+  } catch {}
+  let leaving = null;
+  const writeButton = h("button", { type: "button", class: "kapi-write-button", "aria-keyshortcuts": keyWords("toggleWrite"), onclick: () => setWriting(!writing) });
+  syncWriting();
   const menuButton = h("button", { type: "button", class: "kapi-menu-button", "aria-label": "Page menu", title: "Page menu", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("dots"));
   const EXPORTS = [
     { glyph: "download", label: "HTML", run: () => exportFile("html", () => pageName) },
@@ -301,7 +310,7 @@
       h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" })),
     h("nav", { class: "kapi-breadcrumbs", "aria-label": "Breadcrumb" },
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
-    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, ...themeToggle(), menuButton, menu));
+    h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, outlineButton, chatButton, ...themeToggle(), writeButton, menuButton, menu));
   root.prepend(siteHead);
   main.before(root);
 
@@ -858,7 +867,16 @@
     }
   }
 
-  function editInPlace(el, hosts) {
+  function caretAt({ host, x, y }) {
+    host.focus({ preventScroll: true });
+    const pos = document.caretPositionFromPoint?.(x, y);
+    const range = pos ? null : document.caretRangeFromPoint?.(x, y);
+    const [node, offset] = pos ? [pos.offsetNode, pos.offset] : range ? [range.startContainer, range.startOffset] : [];
+    if (node && host.contains(node)) getSelection().collapse(node, offset);
+    else caretAtEnd(host);
+  }
+
+  function editInPlace(el, hosts, at) {
     for (const host of hosts) {
       const details = host.closest("details");
       if (details) details.open = true;
@@ -871,7 +889,8 @@
       return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: innerOf(host) })) } : null;
     };
     editing = { el, rev: Number(main.dataset.rev), hosts: parts, op };
-    caretAtEnd(hosts[0]);
+    if (at) caretAt(at);
+    else caretAtEnd(hosts[0]);
     renderBar();
   }
 
@@ -917,14 +936,44 @@
     renderBar();
   }
 
-  function startEdit() {
+  function startEdit(at) {
     if (!selected || editing || busy) return;
     notice.hidden = true;
     dismissNote();
     if (selected.hasAttribute("data-kapi-raw")) return editRaw(selected);
     const hosts = partsOf(selected);
     if (!hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
-    editInPlace(selected, hosts);
+    editInPlace(selected, hosts, at);
+  }
+
+  function setWriting(on) {
+    writing = on;
+    try {
+      localStorage.setItem(writeKey, String(on));
+    } catch {}
+    syncWriting();
+    if (!on && editing) defaultAction();
+  }
+
+  function syncWriting() {
+    const label = writing ? "Review" : "Write";
+    writeButton.replaceChildren(icon(writing ? "book" : "pencil"));
+    writeButton.setAttribute("aria-label", label);
+    writeButton.dataset.tip = `${label} ${keyHint("toggleWrite")}`;
+    document.documentElement.toggleAttribute("data-kapi-writing", writing);
+  }
+
+  function writeTarget(el, e) {
+    if (!writing || e.metaKey || e.ctrlKey || !getSelection().isCollapsed || el.hasAttribute("data-kapi-raw") || closest(e.target, `${SOLID}, summary, label`)) return null;
+    const host = partsOf(el).findLast((n) => n.contains(e.target));
+    if (!host) return null;
+    e.preventDefault();
+    return { host, x: e.clientX, y: e.clientY };
+  }
+
+  function leaveEdit() {
+    if (!editing.op()) return endEdit(false);
+    leaving = saveEdit().finally(() => (leaving = null));
   }
 
   function endEdit(restore) {
@@ -2922,6 +2971,15 @@
   main.addEventListener("click", (e) => {
     if (editing) {
       if (closest(e.target, "summary")?.isContentEditable) e.preventDefault();
+      const link = closest(e.target, "a[href]");
+      if (link?.isContentEditable && (e.metaKey || e.ctrlKey)) open(link.href, "_blank", "noopener");
+      const next = leaving && closest(e.target, BLOCK);
+      const at = next && main.contains(next) && !next.contains(editing.el) && writeTarget(next, e);
+      if (at) leaving.then(() => {
+        if (editing || !at.host.isConnected) return;
+        select(next);
+        startEdit(at);
+      });
       return;
     }
     const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
@@ -2938,6 +2996,8 @@
       lastPoint = { el, dx: e.clientX - r.left, dy: e.clientY - r.top, cell: closest(e.target, "td, th") };
     } else lastPoint = null;
     select(el);
+    const at = writeTarget(el, e);
+    if (at) startEdit(at);
   });
 
   function trackSelection() {
@@ -2959,7 +3019,8 @@
     if (editing && !busy && e.button === 0) {
       const path = e.composedPath();
       const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar);
-      if (!inside) cancelEdit();
+      if (!inside && writing) leaveEdit();
+      else if (!inside) cancelEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
   }, true);
@@ -3028,6 +3089,10 @@
     const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
     const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
+    if (SHORTCUTS.is("toggleWrite", e) && !asking && !e.isComposing && (inContent || !typing(focus))) {
+      e.preventDefault();
+      return setWriting(!writing);
+    }
     if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;

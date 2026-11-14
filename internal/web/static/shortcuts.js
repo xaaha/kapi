@@ -35,6 +35,7 @@ window.kapiShortcuts = (() => {
     search: { keys: ["/"], mod: false, hint: "/", words: "/" },
     switchNote: { keys: ["k"], mod: true, hint: `${command}K`, words: `${command}K` },
     printPage: { keys: ["p"], mod: true, hint: `${command}P`, words: `${command}P` },
+    toggleWrite: { keys: ["e"], mod: true, shift: false, hint: `${command}E`, words: `${command}E` },
     searchNext: { keys: ["ArrowDown"], hint: "↓", words: "Down arrow", also: { keys: ["n"], ctrl: true, meta: false } },
     searchPrevious: { keys: ["ArrowUp"], hint: "↑", words: "Up arrow", also: { keys: ["p"], ctrl: true, meta: false } },
     searchJump: { keys: ["Enter"], hint: "↵", words: "Enter" },
