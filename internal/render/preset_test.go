@@ -1,6 +1,7 @@
 package render
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -193,5 +194,30 @@ func TestStepStateShowsItsIconInPlaceOfTheNumber(t *testing.T) {
 	}
 	if out := render(t, `<kapi-plan><kapi-step state="soon">a</kapi-step></kapi-plan>`); !strings.Contains(out, "kapi-error") {
 		t.Errorf("an unknown step state should be an error: %s", out)
+	}
+}
+
+func TestRenderPresetNamesOnlyThemeVariablesThatExist(t *testing.T) {
+	var example string
+	for _, p := range Presets() {
+		if p.Name == "kapi-render" {
+			example = p.Example
+		}
+	}
+	named := regexp.MustCompile(`var\((--kapi-[a-z-]+)\)`).FindAllStringSubmatch(example, -1)
+	if len(named) < 10 {
+		t.Fatalf("kapi-render should list the theme variables, found %d", len(named))
+	}
+	for _, m := range named {
+		if !strings.Contains(string(themeCSS), m[1]+":") {
+			t.Errorf("kapi-render names %s, which theme.css does not define", m[1])
+		}
+	}
+	for _, colour := range []string{"blue", "green", "yellow", "orange", "red", "purple", "grey"} {
+		for _, part := range []string{"text", "fill", "border", "solid"} {
+			if v := "--kapi-" + colour + "-" + part + ":"; !strings.Contains(string(themeCSS), v) {
+				t.Errorf("kapi-render promises %s, which theme.css does not define", v)
+			}
+		}
 	}
 }

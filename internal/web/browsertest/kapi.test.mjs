@@ -1321,6 +1321,34 @@ test("Theme in the menu lists three recent palettes, recolours the page in both 
   await until(() => server.state.settings.theme === "default");
 });
 
+test("an HTML mockup takes the page's palette and mode, and follows a change", async () => {
+  const doc = `<!doctype html><html><head><style>${THEME_CSS}body{background:var(--kapi-bg)}</style></head><body>mockup</body></html>`;
+  const frame = `<figure data-kapi-id="mockupaa" data-kapi-preset="render" class="kapi-render"><iframe class="kapi-render-frame" sandbox="allow-same-origin" srcdoc="${doc.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></iframe></figure>`;
+  const own = await startFakeServer({ blocks: [...SAMPLE, { id: "mockupaa", html: frame }] });
+  own.state.settings = { mode: "dark", theme: "ocean", recent: ["ocean"] };
+  const p = await browser.open(own.url);
+  try {
+    const colours = () => p.eval(`[getComputedStyle(document.body).backgroundColor, getComputedStyle(document.querySelector(".kapi-render-frame").contentDocument.body).backgroundColor]`);
+    const expectSame = async (label) => {
+      await until(async () => new Set(await colours()).size === 1).catch(() => {});
+      const [page, mockup] = await colours();
+      assert.equal(mockup, page, `${label}: the mockup background should match the page`);
+    };
+    await p.waitFor(`document.querySelector(".kapi-render-frame").contentDocument?.body?.textContent === "mockup"`, 5000);
+    await expectSame("ocean, dark, on load");
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+    await p.eval(`document.querySelector(".kapi-menu [data-menu=theme]").click()`);
+    await p.waitFor(`!!document.querySelector(".kapi-menu [data-palette=paper]")`);
+    await p.eval(`document.querySelector(".kapi-menu [data-palette=paper]").click()`);
+    await p.waitFor(`document.documentElement.dataset.palette === "paper"`);
+    await expectSame("paper, dark, after picking it");
+  } finally {
+    await p.close();
+    await own.close();
+  }
+});
+
 test("a failed save puts the theme back the way the server has it", async () => {
   await prefer("light");
   server.state.settingsStatus = 500;
@@ -2167,6 +2195,7 @@ const DIAGRAMS = [
 const hasFlip = () => page.eval(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
 
 const PAGE_STYLES = await readFile(new URL("../../render/style.css", import.meta.url), "utf8");
+const THEME_CSS = await readFile(new URL("../../render/theme.css", import.meta.url), "utf8");
 
 async function withPageStyles(width, fn) {
   const p = await browser.open(server.url, { width, height: 800 });
@@ -4628,6 +4657,7 @@ async function searchJump(query) {
   await page.key("Enter");
   await page.waitFor(`!document.querySelector(".kapi-back").hidden`);
   await until(() => page.eval(`scrollY > 600`));
+  await until(() => page.eval(`new Promise((done) => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => done(scrollY === y))); })`));
 }
 
 test("Esc closes a note popover opened after a search jump before it goes back", async () => {
@@ -4724,9 +4754,8 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
   assert.equal(requests("POST", "/ops").length, 0);
 
-  await page.close();
-  page = await browser.open(server.url);
-  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+  await page.call("Page.reload");
+  await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-panel .kapi-dot")?.dataset.state === "none"`, 5000);
   assert.equal(await writing(), true);
   assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
 });

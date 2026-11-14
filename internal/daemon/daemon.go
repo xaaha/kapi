@@ -251,6 +251,15 @@ func (s *Server) settleStores() {
 
 var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/[0-9a-f]{32}/\n$`)
 
+func savedAddr(home string) string {
+	if b, err := os.ReadFile(HTTPURLPath(home)); err == nil {
+		if m := savedURL.FindSubmatch(b); m != nil {
+			return string(m[1])
+		}
+	}
+	return "127.0.0.1:0"
+}
+
 func (s *Server) listenHTTP() (ln net.Listener, token string, fresh bool, err error) {
 	if ln, err = listenFixed(s.home); err != nil {
 		return nil, "", false, err
@@ -265,12 +274,7 @@ func (s *Server) listenHTTP() (ln net.Listener, token string, fresh bool, err er
 	if err := os.Remove(TokenPath(s.home)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, "", false, err
 	}
-	addr := "127.0.0.1:0"
-	if b, err := os.ReadFile(HTTPURLPath(s.home)); err == nil {
-		if m := savedURL.FindSubmatch(b); m != nil {
-			addr = string(m[1])
-		}
-	}
+	addr := savedAddr(s.home)
 	ln, err = net.Listen("tcp", addr)
 	if err != nil && addr != "127.0.0.1:0" {
 		log.Printf("http: %s is taken (%v); moving to a new port", addr, err)
