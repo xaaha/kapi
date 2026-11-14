@@ -450,20 +450,21 @@ test("Escape ends an edit even when focus has left the text", async () => {
   await page.waitFor(`document.activeElement.dataset.kapiId === "dddddddd"`);
 });
 
-test("clicking outside an edit cancels it and the same click selects its target", async () => {
+test("clicking another block saves the open edit and the same click edits its target", async () => {
   await select("ffffffff");
   await editSelected();
   await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
-  await page.type(" discarded");
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.lastChild)`);
+  await page.type(" Kept.");
   await page.eval(`(() => {
     const target = document.querySelector('[data-kapi-id="bbbbbbbb"]');
     target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
     target.click();
   })()`);
-  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, /Kept\.$/);
+  await until(async () => (await editingId()) === "bbbbbbbb");
   assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId`), "bbbbbbbb");
-  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="ffffffff"] .kapi-callout-body').textContent`), "Copy during the quiet window.");
-  assert.equal(requests("POST", "/ops").length, 0);
 });
 
 test("a code block inside a callout stays one piece while the callout is edited", async () => {
@@ -1612,6 +1613,7 @@ test("the block toolbar never covers page content", async () => {
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
   assert.deepEqual(await page.eval(OVERLAPS), []);
 
+  await page.eval(`localStorage.clear()`);
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
     await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
@@ -1733,6 +1735,28 @@ const tap = async (phone, selector) => {
   await phone.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
   await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 };
+
+for (const width of [390, 360]) {
+  test(`on a ${width} px touch phone a tap in Review only selects, Edit switches the page to Write, and the toggle ends the edit`, async () => {
+    const phone = await mobilePage(width);
+    const writingOn = () => phone.eval(`document.documentElement.hasAttribute("data-kapi-writing")`);
+    try {
+      await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
+      await tap(phone, '[data-kapi-id="bbbbbbbb"]');
+      await phone.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`);
+      assert.equal(await phone.eval(`!!document.querySelector("[contenteditable]")`), false);
+      assert.equal(await writingOn(), false);
+      await tap(phone, '.kapi-bar [data-action="edit"]');
+      await phone.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+      assert.equal(await writingOn(), true);
+      await tap(phone, ".kapi-site-head .kapi-write-button");
+      await phone.waitFor(`!document.querySelector("[contenteditable]")`);
+      assert.equal(await writingOn(), false);
+    } finally {
+      await phone.close();
+    }
+  });
+}
 
 test("tapping a theme in the page menu on a phone does not expand the chat", async () => {
   const phone = await mobilePage(390);
@@ -3216,13 +3240,14 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
 });
 
-test("#39 note pins still open while a block is being edited, and clicking one cancels the edit", async () => {
+test("#39 note pins still open while a block is being edited, and clicking one saves the edit", async () => {
   server.push(sessionNote);
   await until(async () => (await pinStates()) === "1:waiting");
   await select("bbbbbbbb");
   await editSelected();
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
-  await page.type(" discarded");
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.lastChild)`);
+  await page.type(" kept");
   await hoverPin(1);
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), true, "hovering shows the thread without discarding the edit");
   await page.eval(`(() => {
@@ -3232,7 +3257,8 @@ test("#39 note pins still open while a block is being edited, and clicking one c
   })()`);
   await page.waitFor(`!document.querySelector("[contenteditable], .kapi-source")`);
   assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true);
-  assert.equal(await text("bbbbbbbb"), "Move the session store to the new cluster in two steps.");
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, / kept$/);
 });
 
 test("#39 note threads use the chat colours to distinguish the human and agent", async () => {
@@ -4597,6 +4623,27 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
   assert.equal(await writing(), true);
   assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+});
+
+test("double clicking in Review switches the page to Write, a click outside saves, and leaving Write ends the edit", async () => {
+  const button = `document.querySelector(".kapi-site-head .kapi-write-button")`;
+  assert.equal(await writing(), false);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]', 2);
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  assert.equal(await writing(), true);
+  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  await page.type(" Then verify.");
+  await mouseClick('[data-kapi-id="aaaaaaaa"]');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op.parts, [{ id: "bbbbbbbb", inner: "Move the session store to the new cluster in two steps. Then verify." }]);
+  await until(async () => (await editingId()) === "aaaaaaaa");
+
+  await page.key("e", { ctrl: true });
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(await writing(), false);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
 });
 
 test("in Write, clicking another block saves the open edit and starts editing the clicked block", async () => {

@@ -926,9 +926,11 @@
     if (!selected || editing || busy) return;
     notice.hidden = true;
     dismissNote();
-    if (selected.hasAttribute("data-kapi-raw")) return editRaw(selected);
-    const hosts = partsOf(selected);
-    if (!hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
+    const raw = selected.hasAttribute("data-kapi-raw");
+    const hosts = raw ? [] : partsOf(selected);
+    if (!raw && !hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
+    if (!writing) setWriting(true);
+    if (raw) return editRaw(selected);
     editInPlace(selected, hosts, at);
   }
 
@@ -3005,8 +3007,7 @@
     if (editing && !busy && e.button === 0) {
       const path = e.composedPath();
       const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar);
-      if (!inside && writing) leaveEdit();
-      else if (!inside) cancelEdit();
+      if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
   }, true);

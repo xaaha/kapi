@@ -58,7 +58,14 @@ try {
         continue;
       }
       await page.waitFor(`!!${find(key)}?.isContentEditable`);
-      await page.eval(`(host => { window.editedHost = host; if (!host.contains(getSelection().anchorNode)) { host.focus(); getSelection().selectAllChildren(host); getSelection().collapseToEnd(); } })(${find(key)})`);
+      await page.eval(`(host => {
+        window.editedHost = host;
+        if (!host.contains(getSelection().anchorNode)) host.focus();
+        const tail = [...host.childNodes].filter((n) => n.nodeType === 1 || n.data.trim()).pop();
+        const end = tail?.nodeType === 1 && tail.matches("[data-kapi-raw]") ? tail.previousElementSibling : host;
+        getSelection().selectAllChildren(end);
+        getSelection().collapseToEnd();
+      })(${find(key)})`);
       await page.type(` ${mark}`);
       await page.key("Enter", { ctrl: true });
       await page.waitFor(`(host => !document.querySelector("[contenteditable]") && host !== window.editedHost && host.textContent.includes(${JSON.stringify(mark)}))(${find(key)})`, 5000);
