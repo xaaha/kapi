@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,6 +126,34 @@ func TestAFailedSpawnIsReportedAtOnce(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "start daemon") || !strings.Contains(string(out), "daemon.log") {
 		t.Errorf("kapi pending: %v\n%s; want a start daemon error naming daemon.log", err, out)
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("the failed start took %v, want an error before the socket wait runs out", took)
+	}
+	if pids := e.daemonPIDs(); len(pids) != 0 {
+		t.Errorf("daemon processes %v, want none", pids)
+	}
+}
+
+func TestATakenFixedPortFailsTheClientAtOnceNamingThePort(t *testing.T) {
+	e := newE2E(t)
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer squatter.Close()
+	port := strconv.Itoa(squatter.Addr().(*net.TCPAddr).Port)
+	if err := os.WriteFile(filepath.Join(e.home, "port"), []byte(port+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, e.bin, "pending", e.page) //nolint:gosec // runs the kapi binary this test just built
+	cmd.Env = e.env
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "port "+port+" from "+filepath.Join(e.home, "port")+" is taken") {
+		t.Errorf("kapi pending: %v\n%s; want the taken port named", err, out)
 	}
 	if took := time.Since(start); took > 2*time.Second {
 		t.Errorf("the failed start took %v, want an error before the socket wait runs out", took)

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,7 +17,6 @@ func PortPath(home string) string { return filepath.Join(home, "port") }
 
 func TokenPath(home string) string { return filepath.Join(home, "http.token") }
 
-// SetPort saves the port the daemon listens on from its next start; 0 goes back to a sticky random port.
 func SetPort(home string, port int) error {
 	if port < 0 || port > 65535 {
 		return fmt.Errorf("port %d is out of range; use 1-65535, or 0 for a random port", port)
@@ -46,6 +46,26 @@ func fixedPort(home string) (int, error) {
 		return 0, fmt.Errorf("%s holds %q, not a port; fix it with kapi daemon --port", PortPath(home), b)
 	}
 	return port, nil
+}
+
+func CheckFixedPort(home string) error {
+	ln, err := listenFixed(home)
+	if ln != nil {
+		return ln.Close()
+	}
+	return err
+}
+
+func listenFixed(home string) (net.Listener, error) {
+	port, err := fixedPort(home)
+	if err != nil || port == 0 {
+		return nil, err
+	}
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return nil, fmt.Errorf("port %d from %s is taken (%w); stop what holds it or pick another with kapi daemon --port", port, PortPath(home), err)
+	}
+	return ln, nil
 }
 
 var savedToken = regexp.MustCompile(`^([0-9a-f]{32})\n$`)

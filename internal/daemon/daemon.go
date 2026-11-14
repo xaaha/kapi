@@ -250,15 +250,10 @@ func (s *Server) settleStores() {
 var savedURL = regexp.MustCompile(`^http://(127\.0\.0\.1:\d+)/[0-9a-f]{32}/\n$`)
 
 func (s *Server) listenHTTP() (ln net.Listener, token string, fresh bool, err error) {
-	port, err := fixedPort(s.home)
-	if err != nil {
+	if ln, err = listenFixed(s.home); err != nil {
 		return nil, "", false, err
 	}
-	if port != 0 {
-		addr := fmt.Sprintf("127.0.0.1:%d", port)
-		if ln, err = net.Listen("tcp", addr); err != nil {
-			return nil, "", false, fmt.Errorf("port %d from %s is taken (%w); stop what holds it or pick another with kapi daemon --port", port, PortPath(s.home), err)
-		}
+	if ln != nil {
 		if token, fresh, err = keptToken(s.home); err != nil {
 			ln.Close()
 			return nil, "", false, err
