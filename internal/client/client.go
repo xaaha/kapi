@@ -95,6 +95,9 @@ func Spawn(home, reopenExcept string) error {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
+	if err := daemon.CheckFixedPort(home); err != nil {
+		return err
+	}
 	logf, err := os.OpenFile(filepath.Join(home, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

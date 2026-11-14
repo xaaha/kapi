@@ -278,7 +278,15 @@ folder, a rename, then an fsync of the folder.
 On start the daemon reuses the port from a well-formed `http.url` when that
 port is free, and picks a random one otherwise. The token is new on every
 start, never reused: while the daemon is down any local program can bind the
-old port and read a reconnecting tab's token. A request with a wrong token to
+old port and read a reconnecting tab's token.
+
+`kapi daemon --port <n>` saves a fixed port to `$KAPI_HOME/port`, and
+`--port 0` removes it. With a fixed port the daemon listens only there and
+fails to start when the port is taken. It keeps one token across starts in
+`$KAPI_HOME/http.token` (mode 0600), so open tabs reconnect and saved links
+keep working, at the cost of the risk above. `kapi daemon --new-token` deletes
+`http.token`, so the next start issues a new one. Without a fixed port the
+daemon deletes `http.token` on start. A request with a wrong token to
 `p/{id}/`, `p/{id}/events`, `p/{id}/messages`, `p/{id}/notes`, `p/{id}/resolve`, `p/{id}/end`, `p/{id}/files`,
 `p/{id}/images`, `p/{id}/ops`, `p/{id}/answers`, `p/{id}/export/html` or `p/{id}/export/markdown` gets 403 with
 `{"error":"kapi restarted","reopen":"kapi open <page path>"}`. The page path
@@ -311,8 +319,9 @@ opens the new URL of each collected page whose file still exists, newest
 `viewing` first, at most 5, with the same opener as `kapi open`. It logs
 each reopen to `$KAPI_HOME/daemon.log` by page path. It reopens nothing when
 `KAPI_NO_BROWSER`, `CI`, `SSH_CONNECTION` or `SSH_TTY` is set, on Linux when neither `DISPLAY` nor
-`WAYLAND_DISPLAY` is set, or when run as plain `kapi daemon` in the
-foreground. A page whose opener fails is not reported as `reopened`.
+`WAYLAND_DISPLAY` is set, when run as plain `kapi daemon` in the
+foreground, or when it kept the token from a fixed port, since the old tabs
+still work. A page whose opener fails is not reported as `reopened`.
 When `kapi open <page>` is what starts the daemon, the client adds
 `--reopen-except <page id>`, so that page opens once, from the CLI.
 
