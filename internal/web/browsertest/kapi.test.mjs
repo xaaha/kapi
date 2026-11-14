@@ -802,11 +802,13 @@ test("Undo shows only when there is something to undo, on the left so the chat b
   await page.waitFor(`document.querySelector('.kapi-site-actions [data-action="undo"]').hidden`);
 });
 
-test("the full-width Kapi header stays visible while scrolling at desktop widths", async () => {
+test("the full-width Kapi header hides while scrolling down and comes back full width on scroll up at desktop widths", async () => {
   const wide = await browser.open(server.url, { width: 1440, height: 700 });
   try {
     await wide.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
-    await wide.waitFor(`scrollY >= 1200`);
+    await wide.waitFor(`scrollY >= 1200 && document.documentElement.hasAttribute("data-kapi-head-hidden")`);
+    await wide.eval(`scrollTo(0, 900)`);
+    await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden") && document.querySelector(".kapi-site-head").getBoundingClientRect().top === 0`);
     const [head, page] = await wide.eval(`[".kapi-site-head", "#kapi-page"].map((q) => (({ top, left, right, bottom }) => ({ top, left, right, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
     assert.ok(head.top >= 0 && head.bottom <= 80, JSON.stringify(head));
     assert.equal(head.left, 0);
@@ -818,8 +820,9 @@ test("the full-width Kapi header stays visible while scrolling at desktop widths
   const narrow = await browser.open(server.url, { width: 1100, height: 700 });
   try {
     await narrow.eval(`document.body.style.paddingBottom = "3000px"; scrollTo(0, 1200)`);
-    await narrow.waitFor(`scrollY >= 1200`);
-    assert.equal(await narrow.eval(`document.querySelector(".kapi-site-head").getBoundingClientRect().top`), 0);
+    await narrow.waitFor(`scrollY >= 1200 && document.querySelector(".kapi-site-head").getBoundingClientRect().bottom <= 0`);
+    await narrow.eval(`scrollTo(0, 900)`);
+    await narrow.waitFor(`document.querySelector(".kapi-site-head").getBoundingClientRect().top === 0`);
   } finally {
     await narrow.close();
   }
@@ -2170,6 +2173,10 @@ test("on desktop a long table's header row sticks to the top of the window", asy
   await withPageStyles(1280, async (p) => {
     await p.eval(`(t => { for (let i = 0; i < 60; i++) t.tBodies[0].insertRow().append(...["row" + i, String(i)].map((v) => Object.assign(document.createElement("td"), { textContent: v }))); })(document.querySelector('[data-kapi-id="gggggggg"] table'))`);
     await p.eval(`(t => scrollTo(0, t.getBoundingClientRect().top + scrollY + t.offsetHeight / 2))(document.querySelector('[data-kapi-id="gggggggg"]'))`);
+    await p.waitFor(`document.documentElement.hasAttribute("data-kapi-head-hidden")`);
+    assert.equal(await p.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"] thead th').getBoundingClientRect().top)`), 0);
+    await p.eval(`scrollBy(0, -40)`);
+    await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden")`);
     const [top, band, bg] = await p.eval(`(th => [Math.round(th.getBoundingClientRect().top), getComputedStyle(th).backgroundColor, getComputedStyle(document.body).backgroundColor])(document.querySelector('[data-kapi-id="gggggggg"] thead th'))`);
     assert.equal(top, 64);
     assert.notEqual(band, bg);
