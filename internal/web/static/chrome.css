@@ -458,6 +458,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
 
 #kapi-chrome .kapi-site-actions > button:is(.kapi-search-button, .kapi-outline-button, .kapi-chat-button) {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 8px;
   min-height: 36px;
@@ -529,7 +530,6 @@ html { scroll-padding-top: var(--kapi-header-height); }
   .kapi-current-title { max-width: 130px; }
   #kapi-chrome .kapi-site-actions { gap: 0; flex: none; }
   #kapi-chrome .kapi-site-actions > button:is(.kapi-search-button, .kapi-outline-button, .kapi-chat-button) { width: 32px; min-width: 32px; padding: 6px; justify-content: center; }
-  #kapi-chrome .kapi-site-actions .kapi-theme-button,
   #kapi-chrome .kapi-site-actions .kapi-write-button,
   #kapi-chrome .kapi-site-actions .kapi-menu-button { width: 32px; }
 }
@@ -586,20 +586,14 @@ html { scroll-padding-top: var(--kapi-header-height); }
   padding-top: 6px;
 }
 
-#kapi-chrome .kapi-theme {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-}
-
-#kapi-chrome .kapi-panel-head :is(.kapi-search-button, .kapi-theme-button, .kapi-write-button, .kapi-outline-button) {
+#kapi-chrome .kapi-panel-head :is(.kapi-search-button, .kapi-write-button, .kapi-outline-button) {
   position: relative;
   display: inline-flex;
   flex: none;
   padding: 4px;
 }
 
-#kapi-chrome .kapi-panel-head :is(.kapi-search-button[aria-expanded="true"], .kapi-theme-button[aria-expanded="true"], .kapi-outline-button[aria-pressed="true"]) {
+#kapi-chrome .kapi-panel-head :is(.kapi-search-button[aria-expanded="true"], .kapi-outline-button[aria-pressed="true"]) {
   background: var(--kapi-blue-fill);
   color: var(--kapi-blue-text);
 }
@@ -634,31 +628,21 @@ html { scroll-padding-top: var(--kapi-header-height); }
   background: var(--kapi-blue-text);
 }
 
-#kapi-chrome :is(.kapi-search-button, .kapi-theme-button, .kapi-write-button, .kapi-outline-button) svg {
+#kapi-chrome :is(.kapi-search-button, .kapi-write-button, .kapi-outline-button) svg {
   display: block;
   width: 16px;
   height: 16px;
   fill: currentColor;
 }
 
-#kapi-chrome .kapi-panel-head .kapi-theme-menu {
-  top: calc(100% + 6px);
-  right: 0;
-  width: 168px;
-}
-
-#kapi-chrome .kapi-panel-head .kapi-theme-menu::before {
-  content: "";
-  position: absolute;
-  top: -8px;
-  left: 0;
-  right: 0;
-  height: 8px;
-}
-
-#kapi-chrome .kapi-panel-head .kapi-theme-menu [role="menuitemradio"][aria-checked] svg:last-child {
+#kapi-chrome .kapi-panel-head .kapi-menu [role="menuitemradio"][data-theme-choice] svg:last-child {
   visibility: visible;
   color: var(--kapi-faint);
+}
+
+#kapi-chrome .kapi-menu-sep {
+  margin: 4px 6px;
+  border-top: 1px solid var(--kapi-border);
 }
 
 #kapi-chrome .kapi-panel-head button:hover:not(:disabled) {
@@ -684,14 +668,14 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome .kapi-menu-button svg,
-#kapi-chrome :is(.kapi-menu, .kapi-theme-menu) svg {
+#kapi-chrome .kapi-menu svg {
   width: 16px;
   height: 16px;
   flex: none;
   fill: currentColor;
 }
 
-#kapi-chrome :is(.kapi-menu, .kapi-theme-menu) {
+#kapi-chrome .kapi-menu {
   position: absolute;
   z-index: 2147483002;
   top: calc(100% + 4px);
@@ -708,11 +692,11 @@ html { scroll-padding-top: var(--kapi-header-height); }
   box-shadow: var(--kapi-shadow);
 }
 
-#kapi-chrome :is(.kapi-menu, .kapi-theme-menu)[hidden] {
+#kapi-chrome .kapi-menu[hidden] {
   display: none;
 }
 
-#kapi-chrome .kapi-panel-head :is(.kapi-menu, .kapi-theme-menu) button {
+#kapi-chrome .kapi-panel-head .kapi-menu button {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
@@ -726,7 +710,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   text-align: left;
 }
 
-#kapi-chrome .kapi-panel-head :is(.kapi-menu, .kapi-theme-menu) button:is(:hover, :focus-visible) {
+#kapi-chrome .kapi-panel-head .kapi-menu button:is(:hover, :focus-visible) {
   background: var(--kapi-blue-fill);
   outline: none;
 }
@@ -735,7 +719,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   background: var(--kapi-blue-fill);
 }
 
-#kapi-chrome .kapi-panel-head :is(.kapi-menu, .kapi-theme-menu) [role="menuitemradio"][aria-checked="false"] svg {
+#kapi-chrome .kapi-panel-head .kapi-menu [role="menuitemradio"][aria-checked="false"] svg {
   visibility: hidden;
 }
 
@@ -1837,8 +1821,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
     border-bottom: 0;
   }
 
-  #kapi-chrome .kapi-panel-head > .kapi-menu,
-  #kapi-chrome .kapi-panel-head .kapi-theme-menu {
+  #kapi-chrome .kapi-panel-head > .kapi-menu {
     top: calc(100% + 18px);
   }
 
