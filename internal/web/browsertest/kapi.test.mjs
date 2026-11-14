@@ -4621,9 +4621,8 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
   assert.equal(requests("POST", "/ops").length, 0);
 
-  await page.close();
-  page = await browser.open(server.url);
-  await page.waitFor(`document.querySelector(".kapi-panel .kapi-dot").dataset.state === "none"`);
+  await page.call("Page.reload");
+  await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-panel .kapi-dot")?.dataset.state === "none"`, 5000);
   assert.equal(await writing(), true);
   assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
 });

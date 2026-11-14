@@ -81,11 +81,15 @@ export async function launch() {
       ws.send(JSON.stringify({ id, method, params, sessionId }));
     });
 
+  const openPerOrigin = new Map();
   return {
     async open(url, { width = 1280, height = 800, ready = "!!document.getElementById('kapi-chrome')" } = {}) {
+      const origin = new URL(url).origin;
       const { targetId } = await send("Target.createTarget", { url: "about:blank" });
       const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
       const call = (method, params) => send(method, params, sessionId);
+      if (!openPerOrigin.get(origin)) await call("Storage.clearDataForOrigin", { origin, storageTypes: "local_storage,session_storage" });
+      openPerOrigin.set(origin, (openPerOrigin.get(origin) ?? 0) + 1);
       const errors = [];
       listeners.add((msg) => {
         if (msg.sessionId !== sessionId) return;
@@ -128,7 +132,10 @@ export async function launch() {
           const { data } = await call("Page.captureScreenshot", { format: "png" });
           return Buffer.from(data, "base64");
         },
-        close: () => send("Target.closeTarget", { targetId }),
+        close: () => {
+          openPerOrigin.set(origin, openPerOrigin.get(origin) - 1);
+          return send("Target.closeTarget", { targetId });
+        },
       };
       await page.waitFor(`document.readyState === 'complete' && ${ready}`, 30000);
       await page.eval(`document.fonts.ready.then(() => true)`);
