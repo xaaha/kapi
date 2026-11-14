@@ -1773,6 +1773,7 @@ async function touchScroll(phone, yDistance) {
   }
   await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await phone.waitFor(`scrollY ${yDistance < 0 ? ">" : "<"} ${start}`);
+  await phone.waitFor(`new Promise((done) => { const y = scrollY; setTimeout(() => done(scrollY === y), 150); })`);
 }
 
 const longPage = () => reopenWith(Array.from({ length: 40 }, (_, i) => ({ id: `long${String(i).padStart(4, "0")}`, html: `<p data-kapi-id="long${String(i).padStart(4, "0")}">Paragraph ${i} keeps the page long enough to scroll on a phone.</p>` })));
