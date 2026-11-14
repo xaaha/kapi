@@ -1,5 +1,9 @@
 :root {
   color-scheme: light dark;
+}
+
+:root,
+[data-palette-preview="default"] {
   --kapi-bg: light-dark(#f4f0e7, #151513);
   --kapi-surface: light-dark(#fffefa, #1c1b18);
   --kapi-card: light-dark(#ebe5da, #24221e);

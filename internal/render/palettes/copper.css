@@ -1,0 +1,57 @@
+:root[data-palette="copper"],
+[data-palette-preview="copper"] {
+  --kapi-bg: light-dark(#f8f1ec, #201b18);
+  --kapi-surface: light-dark(#fffaf7, #2c2520);
+  --kapi-card: light-dark(#efe8e2, #2f2926);
+  --kapi-panel: light-dark(#e9dad1, #43362f);
+  --kapi-raised: light-dark(#fffaf7, #38312b);
+  --kapi-subtle: light-dark(#ece4de, #332e2a);
+  --kapi-fg: light-dark(#49362b, #f5e9df);
+  --kapi-muted: light-dark(#695e57, #aaa29b);
+  --kapi-faint: light-dark(#685e58, #aba29c);
+  --kapi-border: light-dark(#e5dcd7, #423c38);
+  --kapi-border-strong: light-dark(#d5ccc5, #57514c);
+  --kapi-shadow-ink: light-dark(#33261e, #000000);
+
+  --kapi-red-fill: light-dark(#fcf1f0, #2d1f23);
+  --kapi-red-border: light-dark(#fad0d6, #683540);
+  --kapi-red-text: light-dark(#be123c, #fda4af);
+  --kapi-red-solid: light-dark(#be123c, #be123c);
+  --kapi-red-tint: light-dark(#fde6e7, #341a20);
+
+  --kapi-orange-fill: light-dark(#fcf3ec, #2d221a);
+  --kapi-orange-border: light-dark(#fcd7b6, #683d21);
+  --kapi-orange-text: light-dark(#a83c0a, #fdba74);
+  --kapi-orange-solid: light-dark(#c2410c, #b8410a);
+  --kapi-orange-tint: light-dark(#fde9d9, #352216);
+
+  --kapi-yellow-fill: light-dark(#fcf7ea, #2a2518);
+  --kapi-yellow-border: light-dark(#f3dd89, #5e501c);
+  --kapi-yellow-text: light-dark(#85530b, #fde047);
+  --kapi-yellow-solid: light-dark(#a16207, #9a5f06);
+  --kapi-yellow-tint: light-dark(#fbf0c8, #2f2814);
+
+  --kapi-green-fill: light-dark(#f1f7f0, #192823);
+  --kapi-green-border: light-dark(#b6ecd0, #225544);
+  --kapi-green-text: light-dark(#036b4d, #6ee7b7);
+  --kapi-green-solid: light-dark(#047857, #08785a);
+  --kapi-green-tint: light-dark(#def4e6, #142c25);
+
+  --kapi-blue-fill: light-dark(#f2f5f6, #1a242b);
+  --kapi-blue-border: light-dark(#c3e2f7, #244d64);
+  --kapi-blue-text: light-dark(#03659b, #7cc8f5);
+  --kapi-blue-solid: light-dark(#0369a1, #0b6aa2);
+  --kapi-blue-tint: light-dark(#e2eff7, #142933);
+
+  --kapi-purple-fill: light-dark(#f6f2f7, #231d2c);
+  --kapi-purple-border: light-dark(#dfd6f9, #43366b);
+  --kapi-purple-text: light-dark(#6d28d9, #c4b5fd);
+  --kapi-purple-solid: light-dark(#6d28d9, #7040e0);
+  --kapi-purple-tint: light-dark(#efe9f9, #272038);
+
+  --kapi-grey-fill: light-dark(#f4f2f1, #222225);
+  --kapi-grey-border: light-dark(#dbdade, #363941);
+  --kapi-grey-text: light-dark(#3f3f46, #cfd3db);
+  --kapi-grey-solid: light-dark(#52525b, #5b6170);
+  --kapi-grey-tint: light-dark(#edebed, #27282c);
+}

@@ -219,22 +219,8 @@
     return group;
   };
   const themeItems = () => {
-    const theme = window.kapiTheme;
-    if (!theme?.setPalette) return [];
-    const modes = [["light", "Light"], ["dark", "Dark"], ["system", "System"]].map(([choice, label]) =>
-      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-theme-choice": choice, onclick: () => theme.set(choice) },
-        icon("check"), h("span", { class: "kapi-menu-label", text: label }), icon(choice)));
-    const palettes = theme.palettes.map(({ id, label }) =>
-      h("button", { type: "button", role: "menuitemradio", tabindex: "-1", "data-palette": id, onclick: () => theme.setPalette(id) },
-        icon("check"), h("span", { class: "kapi-menu-label", text: label })));
-    const sync = () => {
-      for (const b of modes) b.setAttribute("aria-checked", String(b.dataset.themeChoice === theme.get()));
-      for (const b of palettes) b.setAttribute("aria-checked", String(b.dataset.palette === theme.palette()));
-    };
-    document.addEventListener("kapi-theme", sync);
-    document.addEventListener("kapi-palette", sync);
-    sync();
-    return [submenuGroup("theme", "theme", "Theme", [...modes, h("div", { class: "kapi-menu-sep", role: "separator" }), ...palettes])];
+    const entries = window.kapiTheme?.entries;
+    return entries ? [submenuGroup("theme", "theme", "Theme", entries({ icon: sharedIcon, close: () => closeMenu(true) }))] : [];
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));

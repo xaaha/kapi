@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 const staticDir = fileURLToPath(new URL("../static/", import.meta.url));
 const THEME_CSS = await readFile(fileURLToPath(new URL("../../render/theme.css", import.meta.url)), "utf8");
 const PALETTE_DIR = fileURLToPath(new URL("../../render/palettes/", import.meta.url));
-const PALETTE_CSS = (await Promise.all((await readdir(PALETTE_DIR)).filter((f) => f.endsWith(".css")).sort().map((f) => readFile(PALETTE_DIR + f, "utf8")))).join("\n");
+const PALETTE_FILES = (await readdir(PALETTE_DIR)).filter((f) => f.endsWith(".css")).sort();
+const PALETTE_CSS = (await Promise.all(PALETTE_FILES.map((f) => readFile(PALETTE_DIR + f, "utf8")))).join("\n");
+const THEMES = ["default", ...PALETTE_FILES.map((f) => f.slice(0, -4))];
 
 export const PAGE_ID = "0123456789abcdef";
 export const TOKEN = "f00dfacecafebeef";
@@ -136,11 +138,13 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     snapshots: {},
     files: {},
     pageFiles: {},
+    settings: { mode: "system", theme: "default", recent: ["default"] },
+    settingsStreams: new Set(),
   };
   const snapshot = () => (state.snapshots[state.rev] ??= state.blocks.map((b) => ({ ...b })));
 
   const pageHTML = () =>
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
+    `<!doctype html><html data-theme-choice="${state.settings.mode}" data-palette-choice="${state.settings.theme}" data-palette-recent="${state.settings.recent.join(" ")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
     `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PALETTE_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"><link rel="stylesheet" href="/${TOKEN}/static/tables.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}" data-path="${escapeAttr(pagePath)}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/shortcuts.js"></script><script src="/${TOKEN}/static/search.js"></script><script src="/${TOKEN}/static/tables.js"></script><script src="/${TOKEN}/static/media.js"></script><script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
@@ -283,7 +287,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     }
     const path = url.pathname.slice(prefix.length - 1);
     const upload = image && (path.endsWith("/files") || path.endsWith("/images"));
-    if (req.method === "POST" && ((req.headers["content-type"] !== "application/json" && !upload) || req.headers.origin !== `http://${req.headers.host}`)) {
+    if ((req.method === "POST" || req.method === "PATCH") && ((req.headers["content-type"] !== "application/json" && !upload) || req.headers.origin !== `http://${req.headers.host}`)) {
       return json(res, 403, { error: "cross-site request" });
     }
     if (path.startsWith("/static/")) {
@@ -291,6 +295,26 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       const type = name.endsWith(".js") ? "text/javascript" : name.endsWith(".svg") ? "image/svg+xml" : "text/css";
       res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
       return res.end(await readFile(staticDir + name));
+    }
+    if (path === "/settings" && req.method === "GET") return json(res, 200, state.settings);
+    if (path === "/settings" && req.method === "PATCH") {
+      if (state.settingsStatus) return json(res, state.settingsStatus, { error: "settings failed" });
+      if (parsed.mode !== undefined && !["system", "light", "dark"].includes(parsed.mode)) return json(res, 422, { error: "invalid setting: mode" });
+      if (parsed.theme !== undefined && !THEMES.includes(parsed.theme)) return json(res, 422, { error: "invalid setting: theme" });
+      const next = { ...state.settings };
+      if (parsed.mode !== undefined) next.mode = parsed.mode;
+      if (parsed.theme !== undefined) next.theme = parsed.theme;
+      if (parsed.theme !== undefined) next.recent = [parsed.theme, ...state.settings.recent.filter((id) => id !== parsed.theme)].slice(0, 3);
+      state.settings = next;
+      for (const stream of state.settingsStreams) stream.write(`data: ${JSON.stringify(next)}\n\n`);
+      return json(res, 200, next);
+    }
+    if (path === "/settings/events" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
+      res.write(`retry: 2000\n\ndata: ${JSON.stringify(state.settings)}\n\n`);
+      state.settingsStreams.add(res);
+      req.on("close", () => state.settingsStreams.delete(res));
+      return;
     }
     const m = path.match(/^\/p\/([^/]+)\/(.*)$/);
     if (!m || m[1] !== PAGE_ID) return json(res, 404, { error: "not found" });

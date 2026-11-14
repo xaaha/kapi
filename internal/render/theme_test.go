@@ -71,8 +71,8 @@ func paletteTokens(t *testing.T) map[string]map[string]string {
 func TestPalettesOverrideEveryColourAndNothingElse(t *testing.T) {
 	base := themeTokens(t)
 	for id, css := range paletteFiles(t) {
-		if !strings.HasPrefix(string(css), `:root[data-palette="`+id+`"] {`) {
-			t.Errorf(`palettes/%s.css must be one :root[data-palette="%s"] block`, id, id)
+		if head := `:root[data-palette="` + id + `"],` + "\n" + `[data-palette-preview="` + id + `"] {`; !strings.HasPrefix(string(css), head) || strings.Count(string(css), "{") != 1 {
+			t.Errorf("palettes/%s.css must be one block that starts %s", id, head)
 		}
 		own := cssTokens(css)
 		for name, val := range base {
@@ -92,7 +92,7 @@ func TestThemeMenuListsExactlyTheEmbeddedPalettes(t *testing.T) {
 		t.Fatal(err)
 	}
 	listed := map[string]bool{}
-	for _, m := range regexp.MustCompile(`\{ id: "([a-z0-9-]+)", label: "[^"]+" \}`).FindAllStringSubmatch(string(js), -1) {
+	for _, m := range regexp.MustCompile(`\{ id: "([a-z0-9-]+)", label: "[^"]+", note: "[^"]+", group: "(?:Neutral|Warm|Color)" \}`).FindAllStringSubmatch(string(js), -1) {
 		listed[m[1]] = true
 	}
 	if !listed["default"] {
@@ -222,6 +222,13 @@ func TestStylesUseOnlyThemeTokens(t *testing.T) {
 	var tokenRules bytes.Buffer
 	tokenCSS(&tokenRules)
 	files := map[string]string{"style.css": string(baseCSS), "chrome.css": string(chrome), "tables.css": string(tables), "code token rules": tokenRules.String()}
+	for _, name := range []string{"ui.css", "theme-gallery.css"} {
+		b, err := os.ReadFile("../web/static/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(b)
+	}
 	for name, css := range files {
 		local := map[string]bool{}
 		for _, m := range regexp.MustCompile(`(--kapi-[a-z0-9-]+)\s*:`).FindAllStringSubmatch(css, -1) {

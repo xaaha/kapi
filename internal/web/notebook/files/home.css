@@ -114,7 +114,7 @@ body:has(#kapi-home) {
   top: calc(100% + 6px);
   right: 0;
   box-sizing: border-box;
-  width: 168px;
+  width: 204px;
   display: flex;
   flex-direction: column;
   padding: 4px;
@@ -162,7 +162,7 @@ body:has(#kapi-home) {
   visibility: hidden;
 }
 
-.nb-top .kapi-theme-menu [aria-checked] svg:last-child {
+.nb-top .kapi-theme-menu button > svg:last-child {
   color: var(--kapi-faint);
 }
 

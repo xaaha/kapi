@@ -1,0 +1,364 @@
+.kapi-dialog-scrim {
+  position: fixed;
+  z-index: 2147483006;
+  inset: 0;
+  background: color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.kapi-dialog {
+  position: fixed;
+  z-index: 2147483007;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(920px, calc(100vw - 32px));
+  height: min(680px, calc(100dvh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  box-shadow: 0 26px 80px color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
+  font: 14px/1.45 var(--kapi-font);
+  transform: translate(-50%, -50%);
+}
+
+.kapi-dialog *,
+.kapi-dialog *::before,
+.kapi-dialog *::after {
+  box-sizing: border-box;
+}
+
+.kapi-dialog[hidden],
+.kapi-dialog-scrim[hidden],
+.kapi-dialog [hidden] {
+  display: none;
+}
+
+.kapi-dialog button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.kapi-dialog :focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 2px;
+}
+
+.kapi-dialog svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
+}
+
+.kapi-dialog-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 20px 16px 24px;
+  border-bottom: 1px solid var(--kapi-border);
+}
+
+.kapi-dialog-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.kapi-dialog-titles h2 {
+  margin: 0;
+  font: 650 18px/1.3 var(--kapi-font);
+}
+
+.kapi-dialog-titles p {
+  margin: 2px 0 0;
+  color: var(--kapi-muted);
+  font-size: 13px;
+}
+
+.kapi-dialog-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: transparent;
+  color: var(--kapi-muted);
+}
+
+.kapi-dialog-close:hover {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+.kapi-dialog-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.kapi-dialog-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px 12px 24px;
+  border-top: 1px solid var(--kapi-border);
+  color: var(--kapi-muted);
+  font-size: 12.5px;
+}
+
+.kapi-dialog-foot .kapi-primary {
+  min-height: 36px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+  font-weight: 600;
+}
+
+.kapi-segmented {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--kapi-border);
+  border-radius: 10px;
+  background: var(--kapi-bg);
+}
+
+.kapi-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--kapi-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kapi-segmented button:hover {
+  color: var(--kapi-fg);
+}
+
+.kapi-segmented button[aria-checked="true"] {
+  background: var(--kapi-raised);
+  color: var(--kapi-fg);
+  box-shadow: var(--kapi-card-shadow);
+}
+
+.kapi-choices {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.kapi-choices-groups {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--kapi-border);
+  background: var(--kapi-bg);
+}
+
+.kapi-choices-groups button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: transparent;
+  color: var(--kapi-muted);
+  font-weight: 550;
+  text-align: left;
+}
+
+.kapi-choices-groups button:hover {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+.kapi-choices-groups button[aria-pressed="true"] {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+.kapi-choices-group-count {
+  color: var(--kapi-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.kapi-choices-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.kapi-choices-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 20px 4px;
+  padding: 0 12px;
+  border: 1px solid var(--kapi-border);
+  border-radius: 10px;
+  background: var(--kapi-bg);
+  color: var(--kapi-muted);
+}
+
+.kapi-choices-bar:focus-within {
+  border-color: var(--kapi-blue-border);
+}
+
+.kapi-choices-search {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--kapi-fg);
+  font: 14px var(--kapi-font);
+}
+
+.kapi-choices-search::placeholder {
+  color: var(--kapi-muted);
+}
+
+.kapi-choices-search::-webkit-search-cancel-button {
+  display: none;
+}
+
+.kapi-choices-count {
+  flex: none;
+  margin: 0;
+  color: var(--kapi-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kapi-choices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  align-content: start;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.kapi-choices-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 6px 10px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  text-align: left;
+}
+
+.kapi-choices-card:hover {
+  border-color: var(--kapi-border-strong);
+}
+
+.kapi-choices-card[aria-selected="true"] {
+  border-color: var(--kapi-fg);
+  box-shadow: 0 0 0 1px var(--kapi-fg);
+}
+
+.kapi-choices-empty {
+  margin: 0;
+  padding: 40px 20px;
+  color: var(--kapi-muted);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .kapi-dialog {
+    top: auto;
+    bottom: 0;
+    width: 100vw;
+    height: min(88dvh, 720px);
+    border-radius: var(--kapi-radius-lg) var(--kapi-radius-lg) 0 0;
+    transform: translateX(-50%);
+  }
+
+  .kapi-dialog-head {
+    flex-wrap: wrap;
+    padding: 16px 12px 12px 16px;
+  }
+
+  .kapi-dialog-titles {
+    flex-basis: calc(100% - 50px);
+  }
+
+  .kapi-dialog-head .kapi-segmented {
+    order: 3;
+    width: 100%;
+  }
+
+  .kapi-dialog-head .kapi-segmented button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .kapi-dialog-foot {
+    padding: 10px 12px 10px 16px;
+  }
+
+  .kapi-choices {
+    flex-direction: column;
+  }
+
+  .kapi-choices-groups {
+    flex-direction: row;
+    width: auto;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--kapi-border);
+  }
+
+  .kapi-choices-groups button {
+    flex: none;
+    gap: 6px;
+  }
+
+  .kapi-choices-bar {
+    margin: 12px 12px 4px;
+  }
+
+  .kapi-choices-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px 12px 16px;
+  }
+}

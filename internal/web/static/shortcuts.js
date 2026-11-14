@@ -48,6 +48,10 @@ window.kapiShortcuts = (() => {
     menuOpen: { keys: ["ArrowRight", "Enter", " "] },
     menuBack: { keys: ["ArrowLeft", "Escape"] },
     menuLeave: { keys: ["Tab"] },
+    choiceNext: { keys: ["ArrowRight", "ArrowDown"] },
+    choicePrevious: { keys: ["ArrowLeft", "ArrowUp"] },
+    choiceFirst: { keys: ["Home"] },
+    choiceLast: { keys: ["End"] },
   };
 
   const matches = (binding, e) => {
