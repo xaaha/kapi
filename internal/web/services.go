@@ -45,19 +45,22 @@ func files(fsys fs.FS) http.Handler {
 	})
 }
 
-func (s *Server) handleHome(w http.ResponseWriter, _ *http.Request) {
-	s.shell(w, "", "kapi", "<main id=\"kapi-home\"></main>\n")
+func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
+	s.shell(w, r, "", "kapi", "<main id=\"kapi-home\"></main>\n")
 }
 
 // shell writes the HTML document around main. root is the relative path from the request to the token root.
-func (s *Server) shell(w http.ResponseWriter, root, title, main string) {
+func (s *Server) shell(w http.ResponseWriter, r *http.Request, root, title, main string) {
+	prefs := s.currentSettings(r.Context())
 	var b strings.Builder
-	b.WriteString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
+	fmt.Fprintf(&b, "<!doctype html>\n<html lang=\"en\" data-theme-choice=\"%s\" data-palette-choice=\"%s\" data-palette-recent=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n",
+		html.EscapeString(prefs.Mode), html.EscapeString(prefs.Theme), html.EscapeString(strings.Join(prefs.Recent, " ")))
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
 	fmt.Fprintf(&b, "<title>%s</title>\n", html.EscapeString(title))
 	fmt.Fprintf(&b, "<link rel=\"icon\" type=\"image/svg+xml\" href=\"%sstatic/favicon.svg\">\n", root)
 	fmt.Fprintf(&b, "<script src=\"%sstatic/theme.js\"></script>\n", root)
 	fmt.Fprintf(&b, "<style>%s</style>\n", render.CSS())
+	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%spalettes.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/chrome.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/tables.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/media.css\">\n", root)

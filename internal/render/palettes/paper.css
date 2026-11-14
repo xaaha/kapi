@@ -1,4 +1,5 @@
-:root[data-palette="paper"] {
+:root[data-palette="paper"],
+[data-palette-preview="paper"] {
   --kapi-bg: light-dark(#faf8f3, #16191f);
   --kapi-surface: light-dark(#fdfcf9, #1b1f26);
   --kapi-card: light-dark(#fffefb, #21262e);

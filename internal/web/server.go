@@ -31,6 +31,7 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/render"
+	"github.com/xaaha/kapi/internal/settings"
 	"github.com/xaaha/kapi/internal/web/app"
 )
 
@@ -51,6 +52,8 @@ type Pages interface {
 
 type Server struct {
 	pages    Pages
+	settings settings.Store
+	feed     feed
 	token    string
 	host     string
 	previous [][32]byte
@@ -63,13 +66,17 @@ type Server struct {
 
 // New serves pages to requests addressed to host (127.0.0.1:<port>) whose path starts with /<token>/.
 // previous holds the SHA-256 of tokens earlier runs issued; only those learn a page's path.
-func New(pages Pages, token, host string, previous [][32]byte) *Server {
-	return newServer(pages, token, host, previous, services(pages))
+func New(pages Pages, prefs settings.Store, token, host string, previous [][32]byte) *Server {
+	return newServer(pages, prefs, token, host, previous, services(pages))
 }
 
-func newServer(pages Pages, token, host string, previous [][32]byte, list []app.Service) *Server {
-	s := &Server{pages: pages, token: token, host: host, previous: previous, mux: http.NewServeMux(), seen: map[string]bool{}}
+func newServer(pages Pages, prefs settings.Store, token, host string, previous [][32]byte, list []app.Service) *Server {
+	s := &Server{pages: pages, settings: prefs, feed: newFeed(), token: token, host: host, previous: previous, mux: http.NewServeMux(), seen: map[string]bool{}}
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
+	s.mux.HandleFunc("GET /palettes.css", handlePalettes)
+	s.mux.HandleFunc("GET /settings", s.handleSettings)
+	s.mux.HandleFunc("PATCH /settings", s.handleSettingsPatch)
+	s.mux.HandleFunc("GET /settings/events", s.handleSettingsEvents)
 	s.mux.HandleFunc("GET /p/{id}/{$}", s.withPage(s.handlePage))
 	s.mux.HandleFunc("GET /p/{id}/blocks/{block}", s.withPage(s.handleBlock))
 	s.mux.HandleFunc("GET /p/{id}/source/{block}", s.withPage(s.handleSource))
@@ -104,8 +111,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "untidy path", http.StatusBadRequest)
 		return
 	}
-	if r.Method == http.MethodPost && !s.sameOriginJSON(r) {
-		http.Error(w, "posts must come from this page as application/json", http.StatusForbidden)
+	if (r.Method == http.MethodPost || r.Method == http.MethodPatch) && !s.sameOriginJSON(r) {
+		http.Error(w, "writes must come from this page as application/json", http.StatusForbidden)
 		return
 	}
 	seg, rest, slash := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
@@ -228,7 +235,7 @@ func (s *Server) Poll(ctx context.Context, every time.Duration) {
 	}
 }
 
-func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Store, _ *eventlog.Log) {
+func (s *Server) handlePage(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
 	src, rev := st.Source()
 	body, err := render.Render(src)
 	if err != nil {
@@ -237,7 +244,7 @@ func (s *Server) handlePage(w http.ResponseWriter, _ *http.Request, st *page.Sto
 	}
 	var main strings.Builder
 	fmt.Fprintf(&main, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
-	s.shell(w, "../../", page.Title(st.Path()), main.String())
+	s.shell(w, r, "../../", page.Title(st.Path()), main.String())
 }
 
 func (s *Server) handleBlock(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {

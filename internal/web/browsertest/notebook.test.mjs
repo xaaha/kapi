@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -85,6 +85,36 @@ test("home has the shared search trigger and universal theme control", async () 
     await p.waitFor(`document.documentElement.dataset.theme === "dark"`);
     await p.eval(`document.querySelector(".nb-top .kapi-theme-button").click(); document.querySelector('.nb-top [data-theme-choice="system"]').click()`);
   } finally {
+    await p.close();
+  }
+});
+
+test("a theme chosen on home reaches an open page at once, survives a reload, and shows in a fresh browser", async () => {
+  const h = await home();
+  const p = await withSwitcher();
+  const fresh = await launch();
+  try {
+    await h.eval(`document.querySelector(".nb-top .kapi-theme-button").click()`);
+    await h.eval(`document.querySelector('.nb-top [data-theme-choice="dark"]').click()`);
+    await h.eval(`document.querySelector(".nb-top .kapi-theme-button").click()`);
+    await h.eval(`document.querySelector('.nb-top [data-palette="paper"]').click()`);
+    await p.waitFor(`document.documentElement.dataset.theme === "dark" && document.documentElement.dataset.palette === "paper"`, 5000);
+    const saved = JSON.parse(readFileSync(join(dir, "home", "settings.json"), "utf8"));
+    assert.equal(saved.mode, "dark");
+    assert.equal(saved.theme, "paper");
+    await p.call("Page.reload");
+    await p.waitFor(`document.readyState === "complete" && document.documentElement.dataset.theme === "dark" && document.documentElement.dataset.palette === "paper"`, 5000);
+    const other = await fresh.open(pageURL);
+    try {
+      assert.equal(await other.eval(`document.documentElement.dataset.theme + " " + document.documentElement.dataset.palette`), "dark paper");
+    } finally {
+      await other.close();
+    }
+  } finally {
+    await h.eval(`window.kapiTheme.setPalette("default"); window.kapiTheme.set("system")`);
+    await p.waitFor(`document.documentElement.dataset.themeChoice === "system" && !document.documentElement.dataset.palette`, 5000);
+    await fresh.close();
+    await h.close();
     await p.close();
   }
 });

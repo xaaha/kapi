@@ -1281,15 +1281,16 @@ test("the theme toggle switches light and dark and remembers the choice across a
   await expectTheme(["light", LIGHT_BG, "system"]);
   await pickMode("dark");
   await expectTheme(["dark", DARK_BG, "dark"]);
-  assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), "dark");
+  await until(() => server.state.settings.mode === "dark");
+  assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
   await reload();
   await expectTheme(["dark", DARK_BG, "dark"]);
   await pickMode("system");
   await expectTheme(["light", LIGHT_BG, "system"]);
-  assert.equal(await page.eval(`localStorage.getItem("kapi-theme")`), null);
+  await until(() => server.state.settings.mode === "system");
 });
 
-test("Theme in the menu lists Default and Paper, recolours the page in both modes, and remembers the choice across a reload", async () => {
+test("Theme in the menu lists three recent palettes, recolours the page in both modes, and the server remembers the choice", async () => {
   const state = () => page.eval(`[document.documentElement.dataset.palette ?? "default", [...document.querySelectorAll(".kapi-menu [data-palette]")].map((b) => [b.textContent, b.getAttribute("aria-checked")]), getComputedStyle(document.body).backgroundColor]`);
   const expectState = async (want) => {
     await until(async () => JSON.stringify(await state()) === JSON.stringify(want)).catch(() => {});
@@ -1301,18 +1302,72 @@ test("Theme in the menu lists Default and Paper, recolours the page in both mode
   };
   await prefer("light");
   await expectTheme(["light", LIGHT_BG, "system"]);
-  await expectState(["default", [["Default", "true"], ["Paper", "false"]], LIGHT_BG]);
+  await expectState(["default", [["Default", "true"], ["Paper", "false"], ["Ocean", "false"]], LIGHT_BG]);
   await pick("paper");
-  await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(250, 248, 243)"]);
-  assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), "paper");
+  await expectState(["paper", [["Default", "false"], ["Paper", "true"], ["Ocean", "false"]], "rgb(250, 248, 243)"]);
+  await until(() => server.state.settings.theme === "paper");
   await page.key("Escape");
   await pickMode("dark");
-  await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(22, 25, 31)"]);
+  await expectState(["paper", [["Default", "false"], ["Paper", "true"], ["Ocean", "false"]], "rgb(22, 25, 31)"]);
   await reload();
-  await expectState(["paper", [["Default", "false"], ["Paper", "true"]], "rgb(22, 25, 31)"]);
+  await expectState(["paper", [["Paper", "true"], ["Default", "false"], ["Ocean", "false"]], "rgb(22, 25, 31)"]);
   await pick("default");
-  await expectState(["default", [["Default", "true"], ["Paper", "false"]], DARK_BG]);
-  assert.equal(await page.eval(`localStorage.getItem("kapi-palette")`), null);
+  await expectState(["default", [["Paper", "false"], ["Default", "true"], ["Ocean", "false"]], DARK_BG]);
+  await until(() => server.state.settings.theme === "default");
+});
+
+test("a failed save puts the theme back the way the server has it", async () => {
+  server.state.settingsStatus = 500;
+  await pickMode("dark");
+  await until(() => requests("PATCH", "/settings").length === 1);
+  await expectTheme(["light", LIGHT_BG, "system"]);
+  assert.equal(server.state.settings.mode, "system");
+});
+
+test("a theme change in one tab reaches another open tab, and a reload keeps it", async () => {
+  const other = await browser.open(server.url);
+  try {
+    await pickMode("dark");
+    await openThemeMenu();
+    await click(".kapi-menu [data-palette=ocean]");
+    await other.waitFor(`document.documentElement.dataset.theme === "dark" && document.documentElement.dataset.palette === "ocean"`, 5000);
+    await other.call("Page.reload");
+    await other.waitFor(`document.readyState === "complete" && document.documentElement.dataset.theme === "dark" && document.documentElement.dataset.palette === "ocean"`, 5000);
+  } finally {
+    await other.close();
+  }
+});
+
+test("Browse all themes opens a searchable gallery that applies a theme without closing, and Done returns focus", async () => {
+  await prefer("light");
+  await openThemeMenu();
+  await click(".kapi-menu [data-theme-browse]");
+  await page.waitFor(`!!document.querySelector(".kapi-theme-gallery") && !document.querySelector(".kapi-theme-gallery").hidden`, 5000);
+  assert.equal(await menuOpen(), false);
+  const cards = () => page.eval(`[...document.querySelectorAll(".kapi-theme-gallery [data-choice]")].filter((c) => !c.hidden).map((c) => c.dataset.choice)`);
+  assert.equal((await cards()).length, 22);
+  assert.equal(await page.eval(`document.activeElement.dataset.choice`), "default");
+  await page.key("ArrowRight");
+  assert.equal(await page.eval(`document.activeElement.dataset.choice`), "paper");
+  await click('.kapi-theme-gallery [data-group="Warm"]');
+  assert.deepEqual(await cards(), ["linen", "sand", "clay", "espresso", "copper", "solar"]);
+  await click('.kapi-theme-gallery [data-group="All themes"]');
+  await page.eval(`document.querySelector(".kapi-choices-search").focus()`);
+  await page.type("coastal");
+  await page.eval(`document.querySelector(".kapi-choices-search").dispatchEvent(new Event("input"))`);
+  assert.deepEqual(await cards(), ["ocean"]);
+  await click('.kapi-theme-gallery [data-choice="ocean"]');
+  await page.waitFor(`document.documentElement.dataset.palette === "ocean"`);
+  assert.equal(await page.eval(`document.querySelector('.kapi-theme-gallery [data-choice="ocean"]').getAttribute("aria-selected")`), "true");
+  assert.equal(await page.eval(`document.querySelector(".kapi-theme-gallery").hidden`), false);
+  await click('.kapi-theme-gallery .kapi-segmented [data-value="dark"]');
+  await page.waitFor(`document.documentElement.dataset.theme === "dark"`);
+  await page.eval(`document.querySelector(".kapi-choices-search").value = "zzz"; document.querySelector(".kapi-choices-search").dispatchEvent(new Event("input"))`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-choices-empty").textContent`), 'No themes match "zzz".');
+  await click(".kapi-theme-gallery .kapi-primary");
+  await page.waitFor(`document.querySelector(".kapi-theme-gallery").hidden`);
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-menu-button")`), true);
+  await until(() => server.state.settings.theme === "ocean" && server.state.settings.mode === "dark");
 });
 
 test("the Theme submenu opens by keys like Export, and opening one submenu closes the other", async () => {
@@ -1323,7 +1378,7 @@ test("the Theme submenu opens by keys like Export, and opening one submenu close
   assert.equal(await focusedItem(), "Theme");
   await pressKey("ArrowRight");
   assert.equal(await focusedItem(), "Light");
-  for (const want of ["Dark", "System", "Default", "Paper"]) {
+  for (const want of ["Dark", "System", "Default", "Paper", "Ocean", "Browse all themes"]) {
     await pressKey("ArrowDown");
     assert.equal(await focusedItem(), want);
   }
@@ -1335,7 +1390,7 @@ test("the Theme submenu opens by keys like Export, and opening one submenu close
 });
 
 test("the theme is set before the first paint, not after the chat panel loads", async () => {
-  await page.eval(`localStorage.setItem("kapi-theme", "dark")`);
+  server.state.settings.mode = "dark";
   await page.call("Page.addScriptToEvaluateOnNewDocument", {
     source: `document.addEventListener("readystatechange", () => { if (!window.firstTheme) window.firstTheme = document.documentElement.dataset.theme || "unset"; }, { once: true });`,
   });
@@ -1354,7 +1409,7 @@ test("System follows the OS colour scheme live, and an explicit choice ignores i
   await expectTheme(["light", LIGHT_BG, "light"]);
 });
 
-test("the theme toggle still works when storage is blocked", async () => {
+test("the theme still works when browser storage is blocked", async () => {
   await page.call("Page.addScriptToEvaluateOnNewDocument", {
     source: `Object.defineProperty(window, "localStorage", { get() { throw new DOMException("blocked", "SecurityError"); } });`,
   });
@@ -3902,7 +3957,7 @@ test("#23 Export opens a submenu of HTML, Markdown and PDF by keys, and ArrowLef
   await pressKey("ArrowRight");
   assert.equal(await submenuOpen(), true);
   assert.equal(await exportExpanded(), "true");
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-submenu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`), ["HTML", "Markdown", "PDF"]);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-menu [data-menu=export] + .kapi-submenu [role=menuitem]")].map((b) => b.querySelector(".kapi-menu-label").textContent)`), ["HTML", "Markdown", "PDF"]);
   assert.equal(await focusedItem(), "HTML");
   for (const [key, want] of [["ArrowDown", "Markdown"], ["ArrowDown", "PDF"], ["ArrowDown", "HTML"], ["ArrowUp", "PDF"], ["Home", "HTML"], ["End", "PDF"]]) {
     await pressKey(key);
@@ -4318,7 +4373,7 @@ test("a page keeps Theme only in its menu, with Light, Dark and System above the
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-site-head .kapi-theme, .kapi-site-head .kapi-theme-button").length`), 0);
   await openThemeMenu();
   assert.deepEqual(await page.eval(`[...document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").children].map((b) => b.getAttribute("role") === "separator" ? "|" : [b.textContent, b.getAttribute("aria-checked")].join(":"))`),
-    ["Light:false", "Dark:false", "System:true", "|", "Default:true", "Paper:false"]);
+    ["Light:false", "Dark:false", "System:true", "|", "Default:true", "Paper:false", "Ocean:false", "|", "Browse all themes:"]);
   assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-menu [data-theme-choice="dark"] svg:last-child')).visibility`), "visible");
   await pickMode("dark");
   await page.waitFor(`document.documentElement.dataset.theme === "dark"`);
