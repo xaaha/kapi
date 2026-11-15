@@ -35,7 +35,6 @@
   --kapi-head-offset: var(--kapi-header-height);
   --kapi-page-left: 0px;
   --kapi-page-right: 100vw;
-  --kapi-page-edge: 100vw;
   --kapi-bar-space: 0px;
   --kapi-panel-width: 355px;
   --kapi-panel-gutter: var(--kapi-panel-width);
@@ -2467,7 +2466,7 @@ html[data-kapi-head-hidden] {
 }
 
 #kapi-chrome .kapi-write-tools {
-  left: min(max(calc(var(--kapi-page-edge) - 56px), calc(var(--kapi-page-right) + 4px)), calc(var(--kapi-page-edge) - 44px));
+  left: min(max(calc(100% - var(--kapi-panel-gutter) - 56px), calc(var(--kapi-page-right) + 4px)), calc(100% - var(--kapi-panel-gutter) - 44px));
 }
 
 html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {

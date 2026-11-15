@@ -309,11 +309,9 @@
     const pad = getComputedStyle(main);
     const left = r.left + parseFloat(pad.paddingLeft);
     const right = r.right - parseFloat(pad.paddingRight);
-    const edge = innerWidth - parseFloat(getComputedStyle(document.documentElement).paddingRight);
     const html = document.documentElement.style;
     html.setProperty("--kapi-page-left", `${left}px`);
     html.setProperty("--kapi-page-right", `${right}px`);
-    html.setProperty("--kapi-page-edge", `${edge}px`);
   }
   new ResizeObserver(placePageTools).observe(main);
   new MutationObserver(placePageTools).observe(document.documentElement, { attributes: true, attributeFilter: ["data-kapi-panel-collapsed", "data-kapi-outline-open"] });
