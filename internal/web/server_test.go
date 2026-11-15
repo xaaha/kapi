@@ -50,6 +50,42 @@ type fakePages struct {
 	tabs    int
 	changed chan struct{}
 	moved   map[string]string
+
+	deleted   map[string]string
+	lifeError error
+}
+
+func (f *fakePages) Delete(id string) (app.Deleted, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lifeError != nil {
+		return app.Deleted{}, f.lifeError
+	}
+	path, ok := f.paths[id]
+	if !ok {
+		return app.Deleted{}, fs.ErrNotExist
+	}
+	if f.deleted == nil {
+		f.deleted = map[string]string{}
+	}
+	f.deleted[id] = path
+	delete(f.paths, id)
+	return app.Deleted{ID: id, Title: page.Title(path)}, nil
+}
+
+func (f *fakePages) Restore(id string) (app.Deleted, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lifeError != nil {
+		return app.Deleted{}, f.lifeError
+	}
+	path, ok := f.deleted[id]
+	if !ok {
+		return app.Deleted{}, fs.ErrNotExist
+	}
+	delete(f.deleted, id)
+	f.paths[id] = path
+	return app.Deleted{ID: id, Title: page.Title(path)}, nil
 }
 
 func (f *fakePages) Viewing(string) func() { return func() {} }

@@ -1,8 +1,8 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -10,7 +10,8 @@ import { launch } from "./chrome.mjs";
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const dir = mkdtempSync("/tmp/kn-");
 const bin = join(dir, "kapi");
-const env = { ...process.env, KAPI_HOME: join(dir, "home"), KAPI_NO_BROWSER: "1" };
+const trash = join(dir, "trash");
+const env = { ...process.env, KAPI_HOME: join(dir, "home"), KAPI_NO_BROWSER: "1", KAPI_TRASH: trash };
 const projectA = join(dir, "alpha");
 const projectB = join(dir, "beta");
 const kapi = (cwd, ...args) => execFileSync(bin, args, { cwd, env }).toString();
@@ -726,6 +727,145 @@ test("Unsave keeps the file where it is and drops the note from the Saved view",
     } finally {
       await h.close();
     }
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+const lifecycleDir = join(dir, "trashed");
+const notePage = (name, title) => {
+  mkdirSync(lifecycleDir, { recursive: true });
+  const path = join(lifecycleDir, `${name}.html`);
+  write(path, title, "Going to the Trash.");
+  mkdirSync(join(lifecycleDir, `${name}.files`), { recursive: true });
+  writeFileSync(join(lifecycleDir, `${name}.files`, "a.png"), "png");
+  return { path, url: kapi(lifecycleDir, "open", `${name}.html`).split("\n")[0] };
+};
+const showAll = (p) => p.eval(`document.querySelector('[data-tab="recent"]').click()`);
+const hasCard = (title) => `[...document.querySelectorAll(".nb-card-title")].some((t) => t.textContent === ${JSON.stringify(title)})`;
+const undoText = `(() => { const n = document.querySelector(".nb-undo"); return n && !n.hidden ? [...n.children].filter((c) => !c.hidden).map((c) => c.textContent).join(" ") : ""; })()`;
+
+test("End and delete on a page trashes its file and images, wakes kapi wait, and Undo on home brings it all back", async () => {
+  const { path, url } = notePage("doomed", "Doomed note");
+  const waiting = spawn(bin, ["wait", "doomed.html"], { cwd: lifecycleDir, env });
+  let out = "";
+  waiting.stdout.on("data", (b) => (out += b));
+  const exited = new Promise((resolve) => waiting.on("exit", resolve));
+  const p = await browser.open(url, { width: 1440, ready: "!!document.getElementById('kapi-chrome') && document.querySelector('.kapi-presence').textContent.includes('Agent ready')" });
+  try {
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.eval(`document.querySelector(".kapi-menu [data-menu=session]").click()`);
+    await p.eval(`document.querySelector(".kapi-menu [data-menu=delete]").click()`);
+    assert.equal(await p.eval(`document.querySelector(".kapi-menu-question").textContent`), "Delete Doomed note?");
+    await p.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector(".kapi-menu [data-menu=delete-yes]").click()`);
+    await p.waitFor(`location.pathname === new URL(${JSON.stringify(base)}).pathname && location.search === "" && !!document.querySelector(".nb-home")`, 5000);
+    await p.waitFor(`${undoText} === "Deleted Doomed note · Undo"`);
+    assert.equal(await exited, 0);
+    assert.match(out, /human deleted the page and ended the session: the file is in the Trash/);
+    assert.equal(existsSync(path), false);
+    assert.equal(existsSync(join(lifecycleDir, "doomed.files")), false);
+    assert.equal(readFileSync(join(trash, "files", "doomed.files", "a.png"), "utf8"), "png");
+    assert.match(readFileSync(join(trash, "info", "doomed.html.trashinfo"), "utf8"), /^\[Trash Info\]\nPath=.*doomed\.html\n/);
+    await showAll(p);
+    assert.equal(await p.eval(hasCard("Doomed note")), false);
+    await p.eval(`document.querySelector(".nb-undo-button").click()`);
+    await p.waitFor(hasCard("Doomed note"), 5000);
+    assert.equal(await p.eval(`document.querySelector(".nb-undo").hidden`), true);
+    assert.match(readFileSync(path, "utf8"), /Doomed note/);
+    assert.equal(readFileSync(join(lifecycleDir, "doomed.files", "a.png"), "utf8"), "png");
+    assert.equal(existsSync(join(trash, "files", "doomed.html")), false);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    waiting.kill();
+    await p.close();
+  }
+});
+
+test("a home card has its own menu button outside the link, with the same in-menu confirm, delete and undo", async () => {
+  const { path } = notePage("cardnote", "Card note");
+  const p = await home(base, { width: 1440 });
+  try {
+    await showAll(p);
+    await p.waitFor(hasCard("Card note"));
+    const button = `[...document.querySelectorAll(".nb-card-menu-button")].find((b) => b.getAttribute("aria-label") === "Actions for Card note")`;
+    assert.deepEqual(await p.eval(`(b => [b.closest("a"), b.querySelector("a, button"), b.getAttribute("aria-haspopup"), b.getAttribute("aria-expanded"), b.parentElement.querySelector(".nb-card").contains(b)])(${button})`), [null, null, "menu", "false", false]);
+    await p.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 2, y: 2 });
+    await p.eval(`document.activeElement?.blur()`);
+    const canHover = await p.eval(`matchMedia("(hover: hover)").matches`);
+    assert.deepEqual(await p.eval(`(b => [b.parentElement.matches(":hover, :focus-within"), getComputedStyle(b).opacity])(${button})`), [false, canHover ? "0" : "1"]);
+    await p.eval(`${button}.focus()`);
+    assert.equal(await p.eval(`getComputedStyle(${button}).opacity`), "1");
+    await p.eval(`${button}.click()`);
+    const menuLabels = `[...document.querySelectorAll(".nb-card-menu > :not([hidden])")].map((b) => b.textContent)`;
+    await p.waitFor(`!document.querySelector(".nb-card-menu").hidden`);
+    assert.deepEqual(await p.eval(menuLabels), ["Delete"]);
+    assert.equal(await p.eval(`${button}.getAttribute("aria-expanded")`), "true");
+    assert.equal(await p.eval(`document.activeElement.textContent`), "Delete");
+    await p.key("Enter");
+    assert.deepEqual(await p.eval(menuLabels), ["Delete Card note?", "Cancel", "Delete"]);
+    assert.equal(await p.eval(`document.activeElement.textContent`), "Cancel");
+    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
+    await p.key("Enter");
+    assert.deepEqual(await p.eval(menuLabels), ["Delete"]);
+    await p.key("Escape");
+    await p.waitFor(`document.querySelector(".nb-card-menu").hidden && document.activeElement === ${button}`);
+    assert.equal(existsSync(path), true);
+
+    await p.eval(`${button}.click()`);
+    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete"]').click()`);
+    await p.eval(`window.deleteCalls = 0; const real = window.fetch; window.fetch = (url, opts) => { if (String(url).endsWith("/delete")) window.deleteCalls++; return real(url, opts); }`);
+    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    assert.equal(await p.eval(`window.deleteCalls`), 0, "a click on Delete right after it appeared went through");
+    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    await p.waitFor(`!${hasCard("Card note")} && ${undoText} === "Deleted Card note · Undo"`, 5000);
+    assert.equal(await p.eval(`document.querySelector(".nb-card-menu").hidden`), true);
+    assert.equal(existsSync(path), false);
+    assert.equal(existsSync(join(trash, "files", "cardnote.html")), true);
+    await p.eval(`document.querySelector(".nb-undo-button").click()`);
+    await p.waitFor(hasCard("Card note"), 5000);
+    assert.equal(existsSync(path), true);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("on a touch screen the card menu button always shows", async () => {
+  const p = await home(base, { width: 390 });
+  try {
+    await p.call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    await p.call("Emulation.setEmulatedMedia", { features: [{ name: "hover", value: "none" }, { name: "pointer", value: "coarse" }] });
+    await showAll(p);
+    await p.waitFor(`matchMedia("(hover: none)").matches && document.querySelectorAll(".nb-card-menu-button").length > 0`);
+    assert.deepEqual(await p.eval(`[...new Set([...document.querySelectorAll(".nb-card-menu-button")].map((b) => getComputedStyle(b).opacity))]`), ["1"]);
+  } finally {
+    await p.close();
+  }
+});
+
+test("deleting a note whose images another note shows keeps the images folder and says so", async () => {
+  const { path } = notePage("shared", "Shared images");
+  writeFileSync(join(lifecycleDir, "borrower.html"), `<h1>Borrower</h1>\n<p><img src="shared.files/a.png" alt=""></p>\n`);
+  kapi(lifecycleDir, "open", "borrower.html");
+  const p = await home(base, { width: 1440 });
+  try {
+    await showAll(p);
+    await p.waitFor(hasCard("Shared images"));
+    const button = `[...document.querySelectorAll(".nb-card-menu-button")].find((b) => b.getAttribute("aria-label") === "Actions for Shared images")`;
+    await p.eval(`${button}.click()`);
+    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete"]').click()`);
+    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    await p.waitFor(`${undoText} === "Deleted Shared images. Its images stay, since another note uses them · Undo"`, 5000);
+    assert.equal(existsSync(path), false);
+    assert.equal(readFileSync(join(lifecycleDir, "shared.files", "a.png"), "utf8"), "png");
+    assert.equal(existsSync(join(trash, "files", "shared.files")), false);
+    await p.eval(`document.querySelector(".nb-undo-button").click()`);
+    await p.waitFor(hasCard("Shared images"), 5000);
+    assert.equal(existsSync(path), true);
     assert.deepEqual(p.errors, []);
   } finally {
     await p.close();

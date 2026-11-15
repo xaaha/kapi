@@ -1,0 +1,227 @@
+.nb-card-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  transition: transform 160ms ease;
+}
+
+.nb-card-wrap > .nb-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-card-wrap:hover {
+  transform: translateY(-3px);
+}
+
+.nb-card-wrap > .nb-card:hover {
+  transform: none;
+}
+
+.nb-card-wrap:hover > .nb-card {
+  border-color: var(--kapi-border-strong);
+  box-shadow: var(--kapi-card-shadow);
+}
+
+.nb-card-wrap .nb-card-top {
+  padding-right: 34px;
+}
+
+.nb-grid[data-view="list"] .nb-card-wrap > .nb-card {
+  padding-right: 60px;
+}
+
+.nb-card-menu-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-surface);
+  color: var(--kapi-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.nb-card-menu-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.nb-card-wrap:is(:hover, :focus-within) .nb-card-menu-button,
+.nb-card-menu-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.nb-card-menu-button:is(:hover, :focus-visible),
+.nb-card-menu-button[aria-expanded="true"] {
+  border-color: var(--kapi-border);
+  background: var(--kapi-raised);
+  color: var(--kapi-fg);
+}
+
+.nb-card-menu-button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .nb-card-menu-button {
+    opacity: 1;
+  }
+}
+
+.nb-card-menu {
+  position: fixed;
+  z-index: 50;
+  box-sizing: border-box;
+  width: 220px;
+  max-width: calc(100vw - 16px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-shadow);
+  color: var(--kapi-fg);
+  font: 14px/1.4 var(--kapi-font);
+}
+
+.nb-card-menu[hidden],
+.nb-card-menu [hidden],
+.nb-undo[hidden],
+.nb-undo [hidden] {
+  display: none;
+}
+
+.nb-card-menu button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: transparent;
+  color: var(--kapi-fg);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nb-card-menu svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.nb-card-menu button:is(:hover, :focus-visible) {
+  background: var(--kapi-blue-fill);
+  outline: none;
+}
+
+.nb-card-menu :is([data-card-action="delete"], [data-card-action="delete-yes"]) {
+  color: var(--kapi-red-text);
+}
+
+.nb-card-menu :is([data-card-action="delete"], [data-card-action="delete-yes"]):is(:hover, :focus-visible) {
+  background: var(--kapi-red-tint);
+}
+
+.nb-card-menu [data-card-action="delete-yes"] {
+  font-weight: 650;
+}
+
+.nb-card-menu [data-card-action="delete-yes"]:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.nb-card-menu-question {
+  margin: 0;
+  padding: 8px 10px 6px;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nb-undo {
+  position: fixed;
+  z-index: 60;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--kapi-blue-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-blue-fill);
+  box-shadow: var(--kapi-shadow);
+  color: var(--kapi-blue-text);
+  font: 600 13.5px/36px var(--kapi-font);
+  transform: translateX(-50%);
+}
+
+.nb-undo[data-error] {
+  border-color: var(--kapi-red-border);
+  background: var(--kapi-red-fill);
+  color: var(--kapi-red-text);
+}
+
+.nb-undo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nb-undo[data-error] .nb-undo-text {
+  padding-right: 10px;
+  white-space: normal;
+  line-height: 1.4;
+  padding-block: 8px;
+}
+
+.nb-undo-button {
+  flex: none;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nb-undo-button:hover {
+  background: var(--kapi-blue-tint);
+}
+
+.nb-undo-button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-card-wrap,
+  .nb-card-wrap:hover {
+    transition: none;
+    transform: none;
+  }
+}

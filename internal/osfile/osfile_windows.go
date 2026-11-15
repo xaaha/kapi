@@ -77,6 +77,21 @@ func Rename(oldpath, newpath string) error {
 	return retry(func() error { return os.Rename(oldpath, newpath) })
 }
 
+func RenameNoReplace(oldpath, newpath string) error {
+	from, err := windows.UTF16PtrFromString(oldpath)
+	if err != nil {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
+	}
+	to, err := windows.UTF16PtrFromString(newpath)
+	if err != nil {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
+	}
+	if err := retry(func() error { return windows.MoveFileEx(from, to, 0) }); err != nil {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
+	}
+	return nil
+}
+
 const busyWait = 2 * time.Second
 
 func retry(f func() error) error {

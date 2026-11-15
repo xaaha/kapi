@@ -29,6 +29,9 @@
   let lastHuman = 0;
   let lastReply = 0;
   let ended = false;
+  let leftDeleted = false;
+  let armTimer = 0;
+  const ARM_MS = 500;
   let opened = false;
   const loadedAt = new Date();
   let busy = false;
@@ -78,7 +81,6 @@
     archive: "M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z",
     unarchive: "M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40ZM90.34,109.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,91.31V152a8,8,0,0,1-16,0V91.31l-18.34,18.35A8,8,0,0,1,90.34,109.66Z",
     android: "M176,148a12,12,0,1,1-12-12A12,12,0,0,1,176,148ZM92,136a12,12,0,1,0,12,12A12,12,0,0,0,92,136Zm148,24v24a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V161.13A113.38,113.38,0,0,1,51.4,78.72L26.34,53.66A8,8,0,0,1,37.66,42.34L63.82,68.5a111.43,111.43,0,0,1,128.55-.19l26-26a8,8,0,0,1,11.32,11.32L204.82,78.5c.75.71,1.5,1.43,2.24,2.17A111.25,111.25,0,0,1,240,160Zm-16,0a96,96,0,0,0-96-96h-.34C74.91,64.18,32,107.75,32,161.13V184H224Z",
-    trash: "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z",
     download: "M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z",
     image: "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z",
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
@@ -91,7 +93,6 @@
     plus: "M216,120H136V40a8,8,0,0,0-16,0v80H40a8,8,0,0,0,0,16h80v80a8,8,0,0,0,16,0V136h80a8,8,0,0,0,0-16Z",
     stop: "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM160,88H96a8,8,0,0,0-8,8v64a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V96A8,8,0,0,0,160,88Zm-8,64H104V104h48Z",
     caret: "M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z",
-    dots: "M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z",
     printer: "M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z",
     outline: "M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z",
     chat: "M128,24A104,104,0,0,0,37,178L24,224l46-13A104,104,0,1,0,128,24Zm0,192a87,87,0,0,1-52-17l-3-2-26,7,7-26-2-3A88,88,0,1,1,128,216Z",
@@ -205,11 +206,20 @@
     { glyph: "bookmark", id: "save", label: "Save to library\u2026", run: () => openSave() },
     { glyph: "bookmark", id: "unsave", label: "Unsave", run: () => unsave() },
     { glyph: "copy", id: "copy", label: "Copy path", detail: pagePath, run: copyPath },
-    { id: "end", glyph: "stop", label: "End session", run: endSession },
   ];
   const menuEntry = ({ id, glyph, label, detail, run }) =>
     h("button", { type: "button", role: "menuitem", tabindex: "-1", ...(id && { "data-menu": id }), onclick: () => (closeMenu(true), run()) },
       icon(glyph), h("span", { class: "kapi-menu-label", text: label }), ...(detail ? [h("code", { class: "kapi-menu-detail", title: detail, text: `\u200e${detail}` })] : []));
+  const confirmEntry = (id, glyph, label, run) =>
+    h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": id, hidden: "", onclick: run }, icon(glyph), h("span", { class: "kapi-menu-label", text: label }));
+  const endEntry = menuEntry({ id: "end", glyph: "stop", label: "End session", run: endSession });
+  const deleteEntry = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": "delete", onclick: () => askDelete(true) },
+    icon("trash"), h("span", { class: "kapi-menu-label", text: "End and delete" }));
+  const deleteQuestion = h("p", { class: "kapi-menu-question", id: "kapi-delete-question", role: "presentation", hidden: "" });
+  const deleteYes = confirmEntry("delete-yes", "trash", "Delete", () => deletePage());
+  const deleteNo = confirmEntry("delete-no", "x", "Cancel", () => deleteYes.hasAttribute("data-armed") && askDelete(false));
+  deleteYes.setAttribute("aria-describedby", deleteQuestion.id);
+  deleteNo.setAttribute("aria-describedby", deleteQuestion.id);
   const submenus = [];
   const submenuGroup = (id, glyph, label, items) => {
     const button = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": id, "aria-haspopup": "menu", "aria-expanded": "false" },
@@ -224,7 +234,9 @@
     return entries ? [submenuGroup("theme", "theme", "Theme", entries({ icon: sharedIcon, close: () => closeMenu(true) }))] : [];
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
-    submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
+    submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry),
+    submenuGroup("session", "stop", "End session", [endEntry, deleteEntry, deleteQuestion, deleteNo, deleteYes]));
+  const sessionMenu = submenus.at(-1);
   const syncSaved = () => {
     const saved = main.dataset.saved === "true";
     menu.querySelector('[data-menu="save"]').hidden = saved;
@@ -657,6 +669,7 @@
     hoverOpened = false;
     clearTimeout(submenuTimer);
     if (!openSub) return;
+    if (openSub === sessionMenu) askDelete(false, false);
     const sub = openSub;
     openSub = null;
     sub.list.hidden = true;
@@ -697,7 +710,7 @@
       else hoverOpen();
     });
     sub.group.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "mouse" || !openSub) return;
+      if (e.pointerType !== "mouse" || !openSub || confirmingDelete()) return;
       clearTimeout(submenuTimer);
       submenuTimer = setTimeout(() => closeSubmenu(openSub.list.contains(document.activeElement)), 300);
     });
@@ -744,6 +757,43 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  function confirmingDelete() {
+    return !deleteYes.hidden;
+  }
+
+  function askDelete(on, focus = true) {
+    deleteQuestion.textContent = `Delete ${pageTitle.textContent || pageName}?`;
+    for (const el of [endEntry, deleteEntry]) el.hidden = on || (el === endEntry && ended);
+    for (const el of [deleteQuestion, deleteYes, deleteNo]) el.hidden = !on;
+    sessionMenu.list.toggleAttribute("data-confirming", on);
+    deleteYes.disabled = false;
+    deleteYes.removeAttribute("data-armed");
+    clearTimeout(armTimer);
+    if (on) armTimer = setTimeout(() => deleteYes.setAttribute("data-armed", ""), ARM_MS);
+    if (focus) (on ? deleteNo : deleteEntry).focus();
+  }
+
+  function leaveDeleted(kept = false) {
+    if (leftDeleted) return;
+    leftDeleted = true;
+    location.assign(`${homeURL}?${new URLSearchParams({ deleted: base.split("/").pop(), title: pageTitle.textContent || pageName, ...(kept && { kept: "1" }) })}`);
+  }
+
+  async function deletePage() {
+    if (!deleteYes.hasAttribute("data-armed") || deleteYes.disabled) return;
+    deleteYes.disabled = true;
+    let res;
+    try {
+      res = await fetch(`${homeURL}api/notebook/pages/${base.split("/").pop()}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    } catch {
+      res = null;
+    }
+    if (res?.ok) return leaveDeleted((await res.json().catch(() => ({}))).keptImages === true);
+    const why = res ? (await res.json().catch(() => ({}))).error || `HTTP ${res.status}` : "Could not reach kapi. Check that the daemon is running.";
+    closeMenu(true);
+    say(`Could not delete the page: ${why}`, "error");
   }
 
   async function endSession() {
@@ -2311,7 +2361,9 @@
 
   function setEnded(on) {
     ended = on;
-    menu.querySelector("[data-menu=end]").hidden = on;
+    endEntry.hidden = on || confirmingDelete();
+    sessionMenu.button.querySelector(".kapi-menu-label").textContent = on ? "Delete" : "End session";
+    deleteEntry.querySelector(".kapi-menu-label").textContent = on ? "Delete page" : "End and delete";
   }
 
   function agentState() {
@@ -2364,9 +2416,10 @@
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
         h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
     }
+    if (ev.kind === "end" && ev.text === "deleted" && new Date(ev.time) >= loadedAt && !deleteYes.disabled) return leaveDeleted();
     if (ev.kind === "end") {
       setEnded(true);
-      log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `You ended the session${clock(ev.time)}` }));
+      log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `${ev.text === "deleted" ? "You deleted the page" : "You ended the session"}${clock(ev.time)}` }));
       empty.hidden = true;
       setStatus(agentState());
     } else if (ev.kind === "message" || ev.kind === "answer" || ev.kind === "note") {

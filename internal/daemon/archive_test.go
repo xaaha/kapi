@@ -425,3 +425,22 @@ func TestATabThatConnectsBeforeTheWriteStopsTheArchive(t *testing.T) {
 		t.Error("a page was archived although a tab connected after the sweep checked it")
 	}
 }
+
+func TestAnAgentLeavingAStoppedDaemonRecordsNoReleaseForTheNextStartToOverwrite(t *testing.T) {
+	a := archiving(t, "")
+	path, _ := a.page("watched.html", 48*time.Hour)
+	old := a.s
+	old.setAttached(path, "agent", true)
+	a.stop()
+	old.setAttached(path, "agent", false)
+	lc, err := page.ReadLifecycle(filepath.Join(a.home, "pages", page.ID(path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lc.Released.IsZero() {
+		t.Fatalf("a detach after the daemon stopped recorded a release at %v; the next start must decide it", lc.Released)
+	}
+	if _, err := os.Stat(filepath.Join(a.home, "pages", page.ID(path), attachedName)); err != nil {
+		t.Fatalf("the attached marker is gone, so the next start cannot release the page: %v", err)
+	}
+}
