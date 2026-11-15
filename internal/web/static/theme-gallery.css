@@ -24,7 +24,7 @@
   width: 22%;
   height: 34%;
   margin-right: auto;
-  border-radius: 3px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-fg);
 }
 
@@ -32,7 +32,7 @@
   width: 9%;
   height: 34%;
   border: 1px solid var(--kapi-border-strong);
-  border-radius: 3px;
+  border-radius: var(--kapi-radius-xs);
 }
 
 .kapi-theme-preview-page {
@@ -42,7 +42,7 @@
   gap: 6%;
   margin: 8% 10% 0;
   padding: 9% 10%;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--kapi-radius-xs) var(--kapi-radius-xs) 0 0;
   background: var(--kapi-surface);
   box-shadow: var(--kapi-card-shadow);
 }
@@ -50,14 +50,14 @@
 .kapi-theme-preview-page b {
   width: 70%;
   height: 12%;
-  border-radius: 2px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-fg);
 }
 
 .kapi-theme-preview-page i {
   width: 100%;
   height: 6%;
-  border-radius: 2px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-muted);
   opacity: 0.55;
 }
@@ -69,7 +69,7 @@
 .kapi-theme-preview-page u {
   width: 38%;
   height: 12%;
-  border-radius: 3px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-blue-fill);
   box-shadow: inset 0 0 0 1px var(--kapi-blue-border);
 }

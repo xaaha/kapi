@@ -64,6 +64,7 @@
   --kapi-grey-tint: light-dark(#e8e9ed, #2a2d34);
 
   --kapi-radius: 12px;
+  --kapi-radius-xs: 4px;
   --kapi-radius-sm: 8px;
   --kapi-radius-lg: 18px;
   --kapi-font: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

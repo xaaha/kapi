@@ -58,7 +58,7 @@ body {
 :where(#kapi-page) :where(code, kbd, samp) { font-family: var(--kapi-mono); font-size: 0.875em; }
 :where(#kapi-page) :not(pre) > code {
   padding: 0.12em 0.38em;
-  border-radius: 6px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-subtle);
   border: 1px solid var(--kapi-border);
   overflow-wrap: anywhere;
@@ -67,7 +67,7 @@ body {
   padding: 0.1em 0.4em;
   border: 1px solid var(--kapi-border-strong);
   border-bottom-width: 2px;
-  border-radius: 6px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-surface);
 }
 :where(#kapi-page) pre {
@@ -96,7 +96,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 :where(#kapi-page) figure:has(> img:only-child) { margin: 0 0 1rem; }
-:where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-yellow-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: 4px; }
+:where(#kapi-page) mark { background: color-mix(in srgb, var(--kapi-yellow-border) 65%, transparent); color: inherit; padding: 0 0.2em; border-radius: var(--kapi-radius-xs); }
 :where(#kapi-page) del { color: var(--kapi-muted); }
 :where(#kapi-page) details {
   margin: 1rem 0;
@@ -188,7 +188,7 @@ body {
   margin-bottom: 0.4rem;
   padding: 0.1rem 0.55rem;
   border: 1px solid var(--kapi-tone-border);
-  border-radius: 999px;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-surface);
   color: var(--kapi-tone-text);
   font-size: 0.7rem;
@@ -208,7 +208,7 @@ body {
   font-family: var(--kapi-font);
   display: inline-block;
   padding: 0.0625rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-tone-tint);
   color: var(--kapi-tone-text);
   font-size: 0.8125rem;
@@ -357,7 +357,7 @@ body {
 .kapi-code-lang {
   padding: 0 0.5rem;
   border: 1px solid var(--kapi-blue-border);
-  border-radius: 999px;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-blue-fill);
   color: var(--kapi-blue-text);
   font-size: 11px;
@@ -469,7 +469,7 @@ pre.kapi-hl {
   margin-top: -0.05rem;
   box-sizing: border-box;
   border: 1px solid var(--kapi-tone-border);
-  border-radius: 50%;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-surface);
   color: var(--kapi-tone-text);
   font-size: 0;
@@ -633,7 +633,7 @@ pre.kapi-hl {
   color: inherit;
   font-size: 0.92rem;
 }
-span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: 6px; font-size: 0.85em; }
+span.kapi-error { display: inline-block; margin: 0 0.15em; padding: 0 0.45em; border-radius: var(--kapi-radius-sm); font-size: 0.85em; }
 .kapi-error-tag { display: block; margin-bottom: 0.45rem; color: var(--kapi-yellow-text); font-family: var(--kapi-mono); font-size: 0.78rem; font-weight: 650; }
 
 @media (max-width: 640px) {

@@ -599,7 +599,8 @@
       ring.style.top = `${r.top - pad}px`;
       ring.style.width = `${r.width + 2 * pad}px`;
       ring.style.height = `${r.height + 2 * pad}px`;
-      ring.style.borderRadius = table ? `${tables.radius(selected) + FRAME_PAD}px` : getComputedStyle(selected).borderRadius;
+      const own = getComputedStyle(selected).borderRadius;
+      ring.style.borderRadius = table ? `${tables.radius(selected) + FRAME_PAD}px` : own === "0px" ? "var(--kapi-radius-sm)" : own;
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }

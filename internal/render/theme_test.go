@@ -23,7 +23,7 @@ var toneRoles = []string{"fill", "border", "text", "solid", "tint"}
 
 var surfaceRoles = []string{"bg", "surface", "card", "panel", "raised", "lift", "subtle", "fg", "muted", "faint", "border", "border-strong", "shadow", "card-shadow", "shadow-ink", "on-solid"}
 
-var shapeTokens = []string{"radius", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
+var shapeTokens = []string{"radius", "radius-xs", "radius-sm", "radius-lg", "font", "font-body", "mono", "measure"}
 
 func cssTokens(css []byte) map[string]string {
 	out := map[string]string{}
