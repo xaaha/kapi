@@ -1849,11 +1849,11 @@ for (const width of [390, 360]) {
 
       await tap(phone, ".kapi-menu-button");
       await phone.waitFor(`!document.querySelector(".kapi-menu").hidden`);
-      await phone.eval(`scrollBy(0, 600)`);
-      await new Promise((r) => setTimeout(r, 100));
+      await phone.eval(`new Promise((done) => { addEventListener("scroll", done, { once: true }); scrollBy(0, 600); })`);
       assert.equal(await hidden(), false);
       assert.equal(await phone.eval(`document.querySelector(".kapi-menu").hidden`), false);
-      await tap(phone, '[data-kapi-id="long0020"]');
+      const outside = await phone.eval(`(() => { const menu = document.querySelector(".kapi-menu").getBoundingClientRect(); return [...document.querySelectorAll('[data-kapi-id^="long"]')].find((p) => { const r = p.getBoundingClientRect(); return r.top > menu.bottom && r.bottom < innerHeight / 2; }).dataset.kapiId; })()`);
+      await tap(phone, `[data-kapi-id="${outside}"]`);
       await phone.waitFor(`document.querySelector(".kapi-menu").hidden`);
     } finally {
       await phone.close();
