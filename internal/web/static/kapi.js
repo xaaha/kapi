@@ -298,7 +298,8 @@
   const outlineTools = h("div", { class: "kapi-page-tools kapi-outline-tools" }, outlineButton);
   const writeTools = h("div", { class: "kapi-page-tools kapi-write-tools" }, writeButton);
   root.prepend(siteHead);
-  root.append(outlineTools, writeTools);
+  const caretPen = h("span", { class: "kapi-caret-pen", hidden: "", "aria-hidden": "true" }, icon("pencil"));
+  root.append(outlineTools, writeTools, caretPen);
   main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -462,8 +463,32 @@
     tables.markPicked(selected, lastPoint, editing);
   }
 
+  let caretFrame = 0;
+  function placeCaretPen() {
+    caretFrame = 0;
+    const sel = getSelection();
+    const node = sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+    const inside = !!node && !!editing?.hosts?.some(({ host }) => host.isContentEditable && host.contains(node));
+    document.documentElement.toggleAttribute("data-kapi-pen-caret", !!editing?.hosts);
+    if (!inside || !sel.isCollapsed) return (caretPen.hidden = true);
+    const range = sel.getRangeAt(0);
+    let r = range.getClientRects()[0];
+    if (!r) {
+      const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+      const style = getComputedStyle(el), box = el.getBoundingClientRect();
+      r = { left: box.left + parseFloat(style.paddingLeft), top: box.top + parseFloat(style.paddingTop), height: parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4 };
+    }
+    caretPen.hidden = false;
+    caretPen.style.transform = `translate(${r.left - 2}px, ${r.top + r.height * 0.8 - 13}px)`;
+  }
+  const scheduleCaretPen = () => (caretFrame ||= requestAnimationFrame(placeCaretPen));
+  document.addEventListener("selectionchange", scheduleCaretPen);
+  addEventListener("scroll", scheduleCaretPen, { passive: true, capture: true });
+  addEventListener("resize", scheduleCaretPen);
+
   function renderBar() {
     writeButton.toggleAttribute("data-editing", !!editing);
+    scheduleCaretPen();
     markPicked();
     const text = !editing && !!textRange;
     if (asking || (!text && (!selected || !selected.isConnected))) {
