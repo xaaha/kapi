@@ -87,6 +87,9 @@ type Server struct {
 	Browser      func(url string) error
 	ReopenExcept string
 
+	now   func() time.Time
+	prefs *settings.File
+
 	mu       sync.Mutex
 	pages    map[string]*eventlog.Log
 	stores   map[string]*page.Store
@@ -105,12 +108,16 @@ type Server struct {
 	index indexCache
 
 	tabs tabs
+
+	retention retention
 }
 
 func New(home string) *Server {
 	return &Server{
 		home:     home,
 		files:    attach.New(filepath.Join(home, "pages")),
+		now:      time.Now,
+		prefs:    settings.NewFile(filepath.Join(home, "settings.json"), render.HasPalette),
 		pages:    map[string]*eventlog.Log{},
 		stores:   map[string]*page.Store{},
 		attached: map[string]map[string]time.Time{},
@@ -172,6 +179,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		return fmt.Errorf("%w on %s", ErrAlreadyRunning, sock)
 	}
 	s.stopping = ctx.Done()
+	s.startRetention()
 	site, token, fresh, err := s.listenHTTP()
 	if err != nil {
 		return err
@@ -192,6 +200,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 	defer stopHTTP()
 	go s.tickStores(ctx, time.Second)
+	go s.archiveLoop(ctx, archiveEvery)
 	var reopening sync.WaitGroup
 	defer reopening.Wait()
 	reopening.Go(func() { s.reopen(recent) })
@@ -302,7 +311,7 @@ func (s *Server) serveHTTP(ctx context.Context, ln net.Listener, token string) (
 	s.mu.Lock()
 	s.baseURL = "http://" + host + "/" + token + "/"
 	s.mu.Unlock()
-	h := web.New(s, settings.NewFile(filepath.Join(s.home, "settings.json"), render.HasPalette), token, host, previous)
+	h := web.New(s, s.prefs, token, host, previous)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() {
 		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
@@ -906,17 +915,39 @@ func resolved(path string) string {
 	return path
 }
 
-func (s *Server) setAttached(page, reader string, on bool) {
+func (s *Server) setAttached(path, reader string, on bool) {
 	defer s.notebookChanged()
+	id := page.ID(path)
+	marker := filepath.Join(s.home, "pages", id, attachedName)
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.attached[page] == nil {
-		s.attached[page] = map[string]time.Time{}
+	if s.attached[path] == nil {
+		s.attached[path] = map[string]time.Time{}
 	}
 	if on {
-		s.attached[page][reader] = time.Now().UTC()
-	} else {
-		delete(s.attached[page], reader)
+		first := len(s.attached[path]) == 0
+		s.attached[path][reader] = time.Now().UTC()
+		s.mu.Unlock()
+		if first {
+			if err := writeAtomic(marker, nil); err != nil {
+				log.Printf("attached %s: %v", path, err)
+			}
+		}
+		return
+	}
+	delete(s.attached[path], reader)
+	last := len(s.attached[path]) == 0
+	s.mu.Unlock()
+	if !last {
+		return
+	}
+	s.release(id)
+	select {
+	case <-s.stopping:
+		return
+	default:
+	}
+	if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("attached %s: %v", path, err)
 	}
 }
 

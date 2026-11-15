@@ -1,7 +1,8 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -63,9 +64,8 @@ test("the token root without a trailing slash opens the notes home", async () =>
   try {
     assert.equal(await p.eval("location.pathname.endsWith('/')"), true);
     assert.equal(await p.eval("document.title"), "kapi");
-    assert.equal(await p.eval("document.querySelector('h1').textContent"), "All notes");
-    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Active", "false"], ["Inactive", "false"], ["Ended", "false"], ["All", "true"]]);
-    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
+    assert.equal(await p.eval("document.querySelector('h1').textContent"), "Recent");
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Recent", "true"], ["Archived", "false"]]);
     assert.ok(await p.eval("document.querySelectorAll('.nb-card').length") >= 3);
     assert.equal(await p.eval("document.querySelector('.nb-glyph') !== null"), true);
   } finally {
@@ -122,7 +122,6 @@ test("a theme chosen on home reaches an open page at once, survives a reload, an
 test("home filters the library by project and status", async () => {
   const p = await home();
   try {
-    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     const titlesIn = async (name) => p.eval(`(() => { const s = document.querySelector(".nb-select"); s.value = [...s.options].find((o) => o.textContent === ${JSON.stringify(name)}).value; s.dispatchEvent(new Event("change", { bubbles: true })); return [...document.querySelectorAll(".nb-card-title")].map((t) => t.textContent).sort().join("|"); })()`);
     assert.equal(await titlesIn("Alpha"), "Rollout plan|Shared notes");
     assert.equal(await titlesIn("Beta"), "Bug list|Shared notes");
@@ -274,7 +273,6 @@ test("a refresh keeps keyboard focus on the same switcher link and home card", a
   const h = await home();
   try {
     await openSwitcher(s);
-    await h.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     const key = await s.eval(`(() => { const a = [...document.querySelectorAll(".kapi-switcher-row")].find((l) => l.textContent.includes("Bug list")); a.focus(); return a.dataset.key; })()`);
     const card = await h.eval(`(() => { const c = [...document.querySelectorAll(".nb-card")].find((l) => l.textContent.includes("Bug list")); c.focus(); return c.dataset.key; })()`);
     await refresh(s);
@@ -346,7 +344,6 @@ test("deleted notes disappear from the switcher and home", async () => {
   const p = await withSwitcher();
   const h = await home();
   try {
-    await h.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     await refresh(p);
     await p.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("Temporary note"))`);
     unlinkSync(path);
@@ -360,7 +357,7 @@ test("deleted notes disappear from the switcher and home", async () => {
   }
 });
 
-test("an ended session is red and can be isolated on home", async () => {
+test("an ended session is red in the switcher and on its home card", async () => {
   const p = await withSwitcher();
   const h = await home();
   try {
@@ -373,8 +370,8 @@ test("an ended session is red and can be isolated on home", async () => {
     await refresh(h);
     await p.waitFor(`[...document.querySelectorAll(".kapi-switcher-row[data-ended]")].some((a) => a.textContent.includes("Bug list"))`);
     assert.equal(await p.eval(`[...document.querySelectorAll(".kapi-switcher-row")].find((a) => a.textContent.includes("Bug list")).querySelector(".nb-dot").dataset.state`), "ended");
-    await h.eval(`[...document.querySelectorAll(".nb-status-button")].find((b) => b.textContent === "Ended").click()`);
-    assert.equal(await h.eval(`[...document.querySelectorAll(".nb-card-title")].map((n) => n.textContent).join("|")`), "Bug list");
+    await h.waitFor(`[...document.querySelectorAll(".nb-card[data-ended]")].map((c) => c.querySelector(".nb-card-title").textContent).join("|") === "Bug list"`);
+    assert.equal(await h.eval(`[...document.querySelectorAll(".nb-card")].find((c) => c.textContent.includes("Bug list")).querySelector(".nb-dot").dataset.tone`), "red");
   } finally {
     await p.close();
     await h.close();
@@ -391,10 +388,10 @@ test("home switches between cards and list, remembers the choice, and keeps filt
     assert.equal(await p.eval(`getComputedStyle(document.querySelector(".nb-grid")).gridTemplateColumns.split(" ").length`), 1);
     await p.eval(`location.reload()`);
     await p.waitFor(`document.querySelector(".nb-grid")?.dataset.view === "list" && document.querySelector(".nb-count").textContent !== ""`);
-    await p.eval(`document.querySelector('[data-status="inactive"]').click()`);
-    assert.equal(await p.eval(`document.querySelector(".nb-filter-context strong").textContent`), "Quiet for now");
+    await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
+    assert.equal(await p.eval(`document.querySelector(".nb-filter-context strong").textContent`), "Deleted 30 days after archiving");
     await p.eval(`[...document.querySelectorAll(".nb-view-button")].find((b) => b.textContent === "Cards").click()`);
-    assert.equal(await p.eval(`document.querySelector('[data-status="inactive"]').getAttribute("aria-pressed")`), "true");
+    assert.equal(await p.eval(`document.querySelector('[data-tab="archived"]').getAttribute("aria-pressed")`), "true");
     assert.equal(await p.eval(`document.querySelector(".nb-grid").dataset.view`), "cards");
     assert.deepEqual(p.errors, []);
   } finally { await p.close(); }
@@ -425,7 +422,6 @@ test("home exposes palette selection and keeps the logo and folder caret aligned
 test("home shows every note in the daemon's order without dropping older notes", async () => {
   const p = await home();
   try {
-    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     const cards = `[...document.querySelectorAll(".nb-card")].map((a) => a.getAttribute("href").match(/p\\/([^/]+)/)[1]).join(",")`;
     const served = await p.eval(`fetch(${JSON.stringify(base)} + "api/notebook/pages").then((r) => r.json()).then((pages) => pages.map((p) => p.id).join(","))`);
     assert.ok(served.split(",").length >= 3);
@@ -470,7 +466,6 @@ test("home organization can rename, collapse, and reorder notes", async () => {
   kapi(hidden, "open", "second.html");
   const p = await home();
   try {
-    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     await refresh(p);
     await p.waitFor(`[...document.querySelectorAll(".nb-card-title")].some((n) => n.textContent === "Second hidden note")`);
     await p.eval(`document.querySelector(".nb-organize").click()`);
@@ -510,7 +505,6 @@ test("home lists the most recently viewed note first, then the most recently tou
   const gammaOrder = `[...document.querySelectorAll(".nb-card-title")].map((n) => n.textContent).filter((t) => t.startsWith("Gamma ")).join("|")`;
   const p = await home();
   try {
-    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
     await refresh(p);
     await p.waitFor(`${gammaOrder} === "Gamma new|Gamma mid|Gamma old"`);
     const other = await launch();
@@ -524,5 +518,83 @@ test("home lists the most recently viewed note first, then the most recently tou
     assert.equal(await p.eval(`document.querySelector(".nb-card-title").textContent`), "Gamma old");
   } finally {
     await p.close();
+  }
+});
+
+test("the archive banner on Recent stays dismissed after a reload", async () => {
+  const banner = `(() => { const b = document.querySelector(".nb-banner"); return b && !!document.querySelector(".nb-intro").textContent && b.hidden; })()`;
+  const p = await home();
+  try {
+    await p.waitFor(`!document.querySelector(".nb-banner").hidden`);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-banner strong, .nb-banner p")].map((n) => n.textContent)`), ["Kapi now tidies up after itself", "Notes nobody edits for 24 hours move to Archived. Archived notes are deleted after 30 days. Save a note to keep it."]);
+    await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
+    assert.equal(await p.eval(`document.querySelector(".nb-banner").hidden`), true);
+    await p.eval(`document.querySelector('[data-tab="recent"]').click()`);
+    await p.eval(`document.querySelector(".nb-banner-dismiss").click()`);
+    await p.waitFor(banner);
+    await p.waitFor(`fetch(location.pathname + "settings").then((r) => r.json()).then((s) => s.dismissed.includes("archive-intro"))`);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "home", "settings.json"), "utf8")).dismissed, ["archive-intro"]);
+    await p.eval(`localStorage.clear()`);
+    await p.call("Page.reload");
+    await p.waitFor(`document.readyState === "complete" && ${banner}`, 5000);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("home splits notes into Recent and Archived with deadline badges, soonest deletion first", async () => {
+  const archiveHome = join(dir, "archive-home");
+  const notes = join(dir, "lifecycle");
+  mkdirSync(archiveHome);
+  mkdirSync(notes);
+  writeFileSync(join(archiveHome, "settings.json"), `{"retention":{"keepWhileOpen":false}}\n`);
+  const archiveEnv = { ...env, KAPI_HOME: archiveHome };
+  const run = (...args) => execFileSync(bin, args, { cwd: notes, env: archiveEnv }).toString();
+  const stop = () => execFileSync(join(repo, "scripts/stop-daemon.sh"), [archiveHome]);
+  const stateOf = (name) => join(archiveHome, "pages", createHash("sha256").update(join(realpathSync(notes), name)).digest("hex").slice(0, 16), "state.json");
+  const hour = 3600000;
+  const now = Date.now();
+  for (const [name, title, hoursAgo] of [["soon.html", "Archives soon", 18.5], ["plenty.html", "Plenty of time", 1], ["older.html", "Archived earlier", 24 * 9], ["newer.html", "Archived later", 24 * 3]]) {
+    const path = join(notes, name);
+    write(path, title, "Lifecycle.");
+    utimesSync(path, new Date(now - hoursAgo * hour), new Date(now - hoursAgo * hour));
+    run("open", name);
+  }
+  stop();
+  run("ls");
+  const archivedAt = (name) => {
+    try {
+      return JSON.parse(readFileSync(stateOf(name), "utf8")).archivedAt;
+    } catch {
+      return undefined;
+    }
+  };
+  for (let i = 0; i < 200 && !(archivedAt("older.html") && archivedAt("newer.html")); i++) await new Promise((r) => setTimeout(r, 25));
+  assert.ok(archivedAt("older.html") && archivedAt("newer.html"), "the start sweep archived both old notes");
+  assert.equal(archivedAt("soon.html"), undefined);
+  stop();
+  const older = JSON.parse(readFileSync(stateOf("older.html"), "utf8"));
+  older.archivedAt = new Date(now - 5 * 24 * hour).toISOString();
+  writeFileSync(stateOf("older.html"), JSON.stringify(older));
+  run("ls");
+  const archiveBase = readFileSync(join(archiveHome, "http.url"), "utf8").trim();
+  const cards = `[...document.querySelectorAll(".nb-card")].map((c) => [c.querySelector(".nb-card-title").textContent, c.querySelector(".nb-badge")?.textContent ?? "", c.hasAttribute("data-archived")])`;
+  const p = await home(archiveBase);
+  try {
+    assert.equal(await p.eval(`document.querySelector('[data-tab="recent"]').getAttribute("aria-label")`), "Recent 2");
+    assert.equal(await p.eval(`document.querySelector('[data-tab="archived"]').getAttribute("aria-label")`), "Archived 2");
+    assert.deepEqual((await p.eval(cards)).sort(), [["Archives soon", "Archives in 5h", false], ["Plenty of time", "", false]]);
+    assert.deepEqual(await p.eval(`[...document.querySelector(".nb-badge-soon").classList, getComputedStyle(document.querySelector(".nb-badge-soon")).backgroundColor, !!document.querySelector(".nb-badge-soon svg")]`), ["nb-badge", "nb-badge-soon", "rgba(0, 0, 0, 0)", true]);
+    await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
+    assert.equal(await p.eval(`document.querySelector("h1").textContent`), "Archived");
+    assert.deepEqual(await p.eval(cards), [["Archived earlier", "Archived · 25 days left", true], ["Archived later", "Archived · 30 days left", true]]);
+    assert.equal(await p.eval(`(() => { const c = document.querySelector(".nb-card[data-archived]"); return getComputedStyle(c.querySelector(".nb-card-title")).color === getComputedStyle(c.querySelector(".nb-card-summary")).color; })()`), true);
+    assert.notEqual(await p.eval(`getComputedStyle(document.querySelector(".nb-badge-archived")).backgroundColor`), "rgba(0, 0, 0, 0)");
+    assert.equal(await p.eval(`document.querySelector(".nb-banner").hidden`), true);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+    stop();
   }
 });

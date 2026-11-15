@@ -277,6 +277,24 @@ an agent message and `kapi wait` leave it alone. A page with no stored
 notebook index, `api/notebook/pages` and `kapi ls` list pages most recently
 viewed first, then most recently touched, then by title.
 
+The daemon sweeps pages when it starts and every 15 minutes. A page whose
+`touched` is older than `retention.archiveAfter` gets `archivedAt` (UTC) in
+`state.json`; `"0"` turns archiving off, and a page with `"saved": true` is
+never archived. With `retention.keepWhileOpen` on, a page with a browser tab
+or an attached `kapi watch` or `kapi wait` is never archived, and its clock
+starts again when the last one leaves; that time is kept as `releasedAt` in
+`state.json`. A page that had a tab open or an agent attached when the daemon
+stopped counts as left at the next start, and no page is archived in the
+first 5 minutes after a start so tabs can reconnect. While `settings.json`
+cannot be read the sweep archives nothing. Anything that moves
+`touched` clears `archivedAt`; a file edit made while no tab was open is
+picked up by the sweep before it archives. Each page in `api/notebook/pages`
+carries `archivedAt`, `deletesAt` (`archivedAt` plus `retention.deleteAfter`,
+absent when that is `"0"`) and, for a page that will archive, `archivesAt`.
+Home shows Recent (not archived) and Archived (soonest deletion first) views.
+`PATCH settings` with `{"dismiss":"archive-intro"}` adds that notice to
+`dismissed`, which hides the one-time archiving banner on Recent.
+
 ## HTTP
 
 The daemon also listens on `127.0.0.1` and writes

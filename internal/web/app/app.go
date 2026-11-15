@@ -48,6 +48,10 @@ type Page struct {
 	Touched time.Time `json:"touched,omitzero"`
 	State   string    `json:"state"`
 	Missing bool      `json:"missing,omitempty"`
+
+	ArchivesAt time.Time `json:"archivesAt,omitzero"`
+	ArchivedAt time.Time `json:"archivedAt,omitzero"`
+	DeletesAt  time.Time `json:"deletesAt,omitzero"`
 }
 
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {

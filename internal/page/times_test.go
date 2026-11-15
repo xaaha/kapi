@@ -1,7 +1,10 @@
 package page
 
 import (
+	"bytes"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,17 +25,29 @@ func TestANewPageIsTouchedWhenItsFileWasWrittenAndNeverViewed(t *testing.T) {
 	}
 	fixClock(t)
 	s := open(t, home, path)
-	viewed, touched := s.Times()
+	lc := s.Lifecycle()
+	viewed, touched := lc.Viewed, lc.Touched
 	if !viewed.IsZero() || !touched.Equal(written) {
 		t.Errorf("viewed %v touched %v, want never viewed and touched at %v", viewed, touched, written)
 	}
 }
 
-func TestOnlyMeaningfulActivityMovesTouched(t *testing.T) {
+func archive(t *testing.T, s *Store) {
+	t.Helper()
+	lc := s.Lifecycle()
+	if !lc.Archived.IsZero() {
+		return
+	}
+	if ok, err := s.MarkArchived(clock(), lc.Touched); err != nil || !ok {
+		t.Fatalf("MarkArchived = %v, %v", ok, err)
+	}
+}
+
+func TestOnlyMeaningfulActivityMovesTouchedAndBringsThePageBackFromTheArchive(t *testing.T) {
 	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p><p data-kapi-id="bbbbbbbb">b</p>`)
 	set := fixClock(t)
 	s := open(t, home, path)
-	_, start := s.Times()
+	start := s.Lifecycle().Touched
 	base := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
 	step := 0
 	moves := func(how string, act func()) {
@@ -40,19 +55,21 @@ func TestOnlyMeaningfulActivityMovesTouched(t *testing.T) {
 		step++
 		at := base.Add(time.Duration(step) * time.Minute)
 		set(at)
+		archive(t, s)
 		act()
-		if _, touched := s.Times(); !touched.Equal(at) {
-			t.Errorf("%s: touched %v, want %v", how, touched, at)
+		if lc := s.Lifecycle(); !lc.Touched.Equal(at) || !lc.Archived.IsZero() {
+			t.Errorf("%s: touched %v archived %v, want touched %v and back from the archive", how, lc.Touched, lc.Archived, at)
 		}
 	}
 	stays := func(how string, act func()) {
 		t.Helper()
 		step++
-		_, before := s.Times()
+		before := s.Lifecycle().Touched
 		set(base.Add(time.Duration(step) * time.Minute))
+		archive(t, s)
 		act()
-		if _, touched := s.Times(); !touched.Equal(before) {
-			t.Errorf("%s moved touched from %v to %v", how, before, touched)
+		if lc := s.Lifecycle(); !lc.Touched.Equal(before) || lc.Archived.IsZero() {
+			t.Errorf("%s moved touched from %v to %v or unarchived it (archived %v)", how, before, lc.Touched, lc.Archived)
 		}
 	}
 
@@ -61,7 +78,7 @@ func TestOnlyMeaningfulActivityMovesTouched(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if _, touched := s.Times(); !touched.Equal(start) {
+	if touched := s.Lifecycle().Touched; !touched.Equal(start) {
 		t.Fatalf("touched moved from %v to %v before any activity", start, touched)
 	}
 	stays("a refresh with nothing new", func() {
@@ -94,7 +111,7 @@ func TestOnlyMeaningfulActivityMovesTouched(t *testing.T) {
 	if _, changed, err := s.Refresh(); err != nil || !changed {
 		t.Fatalf("Refresh = %v, %v", changed, err)
 	}
-	if _, touched := s.Times(); !touched.Equal(written) {
+	if touched := s.Lifecycle().Touched; !touched.Equal(written) {
 		t.Errorf("an agent writing the file: touched %v, want the file's write time %v", touched, written)
 	}
 }
@@ -113,18 +130,96 @@ func TestViewedAndTouchedSurviveReopening(t *testing.T) {
 	}
 	set(looked.Add(time.Hour))
 	again := open(t, home, path)
-	if viewed, touched := again.Times(); !viewed.Equal(looked) || !touched.Equal(edited) {
-		t.Errorf("after reopening, viewed %v touched %v, want %v and %v", viewed, touched, looked, edited)
+	if lc := again.Lifecycle(); !lc.Viewed.Equal(looked) || !lc.Touched.Equal(edited) {
+		t.Errorf("after reopening, viewed %v touched %v, want %v and %v", lc.Viewed, lc.Touched, looked, edited)
 	}
-	viewed, touched, err := ReadTimes(again.dir)
-	if err != nil || !viewed.Equal(looked) || !touched.Equal(edited) {
-		t.Errorf("ReadTimes = %v, %v, %v, want %v and %v", viewed, touched, err, looked, edited)
+	lc, err := ReadLifecycle(again.dir)
+	if err != nil || !lc.Viewed.Equal(looked) || !lc.Touched.Equal(edited) {
+		t.Errorf("ReadLifecycle = %+v, %v, want viewed %v and touched %v", lc, err, looked, edited)
 	}
 }
 
-func TestReadTimesOfAPageWithoutStateIsZero(t *testing.T) {
-	viewed, touched, err := ReadTimes(t.TempDir())
-	if err != nil || !viewed.IsZero() || !touched.IsZero() {
-		t.Errorf("ReadTimes = %v, %v, %v", viewed, touched, err)
+func TestReadLifecycleOfAPageWithoutStateIsZero(t *testing.T) {
+	lc, err := ReadLifecycle(t.TempDir())
+	if err != nil || lc != (Lifecycle{}) {
+		t.Errorf("ReadLifecycle = %+v, %v", lc, err)
+	}
+}
+
+func TestArchivingSkipsSavedPagesAndPagesTouchedSinceTheSweepLooked(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	set := fixClock(t)
+	s := open(t, home, path)
+	seen := s.Lifecycle().Touched
+	set(seen.Add(time.Hour))
+	if err := s.Touch(); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.MarkArchived(clock(), seen); err != nil || ok {
+		t.Errorf("archiving with a stale touched time = %v, %v, want skipped", ok, err)
+	}
+	if ok, err := s.MarkArchived(clock(), s.Lifecycle().Touched); err != nil || !ok {
+		t.Fatalf("MarkArchived = %v, %v", ok, err)
+	}
+	if ok, err := s.MarkArchived(clock().Add(time.Hour), s.Lifecycle().Touched); err != nil || ok {
+		t.Errorf("archiving an archived page again = %v, %v, want skipped", ok, err)
+	}
+	if lc := open(t, home, path).Lifecycle(); !lc.Archived.Equal(clock()) {
+		t.Errorf("after reopening, archived %v, want %v", lc.Archived, clock())
+	}
+
+	saved, savedPath := newPage(t, `<p data-kapi-id="bbbbbbbb">b</p>`)
+	kept := open(t, saved, savedPath)
+	state := filepath.Join(kept.dir, "state.json")
+	b, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state, append(bytes.TrimSuffix(b, []byte("}")), []byte(`,"saved":true}`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lc, err := ReadLifecycle(kept.dir)
+	if err != nil || !lc.Saved {
+		t.Fatalf("ReadLifecycle = %+v, %v, want saved", lc, err)
+	}
+	if ok, err := MarkArchivedAt(kept.dir, clock(), lc.Touched); err != nil || ok {
+		t.Errorf("archiving a saved closed page = %v, %v, want skipped", ok, err)
+	}
+	reopened := open(t, saved, savedPath)
+	if ok, err := reopened.MarkArchived(clock(), lc.Touched); err != nil || ok {
+		t.Errorf("archiving a saved open page = %v, %v, want skipped", ok, err)
+	}
+	if err := reopened.MarkViewed(); err != nil {
+		t.Fatal(err)
+	}
+	if lc, _ := ReadLifecycle(kept.dir); !lc.Saved {
+		t.Error("the store dropped the saved flag when it rewrote state.json")
+	}
+}
+
+func TestArchivingAClosedPageKeepsTheRestOfItsState(t *testing.T) {
+	home, path := newPage(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	fixClock(t)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "edit", ID: "aaaaaaaa", HTML: `<p>b</p>`})
+	if err := s.MarkViewed(); err != nil {
+		t.Fatal(err)
+	}
+	before := s.Lifecycle()
+	at := clock().Add(time.Hour)
+	if ok, err := MarkArchivedAt(s.dir, at, before.Touched); err != nil || !ok {
+		t.Fatalf("MarkArchivedAt = %v, %v", ok, err)
+	}
+	again := open(t, home, path)
+	want := before
+	want.Archived = at
+	if lc := again.Lifecycle(); lc != want {
+		t.Errorf("after reopening, lifecycle %+v, want %+v", lc, want)
+	}
+	if src, rev := again.Source(); rev != 2 || !strings.Contains(string(src), ">b</p>") {
+		t.Errorf("after archiving, source %q at rev %d, want the edit at rev 2", src, rev)
+	}
+	if ok, err := MarkArchivedAt(t.TempDir(), at, before.Touched); err != nil || ok {
+		t.Errorf("archiving a page with no state = %v, %v, want skipped", ok, err)
 	}
 }
