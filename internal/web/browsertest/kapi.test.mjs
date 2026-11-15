@@ -1842,10 +1842,10 @@ for (const width of [390, 360]) {
       await phone.eval(`document.querySelector(".kapi-chat-button").click(); document.activeElement.blur()`);
       await touchScroll(phone, -900);
       await phone.waitFor(`document.documentElement.hasAttribute("data-kapi-head-hidden")`);
-      await phone.waitFor(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom <= 0 && document.querySelector(".kapi-page-tools").getBoundingClientRect().top >= innerHeight`);
+      await phone.waitFor(`document.querySelector(".kapi-site-head").getBoundingClientRect().bottom <= 0 && document.querySelector(".kapi-write-tools").getBoundingClientRect().top >= innerHeight`);
       await touchScroll(phone, 300);
       await phone.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden")`);
-      await phone.waitFor(`document.querySelector(".kapi-site-head").getBoundingClientRect().top === 0 && document.querySelector(".kapi-page-tools").getBoundingClientRect().bottom <= innerHeight`);
+      await phone.waitFor(`document.querySelector(".kapi-site-head").getBoundingClientRect().top === 0 && document.querySelector(".kapi-write-tools").getBoundingClientRect().bottom <= innerHeight`);
 
       await tap(phone, ".kapi-menu-button");
       await phone.waitFor(`!document.querySelector(".kapi-menu").hidden`);
@@ -1864,7 +1864,7 @@ for (const width of [390, 360]) {
     const phone = await mobilePage(width);
     try {
       await phone.eval(`document.querySelector(".kapi-chat-button").click(); document.activeElement.blur()`);
-      const boxes = await phone.eval(`[".kapi-page-tools .kapi-outline-button", ".kapi-page-tools .kapi-write-button"].map((s) => (({ left, right, top, bottom, width, height }) => ({ left, right, top, bottom, width, height }))(document.querySelector(s).getBoundingClientRect()))`);
+      const boxes = await phone.eval(`[".kapi-outline-tools .kapi-outline-button", ".kapi-write-tools .kapi-write-button"].map((s) => (({ left, right, top, bottom, width, height }) => ({ left, right, top, bottom, width, height }))(document.querySelector(s).getBoundingClientRect()))`);
       for (const b of boxes) {
         assert.ok(b.width >= 44 && b.height >= 44, JSON.stringify(b));
         assert.ok(b.left >= 0 && b.right <= width && b.bottom <= 800 && b.top >= 800 - 120, JSON.stringify(b));
@@ -1903,26 +1903,57 @@ for (const width of [390, 360]) {
   });
 }
 
-test("on a wide desktop the outline and Write controls sit side by side in the left margin, clear of the text", async () => {
+test("on a wide desktop Outline sits top left and Write top right of the reading area, on one row, clear of the text and the open outline", async () => {
   const wide = await browser.open(server.url, { width: 1600, height: 800 });
-  const out = await wide.eval(`(() => {
-    const r = document.getElementById("kapi-page").getBoundingClientRect();
-    const left = r.left + parseFloat(getComputedStyle(document.getElementById("kapi-page")).paddingLeft);
-    const box = (s) => document.querySelector(s).getBoundingClientRect();
-    const o = box(".kapi-outline-button"), w = box(".kapi-write-button");
-    return { left, outline: [o.left, o.right, o.top], write: [w.left, w.right, w.top], head: !!document.querySelector(".kapi-site-head .kapi-write-button, .kapi-site-head .kapi-outline-button") };
+  const measure = () => wide.eval(`(() => {
+    const main = document.getElementById("kapi-page"), r = main.getBoundingClientRect(), pad = getComputedStyle(main);
+    const text = { left: r.left + parseFloat(pad.paddingLeft), right: r.right - parseFloat(pad.paddingRight) };
+    const edge = document.querySelector(".kapi-panel").getBoundingClientRect().left;
+    const box = (s) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(s).getBoundingClientRect());
+    return { text, edge, outline: box(".kapi-outline-button"), write: box(".kapi-write-button"), list: box(".kapi-outline"), head: !!document.querySelector(".kapi-site-head .kapi-write-button, .kapi-site-head .kapi-outline-button") };
   })()`);
-  await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
-  await wide.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
-  const clear = await wide.eval(`(() => {
-    const w = document.querySelector(".kapi-write-button").getBoundingClientRect(), o = document.querySelector(".kapi-outline").getBoundingClientRect();
-    return w.left >= o.right || w.top >= o.bottom || w.right <= o.left || w.bottom <= o.top;
-  })()`);
-  await wide.close();
-  assert.equal(clear, true, "the Write control must not sit on top of the open outline");
-  assert.equal(out.head, false);
-  assert.equal(out.outline[2], out.write[2], `both controls share one row: ${JSON.stringify(out)}`);
-  assert.ok(out.outline[1] <= out.write[0] && out.write[1] <= out.left + 1, JSON.stringify(out));
+  try {
+    const m = await measure();
+    assert.equal(m.head, false);
+    assert.equal(m.outline.top, m.write.top, `one row: ${JSON.stringify(m)}`);
+    assert.ok(m.outline.right <= m.text.left + 1, `Outline left of the text: ${JSON.stringify(m)}`);
+    assert.ok(m.write.left >= m.text.right - 1 && m.edge - m.write.right <= 32, `Write at the top right: ${JSON.stringify(m)}`);
+    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    await wide.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
+    const o = await measure();
+    assert.equal(o.write.top, m.write.top, "opening the outline leaves Write at the top");
+    assert.ok(o.write.left >= o.list.right && o.write.left >= o.text.right - 1, JSON.stringify(o));
+    if (await wide.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await wide.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    const c = await measure();
+    assert.equal(c.write.top, m.write.top, "opening chat too leaves Write at the top");
+    assert.ok(c.write.left >= c.text.right - 1 && c.write.right <= c.edge + 1, JSON.stringify(c));
+  } finally {
+    await wide.close();
+  }
+});
+
+test("on a narrow desktop with the outline and chat open, Write stays at the top and fully clear of the chat panel, and Outline stays on screen", async () => {
+  for (const width of [1280, 900]) {
+    const p = await browser.open(server.url, { width, height: 700 });
+    try {
+      if (await p.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await p.eval(`document.querySelector(".kapi-chat-button").click()`);
+      await p.eval(`document.querySelector(".kapi-outline-button").click()`);
+      await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+      const m = await p.eval(`(() => {
+        const w = document.querySelector(".kapi-write-button").getBoundingClientRect(), chat = document.querySelector(".kapi-panel").getBoundingClientRect();
+        const at = document.elementFromPoint(w.left + w.width / 2, w.top + w.height / 2);
+        return { top: w.top, right: w.right, chat: chat.left, hit: !!at?.closest(".kapi-write-button") };
+      })()`);
+      assert.ok(m.top < 200 && m.right <= m.chat + 0.5 && m.hit, `${width}px: ${JSON.stringify(m)}`);
+      await p.eval(`document.querySelector(".kapi-outline-close").click()`);
+      await p.waitFor(`document.querySelector(".kapi-outline-button").checkVisibility()`);
+      const o = await p.eval(`(r => ({ left: r.left, right: r.right }))(document.querySelector(".kapi-outline-button").getBoundingClientRect())`);
+      assert.ok(o.left >= 0 && o.right <= width, `${width}px: Outline must be fully on screen ${JSON.stringify(o)}`);
+    } finally {
+      await p.close();
+    }
+  }
 });
 
 test("tapping a theme in the page menu on a phone does not expand the chat", async () => {
