@@ -4826,6 +4826,19 @@ test("the pencil is plain in Review, pressed in Write, and writes a stroke only 
   assert.deepEqual((await state()).slice(1, 3), ["none", "none"], "reduced motion keeps the pencil and stroke still");
 });
 
+test("an open block shows a soft glow instead of a hard ring", async () => {
+  const ring = () => page.eval(`(s => [s.boxShadow, s.backgroundColor, s.borderTopLeftRadius])(getComputedStyle(document.querySelector(".kapi-ring")))`);
+  await select("bbbbbbbb");
+  const [selected] = await ring();
+  await editSelected();
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  const [shadow, background] = await ring();
+  assert.notEqual(shadow, selected);
+  assert.match(shadow, / 0px 0px 0px 5px$/, shadow);
+  assert.equal(background, "rgba(0, 0, 0, 0)");
+  assert.notEqual((await ring())[2], "0px", "the glow has rounded corners even on a square block");
+});
+
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),
