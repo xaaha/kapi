@@ -69,6 +69,12 @@ func (a *archiveSite) archiveNow(paths ...string) time.Time {
 	return a.clock.now()
 }
 
+func (a *archiveSite) sweepLate(d time.Duration) {
+	a.t.Helper()
+	a.sweepAfter(d)
+	a.sweepAfter(0)
+}
+
 func TestTheSweepTrashesADraftOnceDeleteAfterPassedSinceItWasArchived(t *testing.T) {
 	a, library := expiring(t, "")
 	path := a.draft(library, "old.html", 48*time.Hour)
@@ -139,13 +145,7 @@ func TestNothingIsDeletedUntilAFullSweepIntervalAfterAStart(t *testing.T) {
 	a.archiveNow(path)
 	old := a.s
 	a.stop()
-	old.mu.Lock()
-	for _, l := range old.pages {
-		if err := l.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	old.mu.Unlock()
+	closeLogs(t, old)
 	a.clock.add(2 * deleteAfter)
 	a.start()
 	a.sweepAfter(0)
@@ -169,7 +169,7 @@ func TestAnExpiredPageOutsideTheLibraryIsOnlyForgotten(t *testing.T) {
 	src := mustRead(t, path)
 	id := page.ID(path)
 	a.archiveNow(path)
-	a.sweepAfter(deleteAfter)
+	a.sweepLate(deleteAfter)
 	if mustRead(t, path) != src || mustRead(t, filepath.Join(page.FilesDir(path), "a.png")) != "png" {
 		t.Fatal("the sweep changed a file outside the library")
 	}
@@ -206,7 +206,7 @@ func TestAnExpiredDraftLeavesAnImagesFolderAnotherPageUses(t *testing.T) {
 		t.Fatal(resp.Error)
 	}
 	a.archiveNow(path)
-	a.sweepAfter(deleteAfter)
+	a.sweepLate(deleteAfter)
 	missing(t, path)
 	if !a.inTrash("shared.html") {
 		t.Fatal("the draft is not in the Trash")
@@ -316,6 +316,121 @@ func TestTheSweepRemovesOldSaveRedirects(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, movedName)); err != nil {
 				t.Errorf("deleteAfter %q: the sweep removed %s: %v", tc.retention, filepath.Base(dir), err)
 			}
+		}
+	}
+}
+
+func TestAPageUnderTheLibraryRootButOutsideLibraryAndDraftsIsOnlyForgotten(t *testing.T) {
+	a, root := expiring(t, "")
+	path := filepath.Join(root, "code", "repo", "report.html")
+	mustWrite(t, path, "<h1>Report</h1>\n")
+	mustWrite(t, filepath.Join(page.FilesDir(path), "a.png"), "png")
+	at := a.clock.now().Add(-48 * time.Hour)
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatal(err)
+	}
+	if resp := call(t, a.home, &Request{Op: "open", Page: path}); resp.Error != "" {
+		t.Fatal(resp.Error)
+	}
+	src := mustRead(t, path)
+	a.archiveNow(path)
+	a.sweepLate(deleteAfter)
+	if a.known(path) {
+		t.Fatal("the expired page was not forgotten")
+	}
+	if mustRead(t, path) != src || mustRead(t, filepath.Join(page.FilesDir(path), "a.png")) != "png" || a.inTrash("report.html") || a.inTrash("report.files") {
+		t.Fatal("the sweep trashed a page that sits under the library root but outside its library and drafts folders")
+	}
+}
+
+func TestSaveDuringARemovalIsRefusedAndASaveAfterTheClaimKeepsThePage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		kept bool
+		save func(a *archiveSite, path string)
+	}{
+		{"Save is refused", false, func(a *archiveSite, path string) {
+			if to, err := a.s.Save(path, "Work"); err == nil || !strings.Contains(err.Error(), "is being deleted") {
+				a.t.Errorf("Save on a page kapi was removing = %q, %v; want it refused", to, err)
+			}
+		}},
+		{"a saved flag written after the claim", true, func(a *archiveSite, path string) {
+			if err := page.MarkSaved(filepath.Join(a.home, "pages", page.ID(path))); err != nil {
+				a.t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, library := expiring(t, "")
+			path := a.draft(library, "saved.html", 48*time.Hour)
+			a.archiveNow(path)
+			old := a.s
+			a.stop()
+			closeLogs(t, old)
+			a.clock.add(deleteAfter)
+			a.start()
+			a.clock.add(archiveEvery)
+			prev := claimedExpired
+			claimedExpired = func(p string) {
+				if p == path {
+					tc.save(a, path)
+				}
+			}
+			t.Cleanup(func() { claimedExpired = prev })
+			a.sweepAfter(0)
+			if _, err := os.Stat(filepath.Join(library, "library", "Work", "saved.html")); err == nil {
+				t.Fatal("Save moved the page into the library while kapi was removing it")
+			}
+			if tc.kept && (!a.known(path) || a.inTrash("saved.html")) {
+				t.Fatal("the page was removed although it was saved while kapi was removing it")
+			}
+			if !tc.kept && a.known(path) {
+				t.Fatal("the refused Save stopped the removal")
+			}
+		})
+	}
+}
+
+func TestASweepAfterALongGapDeletesNothing(t *testing.T) {
+	a, library := expiring(t, "")
+	path := a.draft(library, "asleep.html", 48*time.Hour)
+	a.archiveNow(path)
+	a.sweepAfter(archiveEvery)
+	a.sweepAfter(deleteAfter)
+	if !a.known(path) || a.inTrash("asleep.html") {
+		t.Fatal("the first sweep after the machine slept through the deadline deleted the page")
+	}
+	a.sweepAfter(archiveEvery)
+	if a.known(path) || !a.inTrash("asleep.html") {
+		t.Fatal("the next regular sweep kept the expired page")
+	}
+}
+
+func TestAnEditBetweenTheSweepsReadAndTheRemovalKeepsThePage(t *testing.T) {
+	a, library := expiring(t, "")
+	path := a.draft(library, "edited.html", 48*time.Hour)
+	a.archiveNow(path)
+	a.sweepAfter(deleteAfter)
+	prev := sweepRead
+	sweepRead = func(p string) {
+		if p == path {
+			mustWrite(t, path, "<h1>edited by an agent</h1>\n")
+		}
+	}
+	t.Cleanup(func() { sweepRead = prev })
+	a.sweepAfter(0)
+	if !a.known(path) || a.inTrash("edited.html") {
+		t.Fatal("the sweep removed a page edited after it read the file")
+	}
+}
+
+func closeLogs(t *testing.T, s *Server) {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, l := range s.pages {
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

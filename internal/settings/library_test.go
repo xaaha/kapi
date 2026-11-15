@@ -42,8 +42,6 @@ func TestLibraryPatches(t *testing.T) {
 		{abs + "/", abs},
 		{"~/work/kapi/", "~/work/kapi"},
 		{"~/a/../b", "~/b"},
-		{"~", "~"},
-		{"~/", "~"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
@@ -89,6 +87,35 @@ func TestLibraryPatchRefusesRelativeFoldersAndKeepsTheFile(t *testing.T) {
 				t.Errorf("a refused update changed the file:\n%s", after)
 			}
 		})
+	}
+}
+
+func TestLibraryPatchRefusesTheDiskRootTheHomeFolderAndItsParents(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "users", "me")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	root := filepath.VolumeName(home) + string(filepath.Separator)
+	for _, bad := range []string{"~", "~/", "~/..", "~/../..", root, home, filepath.Dir(home), home + string(filepath.Separator)} {
+		t.Run(bad, func(t *testing.T) {
+			f := newFile(t)
+			if _, err := f.Update(context.Background(), Patch{Library: ptr(bad)}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "library") {
+				t.Errorf("Update(%q) = %v, want ErrInvalid naming library", bad, err)
+			}
+		})
+	}
+	f := newFile(t)
+	if err := os.WriteFile(f.path, []byte(`{"library":"~"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Library != DefaultLibrary {
+		t.Errorf("a hand-edited library of ~ gave %q, want the default %q", got.Library, DefaultLibrary)
 	}
 }
 

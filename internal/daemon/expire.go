@@ -16,13 +16,32 @@ import (
 	"github.com/xaaha/kapi/internal/settings"
 )
 
-const redirectsWithoutDeletion = 30 * 24 * time.Hour
+const (
+	redirectsWithoutDeletion = 30 * 24 * time.Hour
+	sweepGap                 = 2 * archiveEvery
+	sweptName                = "swept"
+)
+
+var (
+	claimedExpired = func(string) {}
+	sweepRead      = func(string) {}
+)
 
 func (s *Server) deletingAllowed(now time.Time) bool {
 	r := &s.retention
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	return now.Sub(r.started) >= archiveEvery
+	started := r.started
+	r.mu.Unlock()
+	file := filepath.Join(s.home, sweptName)
+	b, err := os.ReadFile(file)
+	last, perr := time.Parse(time.RFC3339Nano, strings.TrimSpace(string(b)))
+	if werr := writeAtomic(file, []byte(now.Round(0).UTC().Format(time.RFC3339Nano)+"\n")); werr != nil {
+		log.Printf("retention: record the sweep time: %v", werr)
+	}
+	if err != nil || perr != nil || now.Sub(last) > sweepGap {
+		return false
+	}
+	return now.Sub(started) >= archiveEvery
 }
 
 func expired(lc *page.Lifecycle, p settings.Policy, now time.Time) bool {
@@ -35,7 +54,8 @@ func (s *Server) ownedByKapi(path string) bool {
 	if err != nil {
 		return false
 	}
-	return inside(resolved(f.Root), resolved(path))
+	path = resolved(path)
+	return inside(resolved(f.Library), path) || inside(resolved(f.Drafts), path)
 }
 
 func (s *Server) expire(d pageDir, want *page.Lifecycle, seen stamp, p settings.Policy) (bool, error) {
@@ -54,6 +74,11 @@ func (s *Server) expire(d pageDir, want *page.Lifecycle, seen stamp, p settings.
 		return false, err
 	}
 	defer s.doneDeleting(d.path)
+	claimedExpired(d.path)
+	if lc, err := page.ReadLifecycle(d.dir); err != nil || lc.Saved {
+		s.forgetStore(d.path)
+		return false, err
+	}
 	aside := s.deletedDir(id)
 	rec := &deletion{Path: d.path, Title: title, At: s.now().UTC()}
 	var files []string

@@ -93,6 +93,9 @@ func sum(b []byte) string {
 func (s *Server) move(from, dir string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleting[from] {
+		return "", s.refuseDeleted(from)
+	}
 	if err := s.resumePending(from); err != nil {
 		return "", err
 	}

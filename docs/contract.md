@@ -307,20 +307,26 @@ The same sweep removes an archived page once `archivedAt` plus
 counts from `archivedAt`, so a `deleteAfter` shorter than `archiveAfter` never
 removes a page before it was archived. No page is removed until one full sweep
 interval (15 minutes) after a start, so a returning person sees the Archived
-list first. While `settings.json` cannot be read nothing is removed. Right
+list first. Each sweep records its time in `$KAPI_HOME/swept`; a sweep that
+finds no record, or one more than two intervals old (the machine slept with
+the daemon running), removes nothing, so the next one does. While `settings.json` cannot be read nothing is removed. Right
 before removing, under the same locks as archiving, kapi checks again that the
 page is still archived at the same `archivedAt`, not saved, not open in a tab,
 has no attached `kapi watch` or `kapi wait` (whatever `keepWhileOpen` says),
 has the same `touched`, and that its file has the same size and mtime;
 otherwise it keeps the page. An open page store is retired in the same step,
-so a touch that comes later fails instead of landing on a page being removed.
+so a touch that comes later fails instead of landing on a page being removed,
+and Save of a page being removed is refused. The saved flag is read once more
+before anything moves. The file's size and mtime are compared with what the
+sweep read when it decided, or after it took in a file edit.
 Removal depends on where the file is:
 
-- Inside the library root (`<root>`, which holds `library` and `drafts`), the
-  file and its images folder move to the Trash exactly as Delete does, and the
-  page's state goes to `$KAPI_HOME/deleted/<id>/`. An images folder another
+- Inside `<root>/library` or `<root>/drafts`, compared after resolving
+  symlinks, the file and its images folder move to the Trash exactly as
+  Delete does, and the page's state goes to `$KAPI_HOME/deleted/<id>/`. An images folder another
   page uses stays, and only the file moves.
-- Anywhere else (a repo, `~/Documents`, `/tmp`), the file and its images are
+- Anywhere else (a repo, `~/Documents`, `/tmp`, or elsewhere under
+  `<root>`), the file and its images are
   never touched. kapi only forgets the page: its state goes to
   `$KAPI_HOME/deleted/<id>/` and it leaves the index. Opening the file again
   starts a fresh page.
@@ -555,8 +561,10 @@ Pages are temporary until the person saves them. The `library` setting in
 `$KAPI_HOME/settings.json` names the library root: an absolute folder or one
 starting with `~/`, `~/kapi` by default. New pages go in `<root>/drafts` and
 saved ones in folders under `<root>/library`. `PATCH settings` with
-`{"library":"..."}` refuses a relative folder with 422. A hand-edited value
-that is not a string or not absolute is ignored with one warning in the log,
+`{"library":"..."}` refuses a relative folder with 422, and so does the disk
+root, the home folder, or any folder that holds the home folder. A hand-edited value
+that is not a string, not absolute, or one of those refused folders is
+ignored with one warning in the log,
 and the default is used.
 
 `kapi new [--print] <title>` creates `<root>/drafts/<slug>.html` holding

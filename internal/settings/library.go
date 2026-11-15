@@ -19,10 +19,44 @@ const (
 var ErrBadFolder = errors.New("bad folder name")
 
 func checkLibrary(s string) error {
-	if s == "~" || strings.HasPrefix(s, "~/") || filepath.IsAbs(s) {
-		return nil
+	if s != "~" && !strings.HasPrefix(s, "~/") && !filepath.IsAbs(s) {
+		return fmt.Errorf("%q is not an absolute folder or one under ~/", s)
 	}
-	return fmt.Errorf("%q is not an absolute folder or one under ~/", s)
+	root, err := expandLibrary(cleanLibrary(s))
+	if err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("library %s: %w", s, err)
+	}
+	if holds(realPath(root), realPath(home)) || filepath.Dir(root) == root {
+		return fmt.Errorf("%q is or holds your home folder; kapi moves pages it owns there to the Trash, so pick a folder of its own such as ~/kapi", s)
+	}
+	return nil
+}
+
+func holds(folder, path string) bool {
+	rel, err := filepath.Rel(folder, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func realPath(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	return path
+}
+
+func expandLibrary(root string) (string, error) {
+	if root != "~" && !strings.HasPrefix(root, "~/") {
+		return root, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("library %s: %w", root, err)
+	}
+	return filepath.Join(home, strings.TrimPrefix(root, "~")), nil
 }
 
 func cleanLibrary(s string) string {
@@ -43,13 +77,9 @@ type Folders struct {
 }
 
 func (s *Settings) Folders() (Folders, error) {
-	root := cmp.Or(s.Library, DefaultLibrary)
-	if root == "~" || strings.HasPrefix(root, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return Folders{}, fmt.Errorf("library %s: %w", root, err)
-		}
-		root = filepath.Join(home, strings.TrimPrefix(root, "~"))
+	root, err := expandLibrary(cmp.Or(s.Library, DefaultLibrary))
+	if err != nil {
+		return Folders{}, err
 	}
 	return Folders{Root: root, Library: filepath.Join(root, "library"), Drafts: filepath.Join(root, "drafts")}, nil
 }

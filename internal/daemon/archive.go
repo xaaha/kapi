@@ -175,10 +175,13 @@ func (s *Server) sweepArchive() {
 		if !ok {
 			continue
 		}
+		sweepRead(d.path)
 		lc, stale := lifecycleOf(d.dir, at.mod)
+		absorbed := false
 		due := s.archivesAt(d.path, &lc, p)
 		ready := archiving && !due.IsZero() && !now.Before(due)
 		if stale && (ready || !lc.Archived.IsZero()) {
+			absorbed = true
 			before := lc
 			if lc, err = s.absorb(d.path); err != nil {
 				log.Printf("archive %s: %v", d.path, err)
@@ -200,8 +203,10 @@ func (s *Server) sweepArchive() {
 		if !deleting || !expired(&lc, p, now) {
 			continue
 		}
-		if at, ok = stampOf(d.path); !ok {
-			continue
+		if absorbed {
+			if at, ok = stampOf(d.path); !ok {
+				continue
+			}
 		}
 		removed, err := s.expire(d, &lc, at, p)
 		if err != nil {
