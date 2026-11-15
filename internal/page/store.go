@@ -76,7 +76,8 @@ type Store struct {
 	event  *revEvent
 	logged uint64
 
-	viewed, touched time.Time
+	viewed, touched, archived time.Time
+	saved                     bool
 }
 
 type state struct {
@@ -87,8 +88,15 @@ type state struct {
 	Held  []heldFile `json:"held,omitempty"`
 	Event *revEvent  `json:"event,omitempty"`
 
-	Viewed  time.Time `json:"viewed,omitzero"`
-	Touched time.Time `json:"touched,omitzero"`
+	Viewed   time.Time `json:"viewed,omitzero"`
+	Touched  time.Time `json:"touched,omitzero"`
+	Archived time.Time `json:"archivedAt,omitzero"`
+	Saved    bool      `json:"saved,omitempty"`
+}
+
+type Lifecycle struct {
+	Viewed, Touched, Archived time.Time
+	Saved                     bool
 }
 
 type revEvent struct {
@@ -238,7 +246,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 
 func (s *Store) load(st *state) error {
 	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
-	s.viewed, s.touched = st.Viewed, st.Touched
+	s.viewed, s.touched, s.archived, s.saved = st.Viewed, st.Touched, st.Archived, st.Saved
 	if s.rev > 0 {
 		src, err := osfile.ReadFile(s.revPath(s.rev))
 		if err != nil {
@@ -707,6 +715,7 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 			return 0, errors.Join(err, s.saveState(&now))
 		}
 	}
+	touched := s.touched
 	switch {
 	case s.rev == 0:
 		s.touched = written
@@ -714,6 +723,9 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 		s.touched = written
 	case ev != nil && ev.Author != "kapi":
 		s.touched = clock().UTC()
+	}
+	if !s.touched.Equal(touched) {
+		s.archived = time.Time{}
 	}
 	s.src, s.rev, s.undo, s.event = src, rev, undo, ev
 	if err := s.saveState(&next); err != nil {
@@ -736,7 +748,7 @@ func (s *Store) logEvent() (uint64, error) {
 
 func (s *Store) saveState(st *state) error {
 	st.Held, st.Event = s.held, s.event
-	st.Viewed, st.Touched = s.viewed, s.touched
+	st.Viewed, st.Touched, st.Archived, st.Saved = s.viewed, s.touched, s.archived, s.saved
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
@@ -752,10 +764,10 @@ func modTime(path string, otherwise time.Time) time.Time {
 	return fi.ModTime().UTC()
 }
 
-func (s *Store) Times() (viewed, touched time.Time) {
+func (s *Store) Lifecycle() Lifecycle {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.viewed, s.touched
+	return Lifecycle{Viewed: s.viewed, Touched: s.touched, Archived: s.archived, Saved: s.saved}
 }
 
 func (s *Store) MarkViewed() error {
@@ -769,22 +781,57 @@ func (s *Store) Touch() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.touched = clock().UTC()
+	s.archived = time.Time{}
 	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
 }
 
-func ReadTimes(dir string) (viewed, touched time.Time, err error) {
+func (s *Store) MarkArchived(at, touched time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.touched.Equal(touched) || !s.archived.IsZero() || s.saved {
+		return false, nil
+	}
+	s.archived = at.UTC()
+	return true, s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func MarkArchivedAt(dir string, at, touched time.Time) (bool, error) {
+	st, err := readState(dir)
+	if err != nil || st == nil {
+		return false, err
+	}
+	if !st.Touched.Equal(touched) || !st.Archived.IsZero() || st.Saved {
+		return false, nil
+	}
+	st.Archived = at.UTC()
+	b, err := json.Marshal(st)
+	if err != nil {
+		return false, err
+	}
+	return true, WriteAtomic(filepath.Join(dir, "state.json"), b)
+}
+
+func ReadLifecycle(dir string) (Lifecycle, error) {
+	st, err := readState(dir)
+	if err != nil || st == nil {
+		return Lifecycle{}, err
+	}
+	return Lifecycle{Viewed: st.Viewed, Touched: st.Touched, Archived: st.Archived, Saved: st.Saved}, nil
+}
+
+func readState(dir string) (*state, error) {
 	b, err := osfile.ReadFile(filepath.Join(dir, "state.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return time.Time{}, time.Time{}, nil
+		return nil, nil
 	}
 	if err != nil {
-		return time.Time{}, time.Time{}, err
+		return nil, err
 	}
 	var st state
 	if err := json.Unmarshal(b, &st); err != nil {
-		return time.Time{}, time.Time{}, err
+		return nil, err
 	}
-	return st.Viewed, st.Touched, nil
+	return &st, nil
 }
 
 const tempMark = ".kapi-"

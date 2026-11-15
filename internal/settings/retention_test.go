@@ -117,7 +117,7 @@ func TestPartialRetentionPatchLeavesEverythingElseAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: Retention{"2h", "48h", false}}
+	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: Retention{"2h", "48h", false}, Dismissed: []string{}}
 	if !equal(&got, &want) {
 		t.Errorf("Update = %+v, want %+v", got, want)
 	}

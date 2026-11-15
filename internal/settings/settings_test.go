@@ -42,7 +42,7 @@ func TestUpdateRoundTripsThroughANewStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: DefaultRetention()}
+	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: DefaultRetention(), Dismissed: []string{}}
 	if !equal(&got, &want) {
 		t.Errorf("after reopening: %+v, want %+v", got, want)
 	}
@@ -111,9 +111,35 @@ func TestAFileFromAnOlderCatalogFallsBackToKnownThemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Mode: System, Theme: "default", Recent: []string{"default", "rose", "paper"}, Retention: DefaultRetention()}
+	want := Settings{Mode: System, Theme: "default", Recent: []string{"default", "rose", "paper"}, Retention: DefaultRetention(), Dismissed: []string{}}
 	if !equal(&got, &want) {
 		t.Errorf("Get = %+v, want %+v", got, want)
+	}
+}
+
+func TestADismissedNoticeStaysDismissedOnceAndUnknownNoticesAreRefused(t *testing.T) {
+	f := newFile(t)
+	ctx := context.Background()
+	for range 2 {
+		if _, err := f.Update(ctx, Patch{Dismiss: ptr(ArchiveNotice)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.Update(ctx, Patch{Dismiss: ptr("tour")}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("dismissing an unknown notice = %v, want ErrInvalid", err)
+	}
+	got, err := NewFile(f.path, f.known).Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.Dismissed, []string{ArchiveNotice}) {
+		t.Errorf("dismissed = %q, want only %q", got.Dismissed, ArchiveNotice)
+	}
+	if err := os.WriteFile(f.path, []byte(`{"mode":"dark","theme":"ocean","recent":["ocean"],"dismissed":["tour","archive-intro"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.Get(ctx); err != nil || !slices.Equal(got.Dismissed, []string{ArchiveNotice}) {
+		t.Errorf("a hand-edited file reads as dismissed %q, %v, want only %q", got.Dismissed, err, ArchiveNotice)
 	}
 }
 
@@ -181,5 +207,5 @@ func TestConcurrentUpdatesAllLand(t *testing.T) {
 }
 
 func equal(a, b *Settings) bool {
-	return a.Mode == b.Mode && a.Theme == b.Theme && slices.Equal(a.Recent, b.Recent) && a.Retention == b.Retention
+	return a.Mode == b.Mode && a.Theme == b.Theme && slices.Equal(a.Recent, b.Recent) && a.Retention == b.Retention && slices.Equal(a.Dismissed, b.Dismissed)
 }

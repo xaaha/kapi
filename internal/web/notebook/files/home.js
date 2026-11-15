@@ -1,9 +1,10 @@
-import { h, icon, prefs, root, shortcuts } from "../../static/core.js";
+import { getJSON, h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
 import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
 import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
-import { STATUS_FILTERS, stateLabel, stateMatches, stateTone } from "./states.js";
+import { ARCHIVE_NOTICE, VIEWS, badge, bannerCopy, policyOf } from "./lifecycle.js";
+import { stateLabel, stateTone } from "./states.js";
 
 const href = (p) => `${root}p/${p.id}/`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -16,6 +17,7 @@ function card(p, fresh, folder) {
     href: href(p),
     title: p.path,
     "data-ended": p.state === "ended",
+    "data-archived": Boolean(p.archivedAt),
     "data-new": fresh || false,
   },
   h("span", { class: "nb-card-top" },
@@ -25,6 +27,7 @@ function card(p, fresh, folder) {
   h("strong", { class: "nb-card-title", text: title }),
   h("span", { class: "nb-card-summary", text: p.summary || "No summary yet." }),
   h("span", { class: "nb-card-foot" },
+    badge(p),
     h("span", { class: "nb-card-activity", text: `${stateLabel(p)} · ${ago(p.changed)}` }),
     fresh ? h("span", { class: "nb-new", text: "New" }) : null));
 }
@@ -34,7 +37,7 @@ export function showHome(main) {
   registerNotesSearch();
   const searchButton = searchTrigger();
   const project = h("select", { class: "nb-select", "aria-label": "Folder" }, h("option", { value: "", text: "All folders" }));
-  const status = h("div", { class: "nb-status", role: "group", "aria-label": "Status" });
+  const tabs = h("div", { class: "nb-status", role: "group", "aria-label": "View" });
   const count = h("span", { class: "nb-count" });
   const grid = h("div", { class: "nb-grid", "data-view": prefs.get("kapi-home-view") === "list" ? "list" : "cards" });
   const viewButtons = ["cards", "list"].map((view) => {
@@ -48,63 +51,87 @@ export function showHome(main) {
   });
   const viewToggle = h("div", { class: "nb-view-toggle", role: "group", "aria-label": "Note view" }, ...viewButtons);
   const empty = h("p", { class: "nb-empty" });
-  let pickedStatus = "active";
-  let initialized = false;
-  const filterCopy = {
-    active: ["Your current sessions", "Continue where you left off."],
-    inactive: ["Quiet for now", "Pick up a note when you’re ready."],
-    ended: ["Completed sessions", "Your pages and history are still here."],
-    "": ["All your notes", "Browse work from you and your agents."],
-  };
-  const filterTitle = h("strong");
-  const filterDescription = h("p");
-  const filterContext = h("div", { class: "nb-filter-context", role: "status" }, filterTitle, filterDescription);
-  const statusButtons = STATUS_FILTERS.map(({ value, label }) => {
-    const button = h("button", { type: "button", class: "nb-status-button", "data-status": value, "aria-pressed": String(value === pickedStatus), text: label });
+  let picked = VIEWS[0];
+  let settings = null;
+  const contextTitle = h("strong");
+  const contextDescription = h("p");
+  const context = h("div", { class: "nb-filter-context", role: "status" }, contextTitle, contextDescription);
+  const bannerTitle = h("strong");
+  const bannerText = h("p");
+  const gotIt = h("button", { type: "button", class: "nb-banner-dismiss", text: "Got it" });
+  const banner = h("div", { class: "nb-banner", role: "status" }, h("div", { class: "nb-banner-copy" }, bannerTitle, bannerText), h("div", { class: "nb-banner-actions" }, gotIt));
+  banner.hidden = true;
+  const tabButtons = VIEWS.map((view) => {
+    const button = h("button", { type: "button", class: "nb-status-button", "data-tab": view.name, "aria-pressed": String(view === picked), text: view.label });
     button.addEventListener("click", () => {
-      pickedStatus = value;
-      for (const item of statusButtons) item.setAttribute("aria-pressed", String(item === button));
+      picked = view;
       updateProjects();
       draw();
     });
     return button;
   });
-  status.append(...statusButtons);
+  tabs.append(...tabButtons);
 
   const brand = h("a", { class: "kapi-site-home", href: root }, h("span", { class: "kapi-logo", "aria-hidden": "true" }), h("span", { class: "kapi-site-name", text: "Kapi" }));
   const theme = window.kapiTheme?.control?.({ icon, shortcuts });
   const top = h("header", { class: "nb-top kapi-site-head" }, brand,
     h("div", { class: "kapi-site-actions nb-top-actions" }, searchButton, theme));
   const organizer = createOrganizer();
-  const toolbar = h("div", { class: "nb-toolbar" }, status, h("div", { class: "nb-toolbar-right" }, viewToggle, organizer.button, h("span", { class: "nb-select-wrap" }, project, h("span", { class: "nb-select-caret", "aria-hidden": "true" })), count));
-  const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your temporary workspace" }), h("h1", { text: "All notes" })), h("p", { class: "nb-intro", text: "Recent work from you and your agents, in one searchable place." }));
-  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, filterContext, grid, empty);
+  const toolbar = h("div", { class: "nb-toolbar" }, tabs, h("div", { class: "nb-toolbar-right" }, viewToggle, organizer.button, h("span", { class: "nb-select-wrap" }, project, h("span", { class: "nb-select-caret", "aria-hidden": "true" })), count));
+  const title = h("h1");
+  const intro = h("p", { class: "nb-intro" });
+  const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your workspace" }), title), intro);
+  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, banner, context, grid, empty);
   main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)));
 
   let pages = [];
   let fresh = new Set();
   const updateProjects = () => {
-    const folders = new Set(pages.filter((p) => stateMatches(p, pickedStatus)).flatMap(foldersOf));
+    const folders = new Set(pages.filter(picked.shows).flatMap(foldersOf));
     const selected = project.value;
     project.replaceChildren(h("option", { value: "", text: "All folders" }), ...[...folders].map((folder) => h("option", { value: folder, text: folderTitle(folder) })));
     if ([...folders].includes(selected)) project.value = selected;
   };
   const draw = () => redraw(library, () => {
     const candidates = project.value ? byFolder(pages).get(project.value) ?? [] : orderForHome(pages);
-    const matching = candidates;
-    const shown = matching.filter((p) => stateMatches(p, pickedStatus));
-    STATUS_FILTERS.forEach(({ value, label }, i) => {
-      const total = matching.filter((p) => stateMatches(p, value)).length;
-      statusButtons[i].textContent = label;
-      statusButtons[i].dataset.count = total;
-      statusButtons[i].setAttribute("aria-label", `${label} ${total}`);
-      statusButtons[i].setAttribute("aria-pressed", String(value === pickedStatus));
+    const shown = picked.order(candidates.filter(picked.shows));
+    const policy = policyOf(settings);
+    VIEWS.forEach((view, i) => {
+      const total = candidates.filter(view.shows).length;
+      tabButtons[i].dataset.count = total;
+      tabButtons[i].setAttribute("aria-label", `${view.label} ${total}`);
+      tabButtons[i].setAttribute("aria-pressed", String(view === picked));
     });
-    [filterTitle.textContent, filterDescription.textContent] = filterCopy[pickedStatus];
+    title.textContent = picked.label;
+    intro.textContent = settings ? picked.intro(policy) : "";
+    context.hidden = !picked.context;
+    if (picked.context) [contextTitle.textContent, contextDescription.textContent] = picked.context(policy);
+    const copy = bannerCopy(policy);
+    banner.hidden = !settings || !copy || picked !== VIEWS[0] || Boolean(settings.dismissed?.includes(ARCHIVE_NOTICE));
+    if (copy) [bannerTitle.textContent, bannerText.textContent] = copy;
     count.textContent = plural(shown.length, "note");
     grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
     empty.hidden = shown.length > 0;
-    empty.textContent = pages.length ? "No note matches these filters." : "No notes yet. Ask an agent to create one, or run kapi open notes.html.";
+    empty.textContent = !pages.length ? "No notes yet. Ask an agent to create one, or run kapi open notes.html." : project.value ? "No note matches these filters." : picked.empty;
+  });
+
+  let loaded = false;
+  const adopt = (next) => {
+    settings = next;
+    if (loaded) draw();
+  };
+  getJSON("settings").then(adopt, () => {});
+  document.addEventListener("kapi-settings", (e) => adopt(e.detail));
+  gotIt.addEventListener("click", async () => {
+    const before = settings;
+    adopt({ ...settings, dismissed: [...(settings.dismissed ?? []), ARCHIVE_NOTICE] });
+    try {
+      const res = await fetch(`${root}settings`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dismiss: ARCHIVE_NOTICE }) });
+      if (!res.ok) throw new Error(`settings: ${res.status}`);
+      adopt(await res.json());
+    } catch {
+      adopt(before);
+    }
   });
 
   project.addEventListener("change", draw);
@@ -118,10 +145,7 @@ export function showHome(main) {
   });
   watch((next) => {
     pages = next;
-    if (!initialized) {
-      if (!pages.some((p) => stateMatches(p, "active"))) pickedStatus = "";
-      initialized = true;
-    }
+    loaded = true;
     fresh = newIDs(pages, null);
     organizer.setPages(pages);
     updateProjects();

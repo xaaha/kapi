@@ -78,7 +78,9 @@
 
   function listen() {
     const take = (data) => {
-      if (pending === 0) adopt(JSON.parse(data));
+      const next = JSON.parse(data);
+      document.dispatchEvent(new CustomEvent("kapi-settings", { detail: next }));
+      if (pending === 0) adopt(next);
     };
     if (window.SharedWorker) {
       const worker = new SharedWorker(new URL("settings-stream.js", here));

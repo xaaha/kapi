@@ -49,6 +49,7 @@ func (s *Server) Index() ([]app.Page, error) {
 		return nil, err
 	}
 	out := make([]app.Page, 0, len(dirs))
+	policy := s.policy()
 	for _, d := range dirs {
 		if d.err != nil {
 			continue
@@ -63,13 +64,9 @@ func (s *Server) Index() ([]app.Page, error) {
 		if at, ok := stampOf(filepath.Join(d.dir, "events.ndjson")); ok && at.mod.After(p.Changed) {
 			p.Changed = at.mod
 		}
-		p.Viewed, p.Touched, _ = page.ReadTimes(d.dir)
-		if p.Touched.IsZero() {
-			p.Touched = at.mod.UTC()
-		}
-		if p.Viewed.IsZero() {
-			p.Viewed = p.Touched
-		}
+		lc, _ := lifecycleOf(d.dir, at.mod)
+		p.Viewed, p.Touched, p.ArchivedAt = lc.Viewed, lc.Touched, lc.Archived
+		p.ArchivesAt, p.DeletesAt = s.archivesAt(d.path, &lc, policy), deletesAt(&lc, policy)
 		out = append(out, p)
 	}
 	slices.SortStableFunc(out, func(a, b app.Page) int {

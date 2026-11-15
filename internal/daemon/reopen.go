@@ -45,6 +45,7 @@ func (s *Server) Viewing(id string) (done func()) {
 			return
 		}
 		delete(s.viewers, id)
+		s.release(id)
 		select {
 		case <-s.stopping:
 			return
@@ -81,6 +82,7 @@ func (s *Server) takeViewedPages() []viewedPage {
 		if err := os.Remove(file); err != nil {
 			log.Printf("viewing %s: %v", d.Name(), err)
 		}
+		s.release(d.Name())
 		if d.Name() == s.ReopenExcept {
 			continue
 		}

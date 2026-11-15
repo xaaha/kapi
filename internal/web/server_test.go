@@ -1476,8 +1476,7 @@ func TestHumanNotesMessagesAndAnswersTouchThePageButReadingItDoesNot(t *testing.
 		t.Fatal(err)
 	}
 	touched := func() time.Time {
-		_, at := st.Times()
-		return at
+		return st.Lifecycle().Touched
 	}
 	last := touched()
 	for _, step := range []struct {
