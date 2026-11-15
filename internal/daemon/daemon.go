@@ -971,12 +971,12 @@ func (s *Server) setAttached(path, reader string, on bool) {
 	if !last {
 		return
 	}
-	s.release(id)
 	select {
 	case <-s.stopping:
 		return
 	default:
 	}
+	s.release(id)
 	if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("attached %s: %v", path, err)
 	}
