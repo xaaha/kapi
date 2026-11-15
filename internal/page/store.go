@@ -193,7 +193,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 		return nil, err
 	}
 	for attempt := 0; ; attempt++ {
-		raw, err := osfile.ReadFile(path)
+		raw, err := osfile.ReadSettled(path)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +243,7 @@ func (s *Store) load(st *state) error {
 	if st.Next == nil {
 		return nil
 	}
-	raw, err := osfile.ReadFile(s.path)
+	raw, err := osfile.ReadSettled(s.path)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (s *Store) restoreDisplaced(st *state) error {
 			return err
 		}
 	}
-	page, err := osfile.ReadFile(s.path)
+	page, err := osfile.ReadSettled(s.path)
 	if err != nil {
 		return err
 	}
@@ -479,7 +479,7 @@ func (s *Store) Refresh() (Summary, bool, error) {
 		return Summary{}, false, err
 	}
 	for attempt := 0; attempt < 10; attempt++ {
-		raw, err := osfile.ReadFile(s.path)
+		raw, err := osfile.ReadSettled(s.path)
 		if err != nil || bytes.Equal(raw, s.src) {
 			return Summary{}, false, err
 		}
@@ -516,7 +516,7 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 	if rev != s.rev && !s.blockUnchangedSince(rev, op) {
 		return s.rev, Summary{}, ErrStale
 	}
-	raw, err := osfile.ReadFile(s.path)
+	raw, err := osfile.ReadSettled(s.path)
 	if err != nil {
 		return s.rev, Summary{}, err
 	}
@@ -827,7 +827,7 @@ func swapIn(tmp, path string, ours, expect []byte) (*moved, error) {
 	}
 	err = swapFiles(tmp, path)
 	if errors.Is(err, errNoSwap) {
-		cur, err := osfile.ReadFile(path)
+		cur, err := osfile.ReadSettled(path)
 		if err != nil {
 			return nil, err
 		}
@@ -887,7 +887,7 @@ func swapIn(tmp, path string, ours, expect []byte) (*moved, error) {
 type moved struct{ seen, placed placement }
 
 func holding(path string, seen placement) (*moved, error) {
-	at, err := capture(path)
+	at, err := capturePage(path)
 	if err != nil {
 		return nil, err
 	}
@@ -974,7 +974,7 @@ func (s *Store) settleHeld(i int, final bool) (keep, back bool, err error) {
 	if err != nil {
 		return false, false, err
 	}
-	page, err := capture(s.path)
+	page, err := capturePage(s.path)
 	if err != nil {
 		return false, false, err
 	}
@@ -1035,7 +1035,7 @@ func (s *Store) recoverSwapBacks() error {
 		if err != nil {
 			return err
 		}
-		page, err := capture(s.path)
+		page, err := capturePage(s.path)
 		if err != nil {
 			return err
 		}
@@ -1064,12 +1064,21 @@ var settle = func() { time.Sleep(2 * time.Millisecond) }
 
 func settled(name string, p placement) (bool, error) {
 	settle()
-	return p.holds(name)
+	return p.holdsPage(name)
 }
 
 type placement struct {
 	fi os.FileInfo
 	b  []byte
+}
+
+func capturePage(name string) (placement, error) {
+	fi, err := osfile.StatSettled(name)
+	if err != nil {
+		return placement{}, err
+	}
+	b, err := osfile.ReadSettled(name)
+	return placement{fi, b}, err
 }
 
 func capture(name string) (placement, error) {
@@ -1086,14 +1095,26 @@ func (p placement) holds(name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if p.fi != nil && (!os.SameFile(now.fi, p.fi) || now.fi.Size() != p.fi.Size() || !now.fi.ModTime().Equal(p.fi.ModTime())) {
-		return false, nil
+	return p.matches(now), nil
+}
+
+func (p placement) holdsPage(name string) (bool, error) {
+	now, err := capturePage(name)
+	if err != nil {
+		return false, err
 	}
-	return bytes.Equal(now.b, p.b), nil
+	return p.matches(now), nil
+}
+
+func (p placement) matches(now placement) bool {
+	if p.fi != nil && (!os.SameFile(now.fi, p.fi) || now.fi.Size() != p.fi.Size() || !now.fi.ModTime().Equal(p.fi.ModTime())) {
+		return false
+	}
+	return bytes.Equal(now.b, p.b)
 }
 
 func tiedTmpIsNewer(tmp, path string, prev, placed placement) (bool, error) {
-	kept, err := placed.holds(path)
+	kept, err := placed.holdsPage(path)
 	if err != nil || !kept {
 		return false, err
 	}
