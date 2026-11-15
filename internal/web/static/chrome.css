@@ -2462,7 +2462,7 @@ html[data-kapi-head-hidden] {
 }
 
 #kapi-chrome .kapi-outline-tools {
-  left: calc(var(--kapi-page-left) - 56px);
+  left: max(calc(var(--kapi-page-left) - 56px), 8px);
 }
 
 #kapi-chrome .kapi-write-tools {
