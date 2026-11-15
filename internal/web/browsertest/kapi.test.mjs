@@ -1933,7 +1933,7 @@ test("on a wide desktop Outline sits top left and Write top right of the reading
   }
 });
 
-test("on a narrow desktop with the outline and chat open, Write stays at the top and fully clear of the chat panel", async () => {
+test("on a narrow desktop with the outline and chat open, Write stays at the top and fully clear of the chat panel, and Outline stays on screen", async () => {
   for (const width of [1280, 900]) {
     const p = await browser.open(server.url, { width, height: 700 });
     try {
@@ -1946,6 +1946,10 @@ test("on a narrow desktop with the outline and chat open, Write stays at the top
         return { top: w.top, right: w.right, chat: chat.left, hit: !!at?.closest(".kapi-write-button") };
       })()`);
       assert.ok(m.top < 200 && m.right <= m.chat + 0.5 && m.hit, `${width}px: ${JSON.stringify(m)}`);
+      await p.eval(`document.querySelector(".kapi-outline-close").click()`);
+      await p.waitFor(`document.querySelector(".kapi-outline-button").checkVisibility()`);
+      const o = await p.eval(`(r => ({ left: r.left, right: r.right }))(document.querySelector(".kapi-outline-button").getBoundingClientRect())`);
+      assert.ok(o.left >= 0 && o.right <= width, `${width}px: Outline must be fully on screen ${JSON.stringify(o)}`);
     } finally {
       await p.close();
     }
