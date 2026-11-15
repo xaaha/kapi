@@ -34,7 +34,6 @@
   --kapi-header-height: 64px;
   --kapi-head-offset: var(--kapi-header-height);
   --kapi-page-left: 0px;
-  --kapi-page-right: 0px;
   --kapi-bar-space: 0px;
   --kapi-panel-width: 355px;
   --kapi-panel-gutter: var(--kapi-panel-width);
@@ -2461,15 +2460,11 @@ html[data-kapi-head-hidden] {
   gap: 6px;
 }
 
-#kapi-chrome .kapi-write-tools {
-  left: calc(var(--kapi-page-right) + 20px);
+#kapi-chrome .kapi-page-tools {
+  left: calc(var(--kapi-page-left) - 98px);
 }
 
-#kapi-chrome .kapi-outline-tools {
-  left: calc(var(--kapi-page-left) - 56px);
-}
-
-html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
+html[data-kapi-outline-open] #kapi-chrome .kapi-page-tools > .kapi-outline-button {
   display: none;
 }
 
@@ -2517,8 +2512,7 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
     top: auto;
     bottom: calc(16px + var(--kapi-bar-space) + env(safe-area-inset-bottom));
   }
-  #kapi-chrome .kapi-write-tools { left: auto; right: 16px; }
-  #kapi-chrome .kapi-outline-tools { left: auto; right: 68px; }
+  #kapi-chrome .kapi-page-tools { left: auto; right: 16px; gap: 8px; }
   #kapi-chrome .kapi-page-tools > button { width: 44px; height: 44px; box-shadow: var(--kapi-shadow); }
   #kapi-chrome .kapi-page-tools { transition: transform 0.2s ease; }
   html[data-kapi-head-hidden] #kapi-chrome .kapi-page-tools { transform: translateY(calc(100% + 32px)); }
@@ -2526,8 +2520,7 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
 
 @media (min-width: 761px) {
   html[data-kapi-tools-tight] #kapi-chrome .kapi-page-tools { top: auto; bottom: 16px; }
-  html[data-kapi-tools-tight] #kapi-chrome .kapi-write-tools { left: auto; right: calc(var(--kapi-panel-gutter) + 16px); }
-  html[data-kapi-tools-tight] #kapi-chrome .kapi-outline-tools { left: auto; right: calc(var(--kapi-panel-gutter) + 60px); }
+  html[data-kapi-tools-tight] #kapi-chrome .kapi-page-tools { left: auto; right: calc(var(--kapi-panel-gutter) + 16px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
