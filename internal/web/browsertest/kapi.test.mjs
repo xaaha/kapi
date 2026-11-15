@@ -4826,30 +4826,6 @@ test("the pencil is plain in Review, pressed in Write, and writes a stroke only 
   assert.deepEqual((await state()).slice(1, 3), ["none", "none"], "reduced motion keeps the pencil and stroke still");
 });
 
-test("while a block is open the caret is a pencil whose tip follows the typing point, and leaving hides it", async () => {
-  const pen = () => page.eval(`(() => {
-    const p = document.querySelector(".kapi-caret-pen"), sel = getSelection();
-    const r = sel.rangeCount ? sel.getRangeAt(0).getClientRects()[0] : null;
-    const b = p.getBoundingClientRect();
-    return { shown: !p.hidden, caret: getComputedStyle(document.activeElement).caretColor, dx: r ? Math.round(b.left + 2 - r.left) : null, dy: r ? Math.round(b.bottom - 1 - (r.top + r.height * 0.8)) : null };
-  })()`);
-  assert.equal((await pen()).shown, false);
-  await mouseClick(".kapi-write-button");
-  await mouseClick('[data-kapi-id="bbbbbbbb"]');
-  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
-  await until(async () => (await pen()).shown);
-  const first = await pen();
-  assert.equal(first.caret, "rgba(0, 0, 0, 0)", "the native caret is hidden");
-  assert.deepEqual([first.dx, first.dy], [0, 0], JSON.stringify(first));
-  const before = await page.eval(`document.querySelector(".kapi-caret-pen").getBoundingClientRect().left`);
-  await page.type("abc");
-  await until(async () => (await page.eval(`document.querySelector(".kapi-caret-pen").getBoundingClientRect().left`)) > before);
-  assert.deepEqual(((p) => [p.dx, p.dy])(await pen()), [0, 0]);
-  await page.key("Escape");
-  await page.waitFor(`!document.querySelector("[contenteditable]")`);
-  await until(async () => !(await pen()).shown);
-});
-
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),

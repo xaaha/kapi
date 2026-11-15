@@ -2497,34 +2497,6 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   animation: kapi-writing 0.9s ease-in-out infinite;
 }
 
-html[data-kapi-pen-caret] #kapi-page [contenteditable]:not([contenteditable="false"]) {
-  caret-color: transparent;
-}
-
-textarea.kapi-source {
-  caret-color: var(--kapi-blue-solid);
-}
-
-#kapi-chrome .kapi-caret-pen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 2147483001;
-  width: 14px;
-  height: 14px;
-  color: var(--kapi-blue-text);
-  pointer-events: none;
-}
-
-#kapi-chrome .kapi-caret-pen svg {
-  display: block;
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  transform-origin: 12% 88%;
-  animation: kapi-writing 0.9s ease-in-out infinite;
-}
-
 @keyframes kapi-writing {
   0%, 100% { transform: translate(0, 0) rotate(0); }
   25% { transform: translate(1.5px, 1px) rotate(-10deg); }
@@ -2553,8 +2525,7 @@ textarea.kapi-source {
 
 @media (prefers-reduced-motion: reduce) {
   #kapi-chrome .kapi-write-button[data-editing] svg,
-  #kapi-chrome .kapi-write-button[data-editing]::before,
-  #kapi-chrome .kapi-caret-pen svg { animation: none; }
+  #kapi-chrome .kapi-write-button[data-editing]::before { animation: none; }
 }
 
 #kapi-chrome .kapi-page-tools > button:hover {
