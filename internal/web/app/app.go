@@ -52,6 +52,9 @@ type Page struct {
 	ArchivesAt time.Time `json:"archivesAt,omitzero"`
 	ArchivedAt time.Time `json:"archivedAt,omitzero"`
 	DeletesAt  time.Time `json:"deletesAt,omitzero"`
+
+	Saved   bool   `json:"saved,omitempty"`
+	SavedIn string `json:"savedIn,omitempty"`
 }
 
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {

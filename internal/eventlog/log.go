@@ -70,6 +70,8 @@ type Log struct {
 	pos     positions
 	changed chan struct{}
 	acked   chan struct{}
+	gone    chan struct{}
+	movedTo string
 }
 
 type positions struct {
@@ -116,7 +118,7 @@ func Open(dir string) (*Log, error) {
 		f.Close()
 		return nil, err
 	}
-	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{})}, nil
+	return &Log{dir: dir, file: f, size: whole, events: events, pos: pos, changed: make(chan struct{}), acked: make(chan struct{}), gone: make(chan struct{})}, nil
 }
 
 // Summary reads a log's reader cursors, unread counts and end in force without opening it for writing.
@@ -143,6 +145,26 @@ func (l *Log) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.file.Close()
+}
+
+func (l *Log) Retire(to string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.movedTo != "" {
+		return nil
+	}
+	l.movedTo = to
+	l.broken = fmt.Errorf("the page moved to %s", to)
+	close(l.gone)
+	return l.file.Close()
+}
+
+func (l *Log) Gone() <-chan struct{} { return l.gone }
+
+func (l *Log) MovedTo() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.movedTo
 }
 
 func (l *Log) Append(in *Event) (Event, error) {
@@ -312,6 +334,9 @@ func (l *Log) Handover(reader string, seq uint64, cut []uint64) error {
 func (l *Log) update(reader string, seq uint64, change func(*positions)) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.movedTo != "" {
+		return l.broken
+	}
 	if seq > uint64(len(l.events)) {
 		return fmt.Errorf("position %d beyond last event %d", seq, len(l.events))
 	}

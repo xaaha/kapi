@@ -5,7 +5,7 @@ const REFRESH_MS = 10000;
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
 export const base = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
-const dirname = (path) => path.replace(/[\\/][^\\/]*$/, "") || path;
+export const dirname = (path) => path.replace(/[\\/][^\\/]*$/, "") || path;
 export const foldersOf = (p) => (p.folders?.length ? p.folders : [dirname(p.path)]);
 export const folderOf = (p) => foldersOf(p)[0];
 export const inFolder = (p, folder) => foldersOf(p).includes(folder);

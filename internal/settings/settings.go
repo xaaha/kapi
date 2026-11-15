@@ -36,6 +36,7 @@ type Settings struct {
 	Recent    []string  `json:"recent"`
 	Retention Retention `json:"retention"`
 	Dismissed []string  `json:"dismissed"`
+	Library   string    `json:"library"`
 }
 
 type Patch struct {
@@ -43,6 +44,7 @@ type Patch struct {
 	Theme     *string         `json:"theme,omitempty"`
 	Retention *RetentionPatch `json:"retention,omitempty"`
 	Dismiss   *string         `json:"dismiss,omitempty"`
+	Library   *string         `json:"library,omitempty"`
 }
 
 var ErrInvalid = errors.New("invalid setting")
@@ -53,7 +55,7 @@ type Store interface {
 }
 
 func Default() Settings {
-	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}, Retention: DefaultRetention(), Dismissed: []string{}}
+	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}, Retention: DefaultRetention(), Dismissed: []string{}, Library: DefaultLibrary}
 }
 
 type File struct {
@@ -89,6 +91,11 @@ func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
 	if p.Dismiss != nil && !slices.Contains(Notices, *p.Dismiss) {
 		return Settings{}, fmt.Errorf("%w: no notice named %q", ErrInvalid, *p.Dismiss)
 	}
+	if p.Library != nil {
+		if err := checkLibrary(*p.Library); err != nil {
+			return Settings{}, fmt.Errorf("%w: library %w", ErrInvalid, err)
+		}
+	}
 	s, err := f.read()
 	if err != nil {
 		return Settings{}, err
@@ -103,6 +110,9 @@ func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
 	s.Retention = p.Retention.apply(s.Retention)
 	if p.Dismiss != nil && !slices.Contains(s.Dismissed, *p.Dismiss) {
 		s.Dismissed = append(s.Dismissed, *p.Dismiss)
+	}
+	if p.Library != nil {
+		s.Library = cleanLibrary(*p.Library)
 	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -128,11 +138,12 @@ func (f *File) read() (Settings, error) {
 		Recent    []string        `json:"recent"`
 		Retention json.RawMessage `json:"retention"`
 		Dismissed []string        `json:"dismissed"`
+		Library   json.RawMessage `json:"library"`
 	}
 	if err := json.Unmarshal(b, &stored); err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", f.path, err)
 	}
-	s := Settings{Mode: stored.Mode, Theme: stored.Theme, Recent: stored.Recent, Retention: f.retention(stored.Retention), Dismissed: stored.Dismissed}
+	s := Settings{Mode: stored.Mode, Theme: stored.Theme, Recent: stored.Recent, Retention: f.retention(stored.Retention), Dismissed: stored.Dismissed, Library: f.library(stored.Library)}
 	f.clean(&s)
 	return s, nil
 }

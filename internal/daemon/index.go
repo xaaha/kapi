@@ -67,6 +67,9 @@ func (s *Server) Index() ([]app.Page, error) {
 		lc, _ := lifecycleOf(d.dir, at.mod)
 		p.Viewed, p.Touched, p.ArchivedAt = lc.Viewed, lc.Touched, lc.Archived
 		p.ArchivesAt, p.DeletesAt = s.archivesAt(d.path, &lc, policy), deletesAt(&lc, policy)
+		if p.Saved = lc.Saved; p.Saved {
+			p.SavedIn = Tilde(filepath.Dir(d.path))
+		}
 		out = append(out, p)
 	}
 	slices.SortStableFunc(out, func(a, b app.Page) int {

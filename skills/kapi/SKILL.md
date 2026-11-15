@@ -14,8 +14,9 @@ metadata:
 - Run `kapi` first.
 - Treat `kapi --help`, command help, and `kapi preset` as authoritative.
 - Write only documented HTML and presets.
-- Reuse one page per task; add sections instead of creating related pages.
-- Find pages with `kapi ls --json`, last viewed first. `kapi home` shows them all in the browser.
+- Create pages with `kapi new <title>`. Use one page per task; add sections, not related pages.
+- Pages are temporary. Only the person saves one to the library; never move it yourself. Saving moves the file: when `kapi wait` exits naming a new path, use it.
+- Find pages with `kapi ls --json`.
 - Follow `kapi preset` writing rules: fact first, concrete numbers, no repetition.
 - Use `kapi wait <page>` when its exit wakes the harness; restart it after each event. Use `kapi watch <page>` only when every line is delivered.
 - Acknowledge events with the current `say --seen`, `say --reply`, `seen`, or `pending` flow.
@@ -35,7 +36,6 @@ Add visuals without being asked when they clarify the work.
 
 - Do not require Node, npm, npx, or browser packages.
 - Do not add scripts, iframes, or application JavaScript. Put CSS inside `kapi-render`.
-- Do not copy stale CLI syntax from this skill when help differs.
 - Do not detach a watcher that cannot wake the agent.
 
 ## Request

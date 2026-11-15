@@ -42,7 +42,7 @@ func TestUpdateRoundTripsThroughANewStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: DefaultRetention(), Dismissed: []string{}}
+	want := Settings{Mode: Dark, Theme: "ocean", Recent: []string{"ocean", "default"}, Retention: DefaultRetention(), Dismissed: []string{}, Library: DefaultLibrary}
 	if !equal(&got, &want) {
 		t.Errorf("after reopening: %+v, want %+v", got, want)
 	}
@@ -111,7 +111,7 @@ func TestAFileFromAnOlderCatalogFallsBackToKnownThemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Mode: System, Theme: "default", Recent: []string{"default", "rose", "paper"}, Retention: DefaultRetention(), Dismissed: []string{}}
+	want := Settings{Mode: System, Theme: "default", Recent: []string{"default", "rose", "paper"}, Retention: DefaultRetention(), Dismissed: []string{}, Library: DefaultLibrary}
 	if !equal(&got, &want) {
 		t.Errorf("Get = %+v, want %+v", got, want)
 	}
@@ -207,5 +207,5 @@ func TestConcurrentUpdatesAllLand(t *testing.T) {
 }
 
 func equal(a, b *Settings) bool {
-	return a.Mode == b.Mode && a.Theme == b.Theme && slices.Equal(a.Recent, b.Recent) && a.Retention == b.Retention && slices.Equal(a.Dismissed, b.Dismissed)
+	return a.Mode == b.Mode && a.Theme == b.Theme && slices.Equal(a.Recent, b.Recent) && a.Retention == b.Retention && slices.Equal(a.Dismissed, b.Dismissed) && a.Library == b.Library
 }

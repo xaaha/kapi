@@ -22,6 +22,8 @@ let pageURL;
 
 before(async () => {
   execFileSync("go", ["build", "-o", bin, "./cmd/kapi"], { cwd: repo });
+  mkdirSync(join(dir, "home"), { mode: 0o700 });
+  writeFileSync(join(dir, "home", "settings.json"), JSON.stringify({ library: join(dir, "notes") }));
   mkdirSync(projectA);
   mkdirSync(projectB);
   write(join(projectA, "plan.html"), "Rollout plan", "Two steps.");
@@ -65,7 +67,7 @@ test("the token root without a trailing slash opens the notes home", async () =>
     assert.equal(await p.eval("location.pathname.endsWith('/')"), true);
     assert.equal(await p.eval("document.title"), "kapi");
     assert.equal(await p.eval("document.querySelector('h1').textContent"), "Recent");
-    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Recent", "true"], ["Archived", "false"]]);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-status-button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])`), [["Recent", "true"], ["Saved", "false"], ["Archived", "false"]]);
     assert.ok(await p.eval("document.querySelectorAll('.nb-card').length") >= 3);
     assert.equal(await p.eval("document.querySelector('.nb-glyph') !== null"), true);
   } finally {
@@ -596,5 +598,136 @@ test("home splits notes into Recent and Archived with deadline badges, soonest d
   } finally {
     await p.close();
     stop();
+  }
+});
+
+const library = join(dir, "notes", "library");
+const draft = (title) => {
+  const [path, url] = kapi(dir, "new", "--print", title).split("\n");
+  return { path, url };
+};
+const openPage = (url) => browser.open(url, { ready: "!!document.getElementById('kapi-chrome') && !!document.querySelector('.kapi-menu [data-menu=save]')" });
+const openSave = async (p) => {
+  await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+  await p.waitFor(`!document.querySelector(".kapi-menu").hidden`);
+  await p.eval(`document.querySelector('.kapi-menu [data-menu="save"]').click()`);
+  await p.waitFor(`!!document.querySelector(".kapi-save-picker:not([hidden])") && !document.querySelector(".kapi-save-folders").textContent.startsWith("Loading")`, 5000);
+};
+const savedTo = async (p, from) => {
+  await p.waitFor(`!location.pathname.endsWith(${JSON.stringify(new URL(from).pathname)}) && document.readyState === "complete" && document.getElementById("kapi-page")?.dataset.saved === "true" && !!document.querySelector(".kapi-menu [data-menu=unsave]")`, 8000);
+  return p.eval(`document.getElementById("kapi-page").dataset.path`);
+};
+const saveInto = async (url, folder) => {
+  const p = await openPage(url);
+  try {
+    await openSave(p);
+    await p.eval(`document.querySelector('.kapi-save-folder[data-folder="${folder}"]').click()`);
+    const path = await savedTo(p, url);
+    return { path, url: await p.eval("location.href") };
+  } finally {
+    await p.close();
+  }
+};
+
+test("Save in the page menu picks a library folder, moves the note there, and turns into Unsave", async () => {
+  mkdirSync(join(library, "Work", "old.files"), { recursive: true });
+  mkdirSync(join(library, ".hidden"));
+  const { path, url } = draft("Saved one");
+  assert.equal(path, join(dir, "notes", "drafts", "saved-one.html"));
+  const p = await openPage(url);
+  try {
+    assert.equal(await p.eval(`document.getElementById("kapi-page").dataset.saved`), "false");
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].map((b) => [b.dataset.menu, b.hidden])`), [["save", false], ["unsave", true], ["copy", false], ["end", false]]);
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await openSave(p);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-save-folder[data-folder]")].map((b) => b.textContent)`), ["Work"]);
+    assert.equal(await p.eval(`document.querySelector(".kapi-save-where code").textContent`), library);
+    assert.equal(await p.eval(`document.activeElement.dataset.folder`), "Work");
+    await p.eval(`document.querySelector("[data-new-folder]").click()`);
+    assert.equal(await p.eval(`document.activeElement === document.querySelector(".kapi-save-name")`), true);
+    await p.type("../escape");
+    await p.key("Enter");
+    await p.waitFor(`!document.querySelector(".kapi-save-error").hidden`);
+    assert.match(await p.eval(`document.querySelector(".kapi-save-error").textContent`), /bad folder name/);
+    await p.eval(`document.querySelector(".kapi-save-name").value = ""`);
+    await p.type("Kapi");
+    await p.key("Enter");
+    const moved = await savedTo(p, url);
+    assert.equal(moved, join(library, "Kapi", "saved-one.html"));
+    assert.equal(readFileSync(moved, "utf8").includes("Saved one"), true);
+    assert.throws(() => readFileSync(path));
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].filter((b) => !b.hidden).map((b) => b.dataset.menu)`), ["unsave", "copy", "end"]);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("a tab still open at the old address follows the note when another tab saves it", async () => {
+  const { url } = draft("Followed note");
+  const watcher = await openPage(url);
+  try {
+    const moved = await saveInto(url, "Work");
+    await watcher.waitFor(`location.href === ${JSON.stringify(moved.url)} && document.getElementById("kapi-page")?.dataset.path === ${JSON.stringify(moved.path)}`, 8000);
+    assert.equal(await watcher.eval(`document.getElementById("kapi-page").dataset.saved`), "true");
+  } finally {
+    await watcher.close();
+  }
+});
+
+test("the Saved view groups saved notes by folder, newest folder and note first, and only Recent shows the Saved badge", async () => {
+  const a = draft("Alpha keep");
+  const c = draft("Charlie keep");
+  const b = draft("Bravo keep");
+  draft("Left as draft");
+  await saveInto(a.url, "Work");
+  await saveInto(c.url, "Kapi");
+  await saveInto(b.url, "Work");
+  const p = await home();
+  try {
+    await refresh(p);
+    await p.waitFor(`[...document.querySelectorAll(".nb-card")].some((c) => c.textContent.includes("Left as draft")) && [...document.querySelectorAll(".nb-card")].some((c) => c.textContent.includes("Bravo keep"))`);
+    const badged = await p.eval(`Object.fromEntries([...document.querySelectorAll(".nb-grid .nb-card")].filter((c) => / keep|Left as draft/.test(c.textContent)).map((c) => [c.querySelector(".nb-card-title").textContent, c.querySelector(".nb-badge")?.textContent ?? ""]))`);
+    assert.deepEqual(badged, { "Alpha keep": "Saved", "Bravo keep": "Saved", "Charlie keep": "Saved", "Left as draft": "" });
+    assert.equal(await p.eval(`(() => { const probe = document.createElement("span"); probe.style.color = "var(--kapi-blue-text)"; probe.style.backgroundColor = "var(--kapi-blue-fill)"; document.body.append(probe); const badge = getComputedStyle(document.querySelector(".nb-badge-saved")); const want = getComputedStyle(probe); const same = badge.color === want.color && badge.backgroundColor === want.backgroundColor; probe.remove(); return same; })()`), true);
+    await p.eval(`document.querySelector('[data-tab="saved"]').click()`);
+    await p.waitFor(`!document.querySelector(".nb-shelf").hidden`);
+    assert.equal(await p.eval(`location.hash`), "#saved");
+    assert.equal(await p.eval(`document.querySelector("h1").textContent`), "Saved");
+    assert.equal(await p.eval(`document.querySelector('[data-tab="saved"]').getAttribute("aria-label")`), "Saved 5");
+    const shelf = await p.eval(`[...document.querySelectorAll(".nb-folder")].map((f) => [f.querySelector(".nb-folder-head").firstChild.textContent, f.querySelector(".nb-folder-head span").textContent, [...f.querySelectorAll(".nb-card-title")].map((t) => t.textContent)])`);
+    assert.deepEqual(shelf, [
+      ["Work", `${join(library, "Work")} · 3 notes`, ["Bravo keep", "Alpha keep", "Followed note"]],
+      ["Kapi", `${join(library, "Kapi")} · 2 notes`, ["Charlie keep", "Saved one"]],
+    ]);
+    assert.equal(await p.eval(`document.querySelectorAll(".nb-shelf .nb-badge").length`), 0);
+    await p.eval(`document.querySelector('[data-tab="recent"]').click()`);
+    await p.waitFor(`document.querySelector(".nb-shelf").hidden && document.querySelector("h1").textContent === "Recent" && location.hash === ""`);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
+test("Unsave keeps the file where it is and drops the note from the Saved view", async () => {
+  const saved = await saveInto(draft("Unsave me").url, "Kapi");
+  const p = await openPage(saved.url);
+  try {
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.eval(`document.querySelector('.kapi-menu [data-menu="unsave"]').click()`);
+    await p.waitFor(`document.getElementById("kapi-page").dataset.saved === "false" && !document.querySelector('.kapi-menu [data-menu="save"]').hidden`);
+    assert.equal(readFileSync(saved.path, "utf8").includes("Unsave me"), true);
+    const h = await home(base + "#saved");
+    try {
+      await h.waitFor(`document.querySelectorAll(".nb-shelf .nb-card").length > 0`);
+      assert.equal(await h.eval(`[...document.querySelectorAll(".nb-shelf .nb-card")].some((c) => c.textContent.includes("Unsave me"))`), false);
+    } finally {
+      await h.close();
+    }
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
   }
 });

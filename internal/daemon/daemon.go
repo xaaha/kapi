@@ -96,6 +96,7 @@ type Server struct {
 	attached map[string]map[string]time.Time
 	baseURL  string
 	reopened map[string]bool
+	pending  map[string]*moveJournal
 	stopping <-chan struct{}
 
 	viewingMu sync.Mutex
@@ -180,6 +181,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 	s.stopping = ctx.Done()
 	s.startRetention()
+	s.recoverMoves()
 	site, token, fresh, err := s.listenHTTP()
 	if err != nil {
 		return err
@@ -368,6 +370,17 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	if l, ok := s.pages[path]; ok {
 		return l, nil
 	}
+	if err := s.resumePending(path); err != nil {
+		return nil, err
+	}
+	if to, moved := s.movedTo(path); moved {
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			return nil, &page.MovedError{From: path, To: to}
+		}
+		if err := removeMissing(filepath.Join(s.pageState(path), movedName)); err != nil {
+			return nil, err
+		}
+	}
 	dir := filepath.Join(s.home, "pages", page.ID(path))
 	l, err := eventlog.Open(dir)
 	if err != nil {
@@ -441,6 +454,13 @@ func (s *Server) Page(id string) (*page.Store, *eventlog.Log, error) {
 
 func (s *Server) PagePath(id string) (string, error) {
 	b, err := os.ReadFile(filepath.Join(s.home, "pages", id, "page.txt"))
+	if errors.Is(err, os.ErrNotExist) {
+		if m, merr := os.ReadFile(filepath.Join(s.home, "pages", id, movedName)); merr == nil {
+			from := strings.TrimSuffix(string(m), "\n")
+			to, _ := s.movedTo(from)
+			return "", &page.MovedError{To: to}
+		}
+	}
 	return strings.TrimSuffix(string(b), "\n"), err
 }
 
@@ -477,6 +497,11 @@ func (s *Server) setPresenceLocked(path, reader, state string, l *eventlog.Log) 
 		return
 	}
 	s.presence[path][reader] = state
+	select {
+	case <-l.Gone():
+		return
+	default:
+	}
 	if _, err := l.Append(&eventlog.Event{Author: reader, Kind: eventlog.KindPresence, Text: state}); err != nil {
 		log.Printf("presence %s %s: %v", reader, state, err)
 	}
@@ -786,6 +811,9 @@ func (s *Server) watch(dec *json.Decoder, enc *json.Encoder, req *Request, l *ev
 		case <-changed:
 		case <-gone:
 			return
+		case <-l.Gone():
+			_ = enc.Encode(Response{Error: (&page.MovedError{From: req.Page, To: l.MovedTo()}).Error()})
+			return
 		}
 	}
 }
@@ -834,6 +862,9 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 		case <-gone:
 			return
 		case <-s.stopping:
+			return
+		case <-l.Gone():
+			reply(enc, &Response{Error: (&page.MovedError{From: req.Page, To: l.MovedTo()}).Error()})
 			return
 		}
 	}

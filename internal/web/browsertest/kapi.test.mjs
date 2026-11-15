@@ -4173,10 +4173,10 @@ test("#23 the three-dot menu opens on its button, steps with the arrow keys, and
   await page.key("Enter");
   await until(menuOpen);
   assert.equal(await expanded(), "true");
-  assert.deepEqual(await topLabels(), ["Export", "Theme", "Copy path", "End session"]);
+  assert.deepEqual(await topLabels(), ["Export", "Theme", "Save to library\u2026", "Copy path", "End session"]);
   assert.equal(await submenuOpen(), false);
   assert.equal(await focusedItem(), "Export");
-  for (const [key, want] of [["ArrowDown", "Theme"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export"], ["ArrowUp", "End session"], ["Home", "Export"], ["End", "End session"]]) {
+  for (const [key, want] of [["ArrowDown", "Theme"], ["ArrowDown", "Save to library\u2026"], ["ArrowDown", "Copy path"], ["ArrowDown", "End session"], ["ArrowDown", "Export"], ["ArrowUp", "End session"], ["Home", "Export"], ["End", "End session"]]) {
     await pressKey(key);
     assert.equal(await focusedItem(), want, `after ${key}`);
   }
@@ -4534,7 +4534,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.eval(`document.querySelector(".kapi-menu-button").focus()`);
   await page.key("Enter");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export", "Theme", "Copy path"]);
+  assert.deepEqual(await labels(), ["Export", "Theme", "Save to library\u2026", "Copy path"]);
   await pressKey("End");
   assert.equal(await focusedItem(), "Copy path");
   await page.key("Escape");
@@ -4543,7 +4543,7 @@ test("#26 End session in the menu posts an end, and the item is gone while the s
   await page.waitFor(`document.querySelector(".kapi-status").textContent !== "Session ended. Send a message to start again."`);
   await mouseOn(".kapi-menu-button");
   await until(menuOpen);
-  assert.deepEqual(await labels(), ["Export", "Theme", "Copy path", "End session"]);
+  assert.deepEqual(await labels(), ["Export", "Theme", "Save to library\u2026", "Copy path", "End session"]);
   await page.key("Escape");
 });
 

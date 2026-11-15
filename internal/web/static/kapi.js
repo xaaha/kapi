@@ -202,6 +202,8 @@
     { glyph: "printer", label: "PDF", run: () => print() },
   ];
   const MENU = [
+    { glyph: "bookmark", id: "save", label: "Save to library\u2026", run: () => openSave() },
+    { glyph: "bookmark", id: "unsave", label: "Unsave", run: () => unsave() },
     { glyph: "copy", id: "copy", label: "Copy path", detail: pagePath, run: copyPath },
     { id: "end", glyph: "stop", label: "End session", run: endSession },
   ];
@@ -223,6 +225,12 @@
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry));
+  const syncSaved = () => {
+    const saved = main.dataset.saved === "true";
+    menu.querySelector('[data-menu="save"]').hidden = saved;
+    menu.querySelector('[data-menu="unsave"]').hidden = !saved;
+  };
+  syncSaved();
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
     h("div", { class: "kapi-chat-head" }, h("strong", {}, icon("chat"), "Agent chat"), collapsePanelButton), tabs,
     restartBox, notice, chat, notesView,
@@ -741,6 +749,32 @@
   async function endSession() {
     const res = await request("/end", {});
     if (res && !res.ok) say(res.data.error || `kapi could not end the session (HTTP ${res.status}).`, "error");
+  }
+
+  const pageURL = (id) => `${homeURL}p/${id}/`;
+
+  async function openSave() {
+    const { openSavePicker } = await import(new URL("../../static/save-dialog.js", location.href));
+    openSavePicker({
+      name: pageName,
+      save: async (folder) => {
+        const res = await request("/save", { folder });
+        if (!res) return "Could not reach kapi.";
+        if (!res.ok) return res.data.error || `kapi could not save the page (HTTP ${res.status}).`;
+        stream?.close();
+        location.replace(pageURL(res.data.id));
+        return null;
+      },
+    });
+  }
+
+  async function unsave() {
+    const res = await request("/unsave", {});
+    if (!res) return;
+    if (!res.ok) return say(res.data.error || `kapi could not unsave the page (HTTP ${res.status}).`, "error");
+    main.dataset.saved = "false";
+    syncSaved();
+    say("Unsaved. The note stays where it is and is temporary again.");
   }
 
   function copyPath() {
@@ -2372,6 +2406,10 @@
       if (opened) refresh(null);
       opened = true;
     };
+    es.addEventListener("moved", (e) => {
+      es.close();
+      location.replace(pageURL(e.data));
+    });
     es.onerror = () => {
       if (restarted) return;
       setStatus("disconnected");

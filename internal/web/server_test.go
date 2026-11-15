@@ -49,11 +49,25 @@ type fakePages struct {
 
 	tabs    int
 	changed chan struct{}
+	moved   map[string]string
 }
 
 func (f *fakePages) Viewing(string) func() { return func() {} }
 
 func (f *fakePages) Reopened(string) bool { return false }
+
+func (f *fakePages) Library() (string, []string, error) {
+	return "~/kapi/library", []string{"Work"}, nil
+}
+
+func (f *fakePages) Save(path, folder string) (string, error) {
+	if _, err := settings.CheckFolder(folder); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (f *fakePages) Unsave(string) error { return nil }
 
 func (f *fakePages) Tab() func() {
 	f.mu.Lock()
@@ -122,6 +136,9 @@ func (f *fakePages) PagePath(id string) (string, error) {
 func (f *fakePages) Page(id string) (*page.Store, *eventlog.Log, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if to, ok := f.moved[id]; ok {
+		return nil, nil, &page.MovedError{To: to}
+	}
 	path, ok := f.paths[id]
 	if !ok {
 		return nil, nil, fs.ErrNotExist
@@ -442,7 +459,7 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<link rel="stylesheet" href="../../static/tables.css">`, `<script src="../../static/tables.js" defer></script>`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-saved="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<link rel="stylesheet" href="../../static/tables.css">`, `<script src="../../static/tables.js" defer></script>`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}

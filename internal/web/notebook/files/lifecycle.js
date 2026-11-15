@@ -43,6 +43,16 @@ export const VIEWS = Object.freeze([
     empty: "Nothing recent. Older notes are in Archived.",
   }),
   Object.freeze({
+    name: "saved",
+    label: "Saved",
+    shows: (p) => Boolean(p.saved),
+    order: (pages) => pages,
+    intro: () => "Notes you chose to keep, in their library folders. Most recently viewed first.",
+    context: null,
+    grouped: true,
+    empty: "Nothing saved yet. Open a note and choose Save to library in its menu to keep it.",
+  }),
+  Object.freeze({
     name: "archived",
     label: "Archived",
     shows: isArchived,
@@ -60,7 +70,8 @@ function pill(kind, name, text) {
   return h("span", { class: `nb-badge nb-badge-${kind}` }, icon(name), text);
 }
 
-export function badge(p, now = Date.now()) {
+export function badge(p, { now = Date.now(), saved = true } = {}) {
+  if (p.saved) return saved ? pill("saved", "bookmark", "Saved") : null;
   if (isArchived(p)) {
     const left = time(p.deletesAt) - now;
     return pill("archived", "archive", Number.isFinite(left) && left > 0 ? `Archived · ${plural(Math.ceil(left / DAY), "day")} left` : "Archived");
