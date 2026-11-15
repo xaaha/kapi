@@ -594,12 +594,14 @@ HTTP: `GET library` answers `{"library":"<root>/library with ~ for home","folder
 carries `data-saved="true|false"`. `api/notebook/pages` adds `"saved":true`
 and `"savedIn"`, the folder holding the file with `~` for the home directory.
 
-Home has a tab row: Recent (the existing view with its status filters)
-and Saved, also reachable as `#saved`. Saved lists saved pages grouped by
+Home's view tabs are Recent, Saved and Archived; each view other than Recent
+is reachable as `#<name>`, like `#saved`. Saved lists saved pages grouped by
 folder, each under a heading with the folder name and
 `<folder path> · <n> notes`, most recently viewed first inside a folder and
 folders ordered by their most recently viewed page. Recent marks saved cards
-with a blue Saved badge; the Saved view leaves it off.
+with a blue Saved badge (`nb-badge nb-badge-saved`) in place of any archive
+badge; the Saved view leaves it off. Saving an archived page clears
+`archivedAt`, and the sweep never archives a saved page.
 
 ## Agent side
 
