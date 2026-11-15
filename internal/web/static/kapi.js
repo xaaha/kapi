@@ -296,9 +296,10 @@
     h("nav", { class: "kapi-breadcrumbs", "aria-label": "Breadcrumb" },
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
     h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, chatButton, menuButton, menu));
-  const pageTools = h("div", { class: "kapi-page-tools" }, outlineButton, writeButton);
+  const outlineTools = h("div", { class: "kapi-page-tools kapi-outline-tools" }, outlineButton);
+  const writeTools = h("div", { class: "kapi-page-tools kapi-write-tools" }, writeButton);
   root.prepend(siteHead);
-  root.append(pageTools);
+  root.append(outlineTools, writeTools);
   main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -307,9 +308,12 @@
     const r = main.getBoundingClientRect();
     const pad = getComputedStyle(main);
     const left = r.left + parseFloat(pad.paddingLeft);
-    document.documentElement.style.setProperty("--kapi-page-left", `${left}px`);
-    const taken = document.documentElement.hasAttribute("data-kapi-outline-open") && !phone.matches ? outlineView.getBoundingClientRect().right : 0;
-    document.documentElement.toggleAttribute("data-kapi-tools-tight", left - taken < 110);
+    const right = r.right - parseFloat(pad.paddingRight);
+    const edge = innerWidth - parseFloat(getComputedStyle(document.documentElement).paddingRight);
+    const html = document.documentElement.style;
+    html.setProperty("--kapi-page-left", `${left}px`);
+    html.setProperty("--kapi-page-right", `${right}px`);
+    html.setProperty("--kapi-page-edge", `${edge}px`);
   }
   new ResizeObserver(placePageTools).observe(main);
   new MutationObserver(placePageTools).observe(document.documentElement, { attributes: true, attributeFilter: ["data-kapi-panel-collapsed", "data-kapi-outline-open"] });
@@ -3046,7 +3050,7 @@
   document.addEventListener("pointerdown", (e) => {
     if (editing && !busy && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar) || path.includes(pageTools);
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar) || path.includes(outlineTools) || path.includes(writeTools);
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
