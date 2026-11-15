@@ -639,7 +639,8 @@ test("Save in the page menu picks a library folder, moves the note there, and tu
   try {
     assert.equal(await p.eval(`document.getElementById("kapi-page").dataset.saved`), "false");
     await p.eval(`document.querySelector(".kapi-menu-button").click()`);
-    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].map((b) => [b.dataset.menu, b.hidden])`), [["save", false], ["unsave", true], ["copy", false], ["end", false]]);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].map((b) => [b.dataset.menu, b.hidden])`), [["save", false], ["unsave", true], ["copy", false]]);
+    assert.equal(await p.eval(`document.querySelector(".kapi-menu > .kapi-menu-group:last-child > [data-menu=session]").textContent`), "End session");
     await p.eval(`document.querySelector(".kapi-menu-button").click()`);
     await openSave(p);
     assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-save-folder[data-folder]")].map((b) => b.textContent)`), ["Work"]);
@@ -659,7 +660,7 @@ test("Save in the page menu picks a library folder, moves the note there, and tu
     assert.equal(readFileSync(moved, "utf8").includes("Saved one"), true);
     assert.throws(() => readFileSync(path));
     await p.eval(`document.querySelector(".kapi-menu-button").click()`);
-    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].filter((b) => !b.hidden).map((b) => b.dataset.menu)`), ["unsave", "copy", "end"]);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".kapi-menu > [role=menuitem]")].filter((b) => !b.hidden).map((b) => b.dataset.menu)`), ["unsave", "copy"]);
     assert.deepEqual(p.errors, []);
   } finally {
     await p.close();
@@ -771,8 +772,7 @@ test("End and delete on a page trashes its file and images, wakes kapi wait, and
     await showAll(p);
     assert.equal(await p.eval(hasCard("Doomed note")), false);
     await p.eval(`document.querySelector(".nb-undo-button").click()`);
-    await p.waitFor(hasCard("Doomed note"), 5000);
-    assert.equal(await p.eval(`document.querySelector(".nb-undo").hidden`), true);
+    await p.waitFor(`${hasCard("Doomed note")} && document.querySelector(".nb-undo").hidden`, 5000);
     assert.match(readFileSync(path, "utf8"), /Doomed note/);
     assert.equal(readFileSync(join(lifecycleDir, "doomed.files", "a.png"), "utf8"), "png");
     assert.equal(existsSync(join(trash, "files", "doomed.html")), false);
@@ -825,7 +825,7 @@ test("a home card has its own menu button outside the link, with the same in-men
     assert.equal(existsSync(path), false);
     assert.equal(existsSync(join(trash, "files", "cardnote.html")), true);
     await p.eval(`document.querySelector(".nb-undo-button").click()`);
-    await p.waitFor(hasCard("Card note"), 5000);
+    await p.waitFor(`${hasCard("Card note")} && document.querySelector(".nb-undo").hidden`, 5000);
     assert.equal(existsSync(path), true);
     assert.deepEqual(p.errors, []);
   } finally {
@@ -864,7 +864,7 @@ test("deleting a note whose images another note shows keeps the images folder an
     assert.equal(readFileSync(join(lifecycleDir, "shared.files", "a.png"), "utf8"), "png");
     assert.equal(existsSync(join(trash, "files", "shared.files")), false);
     await p.eval(`document.querySelector(".nb-undo-button").click()`);
-    await p.waitFor(hasCard("Shared images"), 5000);
+    await p.waitFor(`${hasCard("Shared images")} && document.querySelector(".nb-undo").hidden`, 5000);
     assert.equal(existsSync(path), true);
     assert.deepEqual(p.errors, []);
   } finally {
