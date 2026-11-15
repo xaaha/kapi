@@ -9,4 +9,8 @@ func Sync(f *os.File) error { return f.Sync() }
 
 func ReadFile(name string) ([]byte, error) { return os.ReadFile(name) }
 
+func ReadSettled(name string) ([]byte, error) { return os.ReadFile(name) }
+
+func StatSettled(name string) (os.FileInfo, error) { return os.Stat(name) }
+
 func Rename(oldpath, newpath string) error { return os.Rename(oldpath, newpath) }

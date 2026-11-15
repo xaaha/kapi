@@ -1359,6 +1359,23 @@ test("a long badge wraps inside its container instead of running past it", async
   assert.equal(edges[1].lines, 1, "a short badge stays on one line");
 });
 
+test("the open outline has a visible close button on a wide screen, like chat", async () => {
+  const wide = await browser.open(server.url, { width: 1440, height: 800 });
+  try {
+    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    await wide.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
+    const close = `document.querySelector(".kapi-outline-close")`;
+    await wide.waitFor(`(r => r.width >= 24 && r.height >= 24)(${close}.getBoundingClientRect()) && ${close}.checkVisibility()`);
+    const { x, y } = await wide.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(${close}.getBoundingClientRect())`);
+    assert.equal(await wide.eval(`document.elementFromPoint(${x}, ${y})?.closest(".kapi-outline-close") === ${close}`), true, "nothing may cover the close button");
+    await wide.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await wide.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    await wide.waitFor(`!document.querySelector(".kapi-outline").checkVisibility() && document.querySelector(".kapi-outline-button").getAttribute("aria-pressed") === "false"`);
+  } finally {
+    await wide.close();
+  }
+});
+
 test("a failed save puts the theme back the way the server has it", async () => {
   await prefer("light");
   server.state.settingsStatus = 500;

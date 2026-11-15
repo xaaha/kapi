@@ -523,7 +523,6 @@ html { scroll-padding-top: var(--kapi-header-height); }
 @media (max-width: 1030px) {
   html[data-kapi-outline-open] { padding-left: 0; }
   #kapi-chrome[data-outline-open] > .kapi-outline { width: 270px; box-shadow: var(--kapi-shadow); }
-  #kapi-chrome .kapi-outline-close { display: inline-flex; margin-left: auto; }
 }
 
 @media (max-width: 760px) {
@@ -2184,7 +2183,22 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome .kapi-outline-close {
-  display: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 8px;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-outline-close:hover { color: var(--kapi-fg); }
+
+#kapi-chrome .kapi-outline-close svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
 #kapi-chrome .kapi-outline-scroll {

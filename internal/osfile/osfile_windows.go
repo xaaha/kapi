@@ -41,6 +41,37 @@ func ReadFile(name string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
+// ReadSettled waits out the moment another program's replace-rename leaves no file at name.
+func ReadSettled(name string) ([]byte, error) {
+	var b []byte
+	err := settle(func() (err error) {
+		b, err = ReadFile(name)
+		return err
+	})
+	return b, err
+}
+
+// StatSettled waits out the same gap as ReadSettled.
+func StatSettled(name string) (os.FileInfo, error) {
+	var fi os.FileInfo
+	err := settle(func() (err error) {
+		fi, err = os.Stat(name)
+		return err
+	})
+	return fi, err
+}
+
+func settle(f func() error) error {
+	start := time.Now()
+	for delay := time.Millisecond; ; delay = min(2*delay, 25*time.Millisecond) {
+		err := f()
+		if err == nil || !errors.Is(err, os.ErrNotExist) || time.Since(start) > busyWait {
+			return err
+		}
+		time.Sleep(delay)
+	}
+}
+
 // Rename retries while another program briefly holds the target open, as editors and virus scanners do.
 func Rename(oldpath, newpath string) error {
 	return retry(func() error { return os.Rename(oldpath, newpath) })
