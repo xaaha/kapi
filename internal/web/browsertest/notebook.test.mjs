@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./chrome.mjs";
@@ -422,12 +422,16 @@ test("home exposes palette selection and keeps the logo and folder caret aligned
   }
 });
 
-test("home uses switcher recency priority without dropping older notes", async () => {
+test("home shows every note in the daemon's order without dropping older notes", async () => {
   const p = await home();
   try {
-    const id = await p.eval(`(() => { const a = [...document.querySelectorAll(".nb-card")].at(-1); const id = a.getAttribute("href").match(/p\\/([^/]+)/)[1]; localStorage.setItem("kapi-notebook-visits", JSON.stringify({ since: Date.now(), ids: { [id]: Date.now() } })); dispatchEvent(new StorageEvent("storage", { key: "kapi-notebook-visits" })); return id; })()`);
-    assert.equal(await p.eval(`document.querySelector(".nb-card").getAttribute("href").includes(${JSON.stringify(id)})`), true);
-    assert.ok(await p.eval(`document.querySelectorAll(".nb-card").length`) >= 3);
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
+    const cards = `[...document.querySelectorAll(".nb-card")].map((a) => a.getAttribute("href").match(/p\\/([^/]+)/)[1]).join(",")`;
+    const served = await p.eval(`fetch(${JSON.stringify(base)} + "api/notebook/pages").then((r) => r.json()).then((pages) => pages.map((p) => p.id).join(","))`);
+    assert.ok(served.split(",").length >= 3);
+    assert.equal(await p.eval(cards), served);
+    await p.eval(`(() => { const id = [...document.querySelectorAll(".nb-card")].at(-1).getAttribute("href").match(/p\\/([^/]+)/)[1]; localStorage.setItem("kapi-notebook-visits", JSON.stringify({ since: Date.now(), ids: { [id]: Date.now() } })); dispatchEvent(new StorageEvent("storage", { key: "kapi-notebook-visits" })); })()`);
+    assert.equal(await p.eval(cards), served);
   } finally { await p.close(); }
 });
 
@@ -488,5 +492,37 @@ test("home organization can rename, collapse, and reorder notes", async () => {
   } finally {
     await p.close();
     rmSync(hidden, { recursive: true, force: true });
+  }
+});
+
+test("home lists the most recently viewed note first, then the most recently touched", async () => {
+  const gamma = join(dir, "gamma");
+  const delta = join(dir, "delta");
+  mkdirSync(gamma);
+  mkdirSync(delta);
+  const urls = {};
+  for (const [name, day, folder] of [["new", 3, gamma], ["mid", 2, delta], ["old", 1, gamma]]) {
+    const path = join(folder, `${name}.html`);
+    write(path, `Gamma ${name}`, "Ordering.");
+    utimesSync(path, new Date(Date.UTC(2020, 0, day)), new Date(Date.UTC(2020, 0, day)));
+    urls[name] = kapi(folder, "open", `${name}.html`).split("\n")[0];
+  }
+  const gammaOrder = `[...document.querySelectorAll(".nb-card-title")].map((n) => n.textContent).filter((t) => t.startsWith("Gamma ")).join("|")`;
+  const p = await home();
+  try {
+    await p.eval(`[...document.querySelectorAll(".nb-status-button")].find((button) => button.textContent === "All").click()`);
+    await refresh(p);
+    await p.waitFor(`${gammaOrder} === "Gamma new|Gamma mid|Gamma old"`);
+    const other = await launch();
+    try {
+      await (await other.open(urls.old)).close();
+    } finally {
+      await other.close();
+    }
+    await refresh(p);
+    await p.waitFor(`${gammaOrder} === "Gamma old|Gamma new|Gamma mid"`);
+    assert.equal(await p.eval(`document.querySelector(".nb-card-title").textContent`), "Gamma old");
+  } finally {
+    await p.close();
   }
 });

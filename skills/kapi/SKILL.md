@@ -15,6 +15,7 @@ metadata:
 - Treat `kapi --help`, command help, and `kapi preset` as authoritative.
 - Write only documented HTML and presets.
 - Reuse one page per task; add sections instead of creating related pages.
+- Find pages with `kapi ls --json`, last viewed first. `kapi home` shows them all in the browser.
 - Follow `kapi preset` writing rules: fact first, concrete numbers, no repetition.
 - Use `kapi wait <page>` when its exit wakes the harness; restart it after each event. Use `kapi watch <page>` only when every line is delivered.
 - Acknowledge events with the current `say --seen`, `say --reply`, `seen`, or `pending` flow.

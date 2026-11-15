@@ -75,6 +75,8 @@ type Store struct {
 	log    *eventlog.Log
 	event  *revEvent
 	logged uint64
+
+	viewed, touched time.Time
 }
 
 type state struct {
@@ -84,6 +86,9 @@ type state struct {
 	Temp  string     `json:"temp,omitempty"`
 	Held  []heldFile `json:"held,omitempty"`
 	Event *revEvent  `json:"event,omitempty"`
+
+	Viewed  time.Time `json:"viewed,omitzero"`
+	Touched time.Time `json:"touched,omitzero"`
 }
 
 type revEvent struct {
@@ -233,6 +238,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 
 func (s *Store) load(st *state) error {
 	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
+	s.viewed, s.touched = st.Viewed, st.Touched
 	if s.rev > 0 {
 		src, err := osfile.ReadFile(s.revPath(s.rev))
 		if err != nil {
@@ -658,6 +664,7 @@ var (
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent) (uint64, error) {
+	written := modTime(s.path, clock().UTC())
 	swapped, err := s.checkHeld(false)
 	if err != nil {
 		return 0, err
@@ -700,6 +707,14 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 			return 0, errors.Join(err, s.saveState(&now))
 		}
 	}
+	switch {
+	case s.rev == 0:
+		s.touched = written
+	case ev != nil && ev.Author == "file" && written.After(s.touched):
+		s.touched = written
+	case ev != nil && ev.Author != "kapi":
+		s.touched = clock().UTC()
+	}
 	s.src, s.rev, s.undo, s.event = src, rev, undo, ev
 	if err := s.saveState(&next); err != nil {
 		return 0, err
@@ -721,11 +736,55 @@ func (s *Store) logEvent() (uint64, error) {
 
 func (s *Store) saveState(st *state) error {
 	st.Held, st.Event = s.held, s.event
+	st.Viewed, st.Touched = s.viewed, s.touched
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
 	return WriteAtomic(filepath.Join(s.dir, "state.json"), b)
+}
+
+func modTime(path string, otherwise time.Time) time.Time {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return otherwise
+	}
+	return fi.ModTime().UTC()
+}
+
+func (s *Store) Times() (viewed, touched time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.viewed, s.touched
+}
+
+func (s *Store) MarkViewed() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.viewed = clock().UTC()
+	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func (s *Store) Touch() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.touched = clock().UTC()
+	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func ReadTimes(dir string) (viewed, touched time.Time, err error) {
+	b, err := osfile.ReadFile(filepath.Join(dir, "state.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return time.Time{}, time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	var st state
+	if err := json.Unmarshal(b, &st); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return st.Viewed, st.Touched, nil
 }
 
 const tempMark = ".kapi-"

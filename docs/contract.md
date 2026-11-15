@@ -266,11 +266,24 @@ reopen with nothing lost logs nothing. A commit that logs no
 event, such as the first load, records none. A file edit made while kapi was
 down is logged on the next open like any file edit, with author `file`.
 
+`state.json` also holds two UTC times. `viewed` is set each time a browser
+connects to the page's `p/{id}/events`. `touched` is set by a revision from a
+human or agent block op, a human undo, or a file edit (to the file's mtime when
+that is later, else to now), and by a human note, chat message or form answer.
+The first load sets it to the file's mtime before kapi converts the file.
+Opening, reading, exporting, resolving or deleting notes, ending the session,
+an agent message and `kapi wait` leave it alone. A page with no stored
+`touched` uses its file's mtime, and one with no `viewed` uses `touched`. The
+notebook index, `api/notebook/pages` and `kapi ls` list pages most recently
+viewed first, then most recently touched, then by title.
+
 ## HTTP
 
 The daemon also listens on `127.0.0.1` and writes
 `http://127.0.0.1:<port>/<token>/` to `$KAPI_HOME/http.url` (mode 0600).
 `kapi open <page>` starts the daemon if needed and opens `<url>p/<pageid>/`.
+`kapi home` starts it the same way and opens `<url>`, the notebook home;
+`--print` or `KAPI_NO_BROWSER` only prints it.
 `http.url`, `previous-tokens`, `pages/<id>/page.txt` and `pages/<id>/viewing`
 are written like the page store's files: a fsynced temp file in the same
 folder, a rename, then an fsync of the folder.

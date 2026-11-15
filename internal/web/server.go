@@ -391,13 +391,19 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 	}
 }
 
+func touch(st *page.Store) {
+	if err := st.Touch(); err != nil {
+		log.Printf("touch: %v", err)
+	}
+}
+
 type readReceipt struct {
 	Kind   string `json:"kind"`
 	Reader string `json:"reader"`
 	Seq    uint64 `json:"seq"`
 }
 
-func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
 	var in struct {
 		Kind   string   `json:"kind"`
 		Target string   `json:"target"`
@@ -420,6 +426,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request, _ *page.S
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	touch(st)
 	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
@@ -487,6 +494,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request, st *page.St
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	touch(st)
 	app.JSON(w, http.StatusOK, map[string]uint64{"seq": out[len(out)-1].Seq})
 }
 
@@ -757,5 +765,6 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.S
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	touch(st)
 	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/xaaha/kapi/internal/render"
 	"github.com/xaaha/kapi/internal/settings"
 	"github.com/xaaha/kapi/internal/web"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 var ErrAlreadyRunning = errors.New("daemon already running")
@@ -54,6 +55,7 @@ type Response struct {
 	Events  []eventlog.Event `json:"events,omitempty"`
 	Readers []ReaderStatus   `json:"readers,omitempty"`
 	Pages   []PageStatus     `json:"pages,omitempty"`
+	Index   []app.Page       `json:"index,omitempty"`
 	URL     string           `json:"url,omitempty"`
 	Notice  string           `json:"notice,omitempty"`
 	Shown   bool             `json:"shown,omitempty"`
@@ -507,6 +509,22 @@ func (s *Server) handle(conn net.Conn) {
 			return
 		}
 		reply(enc, &Response{Pages: pages})
+		return
+	}
+	if req.Op == "home" {
+		s.mu.Lock()
+		resp := &Response{URL: s.baseURL}
+		s.mu.Unlock()
+		reply(enc, resp)
+		return
+	}
+	if req.Op == "index" {
+		index, err := s.Index()
+		if err != nil {
+			reply(enc, &Response{Error: err.Error()})
+			return
+		}
+		reply(enc, &Response{Index: index})
 		return
 	}
 	if req.Op == "pages" {
