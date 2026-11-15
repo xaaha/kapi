@@ -137,7 +137,15 @@ func TestNothingIsDeletedUntilAFullSweepIntervalAfterAStart(t *testing.T) {
 	a, library := expiring(t, "")
 	path := a.draft(library, "returning.html", 48*time.Hour)
 	a.archiveNow(path)
+	old := a.s
 	a.stop()
+	old.mu.Lock()
+	for _, l := range old.pages {
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.mu.Unlock()
 	a.clock.add(2 * deleteAfter)
 	a.start()
 	a.sweepAfter(0)
