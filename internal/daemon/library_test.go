@@ -62,7 +62,7 @@ func TestSaveCarriesTheFileImagesAndStateIntoTheLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, rev := st.Source()
-	oldDir := s.stateDir(from)
+	oldDir := s.pageState(from)
 
 	to, err := s.Save(from, "Work")
 	if err != nil {
@@ -80,7 +80,7 @@ func TestSaveCarriesTheFileImagesAndStateIntoTheLibrary(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(lib, "Work", "plan.files", "a.png")); err != nil || !bytes.Equal(b, img) {
 		t.Errorf("image after save = %q, %v", b, err)
 	}
-	newDir := s.stateDir(to)
+	newDir := s.pageState(to)
 	if b, _ := os.ReadFile(filepath.Join(newDir, "page.txt")); string(b) != to+"\n" {
 		t.Errorf("page.txt = %q, want the new path", b)
 	}
@@ -227,7 +227,7 @@ func TestWaitOnTheOldPathExitsNamingTheNewOne(t *testing.T) {
 			t.Errorf("%s on the old path = %+v, want an error naming the new path", op, resp)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(s.stateDir(from), "events.ndjson")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(s.pageState(from), "events.ndjson")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("a late request recreated the old log: %v", err)
 	}
 }
@@ -288,13 +288,13 @@ func TestUnsaveKeepsTheFileAndRestartsTheClock(t *testing.T) {
 	if err := s.Unsave(to); err != nil {
 		t.Fatal(err)
 	}
-	if lc, _ := page.ReadLifecycle(s.stateDir(to)); lc.Saved {
+	if lc, _ := page.ReadLifecycle(s.pageState(to)); lc.Saved {
 		t.Error("still saved after Unsave")
 	}
 	if _, err := os.Stat(to); err != nil {
 		t.Errorf("Unsave moved the file: %v", err)
 	}
-	if lc, _ := page.ReadLifecycle(s.stateDir(to)); lc.Touched.Before(before) {
+	if lc, _ := page.ReadLifecycle(s.pageState(to)); lc.Touched.Before(before) {
 		t.Errorf("touched %v after unsave, want no earlier than the unsave at %v", lc.Touched, before)
 	}
 }

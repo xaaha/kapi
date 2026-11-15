@@ -543,6 +543,10 @@ page's `<img src="./<name>.files/…">` references to the new folder. It never
 overwrites: the file is hard-linked into place, or copied to a temp file and
 hard-linked when the folder is on another file system, then the original is
 removed. Saving into the folder the page is already in only sets the flag.
+When another page kapi knows refers to a file inside the images folder (an
+`src`, `srcset` or `href` attribute, or a CSS `url()`, relative to that
+page, absolute, or `file://`), the folder is copied into the library instead
+of moved, so that page keeps its images.
 
 The page id and `$KAPI_HOME/pages/<id>/` derive from the absolute path, so the
 state directory moves with the file: revisions, events, reader positions,

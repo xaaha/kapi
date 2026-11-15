@@ -27,7 +27,7 @@ func (s *Server) folders() (settings.Folders, error) {
 	return prefs.Folders()
 }
 
-func (s *Server) stateDir(path string) string {
+func (s *Server) pageState(path string) string {
 	return filepath.Join(s.home, "pages", page.ID(path))
 }
 
@@ -104,7 +104,7 @@ func removeMissing(path string) error {
 func (s *Server) movedTo(path string) (string, bool) {
 	to := path
 	for range 32 {
-		b, err := os.ReadFile(filepath.Join(s.stateDir(to), movedName))
+		b, err := os.ReadFile(filepath.Join(s.pageState(to), movedName))
 		if err != nil {
 			break
 		}

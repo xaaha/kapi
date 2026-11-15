@@ -32,7 +32,7 @@ func assertDraftWhole(t *testing.T, s *Server, from string, img []byte) {
 	if b, err := os.ReadFile(filepath.Join(page.FilesDir(from), "a.png")); err != nil || !bytes.Equal(b, img) {
 		t.Errorf("draft image after the failed save = %q, %v", b, err)
 	}
-	if present(filepath.Join(s.stateDir(from), intentName)) {
+	if present(filepath.Join(s.pageState(from), intentName)) {
 		t.Errorf("%s left behind after the undo", intentName)
 	}
 }
@@ -180,7 +180,7 @@ func TestAnImagesFolderLeftByACopyIsRemovedOnTheNextStart(t *testing.T) {
 	if present(page.FilesDir(from)) {
 		t.Error("the leftover images folder is still next to the old draft")
 	}
-	if present(filepath.Join(s2.stateDir(to), intentName)) {
+	if present(filepath.Join(s2.pageState(to), intentName)) {
 		t.Errorf("%s left behind", intentName)
 	}
 	if !present(filepath.Join(lib, "Work", "plan.files", "a.png")) {
@@ -204,7 +204,7 @@ func TestAHistoryMoveThatFailsIsFinishedBeforeEitherPathOpens(t *testing.T) {
 			t.Errorf("open %s while the history is stuck = %+v, want a refusal", path, r)
 		}
 	}
-	if present(filepath.Join(s.stateDir(to), "events.ndjson")) {
+	if present(filepath.Join(s.pageState(to), "events.ndjson")) {
 		t.Error("a refused open created a fresh history at the new path")
 	}
 	renameState = os.Rename
@@ -278,7 +278,7 @@ func crashSave(t *testing.T, collide bool, steps ...string) crashedSave {
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	j, err := s.beginMove(from, to)
+	j, err := s.beginMove(from, to, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestACrashAfterRemovingTheDraftFinishesAndLeavesANewDraftAlone(t *testing.T
 	if events, _ := l.After(0); len(events) == 0 || events[0].Text != "kept" {
 		t.Errorf("history at the new path = %+v", events)
 	}
-	if lc, _ := page.ReadLifecycle(s.stateDir(c.to)); !lc.Saved {
+	if lc, _ := page.ReadLifecycle(s.pageState(c.to)); !lc.Saved {
 		t.Error("not marked saved")
 	}
 }
@@ -355,7 +355,7 @@ func TestACrashBetweenRemovingAndRecordingItFinishesTheSave(t *testing.T) {
 	if !present(c.to) || !present(filepath.Join(page.FilesDir(c.to), "a.png")) {
 		t.Error("the save was not finished")
 	}
-	if b, _ := os.ReadFile(filepath.Join(s.stateDir(c.to), "page.txt")); string(b) != c.to+"\n" {
+	if b, _ := os.ReadFile(filepath.Join(s.pageState(c.to), "page.txt")); string(b) != c.to+"\n" {
 		t.Errorf("page.txt = %q", b)
 	}
 	if to, moved := s.movedTo(c.from); !moved || to != c.to {

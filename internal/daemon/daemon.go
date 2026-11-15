@@ -377,7 +377,7 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
 			return nil, &page.MovedError{From: path, To: to}
 		}
-		if err := removeMissing(filepath.Join(s.stateDir(path), movedName)); err != nil {
+		if err := removeMissing(filepath.Join(s.pageState(path), movedName)); err != nil {
 			return nil, err
 		}
 	}

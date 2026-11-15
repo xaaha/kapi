@@ -23,7 +23,7 @@ func TestSavingAnArchivedPageBringsItBackAndTheSweepSkipsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, err := page.ReadLifecycle(s.stateDir(to))
+	after, err := page.ReadLifecycle(s.pageState(to))
 	if err != nil || !after.Saved || !after.Archived.IsZero() {
 		t.Fatalf("lifecycle after saving an archived page = %+v, %v; want saved and not archived", after, err)
 	}

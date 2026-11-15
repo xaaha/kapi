@@ -25,6 +25,7 @@ const (
 
 	imagesRename = "rename"
 	imagesCopy   = "copy"
+	imagesKeep   = "keep"
 )
 
 var ErrSourceChanged = errors.New("the page changed while kapi was saving it, so nothing moved; save it again")
@@ -43,6 +44,7 @@ type moveJournal struct {
 	Step    string `json:"step"`
 	Images  string `json:"images,omitempty"`
 	Rewrite bool   `json:"rewrite,omitempty"`
+	Keep    bool   `json:"keep,omitempty"`
 	Placed  string `json:"placed"`
 
 	dir string
@@ -108,7 +110,7 @@ func (s *Server) move(from, dir string) (string, error) {
 		if st := s.stores[from]; st != nil {
 			return from, st.SetSaved(true)
 		}
-		return from, page.MarkSaved(s.stateDir(from))
+		return from, page.MarkSaved(s.pageState(from))
 	}
 	if st := s.stores[from]; st != nil {
 		if err := st.Retire(); err != nil {
@@ -116,8 +118,14 @@ func (s *Server) move(from, dir string) (string, error) {
 		}
 		delete(s.stores, from)
 	}
-	if err := os.MkdirAll(s.stateDir(from), 0o700); err != nil {
+	if err := os.MkdirAll(s.pageState(from), 0o700); err != nil {
 		return "", err
+	}
+	keep := false
+	if fi, err := os.Stat(page.FilesDir(from)); err == nil && fi.IsDir() {
+		if keep, err = s.usedByAnotherPage(from, page.FilesDir(from)); err != nil {
+			return "", err
+		}
 	}
 	var j *moveJournal
 	for n := 1; ; n++ {
@@ -125,7 +133,7 @@ func (s *Server) move(from, dir string) (string, error) {
 		if s.taken(to) {
 			continue
 		}
-		if j, err = s.beginMove(from, to); err != nil {
+		if j, err = s.beginMove(from, to, keep); err != nil {
 			return "", err
 		}
 		err = s.runMove(j, info)
@@ -163,17 +171,20 @@ func (s *Server) move(from, dir string) (string, error) {
 }
 
 func (s *Server) taken(path string) bool {
-	return present(path) || present(page.FilesDir(path)) || present(s.stateDir(path))
+	return present(path) || present(page.FilesDir(path)) || present(s.pageState(path))
 }
 
-func (s *Server) beginMove(from, to string) (*moveJournal, error) {
+func (s *Server) beginMove(from, to string, keep bool) (*moveJournal, error) {
 	src, err := os.ReadFile(from)
 	if err != nil {
 		return nil, err
 	}
-	j := &moveJournal{From: from, To: to, Step: stepBegun, dir: s.stateDir(from)}
+	j := &moveJournal{From: from, To: to, Step: stepBegun, dir: s.pageState(from)}
 	if fi, err := os.Stat(page.FilesDir(from)); err == nil && fi.IsDir() {
-		j.Images = imagesRename
+		j.Images, j.Keep = imagesRename, keep
+		if keep {
+			j.Images = ""
+		}
 		j.Rewrite = filepath.Base(page.FilesDir(from)) != filepath.Base(page.FilesDir(to))
 	}
 	if j.Rewrite {
@@ -228,10 +239,23 @@ func placeFile(j *moveJournal) error {
 }
 
 func moveImages(j *moveJournal) error {
+	filesFrom, filesTo := page.FilesDir(j.From), page.FilesDir(j.To)
+	if j.Keep {
+		if err := os.Mkdir(filesTo, 0o755); err != nil { //nolint:gosec // an images folder next to the page
+			return err
+		}
+		j.Images = imagesKeep
+		if err := j.save(); err != nil {
+			return err
+		}
+		if err := copyDir(filesFrom, filesTo); err != nil {
+			return err
+		}
+		return j.advance(stepImages)
+	}
 	if j.Images == "" {
 		return nil
 	}
-	filesFrom, filesTo := page.FilesDir(j.From), page.FilesDir(j.To)
 	if j.Images == imagesRename {
 		if present(filesTo) {
 			return fs.ErrExist
@@ -277,7 +301,7 @@ func (s *Server) undoMove(j *moveJournal) error {
 				log.Printf("leave the empty %s: %v", filesTo, err)
 			}
 		}
-	case imagesCopy:
+	case imagesCopy, imagesKeep:
 		if present(filesFrom) {
 			if err := removeTree(filesTo); err != nil {
 				return err
@@ -317,10 +341,10 @@ func placedByUs(j *moveJournal) (bool, error) {
 }
 
 func (s *Server) finishMove(j *moveJournal) error {
-	oldDir, newDir := s.stateDir(j.From), s.stateDir(j.To)
+	oldDir, newDir := s.pageState(j.From), s.pageState(j.To)
 	if j.dir == oldDir {
 		if present(newDir) {
-			if err := setAside(newDir); err != nil {
+			if err := setStateAside(newDir); err != nil {
 				return err
 			}
 		}
@@ -362,7 +386,7 @@ func cleanUp(j *moveJournal) error {
 	return j.drop()
 }
 
-func setAside(dir string) error {
+func setStateAside(dir string) error {
 	aside := dir + ".replaced-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := renameState(dir, aside); err != nil {
 		return err
@@ -401,7 +425,7 @@ func (s *Server) resume(j *moveJournal) error {
 	switch {
 	case j.Step == stepCleanup:
 		return cleanUp(j)
-	case j.Step == stepRemoved || j.dir == s.stateDir(j.To):
+	case j.Step == stepRemoved || j.dir == s.pageState(j.To):
 		return s.finishMove(j)
 	case present(j.From):
 		return s.undoMove(j)
@@ -420,8 +444,18 @@ func (s *Server) resume(j *moveJournal) error {
 
 func redoImages(j *moveJournal) error {
 	filesFrom, filesTo := page.FilesDir(j.From), page.FilesDir(j.To)
-	if j.Images == "" || j.Step == stepImages || !present(filesFrom) {
+	if (j.Images == "" && !j.Keep) || j.Step == stepImages || !present(filesFrom) {
 		return nil
+	}
+	if j.Keep {
+		if err := removeTree(filesTo); err != nil {
+			return err
+		}
+		if err := os.Mkdir(filesTo, 0o755); err != nil { //nolint:gosec // an images folder next to the page
+			return err
+		}
+		j.Images = imagesKeep
+		return copyDir(filesFrom, filesTo)
 	}
 	if j.Images == imagesRename && !present(filesTo) {
 		return renamePath(filesFrom, filesTo)
