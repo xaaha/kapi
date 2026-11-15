@@ -109,7 +109,7 @@
   padding: 0;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 0.3);
-  border-radius: 13px;
+  border-radius: var(--kapi-radius-sm);
   background: rgb(22 26 33 / 0.82);
   box-shadow: 0 8px 30px rgb(0 0 0 / 0.28);
   color: #eef2f7;
@@ -137,7 +137,7 @@
   display: block;
   max-width: min(82vw, 88rem);
   max-height: calc(100vh - 8rem);
-  border-radius: 12px;
+  border-radius: var(--kapi-radius);
   background: var(--kapi-surface);
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.5);
   object-fit: contain;
@@ -158,7 +158,7 @@ html[data-kapi-media-open] { overflow: hidden; }
 
 @media (max-width: 640px) {
   .kapi-media-viewer { grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem; padding-inline: 0.5rem; }
-  .kapi-media-viewer button { width: 2.35rem; height: 2.35rem; border-radius: 11px; }
+  .kapi-media-viewer button { width: 2.35rem; height: 2.35rem; border-radius: var(--kapi-radius-sm); }
   .kapi-media-image { max-width: 100%; }
 }
 

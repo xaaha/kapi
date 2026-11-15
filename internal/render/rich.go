@@ -61,7 +61,7 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: .6rem .75rem; border-bottom: 1px solid var(--kapi-border); text-align: left; }
 th { color: var(--kapi-muted); font-size: .75rem; text-transform: uppercase; }
 code { font-family: var(--kapi-mono); }
-:not(pre) > code { padding: .1em .3em; border: 1px solid var(--kapi-border); border-radius: 5px; background: var(--kapi-subtle); }
+:not(pre) > code { padding: .1em .3em; border: 1px solid var(--kapi-border); border-radius: var(--kapi-radius-xs); background: var(--kapi-subtle); }
 `
 
 func renderRich(b *bytes.Buffer, n *html.Node) error {

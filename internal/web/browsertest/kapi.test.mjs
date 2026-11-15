@@ -1956,6 +1956,24 @@ test("on a narrow desktop with the outline and chat open, Write stays at the top
   }
 });
 
+test("the Edit mode tooltip opens toward the page and never runs under the chat panel", async () => {
+  const p = await browser.open(server.url, { width: 1280, height: 700 });
+  try {
+    if (await p.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await p.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    await p.eval(`document.querySelector(".kapi-write-button").focus({ focusVisible: true })`);
+    const m = await p.eval(`(() => {
+      const b = document.querySelector(".kapi-write-button"), tip = getComputedStyle(b, "::after");
+      const right = b.getBoundingClientRect().right - parseFloat(tip.right || "0");
+      return { content: tip.content, right, chat: document.querySelector(".kapi-panel").getBoundingClientRect().left };
+    })()`);
+    assert.match(m.content, /Edit mode/);
+    assert.ok(m.right <= m.chat + 0.5, JSON.stringify(m));
+  } finally {
+    await p.close();
+  }
+});
+
 test("tapping a theme in the page menu on a phone does not expand the chat", async () => {
   const phone = await mobilePage(390);
   try {
@@ -4795,17 +4813,44 @@ test("an agent reply marks closed chat without changing the independent outline"
 const writing = () => page.eval(`document.documentElement.hasAttribute("data-kapi-writing")`);
 const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
 
+test("the pencil is plain in Review, pressed in Write, and writes a stroke only while a block is open", async () => {
+  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, getComputedStyle(b, "::before").animationName, b.dataset.tip.split(" ").slice(0, 3).join(" ")])(document.querySelector(".kapi-write-button"))`);
+  assert.deepEqual(await state(), ["false", "none", "none", "Edit mode: off"]);
+  await mouseClick(".kapi-write-button");
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode: on"]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  assert.deepEqual(await state(), ["true", "kapi-writing", "kapi-stroke", "Edit mode: on"]);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode: on"]);
+  await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.activeElement?.isContentEditable`);
+  assert.deepEqual((await state()).slice(1, 3), ["none", "none"], "reduced motion keeps the pencil and stroke still");
+});
+
+test("the block ring has button-sized rounded corners on a square block, selected or editing", async () => {
+  const radius = () => page.eval(`getComputedStyle(document.querySelector(".kapi-ring")).borderTopLeftRadius`);
+  const button = await page.eval(`getComputedStyle(document.querySelector(".kapi-menu-button")).borderTopLeftRadius`);
+  await select("bbbbbbbb");
+  assert.equal(await radius(), button);
+  await editSelected();
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  assert.equal(await radius(), button);
+});
+
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),
-    ["Write", `Write ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
+    ["Edit mode", `Edit mode: off ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
   assert.equal(await writing(), false);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
 
   await mouseClick(".kapi-write-button");
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
   const { x, y } = await page.eval(`(() => {
     const r = document.createRange();
     const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
@@ -4825,7 +4870,7 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.call("Page.reload");
   await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-panel .kapi-dot")?.dataset.state === "none"`, 5000);
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
 });
 
 test("double clicking in Review switches the page to Write, a click outside saves, and leaving Write ends the edit", async () => {
@@ -4834,7 +4879,7 @@ test("double clicking in Review switches the page to Write, a click outside save
   await mouseClick('[data-kapi-id="bbbbbbbb"]', 2);
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
   await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
   await page.type(" Then verify.");
   await mouseClick('[data-kapi-id="aaaaaaaa"]');
