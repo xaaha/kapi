@@ -126,3 +126,30 @@ func Tilde(path string) string {
 	}
 	return path
 }
+
+func (s *Server) places() (settings.Places, error) {
+	dirs, err := s.pageDirs()
+	if err != nil {
+		return settings.Places{}, err
+	}
+	known := settings.Places{Folders: map[string]bool{}, Pages: map[string]bool{}}
+	for _, d := range dirs {
+		if d.err != nil {
+			continue
+		}
+		known.Pages[filepath.Base(d.dir)] = true
+		known.Folders[filepath.Dir(d.path)] = true
+		for _, o := range s.openers(d.path) {
+			known.Folders[o] = true
+		}
+	}
+	f, err := s.folders()
+	if err != nil {
+		return settings.Places{}, err
+	}
+	_, rels, _ := s.Library()
+	for _, rel := range rels {
+		known.Folders[filepath.Join(f.Library, filepath.FromSlash(rel))] = true
+	}
+	return known, nil
+}

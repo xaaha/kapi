@@ -80,7 +80,7 @@ func TestPatchingSettingsSavesThemAndRendersThemIntoEveryPage(t *testing.T) {
 
 func TestPatchingSettingsRefusesUnknownValues(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
-	for _, body := range []string{`{"mode":"sepia"}`, `{"theme":"neon"}`} {
+	for _, body := range []string{`{"mode":"sepia"}`, `{"theme":"neon"}`, `{"layout":{"collapsed":{"/nowhere":true}}}`} {
 		if resp := s.patchSettings(body, nil); resp.code != http.StatusUnprocessableEntity || !strings.Contains(resp.body, "invalid setting") {
 			t.Errorf("PATCH %s: %d %s, want 422", body, resp.code, resp.body)
 		}

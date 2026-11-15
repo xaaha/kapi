@@ -10,64 +10,98 @@ export const foldersOf = (p) => (p.folders?.length ? p.folders : [dirname(p.path
 export const folderOf = (p) => foldersOf(p)[0];
 export const inFolder = (p, folder) => foldersOf(p).includes(folder);
 
-const META_KEY = "kapi-notebook-layout";
-const META_EVENT = "kapi-notebook-layout";
+const LEGACY_KEY = "kapi-notebook-layout";
+const LAYOUT_EVENT = "kapi-notebook-layout";
+const SECTIONS = ["folderTitles", "pageTitles", "order", "collapsed"];
 
-function metadata() {
+function asLayout(value) {
+  return Object.fromEntries(SECTIONS.map((name) => [name, value?.[name] && typeof value[name] === "object" ? value[name] : {}]));
+}
+
+let layout = asLayout();
+let saved = layout;
+let pending = 0;
+
+const canonical = (value) => JSON.stringify(SECTIONS.map((name) => Object.entries(value[name]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+
+function show(next) {
+  if (canonical(next) === canonical(layout)) return;
+  layout = next;
+  dispatchEvent(new Event(LAYOUT_EVENT));
+}
+
+function adopt(settings) {
+  saved = asLayout(settings?.layout);
+  if (!pending) show(saved);
+}
+
+async function patchSettings(body) {
+  const res = await fetch(`${root}settings`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw Object.assign(new Error(`settings: ${res.status}`), { status: res.status });
+  return res.json();
+}
+
+async function change(section, key, value) {
+  const next = structuredClone(layout);
+  if (value) next[section][key] = value;
+  else delete next[section][key];
+  show(next);
+  pending++;
+  const body = { layout: { [section]: { [key]: value || (section === "collapsed" ? false : null) } } };
+  saved = await patchSettings(body).then((settings) => asLayout(settings.layout), () => saved);
+  pending--;
+  if (!pending) show(saved);
+}
+
+const entries = (value, keep) => Object.fromEntries(Object.entries(value && typeof value === "object" ? value : {}).filter(([, v]) => keep(v)));
+const isText = (v) => typeof v === "string" && v.trim() !== "";
+
+async function importLegacy() {
+  const raw = prefs.get(LEGACY_KEY);
+  if (raw === null) return;
+  let old = null;
   try {
-    const value = JSON.parse(prefs.get(META_KEY));
-    if (value && typeof value === "object") return value;
+    old = JSON.parse(raw);
   } catch {}
-  return {};
+  const body = {
+    folderTitles: entries(old?.folders, isText),
+    pageTitles: entries(old?.pages, isText),
+    order: entries(old?.order, (ids) => Array.isArray(ids) && ids.length > 0 && ids.every((id) => typeof id === "string")),
+    collapsed: entries(old?.collapsed, (v) => v === true),
+  };
+  try {
+    if (Object.values(body).some((section) => Object.keys(section).length)) adopt(await patchSettings({ importLayout: body }));
+    prefs.set(LEGACY_KEY, null);
+  } catch (err) {
+    if (err.status >= 400 && err.status < 500) prefs.set(LEGACY_KEY, null);
+  }
 }
 
-function updateMetadata(change) {
-  const value = metadata();
-  change(value);
-  prefs.set(META_KEY, JSON.stringify(value));
-  dispatchEvent(new Event(META_EVENT));
-}
+document.addEventListener("kapi-settings", (e) => adopt(e.detail));
+const ready = getJSON("settings").then(adopt, () => {}).then(importLegacy);
 
 const friendly = (name) => name.replace(/[._-]+/g, " ").trim().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
 export function folderTitle(folder) {
-  const custom = metadata().folders?.[folder];
+  const custom = layout.folderTitles[folder];
   if (custom) return custom;
   const name = base(folder);
   if (name.startsWith(".")) return `${friendly(base(dirname(folder))) || "Project"} pages`;
   return friendly(name) || "Pages";
 }
 
-export const pageTitle = (p) => metadata().pages?.[p.id] || p.title;
+export const pageTitle = (p) => layout.pageTitles[p.id] || p.title;
 
-export function renameFolder(folder, name) {
-  updateMetadata((value) => {
-    value.folders ??= {};
-    if (name) value.folders[folder] = name;
-    else delete value.folders[folder];
-  });
-}
+export const renameFolder = (folder, name) => change("folderTitles", folder, name);
 
-export function renamePage(id, name) {
-  updateMetadata((value) => {
-    value.pages ??= {};
-    if (name) value.pages[id] = name;
-    else delete value.pages[id];
-  });
-}
+export const renamePage = (id, name) => change("pageTitles", id, name);
 
-export const folderCollapsed = (folder) => metadata().collapsed?.[folder] === true;
+export const folderCollapsed = (folder) => layout.collapsed[folder] === true;
 
-export function setFolderCollapsed(folder, collapsed) {
-  updateMetadata((value) => {
-    value.collapsed ??= {};
-    if (collapsed) value.collapsed[folder] = true;
-    else delete value.collapsed[folder];
-  });
-}
+export const setFolderCollapsed = (folder, collapsed) => change("collapsed", folder, collapsed);
 
 function orderPages(folder, pages) {
-  const order = metadata().order?.[folder] ?? [];
+  const order = layout.order[folder] ?? [];
   if (!order.length) return pages;
   const positions = new Map(order.map((id, i) => [id, i]));
   return pages.map((p, i) => ({ p, i })).sort((a, b) => {
@@ -84,16 +118,10 @@ export function movePage(folder, ids, moved, target, after) {
   const order = ids.filter((id) => id !== moved);
   const at = order.indexOf(target);
   order.splice(at < 0 ? order.length : at + (after ? 1 : 0), 0, moved);
-  updateMetadata((value) => {
-    value.order ??= {};
-    value.order[folder] = order;
-  });
+  change("order", folder, order);
 }
 
-export function onLayout(run) {
-  addEventListener(META_EVENT, run);
-  addEventListener("storage", (e) => e.key === META_KEY && run());
-}
+export const onLayout = (run) => addEventListener(LAYOUT_EVENT, run);
 
 export function ago(iso) {
   if (!iso) return "";
@@ -151,7 +179,7 @@ export function watch(show, fail) {
     }
     loading = true;
     try {
-      const pages = await getJSON("api/notebook/pages");
+      const [pages] = await Promise.all([getJSON("api/notebook/pages"), ready]);
       const seen = `${Math.floor(Date.now() / MINUTE)}:${JSON.stringify(pages)}`;
       if (seen !== last) {
         last = seen;

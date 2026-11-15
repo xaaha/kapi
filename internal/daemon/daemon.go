@@ -119,7 +119,7 @@ type Server struct {
 }
 
 func New(home string) *Server {
-	return &Server{
+	s := &Server{
 		home:     home,
 		files:    attach.New(filepath.Join(home, "pages")),
 		now:      time.Now,
@@ -134,6 +134,8 @@ func New(home string) *Server {
 		deleting: map[string]bool{},
 		Trash:    trash.Folder(filepath.Join(home, "trash")),
 	}
+	s.prefs.WithPlaces(s.places)
+	return s
 }
 
 func (s *Server) Attachments() *attach.Store { return s.files }

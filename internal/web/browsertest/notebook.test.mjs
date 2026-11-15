@@ -487,9 +487,94 @@ test("home organization can rename, collapse, and reorder notes", async () => {
     assert.equal(await p.eval(`document.activeElement.matches(".kapi-organizer-folder-toggle") && document.activeElement.textContent.includes("Agent work")`), true);
     await p.eval(`document.querySelector(".kapi-organizer-close").click()`);
     assert.equal(await p.eval(`(() => { const cards = [...document.querySelectorAll(".nb-card")]; const moved = cards.findIndex((card) => card.href.includes(window.organizerMoved.moved)); const target = cards.findIndex((card) => card.href.includes(window.organizerMoved.target)); return moved >= 0 && moved < target; })()`), true);
+    const { moved, target } = await p.eval(`window.organizerMoved`);
+    const folder = realpathSync(hidden);
+    await p.waitFor(`fetch(location.pathname + "settings").then((r) => r.json()).then(({ layout }) => layout.folderTitles[${JSON.stringify(folder)}] === "Agent work" && layout.collapsed[${JSON.stringify(folder)}] === true && layout.order[${JSON.stringify(folder)}]?.[0] === ${JSON.stringify(moved)} && Object.values(layout.pageTitles).includes("My first note"))`);
+    assert.equal(JSON.parse(readFileSync(join(dir, "home", "settings.json"), "utf8")).layout.folderTitles[folder], "Agent work");
+    assert.equal(await p.eval(`localStorage.getItem("kapi-notebook-layout")`), null);
+    await p.eval(`localStorage.clear()`);
+    await p.call("Page.reload");
+    await p.waitFor(`document.readyState === "complete" && [...document.querySelectorAll(".nb-card")].some((card) => card.href.includes(${JSON.stringify(moved)}))`, 5000);
+    assert.equal(await p.eval(`(() => { const cards = [...document.querySelectorAll(".nb-card")]; const a = cards.findIndex((card) => card.href.includes(${JSON.stringify(moved)})); const b = cards.findIndex((card) => card.href.includes(${JSON.stringify(target)})); return a >= 0 && a < b; })()`), true);
+    assert.equal(await p.eval(`[...document.querySelectorAll(".nb-card")].find((card) => card.href.includes(${JSON.stringify(target)})).querySelector(".nb-card-project").textContent`), "Agent work");
+    assert.ok(await p.eval(`[...document.querySelectorAll(".nb-card-title")].some((n) => n.textContent === "My first note")`));
+    await p.eval(`document.querySelector(".nb-organize").click()`);
+    await p.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder")].find((el) => el.textContent.includes("Agent work"))?.querySelector(".kapi-organizer-pages").hidden === true`);
+    assert.deepEqual(p.errors, []);
   } finally {
     await p.close();
     rmSync(hidden, { recursive: true, force: true });
+  }
+});
+
+const layoutOf = (p) => p.eval(`fetch(location.pathname + "settings").then((r) => r.json()).then((s) => s.layout)`);
+const patchLayout = (p, body) => p.eval(`fetch(location.pathname + "settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: ${JSON.stringify(JSON.stringify(body))} }).then((r) => r.status)`);
+const renameInOrganizer = (p, from, to) => p.eval(`(() => { const head = [...document.querySelectorAll(".kapi-organizer-folder-head")].find((el) => el.textContent.includes(${JSON.stringify(from)})); head.querySelector(".kapi-organizer-rename").click(); const input = head.querySelector(".kapi-organizer-rename-input"); input.value = ${JSON.stringify(to)}; input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+const cardFolder = (title) => `[...document.querySelectorAll(".nb-card")].find((card) => card.querySelector(".nb-card-title").textContent === ${JSON.stringify(title)})?.querySelector(".nb-card-project").textContent`;
+
+test("a layout change in one browser shows in another one live, and edits to different folders both land", async () => {
+  const one = join(dir, "layout-one");
+  const two = join(dir, "layout-two");
+  mkdirSync(one);
+  mkdirSync(two);
+  write(join(one, "first.html"), "Live first", "One.");
+  write(join(two, "second.html"), "Live second", "Two.");
+  kapi(one, "open", "first.html");
+  kapi(two, "open", "second.html");
+  const a = await home();
+  const other = await launch();
+  const b = await other.open(base, { ready: "!!document.querySelector('.nb-home') && document.querySelector('.nb-count').textContent !== ''" });
+  try {
+    await refresh(a);
+    await refresh(b);
+    await a.waitFor(`${cardFolder("Live second")} === "Layout Two"`);
+    await b.waitFor(`${cardFolder("Live first")} === "Layout One"`);
+    await a.eval(`document.querySelector(".nb-organize").click()`);
+    await b.eval(`document.querySelector(".nb-organize").click()`);
+    await a.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder-head")].some((el) => el.textContent.includes("Layout One"))`);
+    await b.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder-head")].some((el) => el.textContent.includes("Layout Two"))`);
+    await renameInOrganizer(a, "Layout One", "Renamed in A");
+    await renameInOrganizer(b, "Layout Two", "Renamed in B");
+    await b.waitFor(`${cardFolder("Live first")} === "Renamed in A"`, 5000);
+    await a.waitFor(`${cardFolder("Live second")} === "Renamed in B"`, 5000);
+    await b.eval(`[...document.querySelectorAll(".kapi-organizer-folder-toggle strong")].find((n) => n.textContent === "Renamed in A").closest("button").click()`);
+    await a.waitFor(`[...document.querySelectorAll(".kapi-organizer-folder")].find((el) => el.textContent.includes("Renamed in A"))?.querySelector(".kapi-organizer-pages").hidden === true`, 5000);
+    const layout = await layoutOf(a);
+    assert.equal(layout.folderTitles[realpathSync(one)], "Renamed in A");
+    assert.equal(layout.folderTitles[realpathSync(two)], "Renamed in B");
+    assert.equal(layout.collapsed[realpathSync(one)], true);
+    assert.deepEqual([...a.errors, ...b.errors], []);
+  } finally {
+    await a.close();
+    await other.close();
+  }
+});
+
+test("a layout left in this browser's storage moves to the server once, and the server's own values win", async () => {
+  const folder = join(dir, "layout-import");
+  mkdirSync(folder);
+  write(join(folder, "kept.html"), "Imported note", "Old layout.");
+  kapi(folder, "open", "kept.html");
+  const key = realpathSync(folder);
+  const p = await home();
+  try {
+    await refresh(p);
+    await p.waitFor(`${cardFolder("Imported note")} === "Layout Import"`);
+    const id = await p.eval(`fetch(location.pathname + "api/notebook/pages").then((r) => r.json()).then((pages) => pages.find((page) => page.title === "Imported note").id)`);
+    assert.equal(await patchLayout(p, { layout: { folderTitles: { [key]: "Server name" } } }), 200);
+    await p.eval(`localStorage.setItem("kapi-notebook-layout", ${JSON.stringify(JSON.stringify({ folders: { [key]: "Browser name", "/nowhere": "Gone" }, pages: { [id]: "Browser title" }, collapsed: { [key]: true }, order: { [key]: [id] } }))})`);
+    await p.call("Page.reload");
+    await p.waitFor(`document.readyState === "complete" && localStorage.getItem("kapi-notebook-layout") === null`, 5000);
+    const layout = await layoutOf(p);
+    assert.equal(layout.folderTitles[key], "Server name");
+    assert.equal(layout.folderTitles["/nowhere"], undefined);
+    assert.equal(layout.pageTitles[id], "Browser title");
+    assert.equal(layout.collapsed[key], true);
+    assert.deepEqual(layout.order[key], [id]);
+    await p.waitFor(`${cardFolder("Browser title")} === "Server name"`);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
   }
 });
 

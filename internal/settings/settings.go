@@ -37,6 +37,7 @@ type Settings struct {
 	Retention Retention `json:"retention"`
 	Dismissed []string  `json:"dismissed"`
 	Library   string    `json:"library"`
+	Layout    Layout    `json:"layout"`
 }
 
 type Patch struct {
@@ -45,6 +46,8 @@ type Patch struct {
 	Retention *RetentionPatch `json:"retention,omitempty"`
 	Dismiss   *string         `json:"dismiss,omitempty"`
 	Library   *string         `json:"library,omitempty"`
+	Layout    *LayoutPatch    `json:"layout,omitempty"`
+	Import    *LayoutPatch    `json:"importLayout,omitempty"`
 }
 
 var ErrInvalid = errors.New("invalid setting")
@@ -55,19 +58,32 @@ type Store interface {
 }
 
 func Default() Settings {
-	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}, Retention: DefaultRetention(), Dismissed: []string{}, Library: DefaultLibrary}
+	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}, Retention: DefaultRetention(), Dismissed: []string{}, Library: DefaultLibrary, Layout: EmptyLayout()}
 }
 
 type File struct {
 	path   string
 	known  func(theme string) bool
 	logf   func(format string, args ...any)
+	places func() (Places, error)
 	warned map[string]bool
 	mu     sync.Mutex
 }
 
 func NewFile(path string, known func(theme string) bool) *File {
 	return &File{path: path, known: known, logf: log.Printf, warned: map[string]bool{}}
+}
+
+func (f *File) WithPlaces(places func() (Places, error)) *File {
+	f.places = places
+	return f
+}
+
+func (f *File) knownPlaces(p Patch) (Places, error) {
+	if (p.Layout.empty() && p.Import.empty()) || f.places == nil {
+		return Places{}, nil
+	}
+	return f.places()
 }
 
 func (f *File) Get(context.Context) (Settings, error) {
@@ -77,6 +93,13 @@ func (f *File) Get(context.Context) (Settings, error) {
 }
 
 func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
+	known, err := f.knownPlaces(p)
+	if err != nil {
+		return Settings{}, err
+	}
+	if err := p.Layout.validate(known); err != nil {
+		return Settings{}, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p.Mode != nil && !slices.Contains(Modes, *p.Mode) {
@@ -114,6 +137,10 @@ func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
 	if p.Library != nil {
 		s.Library = cleanLibrary(*p.Library)
 	}
+	if err := s.Layout.apply(p.Layout); err != nil {
+		return Settings{}, err
+	}
+	s.Layout.adopt(p.Import, known)
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return Settings{}, err
@@ -139,11 +166,12 @@ func (f *File) read() (Settings, error) {
 		Retention json.RawMessage `json:"retention"`
 		Dismissed []string        `json:"dismissed"`
 		Library   json.RawMessage `json:"library"`
+		Layout    json.RawMessage `json:"layout"`
 	}
 	if err := json.Unmarshal(b, &stored); err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", f.path, err)
 	}
-	s := Settings{Mode: stored.Mode, Theme: stored.Theme, Recent: stored.Recent, Retention: f.retention(stored.Retention), Dismissed: stored.Dismissed, Library: f.library(stored.Library)}
+	s := Settings{Mode: stored.Mode, Theme: stored.Theme, Recent: stored.Recent, Retention: f.retention(stored.Retention), Dismissed: stored.Dismissed, Library: f.library(stored.Library), Layout: f.layout(stored.Layout)}
 	f.clean(&s)
 	return s, nil
 }
