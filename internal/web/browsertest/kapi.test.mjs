@@ -4791,6 +4791,23 @@ test("an agent reply marks closed chat without changing the independent outline"
 const writing = () => page.eval(`document.documentElement.hasAttribute("data-kapi-writing")`);
 const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
 
+test("the pencil is plain in Review, pressed in Write, and moves only while a block is open", async () => {
+  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, !!b.querySelector("svg")])(document.querySelector(".kapi-write-button"))`);
+  assert.deepEqual(await state(), ["false", "none", true]);
+  await mouseClick(".kapi-write-button");
+  assert.deepEqual(await state(), ["true", "none", true]);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  assert.deepEqual(await state(), ["true", "kapi-writing", true]);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.deepEqual(await state(), ["true", "none", true]);
+  await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`document.activeElement?.isContentEditable`);
+  assert.equal((await state())[1], "none", "reduced motion keeps the pencil still");
+});
+
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),

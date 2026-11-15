@@ -2487,6 +2487,27 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   color: var(--kapi-muted);
 }
 
+#kapi-chrome .kapi-page-tools > .kapi-write-button[aria-pressed="true"] {
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
+}
+
+#kapi-chrome .kapi-write-button[data-editing] svg {
+  transform-origin: 20% 80%;
+  animation: kapi-writing 0.9s ease-in-out infinite;
+}
+
+@keyframes kapi-writing {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(1.5px, 1px) rotate(-10deg); }
+  50% { transform: translate(3px, 0) rotate(0); }
+  75% { transform: translate(1.5px, 1px) rotate(-10deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-chrome .kapi-write-button[data-editing] svg { animation: none; }
+}
+
 #kapi-chrome .kapi-page-tools > button:hover {
   color: var(--kapi-fg);
 }
