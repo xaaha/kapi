@@ -3,6 +3,7 @@ package settings
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 func TestLibraryDefaultsToKapiInHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got, err := newFile(t).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -91,11 +93,16 @@ func TestLibraryPatchRefusesRelativeFoldersAndKeepsTheFile(t *testing.T) {
 }
 
 func TestHandEditedLibraryFallsBackWithOneWarning(t *testing.T) {
+	abs := filepath.Join(t.TempDir(), "notes")
+	quoted, err := json.Marshal(abs + string(filepath.Separator))
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name, library, want, warning string
 	}{
 		{"missing", ``, "~/kapi", ""},
-		{"absolute", `,"library":"/srv/notes/"`, "/srv/notes", ""},
+		{"absolute", `,"library":` + string(quoted), abs, ""},
 		{"relative", `,"library":"notes"`, "~/kapi", `library: "notes" is not an absolute folder`},
 		{"number", `,"library":7`, "~/kapi", "library: 7 is not a string"},
 		{"null", `,"library":null`, "~/kapi", "library: null is not a string"},

@@ -343,13 +343,12 @@ func writeNewFile(path string, data []byte, like string) error {
 		mode = fi.Mode().Perm()
 	}
 	tmp := filepath.Join(filepath.Dir(path), ".~"+filepath.Base(path)+".saving")
-	if err := os.WriteFile(tmp, data, mode); err != nil {
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
 		return err
 	}
-	f, err := os.Open(tmp)
-	if err == nil {
-		err = errors.Join(f.Sync(), f.Close())
-	}
+	_, err = f.Write(data)
+	err = errors.Join(err, f.Sync(), f.Close())
 	if err == nil {
 		err = os.Link(tmp, path)
 	}
