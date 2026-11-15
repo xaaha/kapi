@@ -2,9 +2,12 @@ package web
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -136,5 +139,74 @@ func TestSettingsEventsSendTheCurrentValueThenEveryChange(t *testing.T) {
 	s.patchSettings(`{"mode":"light"}`, nil)
 	if got := next(); got.Mode != "light" || got.Theme != "paper" {
 		t.Errorf("after the second PATCH the stream sent %+v", got)
+	}
+	s.patchSettings(`{"retention":{"archiveAfter":"0"}}`, nil)
+	if got := next(); got.Retention.ArchiveAfter != "0" || got.Theme != "paper" {
+		t.Errorf("after the retention PATCH the stream sent %+v", got)
+	}
+}
+
+func TestSettingsReturnTheDefaultRetention(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	resp := s.get("/settings")
+	if !strings.Contains(resp.body, `"retention":{"archiveAfter":"24h","deleteAfter":"720h","keepWhileOpen":true}`) {
+		t.Errorf("GET /settings does not carry the default retention:\n%s", resp.body)
+	}
+}
+
+func TestPatchingRetention(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		code int
+		want settings.Retention
+		msg  string
+	}{
+		{"archive only", `{"retention":{"archiveAfter":"2h"}}`, http.StatusOK, settings.Retention{ArchiveAfter: "2h", DeleteAfter: "720h", KeepWhileOpen: true}, ""},
+		{"turn both off", `{"retention":{"archiveAfter":"0","deleteAfter":"0"}}`, http.StatusOK, settings.Retention{ArchiveAfter: "0", DeleteAfter: "0", KeepWhileOpen: true}, ""},
+		{"keep while open off", `{"retention":{"keepWhileOpen":false}}`, http.StatusOK, settings.Retention{ArchiveAfter: "24h", DeleteAfter: "720h", KeepWhileOpen: false}, ""},
+		{"negative", `{"retention":{"archiveAfter":"-1h"}}`, http.StatusUnprocessableEntity, settings.DefaultRetention(), `retention.archiveAfter \"-1h\" is negative`},
+		{"unparseable", `{"retention":{"deleteAfter":"30 days"}}`, http.StatusUnprocessableEntity, settings.DefaultRetention(), `retention.deleteAfter \"30 days\" is not a duration`},
+		{"number", `{"retention":{"archiveAfter":3600}}`, http.StatusBadRequest, settings.DefaultRetention(), "bad request body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+			if resp := s.patchSettings(`{"mode":"dark","theme":"paper"}`, nil); resp.code != http.StatusOK {
+				t.Fatalf("PATCH theme: %d %s", resp.code, resp.body)
+			}
+			resp := s.patchSettings(tt.body, nil)
+			if resp.code != tt.code || !strings.Contains(resp.body, tt.msg) {
+				t.Errorf("PATCH %s: %d %s, want %d containing %q", tt.body, resp.code, resp.body, tt.code, tt.msg)
+			}
+			got := decodeSettings(t, s.get("/settings").body)
+			if got.Retention != tt.want || got.Mode != "dark" || got.Theme != "paper" {
+				t.Errorf("GET after PATCH = %+v, want dark paper with retention %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAHandEditedBadRetentionServesTheDefaultForThatField(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	file := filepath.Join(filepath.Dir(s.path), "settings.json")
+	contents := []byte(`{"mode":"light","theme":"ocean","recent":["ocean"],"retention":{"archiveAfter":"tomorrow","deleteAfter":"12h","keepWhileOpen":false}}`)
+	if err := os.WriteFile(file, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resp := s.get("/settings")
+	if resp.code != http.StatusOK {
+		t.Fatalf("GET /settings: %d %s", resp.code, resp.body)
+	}
+	got := decodeSettings(t, resp.body)
+	if want := (settings.Retention{ArchiveAfter: "24h", DeleteAfter: "12h", KeepWhileOpen: false}); got.Retention != want || got.Theme != "ocean" {
+		t.Errorf("GET /settings = %+v, want ocean with retention %+v", got, want)
+	}
+	after, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, contents) {
+		t.Errorf("GET rewrote settings.json:\n%s", after)
 	}
 }
