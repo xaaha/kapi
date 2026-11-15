@@ -917,18 +917,37 @@ func resolved(path string) string {
 
 func (s *Server) setAttached(path, reader string, on bool) {
 	defer s.notebookChanged()
+	id := page.ID(path)
+	marker := filepath.Join(s.home, "pages", id, attachedName)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.attached[path] == nil {
 		s.attached[path] = map[string]time.Time{}
 	}
 	if on {
+		first := len(s.attached[path]) == 0
 		s.attached[path][reader] = time.Now().UTC()
+		s.mu.Unlock()
+		if first {
+			if err := writeAtomic(marker, nil); err != nil {
+				log.Printf("attached %s: %v", path, err)
+			}
+		}
 		return
 	}
 	delete(s.attached[path], reader)
-	if len(s.attached[path]) == 0 {
-		s.release(page.ID(path))
+	last := len(s.attached[path]) == 0
+	s.mu.Unlock()
+	if !last {
+		return
+	}
+	s.release(id)
+	select {
+	case <-s.stopping:
+		return
+	default:
+	}
+	if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("attached %s: %v", path, err)
 	}
 }
 

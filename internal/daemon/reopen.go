@@ -13,6 +13,7 @@ import (
 const (
 	reopenAtMost = 5
 	viewingName  = "viewing"
+	attachedName = "attached"
 )
 
 var pageID = regexp.MustCompile(`^[0-9a-f]{16}$`)

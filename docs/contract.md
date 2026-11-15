@@ -281,10 +281,12 @@ The daemon sweeps pages when it starts and every 15 minutes. A page whose
 `touched` is older than `retention.archiveAfter` gets `archivedAt` (UTC) in
 `state.json`; `"0"` turns archiving off, and a page with `"saved": true` is
 never archived. With `retention.keepWhileOpen` on, a page with a browser tab
-or an attached `kapi watch` or `kapi wait` is never archived, its clock starts
-again when the last one leaves, a page that had a tab open when the daemon
+or an attached `kapi watch` or `kapi wait` is never archived, and its clock
+starts again when the last one leaves; that time is kept as `releasedAt` in
+`state.json`. A page that had a tab open or an agent attached when the daemon
 stopped counts as left at the next start, and no page is archived in the
-first 5 minutes after a start so tabs can reconnect. Anything that moves
+first 5 minutes after a start so tabs can reconnect. While `settings.json`
+cannot be read the sweep archives nothing. Anything that moves
 `touched` clears `archivedAt`; a file edit made while no tab was open is
 picked up by the sweep before it archives. Each page in `api/notebook/pages`
 carries `archivedAt`, `deletesAt` (`archivedAt` plus `retention.deleteAfter`,

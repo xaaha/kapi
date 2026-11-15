@@ -347,3 +347,81 @@ func TestArchivedAtSurvivesARestart(t *testing.T) {
 		t.Errorf("opening the page's store moved archivedAt to %v, want %v", got, at)
 	}
 }
+
+func TestARestartKeepsTheTimeTheLastTabClosed(t *testing.T) {
+	a := archiving(t, "")
+	path, pageURL := a.page("viewed.html", 48*time.Hour)
+	tab := connectViewer(t, pageURL)
+	waitUntil(t, "the tab to count", func() bool { return a.s.inUse(page.ID(path), path) })
+	a.clock.add(72 * time.Hour)
+	closed := a.clock.now()
+	tab.close()
+	waitUntil(t, "the tab to close", func() bool { return !a.s.inUse(page.ID(path), path) })
+	a.clock.add(time.Hour)
+	a.restart()
+	a.sweepAfter(archiveGrace)
+	if a.archived(path) {
+		t.Fatal("after a restart, a page whose tab closed an hour ago was archived")
+	}
+	if p := a.indexed(path); !p.ArchivesAt.Equal(closed.Add(24 * time.Hour)) {
+		t.Errorf("after a restart, archivesAt %v, want a day after the tab closed (%v)", p.ArchivesAt, closed)
+	}
+}
+
+func TestAnAgentAttachedAtShutdownCountsAsLeavingAtTheNextStart(t *testing.T) {
+	a := archiving(t, "")
+	path, _ := a.page("watched.html", 48*time.Hour)
+	conn, err := net.Dial("unix", SocketPath(a.home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := json.NewEncoder(conn).Encode(Request{Op: "watch", Page: path, Reader: "agent"}); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, "the agent to attach", func() bool { return a.s.inUse(page.ID(path), path) })
+	a.clock.add(72 * time.Hour)
+	old := a.s
+	a.stop()
+	conn.Close()
+	waitUntil(t, "the agent to detach from the stopped daemon", func() bool { return !old.inUse(page.ID(path), path) })
+	a.clock.add(time.Hour)
+	a.start()
+	started := a.clock.now()
+	a.sweepAfter(archiveGrace)
+	if a.archived(path) {
+		t.Fatal("a page an agent was watching when the daemon stopped was archived after the grace period")
+	}
+	if p := a.indexed(path); !p.ArchivesAt.Equal(started.Add(24 * time.Hour)) {
+		t.Errorf("archivesAt %v, want a day after the start (%v)", p.ArchivesAt, started)
+	}
+}
+
+func TestUnreadableSettingsStopTheSweepInsteadOfUsingDefaults(t *testing.T) {
+	a := archiving(t, `{"retention":{"archiveAfter":"0"}},`)
+	stale, _ := a.page("stale.html", 48*time.Hour)
+	a.sweepAfter(archiveGrace)
+	if a.archived(stale) {
+		t.Error("settings.json cannot be read, but the sweep archived a page with the default timer")
+	}
+	if p := a.indexed(stale); !p.ArchivesAt.IsZero() {
+		t.Errorf("settings.json cannot be read, but the index says the page archives at %v", p.ArchivesAt)
+	}
+}
+
+func TestATabThatConnectsBeforeTheWriteStopsTheArchive(t *testing.T) {
+	a := archiving(t, "")
+	path, pageURL := a.page("late.html", 48*time.Hour)
+	a.clock.add(archiveGrace)
+	touched := a.lifecycle(path).Touched
+	connectViewer(t, pageURL)
+	waitUntil(t, "the tab to count", func() bool { return a.s.inUse(page.ID(path), path) })
+	d := pageDir{path: path, dir: filepath.Join(a.home, "pages", page.ID(path))}
+	archived, err := a.s.markArchived(d, a.clock.now(), touched, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archived || a.archived(path) {
+		t.Error("a page was archived although a tab connected after the sweep checked it")
+	}
+}

@@ -76,8 +76,8 @@ type Store struct {
 	event  *revEvent
 	logged uint64
 
-	viewed, touched, archived time.Time
-	saved                     bool
+	viewed, touched, archived, released time.Time
+	saved                               bool
 }
 
 type state struct {
@@ -91,12 +91,13 @@ type state struct {
 	Viewed   time.Time `json:"viewed,omitzero"`
 	Touched  time.Time `json:"touched,omitzero"`
 	Archived time.Time `json:"archivedAt,omitzero"`
+	Released time.Time `json:"releasedAt,omitzero"`
 	Saved    bool      `json:"saved,omitempty"`
 }
 
 type Lifecycle struct {
-	Viewed, Touched, Archived time.Time
-	Saved                     bool
+	Viewed, Touched, Archived, Released time.Time
+	Saved                               bool
 }
 
 type revEvent struct {
@@ -246,7 +247,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 
 func (s *Store) load(st *state) error {
 	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
-	s.viewed, s.touched, s.archived, s.saved = st.Viewed, st.Touched, st.Archived, st.Saved
+	s.viewed, s.touched, s.archived, s.released, s.saved = st.Viewed, st.Touched, st.Archived, st.Released, st.Saved
 	if s.rev > 0 {
 		src, err := osfile.ReadFile(s.revPath(s.rev))
 		if err != nil {
@@ -748,7 +749,7 @@ func (s *Store) logEvent() (uint64, error) {
 
 func (s *Store) saveState(st *state) error {
 	st.Held, st.Event = s.held, s.event
-	st.Viewed, st.Touched, st.Archived, st.Saved = s.viewed, s.touched, s.archived, s.saved
+	st.Viewed, st.Touched, st.Archived, st.Released, st.Saved = s.viewed, s.touched, s.archived, s.released, s.saved
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
@@ -767,7 +768,7 @@ func modTime(path string, otherwise time.Time) time.Time {
 func (s *Store) Lifecycle() Lifecycle {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Lifecycle{Viewed: s.viewed, Touched: s.touched, Archived: s.archived, Saved: s.saved}
+	return Lifecycle{Viewed: s.viewed, Touched: s.touched, Archived: s.archived, Released: s.released, Saved: s.saved}
 }
 
 func (s *Store) MarkViewed() error {
@@ -811,12 +812,41 @@ func MarkArchivedAt(dir string, at, touched time.Time) (bool, error) {
 	return true, WriteAtomic(filepath.Join(dir, "state.json"), b)
 }
 
+func (s *Store) MarkReleased(at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !at.After(s.released) {
+		return nil
+	}
+	s.released = at.UTC()
+	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func MarkReleasedAt(dir string, at time.Time) error {
+	st, err := readState(dir)
+	if err != nil {
+		return err
+	}
+	if st == nil {
+		st = &state{}
+	}
+	if !at.After(st.Released) {
+		return nil
+	}
+	st.Released = at.UTC()
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(filepath.Join(dir, "state.json"), b)
+}
+
 func ReadLifecycle(dir string) (Lifecycle, error) {
 	st, err := readState(dir)
 	if err != nil || st == nil {
 		return Lifecycle{}, err
 	}
-	return Lifecycle{Viewed: st.Viewed, Touched: st.Touched, Archived: st.Archived, Saved: st.Saved}, nil
+	return Lifecycle{Viewed: st.Viewed, Touched: st.Touched, Archived: st.Archived, Released: st.Released, Saved: st.Saved}, nil
 }
 
 func readState(dir string) (*state, error) {

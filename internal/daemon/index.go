@@ -49,7 +49,7 @@ func (s *Server) Index() ([]app.Page, error) {
 		return nil, err
 	}
 	out := make([]app.Page, 0, len(dirs))
-	policy := s.policy()
+	policy, _ := s.policy()
 	for _, d := range dirs {
 		if d.err != nil {
 			continue

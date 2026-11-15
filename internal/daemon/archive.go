@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -17,17 +19,18 @@ const (
 )
 
 type retention struct {
-	mu       sync.Mutex
-	sweep    sync.Mutex
-	started  time.Time
-	released map[string]time.Time
+	mu      sync.Mutex
+	sweep   sync.Mutex
+	started time.Time
+	broken  bool
 }
 
 func (s *Server) startRetention() {
 	r := &s.retention
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.started = s.now().UTC()
+	r.mu.Unlock()
+	s.releaseAttachedAtStop()
 }
 
 func (s *Server) inGrace(now time.Time) bool {
@@ -37,39 +40,66 @@ func (s *Server) inGrace(now time.Time) bool {
 	return now.Sub(r.started) < archiveGrace
 }
 
-func (s *Server) release(id string) {
-	r := &s.retention
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.released == nil {
-		r.released = map[string]time.Time{}
+func (s *Server) releaseAttachedAtStop() {
+	root := filepath.Join(s.home, "pages")
+	dirs, err := os.ReadDir(root)
+	if err != nil {
+		return
 	}
-	r.released[id] = s.now().UTC()
+	for _, d := range dirs {
+		file := filepath.Join(root, d.Name(), attachedName)
+		if _, err := os.Stat(file); err != nil || !pageID.MatchString(d.Name()) {
+			continue
+		}
+		if err := os.Remove(file); err != nil {
+			log.Printf("attached %s: %v", d.Name(), err)
+		}
+		s.release(d.Name())
+	}
 }
 
-func (s *Server) releasedAt(id string) time.Time {
-	r := &s.retention
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.released[id]
+func (s *Server) release(id string) {
+	path, err := s.PagePath(id)
+	if err != nil {
+		return
+	}
+	at := s.now().UTC()
+	s.mu.Lock()
+	st, open := s.stores[path]
+	if !open {
+		err = page.MarkReleasedAt(filepath.Join(s.home, "pages", id), at)
+		s.mu.Unlock()
+	} else {
+		s.mu.Unlock()
+		err = st.MarkReleased(at)
+	}
+	if err != nil {
+		log.Printf("release %s: %v", path, err)
+	}
 }
 
 func (s *Server) inUse(id, path string) bool {
 	s.viewingMu.Lock()
-	viewed := s.viewers[id] > 0
-	s.viewingMu.Unlock()
+	defer s.viewingMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return viewed || len(s.attached[path]) > 0
+	return s.viewers[id] > 0 || len(s.attached[path]) > 0
 }
 
-func (s *Server) policy() settings.Policy {
+func (s *Server) policy() (settings.Policy, bool) {
 	prefs, err := s.prefs.Get(context.Background())
+	r := &s.retention
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if err != nil {
-		log.Printf("retention: %v", err)
-		return settings.DefaultRetention().Policy()
+		if !r.broken {
+			log.Printf("retention: not archiving until settings can be read: %v", err)
+		}
+		r.broken = true
+		return settings.Policy{}, false
 	}
-	return prefs.Retention.Policy()
+	r.broken = false
+	return prefs.Retention.Policy(), true
 }
 
 func lifecycleOf(dir string, mod time.Time) (lc page.Lifecycle, stale bool) {
@@ -91,12 +121,11 @@ func (s *Server) archivesAt(path string, lc *page.Lifecycle, p settings.Policy) 
 	}
 	last := lc.Touched
 	if p.KeepWhileOpen {
-		id := page.ID(path)
-		if s.inUse(id, path) {
+		if s.inUse(page.ID(path), path) {
 			return time.Time{}
 		}
-		if at := s.releasedAt(id); at.After(last) {
-			last = at
+		if lc.Released.After(last) {
+			last = lc.Released
 		}
 	}
 	return last.Add(p.ArchiveAfter)
@@ -130,7 +159,10 @@ func (s *Server) sweepArchive() {
 		log.Printf("archive: %v", err)
 		return
 	}
-	p := s.policy()
+	p, ok := s.policy()
+	if !ok {
+		return
+	}
 	now := s.now().UTC()
 	archiving := !p.KeepWhileOpen || !s.inGrace(now)
 	changed := false
@@ -158,7 +190,7 @@ func (s *Server) sweepArchive() {
 		if !ready {
 			continue
 		}
-		archived, err := s.markArchived(d, now, lc.Touched)
+		archived, err := s.markArchived(d, now, lc.Touched, p.KeepWhileOpen)
 		if err != nil {
 			log.Printf("archive %s: %v", d.path, err)
 			continue
@@ -181,8 +213,14 @@ func (s *Server) absorb(path string) (page.Lifecycle, error) {
 	return st.Lifecycle(), nil
 }
 
-func (s *Server) markArchived(d pageDir, at, touched time.Time) (bool, error) {
+func (s *Server) markArchived(d pageDir, at, touched time.Time, keepWhileOpen bool) (bool, error) {
+	s.viewingMu.Lock()
+	defer s.viewingMu.Unlock()
 	s.mu.Lock()
+	if keepWhileOpen && (s.viewers[filepath.Base(d.dir)] > 0 || len(s.attached[d.path]) > 0) {
+		s.mu.Unlock()
+		return false, nil
+	}
 	st, open := s.stores[d.path]
 	if !open {
 		defer s.mu.Unlock()
