@@ -165,6 +165,7 @@ func (s *Server) sweepArchive() {
 	}
 	now := s.now().UTC()
 	archiving := !p.KeepWhileOpen || !s.inGrace(now)
+	deleting := s.deletingAllowed(now)
 	changed := false
 	for _, d := range dirs {
 		if d.err != nil {
@@ -187,16 +188,29 @@ func (s *Server) sweepArchive() {
 			due = s.archivesAt(d.path, &lc, p)
 			ready = archiving && !due.IsZero() && !now.Before(due)
 		}
-		if !ready {
+		if ready {
+			archived, err := s.markArchived(d, now, lc.Touched, p.KeepWhileOpen)
+			if err != nil {
+				log.Printf("archive %s: %v", d.path, err)
+				continue
+			}
+			changed = changed || archived
 			continue
 		}
-		archived, err := s.markArchived(d, now, lc.Touched, p.KeepWhileOpen)
+		if !deleting || !expired(&lc, p, now) {
+			continue
+		}
+		if at, ok = stampOf(d.path); !ok {
+			continue
+		}
+		removed, err := s.expire(d, &lc, at, p)
 		if err != nil {
-			log.Printf("archive %s: %v", d.path, err)
+			log.Printf("retention: delete %s: %v", d.path, err)
 			continue
 		}
-		changed = changed || archived
+		changed = changed || removed
 	}
+	s.sweepRedirects(now, p)
 	if changed {
 		s.notebookChanged()
 	}

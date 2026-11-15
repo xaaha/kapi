@@ -22,7 +22,7 @@ function section(title, pages, fresh) {
 }
 
 function render(list, pages, query, fresh) {
-  const available = pages.filter((p) => p.id !== pageID && matches(p, query));
+  const available = pages.filter((p) => p.id !== pageID && !p.archivedAt && matches(p, query));
   if (!available.length) {
     list.replaceChildren(h("p", { class: "kapi-switcher-empty", text: pages.length ? "No note matches." : "No notes yet." }));
     return;

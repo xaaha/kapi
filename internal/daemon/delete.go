@@ -88,7 +88,7 @@ func (s *Server) Delete(id string) (app.Deleted, error) {
 	aside := s.deletedDir(id)
 	d := &deletion{Path: path, Title: title, At: time.Now().UTC()}
 	kept := s.keepImages(path)
-	if err := s.trashFiles(aside, d, !kept); err != nil {
+	if err := s.trashFiles(aside, d, trashed(path, kept)); err != nil {
 		return app.Deleted{}, err
 	}
 	if _, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindEnd, Text: eventlog.EndDeleted}); err != nil {
@@ -145,16 +145,19 @@ func untrash(aside string, d *deletion, err error) error {
 	return errors.Join(err, os.RemoveAll(aside))
 }
 
-func (s *Server) trashFiles(aside string, d *deletion, images bool) error {
+func trashed(path string, keptImages bool) []string {
+	if keptImages {
+		return []string{path}
+	}
+	return []string{path, page.FilesDir(path)}
+}
+
+func (s *Server) trashFiles(aside string, d *deletion, paths []string) error {
 	if err := os.RemoveAll(aside); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(aside, 0o700); err != nil {
 		return err
-	}
-	paths := []string{d.Path}
-	if images {
-		paths = append(paths, page.FilesDir(d.Path))
 	}
 	for _, p := range paths {
 		if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {

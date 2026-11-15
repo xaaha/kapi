@@ -4,6 +4,7 @@ const MINUTE = 60000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const SOON = 6 * HOUR;
+const DELETE_WARNING = 3 * DAY;
 const UNITS = Object.freeze({ ns: 1e-6, us: 1e-3, "µs": 1e-3, ms: 1, s: 1000, m: MINUTE, h: HOUR });
 
 export const ARCHIVE_NOTICE = "archive-intro";
@@ -70,11 +71,21 @@ function pill(kind, name, text) {
   return h("span", { class: `nb-badge nb-badge-${kind}` }, icon(name), text);
 }
 
+const midnight = (t) => new Date(t).setHours(0, 0, 0, 0);
+
+function deletesIn(deletesAt, now) {
+  const days = deletesAt <= now ? 0 : Math.round((midnight(deletesAt) - midnight(now)) / DAY);
+  if (days === 0) return "Deletes today";
+  if (days === 1) return "Deletes tomorrow";
+  return `Deletes in ${days} days`;
+}
+
 export function badge(p, { now = Date.now(), saved = true } = {}) {
   if (p.saved) return saved ? pill("saved", "bookmark", "Saved") : null;
   if (isArchived(p)) {
     const left = time(p.deletesAt) - now;
-    return pill("archived", "archive", Number.isFinite(left) && left > 0 ? `Archived · ${plural(Math.ceil(left / DAY), "day")} left` : "Archived");
+    if (Number.isFinite(left) && left <= DELETE_WARNING) return pill("deletes", "trash", deletesIn(time(p.deletesAt), now));
+    return pill("archived", "archive", Number.isFinite(left) ? `Archived · ${plural(Math.ceil(left / DAY), "day")} left` : "Archived");
   }
   if (!p.archivesAt) return null;
   const left = time(p.archivesAt) - now;

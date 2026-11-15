@@ -377,6 +377,9 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleting[path] {
+		return nil, s.refuseDeleted(path)
+	}
 	if l, ok := s.pages[path]; ok {
 		return l, nil
 	}
@@ -451,6 +454,9 @@ func (s *Server) openStore(path string) (*page.Store, *eventlog.Log, bool, error
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleting[path] {
+		return nil, nil, false, s.refuseDeleted(path)
+	}
 	if st, ok := s.stores[path]; ok {
 		return st, l, false, nil
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -14,6 +15,7 @@ import (
 	"github.com/xaaha/cli"
 
 	"github.com/xaaha/kapi/internal/daemon"
+	"github.com/xaaha/kapi/internal/web/app"
 )
 
 var now = time.Now
@@ -50,24 +52,30 @@ func newHomeCmd(c api, out io.Writer) *cli.Command {
 }
 
 type listedPage struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Path    string    `json:"path"`
-	State   string    `json:"state"`
-	Viewed  time.Time `json:"viewed"`
-	Touched time.Time `json:"touched"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Path       string    `json:"path"`
+	State      string    `json:"state"`
+	Viewed     time.Time `json:"viewed"`
+	Touched    time.Time `json:"touched"`
+	Saved      bool      `json:"saved"`
+	Archived   bool      `json:"archived"`
+	ArchivedAt time.Time `json:"archivedAt,omitzero"`
+	DeletesAt  time.Time `json:"deletesAt,omitzero"`
 }
 
 func newLsCmd(c api, out io.Writer) *cli.Command {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "Print a JSON array with id, title, path, state, and the viewed and touched times in UTC")
+	asJSON := fs.Bool("json", false, "Print a JSON array with id, title, path, state, the viewed and touched times in UTC, saved, archived, and for an archived page archivedAt and deletesAt")
+	all := fs.Bool("all", false, "Include archived pages")
 	return &cli.Command{
 		Name:  "ls",
 		Short: "List pages, most recently viewed first",
-		Long:  "List every page kapi knows about whose file still exists, most recently viewed in a browser first, then most recently changed. Starts the daemon if it is not running.",
+		Long:  "List every page kapi knows about whose file still exists and that is not archived, most recently viewed in a browser first, then most recently changed. --all adds archived pages. Starts the daemon if it is not running.",
 		Flags: fs,
 		Examples: []cli.Example{
 			{Command: "kapi ls", Description: "Title, state, when you last viewed it, and path"},
+			{Command: "kapi ls --all", Description: "Archived pages too, marked archived"},
 			{Command: "kapi ls --json", Description: "The same list for scripts and agents"},
 		},
 		Run: func(args []string) error {
@@ -78,26 +86,39 @@ func newLsCmd(c api, out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
+			index := resp.Index
+			if !*all {
+				index = slices.DeleteFunc(index, func(p app.Page) bool { return !p.ArchivedAt.IsZero() })
+			}
 			if *asJSON {
-				pages := make([]listedPage, 0, len(resp.Index))
-				for i := range resp.Index {
-					p := &resp.Index[i]
-					pages = append(pages, listedPage{ID: p.ID, Title: p.Title, Path: p.Path, State: p.State, Viewed: p.Viewed.UTC(), Touched: p.Touched.UTC()})
+				pages := make([]listedPage, 0, len(index))
+				for i := range index {
+					p := &index[i]
+					pages = append(pages, listedPage{ID: p.ID, Title: p.Title, Path: p.Path, State: p.State, Viewed: p.Viewed.UTC(), Touched: p.Touched.UTC(),
+						Saved: p.Saved, Archived: !p.ArchivedAt.IsZero(), ArchivedAt: p.ArchivedAt.UTC(), DeletesAt: p.DeletesAt.UTC()})
 				}
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
 				return enc.Encode(pages)
 			}
-			if len(resp.Index) == 0 {
-				_, err := fmt.Fprintln(out, "No pages yet. Run kapi open <page> to make one.")
+			if len(index) == 0 {
+				msg := "No pages yet. Run kapi open <page> to make one."
+				if len(resp.Index) > 0 {
+					msg = "No pages outside Archived. Run kapi ls --all to list archived pages too."
+				}
+				_, err := fmt.Fprintln(out, msg)
 				return err
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "TITLE\tSTATE\tVIEWED\tPATH")
 			at := now()
-			for i := range resp.Index {
-				p := &resp.Index[i]
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", oneLine(p.Title), p.State, ago(p.Viewed, at), oneLine(p.Path))
+			for i := range index {
+				p := &index[i]
+				state := p.State
+				if !p.ArchivedAt.IsZero() {
+					state += ", archived"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", oneLine(p.Title), state, ago(p.Viewed, at), oneLine(p.Path))
 			}
 			return tw.Flush()
 		},

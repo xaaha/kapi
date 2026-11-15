@@ -292,6 +292,49 @@ picked up by the sweep before it archives. Each page in `api/notebook/pages`
 carries `archivedAt`, `deletesAt` (`archivedAt` plus `retention.deleteAfter`,
 absent when that is `"0"`) and, for a page that will archive, `archivesAt`.
 Home shows Recent (not archived) and Archived (soonest deletion first) views.
+An Archived card with 3 days or less until `deletesAt` shows a red badge
+(`nb-badge nb-badge-deletes`, the trash icon, `--kapi-red-text`, `-fill` and
+`-border`) counted in calendar days: "Deletes in 2 days", "Deletes tomorrow",
+or "Deletes today", which a page past `deletesAt` also shows until the sweep
+removes it. Further out it shows "Archived · N days left". The note switcher
+leaves archived pages out, also when searching. `kapi ls` leaves them out too;
+`kapi ls --all` adds them with `, archived` after the state, and `--json` gives
+every page `saved` and `archived` and an archived one `archivedAt` and
+`deletesAt`.
+
+The same sweep removes an archived page once `archivedAt` plus
+`retention.deleteAfter` has passed; `"0"` turns deletion off. The clock always
+counts from `archivedAt`, so a `deleteAfter` shorter than `archiveAfter` never
+removes a page before it was archived. No page is removed until one full sweep
+interval (15 minutes) after a start, so a returning person sees the Archived
+list first. While `settings.json` cannot be read nothing is removed. Right
+before removing, under the same locks as archiving, kapi checks again that the
+page is still archived at the same `archivedAt`, not saved, not open in a tab,
+has no attached `kapi watch` or `kapi wait` (whatever `keepWhileOpen` says),
+has the same `touched`, and that its file has the same size and mtime;
+otherwise it keeps the page. An open page store is retired in the same step,
+so a touch that comes later fails instead of landing on a page being removed.
+Removal depends on where the file is:
+
+- Inside the library root (`<root>`, which holds `library` and `drafts`), the
+  file and its images folder move to the Trash exactly as Delete does, and the
+  page's state goes to `$KAPI_HOME/deleted/<id>/`. An images folder another
+  page uses stays, and only the file moves.
+- Anywhere else (a repo, `~/Documents`, `/tmp`), the file and its images are
+  never touched. kapi only forgets the page: its state goes to
+  `$KAPI_HOME/deleted/<id>/` and it leaves the index. Opening the file again
+  starts a fresh page.
+
+Either way the page's log gets an `end` by `kapi`, with `text` `deleted` (in
+the Trash) or `forgotten` (left in place), which `kapi watch` and `kapi wait`
+print and exit on, and `$KAPI_HOME/daemon.log` gets one line naming the path
+and why. The set-aside state is deleted an hour later, as after Delete.
+
+The sweep also deletes a state folder that holds nothing but `moved.txt` (the
+redirect Save leaves at the old id) once `moved.txt` is older than
+`retention.deleteAfter`, or 30 days when deletion is off. A folder with
+`page.txt` (a page lives at the old path again) or a `move.json` journal is
+left alone.
 `PATCH settings` with `{"dismiss":"archive-intro"}` adds that notice to
 `dismissed`, which hides the one-time archiving banner on Recent.
 
@@ -553,7 +596,8 @@ state directory moves with the file: revisions, events, reader positions,
 notes, the folders it was opened from, and `state.json`. `page.txt` gets the
 new path and `state.json` gets `"saved":true`, the flag the archive sweep
 reads; a saved page is never swept. The old id's directory keeps only
-`moved.txt`, holding the new path.
+`moved.txt`, holding the new path, until the sweep removes it (see the
+retention paragraphs above).
 
 The move is journaled in `move.json`, first in the old state directory and
 then carried with it: `{"from","to","step","images","rewrite","placed"}`.
