@@ -1952,6 +1952,24 @@ test("on a narrow desktop with the outline and chat open, Write stays at the top
   }
 });
 
+test("the Edit mode tooltip opens toward the page and never runs under the chat panel", async () => {
+  const p = await browser.open(server.url, { width: 1280, height: 700 });
+  try {
+    if (await p.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await p.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await p.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    await p.eval(`document.querySelector(".kapi-write-button").focus({ focusVisible: true })`);
+    const m = await p.eval(`(() => {
+      const b = document.querySelector(".kapi-write-button"), tip = getComputedStyle(b, "::after");
+      const right = b.getBoundingClientRect().right - parseFloat(tip.right || "0");
+      return { content: tip.content, right, chat: document.querySelector(".kapi-panel").getBoundingClientRect().left };
+    })()`);
+    assert.match(m.content, /Edit mode/);
+    assert.ok(m.right <= m.chat + 0.5, JSON.stringify(m));
+  } finally {
+    await p.close();
+  }
+});
+
 test("tapping a theme in the page menu on a phone does not expand the chat", async () => {
   const phone = await mobilePage(390);
   try {
