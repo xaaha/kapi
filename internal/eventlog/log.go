@@ -40,7 +40,12 @@ const (
 	KindDeleteNotes = "delete-notes"
 	KindEnd         = "end"
 	EndDeleted      = "deleted"
+	EndForgotten    = "forgotten"
 )
+
+func (e *Event) Removed() bool {
+	return e.Kind == KindEnd && (e.Text == EndDeleted || e.Text == EndForgotten)
+}
 
 func (e *Event) Quiet() bool { return e.Kind == KindResolve || e.Kind == KindDeleteNotes }
 

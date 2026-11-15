@@ -208,3 +208,22 @@ func TestWaitExitsCleanlyWhenThePageWasDeleted(t *testing.T) {
 		t.Errorf("wait printed %q", out)
 	}
 }
+
+func TestWaitSaysWhetherTheSweepTrashedOrForgotThePage(t *testing.T) {
+	for _, tc := range []struct{ text, want string }{
+		{eventlog.EndDeleted, "#4 kapi deleted the page after it sat in Archived past retention.deleteAfter and ended the session: the file is in the Trash"},
+		{eventlog.EndForgotten, "#4 kapi removed the page from kapi after it sat in Archived past retention.deleteAfter and ended the session: the file was left where it is"},
+	} {
+		f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{{Seq: 4, Author: "kapi", Kind: eventlog.KindEnd, Text: tc.text}}}}
+		out, err := run(t, f, "wait", "plan.html")
+		if err != nil {
+			t.Fatalf("wait on a %s page: %v", tc.text, err)
+		}
+		if len(f.requests) != 1 || f.requests[0].Op != "wait" {
+			t.Fatalf("wait on a %s page sent %+v, want only the wait", tc.text, f.requests)
+		}
+		if !strings.Contains(out, tc.want) {
+			t.Errorf("wait printed %q, want %q", out, tc.want)
+		}
+	}
+}

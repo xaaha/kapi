@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -159,5 +160,44 @@ func TestAgoRoundsDownToTheLargestUnit(t *testing.T) {
 		if got := ago(at.Add(-tc.back), at); got != tc.want {
 			t.Errorf("ago(%v) = %q, want %q", tc.back, got, tc.want)
 		}
+	}
+}
+
+func TestLsLeavesOutArchivedPagesUnlessAll(t *testing.T) {
+	at := fixNow(t)
+	pages := listed(at)
+	pages[1].ArchivedAt = at.Add(-2 * 24 * time.Hour)
+	pages[1].DeletesAt = at.Add(28 * 24 * time.Hour)
+	pages[2].Saved = true
+	ls := func(args ...string) string {
+		t.Helper()
+		out, err := run(t, &fakeAPI{resp: daemon.Response{Index: slices.Clone(pages)}}, append([]string{"ls"}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if out := ls(); strings.Contains(out, "notes.html") || !strings.Contains(out, "rollout.html") || !strings.Contains(out, "fresh.html") {
+		t.Errorf("kapi ls listed:\n%s\nwant every page but the archived one", out)
+	}
+	if out := ls("--all"); !strings.Contains(out, `"Notes\twith a tab"  ended, archived  3 days ago`) {
+		t.Errorf("kapi ls --all printed:\n%s\nwant the archived page marked archived", out)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal([]byte(ls("--json", "--all")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0]["saved"] != false || got[0]["archived"] != false || got[2]["saved"] != true {
+		t.Fatalf("saved and archived flags: %v", got)
+	}
+	if got[1]["archived"] != true || got[1]["archivedAt"] != "2026-11-13T12:00:00Z" || got[1]["deletesAt"] != "2026-12-13T12:00:00Z" {
+		t.Errorf("archived page as JSON: %v", got[1])
+	}
+	if _, ok := got[0]["archivedAt"]; ok {
+		t.Errorf("a page that is not archived has archivedAt: %v", got[0])
+	}
+	out, err := run(t, &fakeAPI{resp: daemon.Response{Index: pages[1:2]}}, "ls")
+	if err != nil || !strings.Contains(out, "kapi ls --all") {
+		t.Errorf("kapi ls with only archived pages printed %q, %v", out, err)
 	}
 }

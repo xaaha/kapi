@@ -37,6 +37,7 @@ var (
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
 	ErrRetired       = errors.New("the page moved; reload it to keep working")
+	ErrExpired       = errors.New("the page was removed after it sat in Archived; stop working on it")
 	ErrInnerEscapes  = errors.New("the new source closes the element early or leaves an element inside it open; edit only what goes between its tags")
 )
 
@@ -823,6 +824,19 @@ func (s *Store) Retire() error {
 	}
 	s.gone = ErrRetired
 	return nil
+}
+
+func (s *Store) Expire(archived, touched time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.gone != nil || s.saved || s.archived.IsZero() || !s.archived.Equal(archived) || !s.touched.Equal(touched) {
+		return false, nil
+	}
+	if _, err := s.checkHeld(true); err != nil {
+		return false, err
+	}
+	s.gone = ErrExpired
+	return true, nil
 }
 
 func MarkSaved(dir string) error {

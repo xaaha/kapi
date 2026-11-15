@@ -530,6 +530,12 @@ body:has(#kapi-home) {
   --nb-badge-border: var(--kapi-yellow-border);
 }
 
+.nb-badge-deletes {
+  --nb-badge-text: var(--kapi-red-text);
+  --nb-badge-fill: var(--kapi-red-fill);
+  --nb-badge-border: var(--kapi-red-border);
+}
+
 .nb-banner {
   display: flex;
   flex-wrap: wrap;

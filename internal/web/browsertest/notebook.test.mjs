@@ -636,14 +636,14 @@ test("home splits notes into Recent and Archived with deadline badges, soonest d
   const notes = join(dir, "lifecycle");
   mkdirSync(archiveHome);
   mkdirSync(notes);
-  writeFileSync(join(archiveHome, "settings.json"), `{"retention":{"keepWhileOpen":false}}\n`);
+  writeFileSync(join(archiveHome, "settings.json"), JSON.stringify({ library: join(dir, "archive-library"), retention: { keepWhileOpen: false } }));
   const archiveEnv = { ...env, KAPI_HOME: archiveHome };
   const run = (...args) => execFileSync(bin, args, { cwd: notes, env: archiveEnv }).toString();
   const stop = () => execFileSync(join(repo, "scripts/stop-daemon.sh"), [archiveHome]);
   const stateOf = (name) => join(archiveHome, "pages", createHash("sha256").update(join(realpathSync(notes), name)).digest("hex").slice(0, 16), "state.json");
   const hour = 3600000;
   const now = Date.now();
-  for (const [name, title, hoursAgo] of [["soon.html", "Archives soon", 18.5], ["plenty.html", "Plenty of time", 1], ["older.html", "Archived earlier", 24 * 9], ["newer.html", "Archived later", 24 * 3]]) {
+  for (const [name, title, hoursAgo] of [["soon.html", "Archives soon", 18.5], ["plenty.html", "Plenty of time", 1], ["older.html", "Archived earlier", 24 * 9], ["newer.html", "Archived later", 24 * 3], ["two.html", "Two days left", 24 * 40], ["tomorrow.html", "Gone tomorrow", 24 * 40], ["today.html", "Gone today", 24 * 40]]) {
     const path = join(notes, name);
     write(path, title, "Lifecycle.");
     utimesSync(path, new Date(now - hoursAgo * hour), new Date(now - hoursAgo * hour));
@@ -658,29 +658,51 @@ test("home splits notes into Recent and Archived with deadline badges, soonest d
       return undefined;
     }
   };
-  for (let i = 0; i < 200 && !(archivedAt("older.html") && archivedAt("newer.html")); i++) await new Promise((r) => setTimeout(r, 25));
-  assert.ok(archivedAt("older.html") && archivedAt("newer.html"), "the start sweep archived both old notes");
+  const archivedNames = ["older.html", "newer.html", "two.html", "tomorrow.html", "today.html"];
+  for (let i = 0; i < 200 && !archivedNames.every(archivedAt); i++) await new Promise((r) => setTimeout(r, 25));
+  assert.ok(archivedNames.every(archivedAt), "the start sweep archived every old note");
   assert.equal(archivedAt("soon.html"), undefined);
   stop();
-  const older = JSON.parse(readFileSync(stateOf("older.html"), "utf8"));
-  older.archivedAt = new Date(now - 5 * 24 * hour).toISOString();
-  writeFileSync(stateOf("older.html"), JSON.stringify(older));
+  const deleteAfter = 720 * hour;
+  const localNoon = (days) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(12, 0, 0, 0);
+    return d.getTime();
+  };
+  for (const [name, at] of [["older.html", now - 5 * 24 * hour], ["two.html", localNoon(2) - deleteAfter], ["tomorrow.html", localNoon(1) - deleteAfter], ["today.html", now - hour - deleteAfter]]) {
+    const state = JSON.parse(readFileSync(stateOf(name), "utf8"));
+    state.archivedAt = new Date(at).toISOString();
+    writeFileSync(stateOf(name), JSON.stringify(state));
+  }
   run("ls");
   const archiveBase = readFileSync(join(archiveHome, "http.url"), "utf8").trim();
   const cards = `[...document.querySelectorAll(".nb-card")].map((c) => [c.querySelector(".nb-card-title").textContent, c.querySelector(".nb-badge")?.textContent ?? "", c.hasAttribute("data-archived")])`;
   const p = await home(archiveBase);
   try {
     assert.equal(await p.eval(`document.querySelector('[data-tab="recent"]').getAttribute("aria-label")`), "Recent 2");
-    assert.equal(await p.eval(`document.querySelector('[data-tab="archived"]').getAttribute("aria-label")`), "Archived 2");
+    assert.equal(await p.eval(`document.querySelector('[data-tab="archived"]').getAttribute("aria-label")`), "Archived 5");
     assert.deepEqual((await p.eval(cards)).sort(), [["Archives soon", "Archives in 5h", false], ["Plenty of time", "", false]]);
     assert.deepEqual(await p.eval(`[...document.querySelector(".nb-badge-soon").classList, getComputedStyle(document.querySelector(".nb-badge-soon")).backgroundColor, !!document.querySelector(".nb-badge-soon svg")]`), ["nb-badge", "nb-badge-soon", "rgba(0, 0, 0, 0)", true]);
     await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
     assert.equal(await p.eval(`document.querySelector("h1").textContent`), "Archived");
-    assert.deepEqual(await p.eval(cards), [["Archived earlier", "Archived · 25 days left", true], ["Archived later", "Archived · 30 days left", true]]);
+    assert.deepEqual(await p.eval(cards), [["Gone today", "Deletes today", true], ["Gone tomorrow", "Deletes tomorrow", true], ["Two days left", "Deletes in 2 days", true], ["Archived earlier", "Archived · 25 days left", true], ["Archived later", "Archived · 30 days left", true]]);
+    const trashIcon = readFileSync(join(repo, "internal/web/static/icons.js"), "utf8").match(/trash: "([^"]+)"/)[1];
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-badge-deletes")].map((b) => [b.className, b.querySelector("svg path")?.getAttribute("d") === ${JSON.stringify(trashIcon)}])`), [["nb-badge nb-badge-deletes", true], ["nb-badge nb-badge-deletes", true], ["nb-badge nb-badge-deletes", true]]);
+    assert.equal(await p.eval(`(() => { const probe = document.createElement("span"); probe.style.color = "var(--kapi-red-text)"; probe.style.backgroundColor = "var(--kapi-red-fill)"; probe.style.border = "1px solid var(--kapi-red-border)"; document.body.append(probe); const badge = getComputedStyle(document.querySelector(".nb-badge-deletes")); const want = getComputedStyle(probe); const same = badge.color === want.color && badge.backgroundColor === want.backgroundColor && badge.borderTopColor === want.borderTopColor; probe.remove(); return same; })()`), true);
     assert.equal(await p.eval(`(() => { const c = document.querySelector(".nb-card[data-archived]"); return getComputedStyle(c.querySelector(".nb-card-title")).color === getComputedStyle(c.querySelector(".nb-card-summary")).color; })()`), true);
     assert.notEqual(await p.eval(`getComputedStyle(document.querySelector(".nb-badge-archived")).backgroundColor`), "rgba(0, 0, 0, 0)");
     assert.equal(await p.eval(`document.querySelector(".nb-banner").hidden`), true);
     assert.deepEqual(p.errors, []);
+    const page = await browser.open(run("open", "plenty.html").split("\n")[0], { ready: "!!document.getElementById('kapi-chrome') && document.querySelectorAll('.kapi-switcher-row').length > 0", width: 1440 });
+    try {
+      await openSwitcher(page);
+      assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-switcher-row strong")].map((t) => t.textContent)`), ["Archives soon"]);
+      await page.eval(`(() => { const input = document.querySelector(".kapi-switcher-search"); input.value = "Gone"; input.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+      assert.equal(await page.eval(`document.querySelectorAll(".kapi-switcher-row").length + " " + document.querySelector("#kapi-switcher-list").textContent`), "0 No note matches.");
+    } finally {
+      await page.close();
+    }
   } finally {
     await p.close();
     stop();

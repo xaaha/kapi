@@ -192,7 +192,7 @@ func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 				if len(resp.Events) == 0 {
 					continue
 				}
-				if slices.ContainsFunc(resp.Events, func(e eventlog.Event) bool { return e.Kind == eventlog.KindEnd && e.Text == eventlog.EndDeleted }) {
+				if slices.ContainsFunc(resp.Events, func(e eventlog.Event) bool { return e.Removed() }) {
 					return nil
 				}
 				_, err = c.Do(&daemon.Request{Op: "queue", Page: page, Reader: *reader, Seq: resp.Events[len(resp.Events)-1].Seq})
@@ -1219,8 +1219,14 @@ func pagePath(args []string, want int, command string) (string, error) {
 }
 
 func eventLine(e *eventlog.Event) string {
+	if e.Kind == eventlog.KindEnd && e.Text == eventlog.EndDeleted && e.Author == "kapi" {
+		return eventlog.Printable(fmt.Sprintf("#%d kapi deleted the page after it sat in Archived past retention.deleteAfter and ended the session: the file is in the Trash, so stop working on this page and do not run kapi wait or kapi watch on it again", e.Seq))
+	}
 	if e.Kind == eventlog.KindEnd && e.Text == eventlog.EndDeleted {
 		return eventlog.Printable(fmt.Sprintf("#%d %s deleted the page and ended the session: the file is in the Trash, so stop working on this page and do not run kapi wait or kapi watch on it again", e.Seq, e.Author))
+	}
+	if e.Kind == eventlog.KindEnd && e.Text == eventlog.EndForgotten {
+		return eventlog.Printable(fmt.Sprintf("#%d %s removed the page from kapi after it sat in Archived past retention.deleteAfter and ended the session: the file was left where it is, but its notes and history are gone, so stop working on this page and do not run kapi wait or kapi watch on it again", e.Seq, e.Author))
 	}
 	if e.Kind == eventlog.KindEnd {
 		return eventlog.Printable(fmt.Sprintf("#%d %s ended the session: stop working on this page and do not run kapi wait or kapi watch on it again; a new message from the human starts it again", e.Seq, e.Author))
