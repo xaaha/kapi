@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -109,5 +110,55 @@ func TestTheNotebookStreamCountsATabAndSaysWhenPagesChange(t *testing.T) {
 			t.Fatal("the tab is still counted after the stream closed")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (s *site) notebook(method, path string) (int, map[string]string) {
+	s.t.Helper()
+	resp := s.raw(method, "/"+token+"/api/notebook"+path, http.Header{"Origin": {s.srv.URL}, "Content-Type": {"application/json"}})
+	var out map[string]string
+	if err := json.Unmarshal([]byte(resp.body), &out); err != nil {
+		s.t.Fatalf("%s %s: %d, body is not JSON: %v\n%s", method, path, resp.code, err, resp.body)
+	}
+	return resp.code, out
+}
+
+func TestNotebookDeletesAPageAndBringsItBack(t *testing.T) {
+	s := newSiteNamed(t, "rollout.html", `<h1 data-kapi-id="aaaaaaaa">Rollout plan</h1>`)
+	code, out := s.notebook("POST", "/pages/"+s.id+"/delete")
+	if code != http.StatusOK || out["id"] != s.id || out["title"] != "rollout" {
+		t.Fatalf("delete: %d %v", code, out)
+	}
+	if code, out := s.notebook("POST", "/pages/"+s.id+"/delete"); code != http.StatusNotFound || out["error"] == "" {
+		t.Fatalf("delete again: %d %v", code, out)
+	}
+	if code, out := s.notebook("POST", "/pages/"+s.id+"/restore"); code != http.StatusOK || out["id"] != s.id {
+		t.Fatalf("restore: %d %v", code, out)
+	}
+	if code, _ := s.notebook("POST", "/pages/"+s.id+"/restore"); code != http.StatusNotFound {
+		t.Fatalf("restore again: %d", code)
+	}
+}
+
+func TestNotebookSaysWhyADeleteOrRestoreFailed(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.pages.lifeError = errors.New("could not move plan.html to the Trash")
+	if code, out := s.notebook("POST", "/pages/"+s.id+"/delete"); code != http.StatusInternalServerError || out["error"] != "could not move plan.html to the Trash" {
+		t.Fatalf("delete: %d %v", code, out)
+	}
+	s.pages.lifeError = errors.New("could not put plan.html back")
+	if code, out := s.notebook("POST", "/pages/"+s.id+"/restore"); code != http.StatusConflict || out["error"] != "could not put plan.html back" {
+		t.Fatalf("restore: %d %v", code, out)
+	}
+}
+
+func TestNotebookDeleteRefusesARequestFromAnotherSite(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	resp := s.raw("POST", "/"+token+"/api/notebook/pages/"+s.id+"/delete", http.Header{"Origin": {"http://evil.example"}, "Content-Type": {"application/json"}})
+	if resp.code != http.StatusForbidden {
+		t.Fatalf("cross-site delete: %d", resp.code)
+	}
+	if _, err := s.pages.PagePath(s.id); err != nil {
+		t.Fatalf("the page went away: %v", err)
 	}
 }

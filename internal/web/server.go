@@ -51,6 +51,8 @@ type Pages interface {
 	Library() (root string, folders []string, err error)
 	Save(path, folder string) (string, error)
 	Unsave(path string) error
+	Delete(id string) (app.Deleted, error)
+	Restore(id string) (app.Deleted, error)
 }
 
 type Server struct {

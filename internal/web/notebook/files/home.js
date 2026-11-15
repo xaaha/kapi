@@ -1,6 +1,7 @@
 import { getJSON, h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
 import { ago, byFolder, dirname, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
+import { cardMenu, undoNote } from "./trash.js";
 import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
 import { ARCHIVE_NOTICE, VIEWS, badge, bannerCopy, policyOf } from "./lifecycle.js";
@@ -19,8 +20,12 @@ export function savedFolders(pages) {
   return [...folders.values()];
 }
 
-function card(p, fresh, folder, savedBadge = true) {
+function card(p, fresh, folder, menu, savedBadge = true) {
   const title = pageTitle(p);
+  return h("div", { class: "nb-card-wrap" }, link(p, fresh, folder, title, savedBadge), menu.button(p, title));
+}
+
+function link(p, fresh, folder, title, savedBadge) {
   return h("a", {
     class: "nb-card",
     "data-key": `card\n${p.id}`,
@@ -95,7 +100,14 @@ export function showHome(main) {
   const intro = h("p", { class: "nb-intro" });
   const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your workspace" }), title), intro);
   const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, banner, context, grid, shelf, empty);
-  main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)));
+  const note = undoNote();
+  const menu = cardMenu(note);
+  main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)), menu.el, note.el);
+  const arrived = new URLSearchParams(location.search);
+  if (/^[0-9a-f]{16}$/.test(arrived.get("deleted") ?? "")) {
+    note.deleted({ id: arrived.get("deleted"), title: arrived.get("title") || "the note", kept: arrived.get("kept") === "1" });
+    history.replaceState(history.state, "", location.pathname);
+  }
 
   let pages = [];
   let fresh = new Set();
@@ -129,11 +141,12 @@ export function showHome(main) {
       grid.replaceChildren();
       shelf.replaceChildren(...savedFolders(shown).map((f) => h("section", { class: "nb-folder", "aria-label": folderTitle(f.dir) },
         h("h2", { class: "nb-folder-head", text: folderTitle(f.dir) }, h("span", { text: `${f.shown} · ${plural(f.pages.length, "note")}` })),
-        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, false))))));
+        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, menu, false))))));
     } else {
       shelf.replaceChildren();
-      grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
+      grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null, menu)));
     }
+    menu.redrawn();
     empty.hidden = shown.length > 0;
     empty.textContent = !pages.length ? "No notes yet. Ask an agent to create one, or run kapi open notes.html." : project.value ? "No note matches these filters." : picked.empty;
   });

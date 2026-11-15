@@ -26,6 +26,7 @@ import (
 	"github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/render"
 	"github.com/xaaha/kapi/internal/settings"
+	"github.com/xaaha/kapi/internal/trash"
 	"github.com/xaaha/kapi/internal/web"
 	"github.com/xaaha/kapi/internal/web/app"
 )
@@ -86,6 +87,10 @@ type Server struct {
 
 	Browser      func(url string) error
 	ReopenExcept string
+	Trash        *trash.Bin
+
+	lifecycle sync.Mutex
+	deleting  map[string]bool
 
 	now   func() time.Time
 	prefs *settings.File
@@ -126,6 +131,8 @@ func New(home string) *Server {
 		viewers:  map[string]int{},
 		presence: map[string]map[string]string{},
 		watchers: map[string]map[string]int{},
+		deleting: map[string]bool{},
+		Trash:    trash.Folder(filepath.Join(home, "trash")),
 	}
 }
 
@@ -138,6 +145,7 @@ func (s *Server) sweepFiles(ctx context.Context, every time.Duration) {
 		if err := s.files.Sweep(); err != nil {
 			log.Printf("sweep attachments: %v", err)
 		}
+		s.sweepDeleted(time.Now())
 		select {
 		case <-ctx.Done():
 			return
@@ -370,6 +378,9 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	if l, ok := s.pages[path]; ok {
 		return l, nil
 	}
+	if err := s.refuseDeleted(path); err != nil {
+		return nil, err
+	}
 	if err := s.resumePending(path); err != nil {
 		return nil, err
 	}
@@ -394,6 +405,12 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	}
 	s.pages[path] = l
 	return l, nil
+}
+
+func (s *Server) current(path string, l *eventlog.Log) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pages[path] == l
 }
 
 func clearPresence(l *eventlog.Log) error {
@@ -501,6 +518,9 @@ func (s *Server) setPresenceLocked(path, reader, state string, l *eventlog.Log) 
 	case <-l.Gone():
 		return
 	default:
+	}
+	if !s.current(path, l) {
+		return
 	}
 	if _, err := l.Append(&eventlog.Event{Author: reader, Kind: eventlog.KindPresence, Text: state}); err != nil {
 		log.Printf("presence %s %s: %v", reader, state, err)
@@ -971,12 +991,12 @@ func (s *Server) setAttached(path, reader string, on bool) {
 	if !last {
 		return
 	}
-	s.release(id)
 	select {
 	case <-s.stopping:
 		return
 	default:
 	}
+	s.release(id)
 	if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("attached %s: %v", path, err)
 	}

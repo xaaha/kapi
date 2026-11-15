@@ -39,6 +39,7 @@ const (
 	KindResolve     = "resolve"
 	KindDeleteNotes = "delete-notes"
 	KindEnd         = "end"
+	EndDeleted      = "deleted"
 )
 
 func (e *Event) Quiet() bool { return e.Kind == KindResolve || e.Kind == KindDeleteNotes }

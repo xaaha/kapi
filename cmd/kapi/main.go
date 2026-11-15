@@ -34,6 +34,7 @@ import (
 	pkgpage "github.com/xaaha/kapi/internal/page"
 	"github.com/xaaha/kapi/internal/publish"
 	"github.com/xaaha/kapi/internal/setup"
+	"github.com/xaaha/kapi/internal/trash"
 )
 
 type api interface {
@@ -190,6 +191,9 @@ func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 				}
 				if len(resp.Events) == 0 {
 					continue
+				}
+				if slices.ContainsFunc(resp.Events, func(e eventlog.Event) bool { return e.Kind == eventlog.KindEnd && e.Text == eventlog.EndDeleted }) {
+					return nil
 				}
 				_, err = c.Do(&daemon.Request{Op: "queue", Page: page, Reader: *reader, Seq: resp.Events[len(resp.Events)-1].Seq})
 				return err
@@ -379,7 +383,8 @@ func daemonCmd() *cli.Command {
 			"With a port saved by --port, it always listens there, fails to start when the port is taken, and keeps\n" +
 			"one token across restarts in $KAPI_HOME/http.token, so open tabs and saved links keep working.\n" +
 			"While the daemon is down, any local program can bind that port and read a reconnecting tab's token;\n" +
-			"--new-token replaces it.",
+			"--new-token replaces it.\n" +
+			"Deleting a page in the browser moves its file and images folder to the system Trash, or into $KAPI_TRASH when it is set.",
 		Run: func([]string) error {
 			saved := *port >= 0 || *rotate
 			if *port >= 0 {
@@ -400,6 +405,7 @@ func daemonCmd() *cli.Command {
 			s := daemon.New(home())
 			s.Browser = daemonBrowser(*reopen, os.Getenv, runtime.GOOS)
 			s.ReopenExcept = *except
+			s.Trash = daemonTrash(home(), os.Getenv)
 			err := s.Serve(ctx)
 			if saved && errors.Is(err, daemon.ErrAlreadyRunning) {
 				return fmt.Errorf("%w; the new setting applies the next time it starts", err)
@@ -407,6 +413,13 @@ func daemonCmd() *cli.Command {
 			return err
 		},
 	}
+}
+
+func daemonTrash(home string, getenv func(string) string) *trash.Bin {
+	if dir := getenv("KAPI_TRASH"); dir != "" {
+		return trash.Folder(dir)
+	}
+	return trash.New(filepath.Join(home, "trash"))
 }
 
 func daemonBrowser(reopen bool, getenv func(string) string, goos string) func(url string) error {
@@ -1206,6 +1219,9 @@ func pagePath(args []string, want int, command string) (string, error) {
 }
 
 func eventLine(e *eventlog.Event) string {
+	if e.Kind == eventlog.KindEnd && e.Text == eventlog.EndDeleted {
+		return eventlog.Printable(fmt.Sprintf("#%d %s deleted the page and ended the session: the file is in the Trash, so stop working on this page and do not run kapi wait or kapi watch on it again", e.Seq, e.Author))
+	}
 	if e.Kind == eventlog.KindEnd {
 		return eventlog.Printable(fmt.Sprintf("#%d %s ended the session: stop working on this page and do not run kapi wait or kapi watch on it again; a new message from the human starts it again", e.Seq, e.Author))
 	}

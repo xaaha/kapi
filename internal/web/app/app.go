@@ -57,6 +57,12 @@ type Page struct {
 	SavedIn string `json:"savedIn,omitempty"`
 }
 
+type Deleted struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	KeptImages bool   `json:"keptImages,omitempty"`
+}
+
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(v); err != nil {
 		JSON(w, http.StatusBadRequest, map[string]string{"error": "bad request body: " + err.Error()})

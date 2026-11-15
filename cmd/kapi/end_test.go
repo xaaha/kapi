@@ -191,3 +191,20 @@ func TestD25AWatchOrWaitOnAnEndedPageWhoseEndWasSeenStillGetsTheEnd(t *testing.T
 		t.Fatalf("kapi wait on an ended page whose end was seen printed %q, want the end at once", out.String())
 	}
 }
+
+func TestWaitExitsCleanlyWhenThePageWasDeleted(t *testing.T) {
+	f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{
+		{Seq: 3, Author: "human", Kind: "message", Text: "one more thing"},
+		{Seq: 4, Author: "human", Kind: eventlog.KindEnd, Text: eventlog.EndDeleted},
+	}}}
+	out, err := run(t, f, "wait", "plan.html")
+	if err != nil {
+		t.Fatalf("wait on a deleted page: %v", err)
+	}
+	if len(f.requests) != 1 || f.requests[0].Op != "wait" {
+		t.Fatalf("wait sent %+v, want only the wait: a queue on a deleted page fails", f.requests)
+	}
+	if !strings.Contains(out, "#4 human deleted the page and ended the session: the file is in the Trash, so stop working on this page and do not run kapi wait or kapi watch on it again") {
+		t.Errorf("wait printed %q", out)
+	}
+}

@@ -316,6 +316,17 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       req.on("close", () => state.settingsStreams.delete(res));
       return;
     }
+    const lifecycle = path.match(/^\/api\/notebook\/pages\/([^/]+)\/(delete|restore)$/);
+    if (req.method === "POST" && lifecycle) {
+      if (lifecycle[1] !== PAGE_ID) return json(res, 404, { error: "kapi has no such page to delete or bring back" });
+      if (state.deleteError) return json(res, 500, { error: state.deleteError });
+      if (lifecycle[2] === "delete") push({ author: "human", kind: "end", text: "deleted" });
+      return json(res, 200, { id: PAGE_ID, title: "plan", ...(lifecycle[2] === "delete" && state.keptImages && { keptImages: true }) });
+    }
+    if (req.method === "GET" && path === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end('<!doctype html><title>kapi</title><main id="kapi-home"></main>');
+    }
     const m = path.match(/^\/p\/([^/]+)\/(.*)$/);
     if (!m || m[1] !== PAGE_ID) return json(res, 404, { error: "not found" });
     const rest = m[2];
