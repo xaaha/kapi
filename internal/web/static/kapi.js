@@ -988,7 +988,7 @@
   function syncWriting() {
     writeButton.setAttribute("aria-pressed", String(writing));
     writeButton.setAttribute("aria-label", "Edit mode");
-    writeButton.dataset.tip = `Edit mode ${keyHint("toggleWrite")}`;
+    writeButton.dataset.tip = `Edit mode: ${writing ? "on" : "off"} ${keyHint("toggleWrite")}`;
     document.documentElement.toggleAttribute("data-kapi-writing", writing);
   }
 

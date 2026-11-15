@@ -4810,16 +4810,16 @@ const writing = () => page.eval(`document.documentElement.hasAttribute("data-kap
 const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
 
 test("the pencil is plain in Review, pressed in Write, and writes a stroke only while a block is open", async () => {
-  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, getComputedStyle(b, "::before").animationName, b.dataset.tip.split(" ")[0] + " " + b.dataset.tip.split(" ")[1]])(document.querySelector(".kapi-write-button"))`);
-  assert.deepEqual(await state(), ["false", "none", "none", "Edit mode"]);
+  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, getComputedStyle(b, "::before").animationName, b.dataset.tip.split(" ").slice(0, 3).join(" ")])(document.querySelector(".kapi-write-button"))`);
+  assert.deepEqual(await state(), ["false", "none", "none", "Edit mode: off"]);
   await mouseClick(".kapi-write-button");
-  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode"]);
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode: on"]);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
-  assert.deepEqual(await state(), ["true", "kapi-writing", "kapi-stroke", "Edit mode"]);
+  assert.deepEqual(await state(), ["true", "kapi-writing", "kapi-stroke", "Edit mode: on"]);
   await page.key("Escape");
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
-  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode"]);
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode: on"]);
   await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   await page.waitFor(`document.activeElement?.isContentEditable`);
@@ -4829,7 +4829,7 @@ test("the pencil is plain in Review, pressed in Write, and writes a stroke only 
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),
-    ["Edit mode", `Edit mode ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
+    ["Edit mode", `Edit mode: off ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
   assert.equal(await writing(), false);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
