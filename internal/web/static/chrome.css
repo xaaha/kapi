@@ -203,8 +203,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome .kapi-ring[data-editing] {
-  border-radius: var(--kapi-radius);
-  box-shadow: 0 0 0 5px var(--kapi-blue-fill);
+  background: color-mix(in srgb, var(--kapi-blue-text) 6%, transparent);
 }
 
 #kapi-chrome .kapi-bar {
