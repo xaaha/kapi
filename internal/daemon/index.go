@@ -63,33 +63,25 @@ func (s *Server) Index() ([]app.Page, error) {
 		if at, ok := stampOf(filepath.Join(d.dir, "events.ndjson")); ok && at.mod.After(p.Changed) {
 			p.Changed = at.mod
 		}
+		p.Viewed, p.Touched, _ = page.ReadTimes(d.dir)
+		if p.Touched.IsZero() {
+			p.Touched = at.mod.UTC()
+		}
+		if p.Viewed.IsZero() {
+			p.Viewed = p.Touched
+		}
 		out = append(out, p)
 	}
 	slices.SortStableFunc(out, func(a, b app.Page) int {
-		if d := cmp.Compare(stateRank(a.State), stateRank(b.State)); d != 0 {
+		if d := b.Viewed.Compare(a.Viewed); d != 0 {
 			return d
 		}
-		if d := b.Changed.Compare(a.Changed); d != 0 {
+		if d := b.Touched.Compare(a.Touched); d != 0 {
 			return d
 		}
 		return cmp.Compare(a.Title, b.Title)
 	})
 	return out, nil
-}
-
-func stateRank(state string) int {
-	switch state {
-	case app.Live:
-		return 0
-	case app.Waiting:
-		return 1
-	case app.Idle:
-		return 2
-	case app.Ended:
-		return 3
-	default:
-		return 4
-	}
 }
 
 func (s *Server) preview(path string, at stamp) (title, summary string) {

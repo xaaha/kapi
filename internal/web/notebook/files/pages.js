@@ -121,8 +121,6 @@ export function byFolder(pages) {
   return out;
 }
 
-// The unfiltered Home view uses each note's primary folder so a note appears once
-// and the order chosen in the organizer remains visible outside the dialog.
 export function orderForHome(pages) {
   const groups = new Map();
   for (const page of pages) {
@@ -130,7 +128,8 @@ export function orderForHome(pages) {
     if (!groups.has(folder)) groups.set(folder, []);
     groups.get(folder).push(page);
   }
-  return [...groups].flatMap(([folder, items]) => orderPages(folder, items));
+  const queues = new Map([...groups].map(([folder, items]) => [folder, orderPages(folder, items)]));
+  return pages.map((page) => queues.get(folderOf(page)).shift());
 }
 
 export function redraw(container, build) {

@@ -1,6 +1,6 @@
 import { h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
-import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, noteGroups, watch } from "./pages.js";
+import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
 import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
 import { STATUS_FILTERS, stateLabel, stateMatches, stateTone } from "./states.js";
@@ -102,8 +102,7 @@ export function showHome(main) {
     });
     [filterTitle.textContent, filterDescription.textContent] = filterCopy[pickedStatus];
     count.textContent = plural(shown.length, "note");
-    const ordered = noteGroups(shown, fresh).flatMap(([, notes]) => notes);
-    grid.replaceChildren(...ordered.map((p) => card(p, fresh.has(p.id), project.value || null)));
+    grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
     empty.hidden = shown.length > 0;
     empty.textContent = pages.length ? "No note matches these filters." : "No notes yet. Ask an agent to create one, or run kapi open notes.html.";
   });

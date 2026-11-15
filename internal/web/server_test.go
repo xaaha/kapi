@@ -1468,3 +1468,42 @@ func TestThePagePathIsEscapedInItsAttribute(t *testing.T) {
 		t.Errorf("page %d, want %s in:\n%s", got.code, want, got.body)
 	}
 }
+
+func TestHumanNotesMessagesAndAnswersTouchThePageButReadingItDoesNot(t *testing.T) {
+	s := newSite(t, `<kapi-form data-kapi-id="ffffffff" name="env"><kapi-choice data-kapi-id="cccccccc" name="where"><kapi-opt data-kapi-id="oooooooo" value="prod">Prod</kapi-opt></kapi-choice></kapi-form><p data-kapi-id="aaaaaaaa">One</p>`)
+	st, _, err := s.pages.Page(s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	touched := func() time.Time {
+		_, at := st.Times()
+		return at
+	}
+	last := touched()
+	for _, step := range []struct {
+		how   string
+		do    func()
+		moves bool
+	}{
+		{"loading the page", func() { s.get("/p/" + s.id + "/") }, false},
+		{"exporting markdown", func() { s.get("/p/" + s.id + "/export/markdown") }, false},
+		{"a note", func() { s.post("/notes", `{"notes":[{"target":"aaaaaaaa","text":"why?"}]}`) }, true},
+		{"resolving it", func() { s.post("/resolve", `{"note":1}`) }, false},
+		{"a chat message", func() { s.post("/messages", `{"kind":"message","text":"hello"}`) }, true},
+		{"a form answer", func() { s.post("/answers", `{"form":"env","values":{"where":["prod"]}}`) }, true},
+		{"a block edit", func() {
+			_, rev := st.Source()
+			s.post("/ops", fmt.Sprintf(`{"rev":%d,"op":{"kind":"archive","id":"aaaaaaaa"}}`, rev))
+		}, true},
+	} {
+		step.do()
+		now := touched()
+		if step.moves && !now.After(last) {
+			t.Errorf("%s left touched at %v", step.how, now)
+		}
+		if !step.moves && !now.Equal(last) {
+			t.Errorf("%s moved touched from %v to %v", step.how, last, now)
+		}
+		last = now
+	}
+}

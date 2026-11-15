@@ -61,7 +61,7 @@ func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
 	}
 }
 
-func TestIndexOrdersUsefulPagesFirstAndThenByMostRecentChange(t *testing.T) {
+func TestIndexOrdersByTimeWhateverTheSessionState(t *testing.T) {
 	dir := t.TempDir()
 	live := filepath.Join(dir, "live.html")
 	waiting := filepath.Join(dir, "waiting.html")
@@ -111,7 +111,7 @@ func TestIndexOrdersUsefulPagesFirstAndThenByMostRecentChange(t *testing.T) {
 	for _, p := range pages {
 		got = append(got, p.Path)
 	}
-	want := []string{live, waiting, recent, old, ended}
+	want := []string{ended, recent, old, waiting, live}
 	if !slices.Equal(got, want) {
 		t.Errorf("page order = %v, want %v", got, want)
 	}

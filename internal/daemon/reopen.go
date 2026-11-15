@@ -23,6 +23,12 @@ type viewedPage struct {
 }
 
 func (s *Server) Viewing(id string) (done func()) {
+	if st, _, err := s.Page(id); err == nil {
+		if err := st.MarkViewed(); err != nil {
+			log.Printf("viewed %s: %v", id, err)
+		}
+		s.notebookChanged()
+	}
 	file := filepath.Join(s.home, "pages", id, viewingName)
 	s.viewingMu.Lock()
 	defer s.viewingMu.Unlock()

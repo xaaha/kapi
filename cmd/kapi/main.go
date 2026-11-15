@@ -93,6 +93,8 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			newExportCmd(out),
 			attachCmd(c, out),
 			newOpenCmd(c, out),
+			newHomeCmd(c, out),
+			newLsCmd(c, out),
 		},
 	}
 	root.SubCommands = append(root.SubCommands, versionCmd(out), completionCmd(root, out), setupCmd(in, out), hookContextCmd(c, out), hookMessagesCmd(c, in, out), hookIdleCmd(c, out))
