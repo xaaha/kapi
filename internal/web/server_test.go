@@ -1349,6 +1349,19 @@ func TestSelectedBlockExportsThroughTheSameMarkdownRenderer(t *testing.T) {
 	}
 }
 
+func TestAFoldedHeadingExportsItsWholeSectionAsMarkdown(t *testing.T) {
+	s := newSite(t, `<h2 data-kapi-id="aaaaaaaa">First</h2><p data-kapi-id="bbbbbbbb">One.</p><h3 data-kapi-id="cccccccc">Detail</h3><p data-kapi-id="dddddddd">More.</p><h2 data-kapi-id="eeeeeeee">Second</h2><p data-kapi-id="ffffffff">Two.</p>`)
+	if got, want := s.get("/p/"+s.id+"/export/markdown?block=aaaaaaaa&section=1").body, "## First\n\nOne.\n\n### Detail\n\nMore.\n"; got != want {
+		t.Errorf("section markdown = %q, want %q", got, want)
+	}
+	if got, want := s.get("/p/"+s.id+"/export/markdown?block=aaaaaaaa").body, "## First\n"; got != want {
+		t.Errorf("heading markdown = %q, want %q", got, want)
+	}
+	if got := s.get("/p/" + s.id + "/export/markdown?block=bbbbbbbb&section=1"); got.code != http.StatusUnprocessableEntity {
+		t.Errorf("section of a paragraph: %d %q", got.code, got.body)
+	}
+}
+
 func TestASelectedRowOrColumnExportsAsMarkdown(t *testing.T) {
 	s := newSite(t, `<kapi-table data-kapi-id="bbbbbbbb"><table><tr><th>Shard</th><th>Rows</th></tr><tr><td>beta</td><td>10</td></tr><tr><td><code>alpha</code></td><td>9</td></tr></table></kapi-table>`)
 	if got, want := s.get("/p/"+s.id+"/export/markdown?block=bbbbbbbb&row=2").body, "| Shard | Rows |\n| --- | --- |\n| `alpha` | 9 |\n"; got != want {

@@ -360,6 +360,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
         const found = state.blocks.find((b) => b.id === block);
         if (!found) return json(res, 404, { error: "no block" });
         res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store" });
+        if (url.searchParams.get("section") === "1") return res.end(found.sectionMarkdown);
         return res.end(found.markdown ?? found.source ?? found.html);
       }
       if (state.markdownZip) {

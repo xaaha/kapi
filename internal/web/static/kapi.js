@@ -487,19 +487,19 @@
       const preview = !archived && media.has(selected);
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
       const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
-      const part = scope() === "block" ? "" : ` ${scope()}`;
-      const tools = [tool("android", "Ask AI", "ask"), tool("copy", `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", "Unarchive", "unarchive")] : [
+      const part = targetLabel();
+      const tools = [tool("android", "Ask AI", "ask"), tool("copy", `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", `Unarchive${part}`, "unarchive")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(preview ? [tool("expand", "Open image", "preview")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
         ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
         ...(flip ? [iconTool("flip", next, "flip")] : []),
         ...widthTool(),
-        tool("archive", "Archive", "archive")]),
+        tool("archive", `Archive${part}`, "archive")]),
         tool("trash", `Delete${part}`, "delete")];
       bar.replaceChildren(...tools.filter((b) => b.dataset.action === "ask" || scopedAction(b.dataset.action)));
     }
-    if (copiedBlock?.block === selected && copiedBlock.scope === scope() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
+    if (copiedBlock?.block === selected && copiedBlock.unit === targetLabel() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
     const zoom = selected && diagramZoom.get(selected)?.level;
     for (const b of bar.querySelectorAll("button")) {
       b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
@@ -756,11 +756,11 @@
   }
 
   async function copyBlock(part = {}) {
-    const id = selected && idOf(selected);
-    if (!id) return;
+    if (!selected) return;
+    const { id, section } = blockTarget();
     let res;
     try {
-      res = await fetch(`${base}/export/markdown?block=${encodeURIComponent(id)}${Object.entries(part).map(([k, v]) => `&${k}=${v}`).join("")}`);
+      res = await fetch(`${base}/export/markdown?${new URLSearchParams({ block: id, ...(section && { section: 1 }), ...part })}`);
     } catch {
       return say("Could not reach kapi. Check that the daemon is running.", "error");
     }
@@ -769,7 +769,7 @@
     const markdown = await res.text();
     navigator.clipboard.writeText(markdown).then(() => {
       notice.hidden = true;
-      const state = { block: selected, scope: scope(), until: performance.now() + 1600 };
+      const state = { block: selected, unit: targetLabel(), until: performance.now() + 1600 };
       copiedBlock = state;
       renderBar();
       setTimeout(() => {
@@ -1063,15 +1063,23 @@
     return tables.scope(selected, lastPoint);
   }
 
+  function blockTarget() {
+    return { id: idOf(selected), ...(selected.hasAttribute("data-kapi-folded") && { section: true }) };
+  }
+
+  function targetLabel() {
+    if (scope() !== "block") return ` ${scope()}`;
+    return blockTarget().section ? " section" : "";
+  }
+
   function scopedAction(name) {
     return selected ? BLOCK_ACTIONS[name]?.[scope()] : undefined;
   }
 
   async function archiveBlock(name) {
-    const id = idOf(selected);
-    const section = name === "archive" ? selected.hasAttribute("data-kapi-folded") : selected.hasAttribute("data-kapi-archive-section");
-    const res = await op(name, { id, ...(section ? { section: true } : {}) });
-    return res?.ok && refresh(res.data.ids || [id]);
+    const target = blockTarget();
+    const res = await op(name, target);
+    return res?.ok && refresh(res.data.ids || [target.id]);
   }
 
   function downloadImage() {
@@ -1091,8 +1099,7 @@
 
   async function deleteBlock() {
     const spot = noteSpot(selected);
-    const section = selected.hasAttribute("data-kapi-folded");
-    if (!(await op("delete", { id: idOf(selected), ...(section ? { section: true } : {}) }))?.ok) return;
+    if (!(await op("delete", blockTarget()))?.ok) return;
     await refresh(null);
     showNote(spot);
   }

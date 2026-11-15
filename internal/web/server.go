@@ -556,6 +556,9 @@ func (s *Server) handleMarkdown(w http.ResponseWriter, r *http.Request, st *page
 	src, _ := st.Source()
 	if id := r.URL.Query().Get("block"); id != "" {
 		block, err := page.Outer(src, id)
+		if r.URL.Query().Get("section") == "1" {
+			block, err = page.Section(src, id)
+		}
 		if row := r.URL.Query().Get("row"); row != "" {
 			n, convErr := strconv.Atoi(row)
 			if convErr != nil {
