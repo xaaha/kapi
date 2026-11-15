@@ -98,8 +98,31 @@ func CheckFolderName(name string) error {
 		return errors.New("ends in .files, which kapi keeps for page images")
 	case len(name) > 100:
 		return errors.New("is longer than 100 bytes")
+	case strings.HasSuffix(name, ".") || strings.HasSuffix(name, " "):
+		return errors.New("ends in a dot or a space, which Windows drops")
+	case reservedOnWindows(name):
+		return errors.New("is a device name Windows reserves")
 	case strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || strings.ContainsRune(`\:*?"<>|`, r) }):
 		return errors.New(`holds a control character or one of \ : * ? " < > |`)
 	}
 	return nil
+}
+
+func reservedOnWindows(name string) bool {
+	stem, _, _ := strings.Cut(strings.ToUpper(name), ".")
+	stem = strings.TrimRight(stem, " ")
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$":
+		return true
+	}
+	if len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) {
+		return stem[3] >= '0' && stem[3] <= '9'
+	}
+	if rest, ok := strings.CutPrefix(stem, "COM"); ok && strings.ContainsAny(rest, "¹²³") && len([]rune(rest)) == 1 {
+		return true
+	}
+	if rest, ok := strings.CutPrefix(stem, "LPT"); ok && strings.ContainsAny(rest, "¹²³") && len([]rune(rest)) == 1 {
+		return true
+	}
+	return false
 }

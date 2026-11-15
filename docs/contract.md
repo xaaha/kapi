@@ -532,7 +532,9 @@ as `Work/Clients`, at most 4 deep, leaving out folders that start with a dot or
 end in `.files`) and a New folder field. A folder name is one or more
 `/`-separated parts; a part that is empty, `.` or `..`, starts with a dot,
 ends in `.files`, is longer than 100 bytes, or holds a control character or
-one of `\ : * ? " < > |` is refused with 422 `bad folder name`.
+one of `\ : * ? " < > |`, ends in a dot or a space, or is a device name
+Windows reserves (`CON`, `PRN`, `AUX`, `NUL`, `COM0` to `COM9`, `LPT0` to
+`LPT9`, with or without an extension) is refused with 422 `bad folder name`.
 
 Save moves the page file and its images folder (`page.FilesDir`) into that
 folder, creating it as needed. When the name is taken there (same rule as
@@ -547,10 +549,28 @@ state directory moves with the file: revisions, events, reader positions,
 notes, the folders it was opened from, and `state.json`. `page.txt` gets the
 new path and `state.json` gets `"saved":true`, the flag the archive sweep
 reads; a saved page is never swept. The old id's directory keeps only
-`moved.txt`, holding the new path. Before moving anything the daemon writes
-`move.json` (`{"from","to"}`) in the old state directory. On start it finishes
-a move whose file already moved and undoes one whose file had not, so a crash
-never splits a page from its history.
+`moved.txt`, holding the new path.
+
+The move is journaled in `move.json`, first in the old state directory and
+then carried with it: `{"from","to","step","images","rewrite","placed"}`.
+`step` is `begun`, `placed` (the file is at `to`), `images` (the images folder
+is there, renamed or copied), `removed` (the draft is gone; the move is
+committed) or `cleanup` (only a copied images folder is left to delete).
+`placed` is the SHA-256 of the bytes put at `to`. Before removing the draft
+kapi checks that it is still the same file with the same size and mtime, and
+aborts with "the page changed while kapi was saving it" when an agent wrote it
+in between. Any failure before `removed` undoes the finished steps in reverse:
+the images go back, and `to` is deleted only when it is the draft's hard link
+or holds exactly `placed`. The journal stays until the undo succeeds.
+On start, and before any request names either path, kapi resumes a journal by
+its step, never by guessing from which files exist: `removed` or later
+finishes the move (a new file at the old path is a new draft and is left
+alone); an earlier step undoes it while the draft is still there, and
+finishes it when the draft is gone. While a committed move cannot finish
+moving the history, both paths are refused with "still being saved", so no
+fresh history starts at the new path. A copied images folder is deleted from
+the old place only after `removed`; when that fails the save still succeeds
+and the next start finishes the deletion.
 
 Clients of the old path learn the new one:
 

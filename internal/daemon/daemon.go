@@ -96,6 +96,7 @@ type Server struct {
 	attached map[string]map[string]time.Time
 	baseURL  string
 	reopened map[string]bool
+	pending  map[string]*moveJournal
 	stopping <-chan struct{}
 
 	viewingMu sync.Mutex
@@ -368,6 +369,9 @@ func (s *Server) page(path string) (*eventlog.Log, error) {
 	defer s.mu.Unlock()
 	if l, ok := s.pages[path]; ok {
 		return l, nil
+	}
+	if err := s.resumePending(path); err != nil {
+		return nil, err
 	}
 	if to, moved := s.movedTo(path); moved {
 		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {

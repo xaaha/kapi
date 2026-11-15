@@ -136,3 +136,16 @@ func TestHandEditedLibraryFallsBackWithOneWarning(t *testing.T) {
 		})
 	}
 }
+
+func TestFolderNamesWindowsCannotHoldAreRefused(t *testing.T) {
+	for _, bad := range []string{"CON", "con", "Nul.txt", "aux ", "COM1", "lpt9.notes", "COM¹", "x.files.", "Work.", "Work/notes."} {
+		if _, err := CheckFolder(bad); !errors.Is(err, ErrBadFolder) {
+			t.Errorf("CheckFolder(%q) = %v, want ErrBadFolder", bad, err)
+		}
+	}
+	for _, good := range []string{"Console", "COM", "COM10", "Lpt", "nullable", "Work/Clients", "v1.2"} {
+		if _, err := CheckFolder(good); err != nil {
+			t.Errorf("CheckFolder(%q) = %v, want it accepted", good, err)
+		}
+	}
+}
