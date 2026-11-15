@@ -380,3 +380,36 @@ func TestANewFileAtAMovedPathStartsAFreshPage(t *testing.T) {
 		t.Errorf("the new page inherited %+v", p.Events)
 	}
 }
+
+func TestLayoutAcceptsFoldersKapiKnowsAndRefusesOthers(t *testing.T) {
+	home, s, _ := serving(t)
+	lib := withLibrary(t, s)
+	if err := os.MkdirAll(filepath.Join(lib, "Work", "Clients"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := draftWithImage(t)
+	opener := t.TempDir()
+	call(t, home, &Request{Op: "open", Page: path, Dir: opener})
+	ctx := context.Background()
+	collapse := func(folder string) error {
+		_, err := s.prefs.Update(ctx, settings.Patch{Layout: &settings.LayoutPatch{Collapsed: map[string]bool{folder: true}}})
+		return err
+	}
+	pages, err := s.Index()
+	if err != nil || len(pages) != 1 {
+		t.Fatalf("Index = %+v, %v", pages, err)
+	}
+	for _, folder := range []string{filepath.Dir(pages[0].Path), resolved(opener), filepath.Join(lib, "Work", "Clients")} {
+		if err := collapse(folder); err != nil {
+			t.Errorf("collapse %s: %v", folder, err)
+		}
+	}
+	for _, folder := range []string{t.TempDir(), filepath.Join(lib, "Nope"), "relative"} {
+		if err := collapse(folder); !errors.Is(err, settings.ErrInvalid) {
+			t.Errorf("collapse %s: %v, want ErrInvalid", folder, err)
+		}
+	}
+	if _, err := s.prefs.Update(ctx, settings.Patch{Layout: &settings.LayoutPatch{PageTitles: map[string]*string{pages[0].ID: new("Plan")}}}); err != nil {
+		t.Errorf("rename a known page: %v", err)
+	}
+}
