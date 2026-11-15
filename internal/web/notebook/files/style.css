@@ -10,7 +10,7 @@
   gap: 9px;
   padding: 8px 9px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--kapi-radius-sm);
   background: transparent;
   color: var(--kapi-fg);
   cursor: pointer;

@@ -12,7 +12,7 @@
   max-height: min(760px, calc(100vh - 48px));
   overflow: hidden;
   border: 1px solid var(--kapi-border-strong);
-  border-radius: 16px;
+  border-radius: var(--kapi-radius-lg);
   background: var(--kapi-surface);
   color: var(--kapi-fg);
   box-shadow: 0 26px 80px color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
@@ -50,7 +50,7 @@
 .kapi-organizer-close,
 .kapi-organizer-rename {
   border: 1px solid var(--kapi-border);
-  border-radius: 8px;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-surface);
   color: var(--kapi-muted);
   font: 12px var(--kapi-font);
@@ -95,7 +95,7 @@
 
 .kapi-organizer-folder {
   border: 1px solid var(--kapi-border);
-  border-radius: 12px;
+  border-radius: var(--kapi-radius);
   overflow: hidden;
 }
 
@@ -157,7 +157,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--kapi-radius-sm);
 }
 
 .kapi-organizer-page:hover {
@@ -175,7 +175,7 @@
   right: 8px;
   left: 8px;
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--kapi-radius-xs);
   background: var(--kapi-blue-solid);
 }
 
@@ -201,7 +201,7 @@
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--kapi-blue-border);
-  border-radius: 7px;
+  border-radius: var(--kapi-radius-sm);
   background: var(--kapi-bg);
   color: var(--kapi-fg);
   font: inherit;
@@ -227,7 +227,7 @@
     left: 8px;
     width: auto;
     max-height: calc(100vh - 16px);
-    border-radius: 18px;
+    border-radius: var(--kapi-radius-lg);
     transform: none;
   }
 

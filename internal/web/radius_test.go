@@ -13,11 +13,14 @@ var radiusDecl = regexp.MustCompile(`border-radius:\s*([^;}]+)`)
 var radiusToken = regexp.MustCompile(`^var\(--kapi-(radius(-xs|-sm|-lg)?|frame-radius)\)$`)
 
 func TestEveryCornerRadiusUsesTheSharedScale(t *testing.T) {
-	files, err := filepath.Glob("static/*.css")
-	if err != nil {
-		t.Fatal(err)
+	var files []string
+	for _, pattern := range []string{"static/*.css", "notebook/files/*.css", "../render/style.css"} {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, matches...)
 	}
-	files = append(files, "../render/style.css")
 	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
