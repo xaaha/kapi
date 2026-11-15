@@ -630,8 +630,8 @@ func (s *Store) blockUnchangedSince(rev uint64, op *Op) bool {
 		}
 	}
 	if sectionOp && (op.Kind == "archive" || op.Kind == "unarchive" || op.Kind == "delete") {
-		was, wasErr := sectionSource(then, op.ID)
-		is, isErr := sectionSource(s.src, op.ID)
+		was, wasErr := Section(then, op.ID)
+		is, isErr := Section(s.src, op.ID)
 		return wasErr == nil && isErr == nil && bytes.Equal(was, is)
 	}
 	was, err := Outer(then, op.ID)
@@ -1270,7 +1270,7 @@ func sectionIDs(els []element, heading *element) ([]string, error) {
 	return ids, nil
 }
 
-func sectionSource(src []byte, headingID string) ([]byte, error) {
+func Section(src []byte, headingID string) ([]byte, error) {
 	els := parse(src)
 	heading, err := find(els, headingID)
 	if err != nil {

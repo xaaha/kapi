@@ -2760,6 +2760,35 @@ test("deleting a folded heading deletes its whole hidden section and Undo restor
   }
 });
 
+test("every toolbar action on a folded heading acts on its whole section, and on the heading alone once unfolded", async () => {
+  await reopenWith([
+    { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">1. First</h2>', markdown: "## 1. First\n", sectionMarkdown: "## 1. First\n\nOne.\n" },
+    { id: "p2p2p2p2", html: '<p data-kapi-id="p2p2p2p2">One.</p>' },
+    { id: "h2bbbbbb", html: '<h2 data-kapi-id="h2bbbbbb">2. Second</h2>' },
+    { id: "p4p4p4p4", html: '<p data-kapi-id="p4p4p4p4">Two.</p>' },
+  ]);
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
+  const labels = () => page.eval(`[...document.querySelectorAll(".kapi-bar [data-action]")].filter((b) => ["copy", "archive", "delete"].includes(b.dataset.action)).map((b) => b.getAttribute("aria-label"))`);
+  const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
+  await mouseClickAt(x, y);
+  await page.waitFor(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded === "1 block"`);
+  await click('[data-kapi-id="h2aaaaaa"]');
+  assert.deepEqual(await labels(), ["Copy section as Markdown", "Archive section", "Delete section"]);
+  await click('.kapi-bar [data-action="copy"]');
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.equal(requests("GET", "/export/markdown").at(-1).search, "?block=h2aaaaaa&section=1");
+  assert.deepEqual(await page.eval(`window.copied`), ["## 1. First\n\nOne.\n"]);
+
+  await mouseClickAt(x, y);
+  await page.waitFor(`!document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-folded")`);
+  await click('[data-kapi-id="h2aaaaaa"]');
+  assert.deepEqual(await labels(), ["Copy as Markdown", "Archive", "Delete"]);
+  await click('.kapi-bar [data-action="copy"]');
+  await until(async () => (await page.eval(`window.copied.length`)) === 2);
+  assert.equal(requests("GET", "/export/markdown").at(-1).search, "?block=h2aaaaaa");
+  assert.equal(await page.eval(`window.copied[1]`), "## 1. First\n");
+});
+
 test("archiving a folded heading archives its section and unarchiving restores it", async () => {
   await reopenWith([
     { id: "h2aaaaaa", html: '<h2 data-kapi-id="h2aaaaaa">1. First</h2>' },
