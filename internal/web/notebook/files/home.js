@@ -1,6 +1,6 @@
 import { getJSON, h, icon, prefs, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
-import { ago, byFolder, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
+import { ago, byFolder, dirname, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
 import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
 import { ARCHIVE_NOTICE, VIEWS, badge, bannerCopy, policyOf } from "./lifecycle.js";
@@ -9,7 +9,17 @@ import { stateLabel, stateTone } from "./states.js";
 const href = (p) => `${root}p/${p.id}/`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-function card(p, fresh, folder) {
+export function savedFolders(pages) {
+  const folders = new Map();
+  for (const p of pages) {
+    const dir = dirname(p.path);
+    if (!folders.has(dir)) folders.set(dir, { dir, shown: p.savedIn || dir, pages: [] });
+    folders.get(dir).pages.push(p);
+  }
+  return [...folders.values()];
+}
+
+function card(p, fresh, folder, savedBadge = true) {
   const title = pageTitle(p);
   return h("a", {
     class: "nb-card",
@@ -27,7 +37,7 @@ function card(p, fresh, folder) {
   h("strong", { class: "nb-card-title", text: title }),
   h("span", { class: "nb-card-summary", text: p.summary || "No summary yet." }),
   h("span", { class: "nb-card-foot" },
-    badge(p),
+    badge(p, { saved: savedBadge }),
     h("span", { class: "nb-card-activity", text: `${stateLabel(p)} · ${ago(p.changed)}` }),
     fresh ? h("span", { class: "nb-new", text: "New" }) : null));
 }
@@ -44,6 +54,7 @@ export function showHome(main) {
     const button = h("button", { type: "button", class: "nb-view-button", "aria-pressed": String(grid.dataset.view === view), text: view === "cards" ? "Cards" : "List" });
     button.addEventListener("click", () => {
       grid.dataset.view = view;
+      for (const g of shelf.querySelectorAll(".nb-grid")) g.dataset.view = view;
       prefs.set("kapi-home-view", view);
       for (const item of viewButtons) item.setAttribute("aria-pressed", String(item === button));
     });
@@ -51,7 +62,8 @@ export function showHome(main) {
   });
   const viewToggle = h("div", { class: "nb-view-toggle", role: "group", "aria-label": "Note view" }, ...viewButtons);
   const empty = h("p", { class: "nb-empty" });
-  let picked = VIEWS[0];
+  const shelf = h("div", { class: "nb-shelf", hidden: true });
+  let picked = VIEWS.find((view) => location.hash === `#${view.name}`) ?? VIEWS[0];
   let settings = null;
   const contextTitle = h("strong");
   const contextDescription = h("p");
@@ -65,6 +77,7 @@ export function showHome(main) {
     const button = h("button", { type: "button", class: "nb-status-button", "data-tab": view.name, "aria-pressed": String(view === picked), text: view.label });
     button.addEventListener("click", () => {
       picked = view;
+      history.replaceState(null, "", view === VIEWS[0] ? location.pathname : `#${view.name}`);
       updateProjects();
       draw();
     });
@@ -81,7 +94,7 @@ export function showHome(main) {
   const title = h("h1");
   const intro = h("p", { class: "nb-intro" });
   const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your workspace" }), title), intro);
-  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, banner, context, grid, empty);
+  const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, banner, context, grid, shelf, empty);
   main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)));
 
   let pages = [];
@@ -110,7 +123,17 @@ export function showHome(main) {
     banner.hidden = !settings || !copy || picked !== VIEWS[0] || Boolean(settings.dismissed?.includes(ARCHIVE_NOTICE));
     if (copy) [bannerTitle.textContent, bannerText.textContent] = copy;
     count.textContent = plural(shown.length, "note");
-    grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
+    grid.hidden = Boolean(picked.grouped);
+    shelf.hidden = !picked.grouped;
+    if (picked.grouped) {
+      grid.replaceChildren();
+      shelf.replaceChildren(...savedFolders(shown).map((f) => h("section", { class: "nb-folder", "aria-label": folderTitle(f.dir) },
+        h("h2", { class: "nb-folder-head", text: folderTitle(f.dir) }, h("span", { text: `${f.shown} · ${plural(f.pages.length, "note")}` })),
+        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, false))))));
+    } else {
+      shelf.replaceChildren();
+      grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null)));
+    }
     empty.hidden = shown.length > 0;
     empty.textContent = !pages.length ? "No notes yet. Ask an agent to create one, or run kapi open notes.html." : project.value ? "No note matches these filters." : picked.empty;
   });

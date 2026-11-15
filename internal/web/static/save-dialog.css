@@ -1,0 +1,112 @@
+.kapi-dialog.kapi-save-picker {
+  width: min(440px, calc(100vw - 32px));
+  height: auto;
+  max-height: min(560px, calc(100dvh - 48px));
+}
+
+.kapi-save-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 16px 20px 20px 24px;
+  overflow-y: auto;
+}
+
+.kapi-save-body[aria-busy="true"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.kapi-save-where {
+  margin: 0 0 4px;
+  color: var(--kapi-muted);
+  font-size: 13px;
+}
+
+.kapi-save-where code {
+  font: 12.5px var(--kapi-mono);
+  overflow-wrap: anywhere;
+}
+
+.kapi-save-folders {
+  display: grid;
+  gap: 4px;
+}
+
+.kapi-dialog .kapi-save-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-bg);
+  text-align: left;
+}
+
+.kapi-dialog .kapi-save-folder span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kapi-dialog .kapi-save-folder:hover {
+  border-color: var(--kapi-border-strong);
+  background: var(--kapi-subtle);
+}
+
+.kapi-dialog .kapi-save-add {
+  border-style: dashed;
+  color: var(--kapi-muted);
+}
+
+.kapi-save-new {
+  display: flex;
+  gap: 8px;
+}
+
+.kapi-save-name {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-bg);
+  color: var(--kapi-fg);
+  font: inherit;
+}
+
+.kapi-dialog .kapi-save-new .kapi-primary {
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+  font-weight: 600;
+}
+
+.kapi-save-empty {
+  margin: 0;
+  color: var(--kapi-muted);
+  font-size: 13px;
+}
+
+.kapi-save-error {
+  margin: 4px 0 0;
+  color: var(--kapi-red-text);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .kapi-save-new {
+    flex-direction: column;
+  }
+}

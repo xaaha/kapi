@@ -93,6 +93,7 @@ func newRoot(c api, in io.Reader, out io.Writer, sleep func(time.Duration)) *cli
 			newExportCmd(out),
 			attachCmd(c, out),
 			newOpenCmd(c, out),
+			newNewCmd(c, out),
 			newHomeCmd(c, out),
 			newLsCmd(c, out),
 		},
@@ -687,32 +688,36 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 			if err != nil {
 				return err
 			}
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			resp, err := c.Do(&daemon.Request{Op: "open", Page: page, Dir: wd})
-			if err != nil {
-				return err
-			}
-			if _, err := fmt.Fprintln(out, resp.URL); err != nil {
-				return err
-			}
-			if resp.Notice != "" {
-				if _, err := fmt.Fprintln(out, resp.Notice); err != nil {
-					return err
-				}
-			}
-			if *printOnly || os.Getenv("KAPI_NO_BROWSER") != "" {
-				return nil
-			}
-			if resp.Shown {
-				_, err := fmt.Fprintln(out, "The page is in the sidebar of the open kapi tab.")
-				return err
-			}
-			return openBrowser(resp.URL)
+			return openPage(c, out, page, *printOnly)
 		},
 	}
+}
+
+func openPage(c api, out io.Writer, page string, printOnly bool) error {
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	resp, err := c.Do(&daemon.Request{Op: "open", Page: page, Dir: wd})
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, resp.URL); err != nil {
+		return err
+	}
+	if resp.Notice != "" {
+		if _, err := fmt.Fprintln(out, resp.Notice); err != nil {
+			return err
+		}
+	}
+	if printOnly || os.Getenv("KAPI_NO_BROWSER") != "" {
+		return nil
+	}
+	if resp.Shown {
+		_, err := fmt.Fprintln(out, "The page is in the sidebar of the open kapi tab.")
+		return err
+	}
+	return openBrowser(resp.URL)
 }
 
 func completionCmd(root *cli.Command, out io.Writer) *cli.Command {

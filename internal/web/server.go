@@ -48,6 +48,9 @@ type Pages interface {
 	Index() ([]app.Page, error)
 	Tab() (done func())
 	Changes() <-chan struct{}
+	Library() (root string, folders []string, err error)
+	Save(path, folder string) (string, error)
+	Unsave(path string) error
 }
 
 type Server struct {
@@ -94,6 +97,7 @@ func newServer(pages Pages, prefs settings.Store, token, host string, previous [
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
+	s.libraryRoutes()
 	s.mount(list)
 	return s
 }
@@ -129,7 +133,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|delete-notes|end|files|images|ops|answers|export/html|export/markdown)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|delete-notes|end|save|unsave|files|images|ops|answers|export/html|export/markdown)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -188,6 +192,10 @@ func (s *Server) withPage(h pageHandler) http.HandlerFunc {
 			return
 		}
 		st, l, err := s.pages.Page(id)
+		if moved := (*page.MovedError)(nil); errors.As(err, &moved) {
+			s.redirectMoved(w, r, id, moved.To)
+			return
+		}
 		if errors.Is(err, fs.ErrNotExist) {
 			http.NotFound(w, r)
 			return
@@ -228,6 +236,12 @@ func (s *Server) Poll(ctx context.Context, every time.Duration) {
 			if err == nil {
 				_, _, err = st.Refresh()
 			}
+			if moved := (*page.MovedError)(nil); errors.As(err, &moved) {
+				s.mu.Lock()
+				delete(s.seen, id)
+				s.mu.Unlock()
+				continue
+			}
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				log.Printf("poll %s: %v", id, err)
 			}
@@ -243,7 +257,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request, st *page.Sto
 		return
 	}
 	var main strings.Builder
-	fmt.Fprintf(&main, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), html.EscapeString(st.Path()), body)
+	fmt.Fprintf(&main, "<main id=\"kapi-page\" data-rev=\"%d\" data-undo=\"%t\" data-saved=\"%t\" data-path=\"%s\">\n%s\n</main>\n", rev, st.CanUndo(), st.Saved(), html.EscapeString(st.Path()), body)
 	s.shell(w, r, "../../", page.Title(st.Path()), main.String())
 }
 
@@ -386,6 +400,11 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		case <-changed:
 		case <-acked:
 		case <-r.Context().Done():
+			return
+		case <-l.Gone():
+			if _, err := fmt.Fprintf(w, "event: moved\ndata: %s\n\n", page.ID(l.MovedTo())); err == nil { //nolint:gosec // a hex page id in text/event-stream
+				_ = rc.Flush()
+			}
 			return
 		}
 	}

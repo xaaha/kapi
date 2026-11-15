@@ -219,6 +219,37 @@ body:has(#kapi-home) {
   color: var(--kapi-muted);
 }
 
+.nb-library [hidden] {
+  display: none !important;
+}
+
+.nb-folder {
+  display: grid;
+  gap: 12px;
+}
+
+.nb-folder + .nb-folder {
+  margin-top: 28px;
+}
+
+.nb-folder-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  color: var(--kapi-fg);
+  font: 650 13px/1.2 "Hanken Grotesk", system-ui, sans-serif;
+}
+
+.nb-folder-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kapi-faint);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .nb-toolbar {
   display: flex;
   align-items: center;
@@ -440,8 +471,10 @@ body:has(#kapi-home) {
 
 .nb-card-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
+  row-gap: 8px;
   margin-top: auto;
   padding-top: 18px;
   color: var(--kapi-faint);
@@ -483,6 +516,12 @@ body:has(#kapi-home) {
   --nb-badge-text: var(--kapi-yellow-text);
   --nb-badge-fill: transparent;
   --nb-badge-border: var(--kapi-yellow-border);
+}
+
+.nb-badge-saved {
+  --nb-badge-text: var(--kapi-blue-text);
+  --nb-badge-fill: var(--kapi-blue-fill);
+  --nb-badge-border: var(--kapi-blue-border);
 }
 
 .nb-badge-archived {

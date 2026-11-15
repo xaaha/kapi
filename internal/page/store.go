@@ -36,6 +36,7 @@ var (
 	ErrDanglingLinks = errors.New("the edit leaves links to missing elements")
 	ErrEditLostID    = errors.New("the edited element would no longer be on the page; its tag cannot stand there")
 	ErrPresetInProse = errors.New("prose html cannot hold kapi-* elements other than kapi-badge, or data-kapi-preset; edit the preset's source instead")
+	ErrRetired       = errors.New("the page moved; reload it to keep working")
 	ErrInnerEscapes  = errors.New("the new source closes the element early or leaves an element inside it open; edit only what goes between its tags")
 )
 
@@ -78,6 +79,7 @@ type Store struct {
 
 	viewed, touched, archived, released time.Time
 	saved                               bool
+	gone                                error
 }
 
 type state struct {
@@ -487,6 +489,9 @@ func (s *Store) CanUndo() bool {
 func (s *Store) Refresh() (Summary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.gone != nil {
+		return Summary{}, false, s.gone
+	}
 	if _, err := s.logEvent(); err != nil {
 		return Summary{}, false, err
 	}
@@ -522,6 +527,9 @@ func (s *Store) Apply(rev uint64, op *Op) (uint64, Summary, error) {
 func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.gone != nil {
+		return s.rev, Summary{}, s.gone
+	}
 	if _, err := s.logEvent(); err != nil {
 		return s.rev, Summary{}, err
 	}
@@ -748,6 +756,9 @@ func (s *Store) logEvent() (uint64, error) {
 }
 
 func (s *Store) saveState(st *state) error {
+	if s.gone != nil {
+		return s.gone
+	}
 	st.Held, st.Event = s.held, s.event
 	st.Viewed, st.Touched, st.Archived, st.Released, st.Saved = s.viewed, s.touched, s.archived, s.released, s.saved
 	b, err := json.Marshal(st)
@@ -784,6 +795,50 @@ func (s *Store) Touch() error {
 	s.touched = clock().UTC()
 	s.archived = time.Time{}
 	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func (s *Store) Saved() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saved
+}
+
+func (s *Store) SetSaved(saved bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saved = saved
+	if saved {
+		s.archived = time.Time{}
+	} else {
+		s.touched = clock().UTC()
+	}
+	return s.saveState(&state{Rev: s.rev, Undo: s.undo})
+}
+
+func (s *Store) Retire() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.checkHeld(true); err != nil {
+		return err
+	}
+	s.gone = ErrRetired
+	return nil
+}
+
+func MarkSaved(dir string) error {
+	st, err := readState(dir)
+	if err != nil {
+		return err
+	}
+	if st == nil {
+		st = &state{}
+	}
+	st.Saved, st.Archived = true, time.Time{}
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(filepath.Join(dir, "state.json"), b)
 }
 
 func (s *Store) MarkArchived(at, touched time.Time) (bool, error) {
@@ -1060,6 +1115,9 @@ func (s *Store) placed(page fileStamp) {
 func (s *Store) Tick() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.gone != nil {
+		return nil
+	}
 	_, err := s.checkHeld(false)
 	return err
 }
@@ -1068,6 +1126,9 @@ func (s *Store) Tick() error {
 func (s *Store) Settle() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.gone != nil {
+		return nil
+	}
 	_, err := s.checkHeld(true)
 	return err
 }

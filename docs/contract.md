@@ -506,6 +506,81 @@ follows presence.
 
 The browser keeps nothing: after any reconnect it refetches the page.
 
+## Library
+
+Pages are temporary until the person saves them. The `library` setting in
+`$KAPI_HOME/settings.json` names the library root: an absolute folder or one
+starting with `~/`, `~/kapi` by default. New pages go in `<root>/drafts` and
+saved ones in folders under `<root>/library`. `PATCH settings` with
+`{"library":"..."}` refuses a relative folder with 422. A hand-edited value
+that is not a string or not absolute is ignored with one warning in the log,
+and the default is used.
+
+`kapi new [--print] <title>` creates `<root>/drafts/<slug>.html` holding
+`<h1><title></h1>`, prints its path, and then opens it exactly like
+`kapi open`. The slug is the title lowercased, with each run of characters
+other than letters and digits turned into one `-`, at most 80 bytes, and
+`untitled` when nothing is left. When the name is taken, `<slug> 2.html`,
+`<slug> 3.html` and so on are tried. A name is taken when the file, its
+`.files` images folder, or kapi state for that path under `$KAPI_HOME/pages/`
+exists, so a new draft never inherits an old page's history and never
+overwrites a file (it is created with `O_EXCL`).
+
+Only the person saves. The page's ⋮ menu has Save to library…, which
+opens a folder picker listing the folders under `<root>/library` (nested ones
+as `Work/Clients`, at most 4 deep, leaving out folders that start with a dot or
+end in `.files`) and a New folder field. A folder name is one or more
+`/`-separated parts; a part that is empty, `.` or `..`, starts with a dot,
+ends in `.files`, is longer than 100 bytes, or holds a control character or
+one of `\ : * ? " < > |` is refused with 422 `bad folder name`.
+
+Save moves the page file and its images folder (`page.FilesDir`) into that
+folder, creating it as needed. When the name is taken there (same rule as
+`kapi new`), it uses `<name> 2.html` with `<name> 2.files`, and rewrites the
+page's `<img src="./<name>.files/…">` references to the new folder. It never
+overwrites: the file is hard-linked into place, or copied to a temp file and
+hard-linked when the folder is on another file system, then the original is
+removed. Saving into the folder the page is already in only sets the flag.
+
+The page id and `$KAPI_HOME/pages/<id>/` derive from the absolute path, so the
+state directory moves with the file: revisions, events, reader positions,
+notes, the folders it was opened from, and `state.json`. `page.txt` gets the
+new path and `state.json` gets `"saved":true`, the flag the archive sweep
+reads; a saved page is never swept. The old id's directory keeps only
+`moved.txt`, holding the new path. Before moving anything the daemon writes
+`move.json` (`{"from","to"}`) in the old state directory. On start it finishes
+a move whose file already moved and undoes one whose file had not, so a crash
+never splits a page from its history.
+
+Clients of the old path learn the new one:
+
+- A `kapi wait` or `kapi watch` attached to the old path exits with
+  `<old> moved to <new> when it was saved; use the new path from now on,
+  e.g. kapi wait "<new>"`. Every later request naming the old path gets the
+  same error, until a new file appears at the old path; that file starts a
+  fresh page.
+- A browser stream on `p/<old id>/events` gets `event: moved` with
+  `data: <new id>` and closes; the tab replaces its location with
+  `p/<new id>/`. Any request to `p/<old id>/…` answers 307 to the same path
+  and query under `p/<new id>/`.
+
+Unsave, shown in the menu in place of Save on a saved page, clears the
+flag and sets `touched` to now, so the archive clock starts over. The file
+stays where it is.
+
+HTTP: `GET library` answers `{"library":"<root>/library with ~ for home","folders":[...]}`.
+`POST p/{id}/save` with `{"folder":"Work"}` answers `{"id":"<new id>","path":"<new path>"}`.
+`POST p/{id}/unsave` with `{}` answers `{"path":...}`. The page's `<main>`
+carries `data-saved="true|false"`. `api/notebook/pages` adds `"saved":true`
+and `"savedIn"`, the folder holding the file with `~` for the home directory.
+
+Home has a tab row: Recent (the existing view with its status filters)
+and Saved, also reachable as `#saved`. Saved lists saved pages grouped by
+folder, each under a heading with the folder name and
+`<folder path> · <n> notes`, most recently viewed first inside a folder and
+folders ordered by their most recently viewed page. Recent marks saved cards
+with a blue Saved badge; the Saved view leaves it off.
+
 ## Agent side
 
 Ops reach the agent through the existing event log, so `kapi watch` shows
