@@ -4791,34 +4791,34 @@ test("an agent reply marks closed chat without changing the independent outline"
 const writing = () => page.eval(`document.documentElement.hasAttribute("data-kapi-writing")`);
 const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
 
-test("the pencil is plain in Review, pressed in Write, and moves only while a block is open", async () => {
-  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, !!b.querySelector("svg")])(document.querySelector(".kapi-write-button"))`);
-  assert.deepEqual(await state(), ["false", "none", true]);
+test("the pencil is plain in Review, pressed in Write, and writes a stroke only while a block is open", async () => {
+  const state = () => page.eval(`(b => [b.getAttribute("aria-pressed"), getComputedStyle(b.querySelector("svg")).animationName, getComputedStyle(b, "::before").animationName, b.dataset.tip.split(" ")[0] + " " + b.dataset.tip.split(" ")[1]])(document.querySelector(".kapi-write-button"))`);
+  assert.deepEqual(await state(), ["false", "none", "none", "Edit mode"]);
   await mouseClick(".kapi-write-button");
-  assert.deepEqual(await state(), ["true", "none", true]);
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode"]);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
-  assert.deepEqual(await state(), ["true", "kapi-writing", true]);
+  assert.deepEqual(await state(), ["true", "kapi-writing", "kapi-stroke", "Edit mode"]);
   await page.key("Escape");
   await page.waitFor(`!document.querySelector("[contenteditable]")`);
-  assert.deepEqual(await state(), ["true", "none", true]);
+  assert.deepEqual(await state(), ["true", "none", "none", "Edit mode"]);
   await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   await page.waitFor(`document.activeElement?.isContentEditable`);
-  assert.equal((await state())[1], "none", "reduced motion keeps the pencil still");
+  assert.deepEqual((await state()).slice(1, 3), ["none", "none"], "reduced motion keeps the pencil and stroke still");
 });
 
 test("the header pencil switches to Write, where one real click edits at the clicked spot, and the choice survives a reload", async () => {
   const button = `document.querySelector(".kapi-write-button")`;
   assert.deepEqual(await page.eval(`[${button}.getAttribute("aria-label"), ${button}.dataset.tip, ${button}.getAttribute("aria-keyshortcuts")]`),
-    ["Write", `Write ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
+    ["Edit mode", `Edit mode ${await page.eval(`window.kapiShortcuts.key("toggleWrite").hint`)}`, await page.eval(`window.kapiShortcuts.key("toggleWrite").words`)]);
   assert.equal(await writing(), false);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
 
   await mouseClick(".kapi-write-button");
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
   const { x, y } = await page.eval(`(() => {
     const r = document.createRange();
     const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
@@ -4838,7 +4838,7 @@ test("the header pencil switches to Write, where one real click edits at the cli
   await page.call("Page.reload");
   await page.waitFor(`document.readyState === "complete" && document.querySelector(".kapi-panel .kapi-dot")?.dataset.state === "none"`, 5000);
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
 });
 
 test("double clicking in Review switches the page to Write, a click outside saves, and leaving Write ends the edit", async () => {
@@ -4847,7 +4847,7 @@ test("double clicking in Review switches the page to Write, a click outside save
   await mouseClick('[data-kapi-id="bbbbbbbb"]', 2);
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
   assert.equal(await writing(), true);
-  assert.equal(await page.eval(`${button}.getAttribute("aria-label")`), "Review");
+  assert.equal(await page.eval(`${button}.getAttribute("aria-pressed")`), "true");
   await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
   await page.type(" Then verify.");
   await mouseClick('[data-kapi-id="aaaaaaaa"]');

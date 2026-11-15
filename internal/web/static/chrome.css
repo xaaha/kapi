@@ -2504,8 +2504,28 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   75% { transform: translate(1.5px, 1px) rotate(-10deg); }
 }
 
+#kapi-chrome .kapi-write-button[data-editing]::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  bottom: 8px;
+  width: 11px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: left center;
+  animation: kapi-stroke 0.9s ease-in-out infinite;
+}
+
+@keyframes kapi-stroke {
+  0% { transform: scaleX(0.15); opacity: 0.4; }
+  60% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #kapi-chrome .kapi-write-button[data-editing] svg { animation: none; }
+  #kapi-chrome .kapi-write-button[data-editing] svg,
+  #kapi-chrome .kapi-write-button[data-editing]::before { animation: none; }
 }
 
 #kapi-chrome .kapi-page-tools > button:hover {

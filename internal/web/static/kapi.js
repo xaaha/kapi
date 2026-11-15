@@ -986,10 +986,9 @@
   }
 
   function syncWriting() {
-    const label = writing ? "Review" : "Write";
     writeButton.setAttribute("aria-pressed", String(writing));
-    writeButton.setAttribute("aria-label", label);
-    writeButton.dataset.tip = `${label} ${keyHint("toggleWrite")}`;
+    writeButton.setAttribute("aria-label", "Edit mode");
+    writeButton.dataset.tip = `Edit mode ${keyHint("toggleWrite")}`;
     document.documentElement.toggleAttribute("data-kapi-writing", writing);
   }
 
