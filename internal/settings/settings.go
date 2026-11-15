@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"slices"
 	"sync"
@@ -25,14 +26,16 @@ const (
 var Modes = []string{System, Light, Dark}
 
 type Settings struct {
-	Mode   string   `json:"mode"`
-	Theme  string   `json:"theme"`
-	Recent []string `json:"recent"`
+	Mode      string    `json:"mode"`
+	Theme     string    `json:"theme"`
+	Recent    []string  `json:"recent"`
+	Retention Retention `json:"retention"`
 }
 
 type Patch struct {
-	Mode  *string `json:"mode,omitempty"`
-	Theme *string `json:"theme,omitempty"`
+	Mode      *string         `json:"mode,omitempty"`
+	Theme     *string         `json:"theme,omitempty"`
+	Retention *RetentionPatch `json:"retention,omitempty"`
 }
 
 var ErrInvalid = errors.New("invalid setting")
@@ -43,17 +46,19 @@ type Store interface {
 }
 
 func Default() Settings {
-	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}}
+	return Settings{Mode: System, Theme: DefaultTheme, Recent: []string{DefaultTheme}, Retention: DefaultRetention()}
 }
 
 type File struct {
-	path  string
-	known func(theme string) bool
-	mu    sync.Mutex
+	path   string
+	known  func(theme string) bool
+	logf   func(format string, args ...any)
+	warned map[string]bool
+	mu     sync.Mutex
 }
 
 func NewFile(path string, known func(theme string) bool) *File {
-	return &File{path: path, known: known}
+	return &File{path: path, known: known, logf: log.Printf, warned: map[string]bool{}}
 }
 
 func (f *File) Get(context.Context) (Settings, error) {
@@ -71,6 +76,9 @@ func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
 	if p.Theme != nil && !f.known(*p.Theme) {
 		return Settings{}, fmt.Errorf("%w: no theme named %q", ErrInvalid, *p.Theme)
 	}
+	if err := p.Retention.validate(); err != nil {
+		return Settings{}, err
+	}
 	s, err := f.read()
 	if err != nil {
 		return Settings{}, err
@@ -82,6 +90,7 @@ func (f *File) Update(_ context.Context, p Patch) (Settings, error) {
 		s.Theme = *p.Theme
 		s.Recent = recent(*p.Theme, s.Recent)
 	}
+	s.Retention = p.Retention.apply(s.Retention)
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return Settings{}, err
@@ -100,14 +109,21 @@ func (f *File) read() (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
-	var s Settings
-	if err := json.Unmarshal(b, &s); err != nil {
+	var stored struct {
+		Mode      string          `json:"mode"`
+		Theme     string          `json:"theme"`
+		Recent    []string        `json:"recent"`
+		Retention json.RawMessage `json:"retention"`
+	}
+	if err := json.Unmarshal(b, &stored); err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", f.path, err)
 	}
-	return f.clean(s), nil
+	s := Settings{Mode: stored.Mode, Theme: stored.Theme, Recent: stored.Recent, Retention: f.retention(stored.Retention)}
+	f.clean(&s)
+	return s, nil
 }
 
-func (f *File) clean(s Settings) Settings {
+func (f *File) clean(s *Settings) {
 	if !slices.Contains(Modes, s.Mode) {
 		s.Mode = System
 	}
@@ -116,7 +132,6 @@ func (f *File) clean(s Settings) Settings {
 	}
 	kept := slices.DeleteFunc(slices.Clone(s.Recent), func(id string) bool { return !f.known(id) })
 	s.Recent = recent(s.Theme, kept)
-	return s
 }
 
 func recent(theme string, before []string) []string {
