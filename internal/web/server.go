@@ -442,8 +442,10 @@ type streamed struct {
 	HTML string `json:"html,omitempty"`
 }
 
+const maxFormattedText = 64 << 10
+
 func messageHTML(e *eventlog.Event) string {
-	if (e.Kind != "message" && e.Kind != eventlog.KindNote) || strings.TrimSpace(e.Text) == "" {
+	if (e.Kind != "message" && e.Kind != eventlog.KindNote) || strings.TrimSpace(e.Text) == "" || len(e.Text) > maxFormattedText {
 		return ""
 	}
 	out, err := render.Message(e.Text)

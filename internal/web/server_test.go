@@ -1135,7 +1135,9 @@ func TestTheStreamSendsMessagesAndNotesFormattedAlongsideTheirText(t *testing.T)
 	if want := "<p>Left:</p>\n<ol>\n<li><strong>review</strong></li>\n<li>\n&lt;script&gt;x&lt;/script&gt;\n</li>\n</ol>"; first.HTML != want {
 		t.Errorf("html = %q, want %q", first.HTML, want)
 	}
-	for _, e := range []eventlog.Event{{Kind: "answer", Text: `{"a":1}`}, {Kind: "revision", Text: "edited in the file"}, {Kind: "message", Text: "  "}} {
+	tooLong := strings.Repeat("word ", maxFormattedText/5+1)
+	deep := strings.Repeat("> ", 600) + "x"
+	for _, e := range []eventlog.Event{{Kind: "answer", Text: `{"a":1}`}, {Kind: "revision", Text: "edited in the file"}, {Kind: "message", Text: "  "}, {Kind: "message", Text: tooLong}, {Kind: "message", Text: deep}} {
 		if got := messageHTML(&e); got != "" {
 			t.Errorf("%s %q formatted as %q, want plain text only", e.Kind, e.Text, got)
 		}

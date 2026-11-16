@@ -604,7 +604,8 @@ reconnects with `Last-Event-ID` and gets everything after it. Event `data` is
 the `eventlog.Event` JSON. A `message` or `note` with text also carries `html`:
 its `text` read as Markdown (GitHub tables, task lists, strikethrough and
 links), raw HTML shown as typed, and the result cleaned the way page HTML is.
-The log, `kapi wait`, `kapi watch` and exports keep only the plain `text`.
+`html` is left out when the text is longer than 64 KiB or cannot be formatted,
+and the browser then shows the plain `text`. The log, `kapi wait`, `kapi watch` and exports keep only the plain `text`.
 Kinds the browser cares about:
 
 | `kind` | Meaning | Browser does |
