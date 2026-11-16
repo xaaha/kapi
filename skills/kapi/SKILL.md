@@ -11,31 +11,31 @@ metadata:
 
 ## Workflow
 
-- Run `kapi` first.
-- Treat `kapi --help`, command help, and `kapi preset` as authoritative.
-- Write only documented HTML and presets.
-- Create pages with `kapi new <title>`. Use one page per task; add sections, not related pages.
-- Pages are temporary. Only the person saves one to the library; never move it yourself. Saving moves the file: when `kapi wait` exits naming a new path, use it.
-- Find pages with `kapi ls --json`.
-- Follow `kapi preset` writing rules: fact first, concrete numbers, no repetition.
+- Run `kapi` first. `kapi --help` and `kapi preset` are authoritative.
+- Create pages with `kapi new <title>`. One page per task; add sections, not related pages. Find pages with `kapi ls --json`.
+- Pages are temporary until the person saves one. Never move a page yourself. When `kapi wait` exits naming a new path, use it.
+- Write the fact first, with numbers. Say each thing once.
 - Use `kapi wait <page>` when its exit wakes the harness; restart it after each event. Use `kapi watch <page>` only when every line is delivered.
-- Acknowledge events with the current `say --seen`, `say --reply`, `seen`, or `pending` flow.
+- Acknowledge events with `say --seen`, `say --reply`, `seen`, or `pending`.
+- A `repaired` event means kapi fixed your markup. Write it the fixed way next time.
 - Stop waiting or watching when the session ends.
 
-## Visuals
+## Writing pages
 
-Add visuals without being asked when they clarify the work.
+Write ordinary HTML; kapi styles it:
 
-- Use `kapi-diagram` for flows, sequences, architecture, dependencies, states, and relationships. Include meaningful nodes and edges.
-- Use `kapi-render` for HTML/CSS mockups, dashboards, cards, charts, timelines, and spatial layouts. Prefer Kapi theme variables.
-- Prefer semantic HTML and let Kapi format it: `<table>` with `<thead>`, `<details><summary>`, `<pre><code class="language-…">`, `<dl><dt><dd>`, `<figure><img><figcaption>`, and `<ul>` items beginning with checkbox inputs. Use `kapi-*` only when ordinary HTML cannot express the component. Combine presets when useful.
-- Use `kapi attach <page> <image...>` for images; multiple images form a gallery.
-- Use ASCII only for literal source or terminal output, never instead of a diagram or interface.
+- `<table>` with `<thead>`, `<dl>`, `<details><summary>`, `<blockquote>`, `<figure><img><figcaption>`, `<pre><code class="language-…">`, and `<ul>` items starting with checkbox inputs.
+- Add visuals without being asked when they clarify the work.
+- Use `kapi-diagram` for architecture, or Mermaid `flowchart` and `sequenceDiagram` in `<pre class="mermaid">` for flows and sequences.
+- Use `kapi-render` for mockups, dashboards and charts.
+- Use other `kapi-*` presets only for what HTML cannot say: callout, badge, plan, compare, form, diff.
+- Use ASCII only for literal output, never instead of a diagram or interface.
+- Images: `kapi attach <page> <image...>`; several form a gallery.
 
 ## Constraints
 
-- Do not require Node, npm, npx, or browser packages.
-- Do not add scripts, iframes, or application JavaScript. Put CSS inside `kapi-render`.
+- No scripts, iframes, or application JavaScript. CSS only inside `kapi-render`.
+- No Node, npm, npx, or browser packages.
 - Do not detach a watcher that cannot wake the agent.
 
 ## Request
