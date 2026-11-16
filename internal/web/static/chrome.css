@@ -1070,6 +1070,86 @@ html { scroll-padding-top: var(--kapi-header-height); }
   overflow-wrap: anywhere;
 }
 
+#kapi-chrome .kapi-md {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+#kapi-chrome .kapi-md > :first-child { margin-top: 0; }
+#kapi-chrome .kapi-md > :last-child { margin-bottom: 0; }
+#kapi-chrome .kapi-md :is(p, ul, ol, blockquote, .kapi-table, .kapi-code) { margin: 0 0 0.6em; }
+#kapi-chrome .kapi-md :is(ul, ol) { padding-left: 1.35em; }
+#kapi-chrome .kapi-md li { margin: 0.15em 0; }
+#kapi-chrome .kapi-md li > :is(ul, ol) { margin: 0.15em 0 0; }
+#kapi-chrome .kapi-md li::marker { color: var(--kapi-muted); }
+
+#kapi-chrome .kapi-md :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.9em 0 0.3em;
+  font: 600 12px/1.4 var(--kapi-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-md a {
+  color: var(--kapi-blue-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#kapi-chrome .kapi-md :not(pre) > code {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-subtle);
+  font: 0.86em/1.4 var(--kapi-mono);
+  overflow-wrap: anywhere;
+}
+
+#kapi-chrome .kapi-md blockquote {
+  padding-left: 0.75em;
+  border-left: 3px solid var(--kapi-border-strong);
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-md hr {
+  margin: 0.8em 0;
+  border: 0;
+  border-top: 1px solid var(--kapi-border);
+}
+
+#kapi-chrome .kapi-md .kapi-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+#kapi-chrome .kapi-md table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#kapi-chrome .kapi-md :is(th, td) {
+  padding: 4px 8px;
+  border: 1px solid var(--kapi-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+#kapi-chrome .kapi-md th { background: var(--kapi-subtle); font-weight: 600; white-space: nowrap; cursor: default; }
+#kapi-chrome .kapi-md th::after { content: none; }
+
+#kapi-chrome .kapi-md .kapi-code {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12.5px;
+}
+
+#kapi-chrome .kapi-md .kapi-code pre { overflow-x: auto; }
+#kapi-chrome .kapi-md .kapi-checklist { padding-left: 0.2em; list-style: none; }
+#kapi-chrome .kapi-md .kapi-task input { margin: 0 0.4em 0 0; vertical-align: -1px; }
+
 #kapi-chrome .kapi-composer {
   display: flex;
   flex-direction: column;
@@ -1593,6 +1673,8 @@ html { scroll-padding-top: var(--kapi-header-height); }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+#kapi-chrome .kapi-pop-text.kapi-md { white-space: normal; overflow-wrap: break-word; }
 
 #kapi-chrome .kapi-pop-gone {
   margin: 0;

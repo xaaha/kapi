@@ -110,6 +110,13 @@
     return svg;
   }
 
+  function prose(tag, className, text, html) {
+    const el = h(tag, { class: html ? `${className} kapi-md` : className });
+    if (html) el.innerHTML = html;
+    else el.textContent = text;
+    return el;
+  }
+
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const MAX_IMAGES = 4;
   const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
@@ -1751,14 +1758,14 @@
     const re = Array.isArray(ev.re) ? ev.re : [];
     if (ev.kind === "note" && !re.length && ev.author === "human") {
       const n = { seq: ev.seq, num: notes.length + 1, target: ev.target || "", part: ev.part || "", quote: ev.quote || "", prefix: ev.prefix || "",
-        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false, files: ev.files || [] };
+        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, html: ev.html || "", time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false, files: ev.files || [] };
       notes.push(n);
       noteBySeq.set(ev.seq, n);
     } else if ((ev.kind === "note" || ev.kind === "message") && re.length) {
       for (const seq of re) {
         const n = noteBySeq.get(seq);
         if (!n) continue;
-        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time, files: ev.files || [] });
+        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, html: ev.html || "", time: ev.time, files: ev.files || [] });
         if (ev.kind === "note" && !noteBySeq.has(ev.seq)) noteBySeq.set(ev.seq, n);
         n.last = ev.author === "human" ? "waiting" : "answered";
       }
@@ -2099,10 +2106,10 @@
         ...(c.before ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Before" }), h("span", { class: "kapi-diff-old", text: clip(c.before, 400) }))] : []),
         ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
     }
-    const msg = (author, text, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
-      h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), h("span", { class: "kapi-pop-text", text }), ...thumbs(files));
-    kids.push(msg("human", n.text, n.files));
-    for (const r of n.replies) kids.push(msg(r.author, r.text, r.files));
+    const msg = (author, text, html, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
+      h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), prose(html ? "div" : "span", "kapi-pop-text", text, html), ...thumbs(files));
+    kids.push(msg("human", n.text, n.html, n.files));
+    for (const r of n.replies) kids.push(msg(r.author, r.text, r.html, r.files));
     if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
     const foot = h("div", { class: "kapi-pop-foot" }, h("span", { class: "kapi-pop-hint", text: matchMedia("(hover: hover)").matches ? "Move away to close" : "Tap outside to close" }));
     if (!n.resolved) {
@@ -2458,11 +2465,11 @@
     }
     trackNote(ev);
     if (ended && ev.author === "human" && ["message", "answer", "note"].includes(ev.kind)) log.append(h("li", { class: "kapi-again", "data-seq": ev.seq, text: `Session started again${clock(ev.time)}` }));
-    if (ev.kind === "message") addEntry(ev, h("div", {}, h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
+    if (ev.kind === "message") addEntry(ev, h("div", {}, prose("div", "kapi-msg-text", ev.text, ev.html), ...thumbs(ev.files)));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
     else if (ev.kind === "note") {
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
-        h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
+        prose("div", "kapi-msg-text", ev.text, ev.html), ...thumbs(ev.files)));
     }
     if (ev.kind === "end" && ev.text === "deleted" && new Date(ev.time) >= loadedAt && !deleteYes.disabled) return leaveDeleted();
     if (ev.kind === "end") {
