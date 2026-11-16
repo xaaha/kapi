@@ -1,9 +1,29 @@
 package render
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestAHugeMermaidFanOutShowsAsCodeInsteadOfDrawing(t *testing.T) {
+	var as, bs []string
+	for i := range 120 {
+		as = append(as, fmt.Sprintf("a%d", i))
+		bs = append(bs, fmt.Sprintf("b%d", i))
+	}
+	src := "<pre class=\"mermaid\">flowchart TD\n  " + strings.Join(as, "&") + " --> " + strings.Join(bs, "&") + "</pre>"
+	start := time.Now()
+	out := render(t, src)
+	if took := time.Since(start); took > 2*time.Second || strings.Contains(out, "<svg") || len(out) > 100_000 {
+		t.Fatalf("a 14,400 edge fan-out took %v and %d bytes; want a plain code block", took, len(out))
+	}
+	notes, err := Repairs([]byte(src))
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0], "too many nodes or edges") || len(notes[0]) > 200 {
+		t.Errorf("notes = %q, %v; want one saying the diagram has too many edges", notes, err)
+	}
+}
 
 func TestMermaidFlowchartsOfferTheFlip(t *testing.T) {
 	src := "graph LR\n  a[Web] --> b[(Orders)]"

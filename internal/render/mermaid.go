@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -24,6 +25,13 @@ var (
 	mermaidActor      = regexp.MustCompile(`^(participant|actor)\s+(.+?)(?:\s+as\s+(.+))?$`)
 	mermaidMessage    = regexp.MustCompile(`^(.+?)\s*(-->>|->>|--x|-x|--\)|-\)|-->|->)[+-]?\s*([^:]+?)\s*(?::(.*))?$`)
 )
+
+const (
+	mermaidMaxNodes = 100
+	mermaidMaxEdges = 200
+)
+
+var errMermaidTooBig = errors.New("has too many nodes or edges to draw")
 
 var mermaidStyling = set("classdef", "class", "style", "linkstyle", "click")
 
@@ -148,7 +156,9 @@ func parseMermaidFlow(lines []string, from int) (*graph, error) {
 			if stmt == "" || strings.HasPrefix(stmt, "%%") || mermaidStyling[strings.ToLower(strings.Fields(stmt)[0])] {
 				continue
 			}
-			if err := m.statement(stmt); err != nil {
+			if err := m.statement(stmt); errors.Is(err, errMermaidTooBig) {
+				return nil, err
+			} else if err != nil {
 				return nil, fmt.Errorf("line %d: %q is outside the Mermaid subset kapi draws (%w)", i+1, stmt, err)
 			}
 		}
@@ -178,6 +188,9 @@ func (m *mermaidGraph) statement(s string) error {
 		if err != nil {
 			return err
 		}
+		if len(m.g.edges)+len(from)*len(to) > mermaidMaxEdges {
+			return fmt.Errorf("%w, over %d edges", errMermaidTooBig, mermaidMaxEdges)
+		}
 		for _, f := range from {
 			for _, t := range to {
 				e.from, e.to = f, t
@@ -198,6 +211,9 @@ func (m *mermaidGraph) group(s string) ([]int, string, error) {
 			return nil, "", fmt.Errorf("expected a node id at %q", s)
 		}
 		label, open, rest := mermaidShape(s[len(id):])
+		if _, known := m.index[id]; !known && len(m.ids) == mermaidMaxNodes {
+			return nil, "", fmt.Errorf("%w, over %d nodes", errMermaidTooBig, mermaidMaxNodes)
+		}
 		out = append(out, m.node(id, label, open))
 		rest = strings.TrimSpace(mermaidClass.ReplaceAllString(rest, ""))
 		if !strings.HasPrefix(rest, "&") {
