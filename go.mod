@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/xaaha/cli v0.3.0
+	github.com/yuin/goldmark v1.7.13
 	golang.org/x/net v0.61.0
 	golang.org/x/sys v0.49.0
 )
