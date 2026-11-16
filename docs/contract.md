@@ -48,7 +48,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored. A body that starts with a Mermaid header is read as Mermaid instead, as below |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored. A body whose first line is a Mermaid `flowchart`, `graph` or `sequenceDiagram` header is read as Mermaid instead, as below; any other first line, even a node named `pie` or `journey`, is native syntax |
 | `<kapi-badge>` | optional `tone`: the shared `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default), common aliases such as `gray`, `violet` and `teal`, any other name (deterministically assigned a shared theme tone), or a hex colour; optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
 | `<kapi-kv>` | legacy wrapper; new pages should use `<dl>` with alternating `<dt>` and `<dd>` children | `<kapi-item key="...">` children, each prose |
 | `<kapi-details>` | legacy wrapper; new pages should use `<details><summary>…</summary>…</details>` | prose, hidden until the reader opens it; closed unless `open` is set |
@@ -63,7 +63,7 @@ derive the same roles with `color-mix()` against the active palette, so they
 adapt to light, dark and custom palettes.
 
 Mermaid is drawn by the renderer with the diagram styles, with no script. The
-subset is `flowchart` or `graph` with `TB`, `TD`, `BT`, `LR` or `RL`; nodes `a`,
+subset is `flowchart` or `graph` with `TB`, `TD`, `BT`, `LR` or `RL` in any case, after a space or tab; nodes `a`,
 `a[label]`, `a(label)`, `a{label}`, `a[(label)]` (a database) and the other
 bracket shapes; solid, dotted (`-.->`) and thick (`==>`) links, labelled with
 `|text|` or inline (`-- text`); chains and `a & b`; and `classDef`, `class`,
@@ -75,8 +75,9 @@ api, cron or file get that kind's icon. A flowchart in `<kapi-diagram>` keeps
 its header's direction unless `dir` is set; one in a plain `<pre>` takes its
 direction from the header alone. Both carry `data-kapi-dir`, so the reader can
 flip them. Anything
-else (`subgraph`, `Note`, `loop`, other diagram types) is shown as a plain code
-block.
+else (`subgraph`, `Note`, `loop`, other diagram types, or more than 100 nodes or
+200 edges) is shown as a code block, keeping its `mermaid` label, with a
+`repaired` note.
 
 Nothing a page holds renders an error box for the reader. Before the presets
 render, one repair pass runs over the parsed page: a list of small rules, each
@@ -91,7 +92,9 @@ unknown enum value (callout `kind`, `state`, diagram `type` and `dir`) uses a
 fixed alias, else the default; bad code `lines` number from 1. A `title` on a
 step, risk, question, task or callout is shown as a bold lead-in, and on an item
 or details it is the `key` or `summary` when that is missing; an option with no
-`value` uses its label. `kapi-note`, `kapi-warning` and the other callout kinds
+`value` uses its label. A form, choice or text field with no `name` is named
+after its `data-kapi-id` (or `form`, `choice`, `text` without one), and answers
+to a nameless form find it by that id. `kapi-note`, `kapi-warning` and the other callout kinds
 become that callout, `kapi-mermaid` and friends a diagram; other unknown
 `kapi-*` elements render their content. A code block, diff or diagram that
 still cannot render is shown as a plain `<pre>`. A repaired element keeps its
@@ -225,8 +228,10 @@ any other element; its summary is `checked` or `unchecked`. `orient`, sent as
 architecture `<kapi-diagram>`. On a plain `<pre>` Mermaid flowchart that the
 renderer draws, it rewrites only the direction word on the header line to `LR`
 or `TB`, adding it after `flowchart` or `graph` when the header has none, and
-leaves every other byte alone. A sequence diagram, Mermaid outside the drawn
-subset, any other element, or a `dir` other than `tb` or `lr` is refused with
+leaves every other byte alone. The header line must be plain text, with no
+entity on it and no carriage return, form feed or entity line break before it,
+so the bytes orient rewrites are the ones the renderer read. A sequence diagram,
+Mermaid outside the drawn subset, a header orient cannot place, any other element, or a `dir` other than `tb` or `lr` is refused with
 422. The browser shows a Flip
 action for diagrams that carry `data-kapi-dir`, except an archived one.
 Every applied op saves the previous source as `revs/<rev>.html` so `undo`

@@ -1734,7 +1734,11 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
 		}
 		if flowchart {
-			return orientMermaid(src, els, e, op.Dir), Summary{Text: text, IDs: one}, nil
+			out, ok := orientMermaid(src, els, e, op.Dir)
+			if !ok {
+				return nil, Summary{}, fmt.Errorf("orient can only rewrite a Mermaid header written as plain text, such as flowchart TD, and #%s has entities or unusual spacing before it", op.ID)
+			}
+			return out, Summary{Text: text, IDs: one}, nil
 		}
 		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
 	case "deleterow":

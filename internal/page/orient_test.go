@@ -54,7 +54,11 @@ const mermaidBlocks = "<pre class=\"mermaid\" data-kapi-id=\"mmmmmmmm\">flowchar
 	"<pre data-kapi-id=\"cccccccc\"><code class=\"language-mermaid\">%% keep &amp; this\ngraph;\n  a --> b</code></pre>\n" +
 	"<pre class=\"mermaid\" data-kapi-id=\"qqqqqqqq\">sequenceDiagram\n  a->>b: hi</pre>\n" +
 	"<pre class=\"mermaid\" data-kapi-id=\"uuuuuuuu\">flowchart TD\n  subgraph one\n  a --> b\n  end</pre>\n" +
-	"<pre data-kapi-id=\"oooooooo\">flowchart TD\n  a --> b</pre>\n"
+	"<pre data-kapi-id=\"oooooooo\">flowchart TD\n  a --> b</pre>\n" +
+	"<pre class=\"mermaid\" data-kapi-id=\"eeeeeeee\">flowchart&#32;TD\n  a --> b</pre>\n" +
+	"<pre class=\"mermaid\" data-kapi-id=\"ffffffff\">&#32;flowchart TD\n  a --> b</pre>\n" +
+	"<pre class=\"mermaid\" data-kapi-id=\"rrrrrrrr\">%% c\rgraph TD\n  a --> b</pre>\n" +
+	"<pre class=\"mermaid\" data-kapi-id=\"llllllll\">graph lr\n  a --> b</pre>\n"
 
 func TestOrientRewritesOnlyTheMermaidDirectionWord(t *testing.T) {
 	home, path := newPage(t, mermaidBlocks)
@@ -71,7 +75,11 @@ func TestOrientRewritesOnlyTheMermaidDirectionWord(t *testing.T) {
 	if got := onDisk(t, path); !strings.Contains(got, "flowchart TB\n  a[Web]") {
 		t.Errorf("flipping back should write TB:\n%s", got)
 	}
-	for range 3 {
+	mustApply(t, s, &Op{Kind: "orient", ID: "llllllll", Dir: "tb"})
+	if got := onDisk(t, path); !strings.Contains(got, "graph TB\n  a --> b") {
+		t.Errorf("a lowercase direction should be rewritten:\n%s", got)
+	}
+	for range 4 {
 		mustApply(t, s, &Op{Kind: "undo"})
 	}
 	if got := onDisk(t, path); got != mermaidBlocks {
@@ -82,7 +90,7 @@ func TestOrientRewritesOnlyTheMermaidDirectionWord(t *testing.T) {
 func TestOrientRefusesMermaidItCannotFlip(t *testing.T) {
 	home, path := newPage(t, mermaidBlocks)
 	s := open(t, home, path)
-	for _, id := range []string{"qqqqqqqq", "uuuuuuuu", "oooooooo"} {
+	for _, id := range []string{"qqqqqqqq", "uuuuuuuu", "oooooooo", "eeeeeeee", "ffffffff", "rrrrrrrr"} {
 		if _, _, err := s.Apply(1, &Op{Kind: "orient", ID: id, Dir: "lr"}); err == nil || errors.Is(err, ErrStale) {
 			t.Errorf("orient #%s: err = %v, want a refusal", id, err)
 		}

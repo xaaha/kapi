@@ -75,6 +75,9 @@ func canonicalNode(b *bytes.Buffer, n *html.Node) {
 
 func keptPresetAttrs(n *html.Node) []html.Attribute {
 	keep := presetSourceAttrs[n.Data]
+	if a, ok := elementAliases[n.Data]; ok {
+		keep = presetSourceAttrs[a.tag]
+	}
 	var attrs []html.Attribute
 	for _, a := range n.Attr {
 		if a.Namespace == "" && (keep[a.Key] || (isDataAttr(a.Key) && a.Key != "data-kapi-preset")) {

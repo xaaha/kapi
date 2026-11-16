@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"golang.org/x/net/html"
 )
 
 var mermaidHeaders = set("flowchart", "graph", "sequencediagram", "classdiagram", "classdiagram-v2", "statediagram", "statediagram-v2",
@@ -15,7 +17,7 @@ var mermaidHeaders = set("flowchart", "graph", "sequencediagram", "classdiagram"
 	"packet-beta", "kanban", "architecture-beta", "radar-beta")
 
 var (
-	mermaidFlowHeader = regexp.MustCompile(`^(?i:flowchart|graph)(?:\s+(TB|TD|BT|RL|LR))?\s*(?:;(.*))?$`)
+	mermaidFlowHeader = regexp.MustCompile(`(?i)^(flowchart|graph)(?:[ \t]+(TB|TD|BT|RL|LR)\b)?[ \t]*(?:;(.*))?$`)
 	mermaidID         = regexp.MustCompile(`^[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*`)
 	mermaidClass      = regexp.MustCompile(`^:::[\w-]+`)
 	mermaidTextLink   = regexp.MustCompile(`^(<)?(--|==|-\.)\s+(.*?)\s*(-{2,}>|={2,}>|\.-+>|-{3,}|={3,}|\.-+|-{2,}[ox]|={2,}[ox])`)
@@ -64,20 +66,36 @@ func mermaidSource(src string) bool {
 	return mermaidHeaders[strings.ToLower(words[0])] && !strings.Contains(head, "->")
 }
 
-var mermaidDirection = regexp.MustCompile(`^[ \t]*(?i:flowchart|graph)(?:[ \t]+(TB|TD|BT|RL|LR)\b)?`)
+func mermaidDrawn(src string) bool {
+	line := firstMermaidLine(strings.Split(src, "\n"))
+	if line < 0 {
+		return false
+	}
+	head := strings.TrimSpace(strings.Split(src, "\n")[line])
+	return mermaidFlowHeader.MatchString(head) || strings.EqualFold(strings.Fields(head)[0], "sequenceDiagram")
+}
 
 func MermaidDirection(src []byte) (start, end int, ok bool) {
 	at := 0
 	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
-		if t := bytes.TrimSpace(line); len(t) > 0 && !bytes.HasPrefix(t, []byte("%%")) {
-			m := mermaidDirection.FindSubmatchIndex(line)
+		body := bytes.TrimSuffix(bytes.TrimSuffix(line, []byte("\n")), []byte("\r"))
+		decoded := html.UnescapeString(string(body))
+		if strings.ContainsAny(decoded, "\n\r\f\v") {
+			return 0, 0, false
+		}
+		if t := strings.TrimSpace(decoded); t != "" && !strings.HasPrefix(t, "%%") {
+			if decoded != string(body) {
+				return 0, 0, false
+			}
+			indent := len(body) - len(bytes.TrimLeft(body, " \t"))
+			m := mermaidFlowHeader.FindSubmatchIndex(bytes.TrimRight(body[indent:], " \t"))
 			switch {
 			case m == nil:
 				return 0, 0, false
-			case m[2] >= 0:
-				return at + m[2], at + m[3], true
+			case m[4] >= 0:
+				return at + indent + m[4], at + indent + m[5], true
 			}
-			return at + m[1], at + m[1], true
+			return at + indent + m[3], at + indent + m[3], true
 		}
 		at += len(line)
 	}
@@ -107,14 +125,17 @@ func parseMermaid(src string) (kind, dir string, g *graph, err error) {
 	head := strings.TrimSpace(lines[h])
 	if m := mermaidFlowHeader.FindStringSubmatch(head); m != nil {
 		dir = "tb"
-		if d := strings.ToUpper(m[1]); d == "LR" || d == "RL" {
+		if d := strings.ToUpper(m[2]); d == "LR" || d == "RL" {
 			dir = "lr"
 		}
-		lines[h] = m[2]
+		lines[h] = m[3]
 		g, err = parseMermaidFlow(lines, h)
 		return "flow", dir, g, err
 	}
 	word := strings.Fields(head)[0]
+	if strings.EqualFold(word, "flowchart") || strings.EqualFold(word, "graph") {
+		return "", "", nil, fmt.Errorf("header %q needs TB, TD, BT, RL or LR after a space", head)
+	}
 	if !strings.EqualFold(word, "sequenceDiagram") {
 		return "", "", nil, fmt.Errorf("is a Mermaid %s diagram, which kapi does not draw; use flowchart or sequenceDiagram", word)
 	}

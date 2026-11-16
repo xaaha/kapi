@@ -127,16 +127,17 @@ var calloutKinds = map[string]calloutKind{
 	"success": {"Success", "green"},
 }
 
+var calloutAliases = map[string]string{
+	"": "note", "info": "note", "tip": "note", "hint": "note", "information": "note", "fyi": "note", "aside": "note",
+	"warn": "warning", "caution": "warning", "attention": "warning", "careful": "warning", "notice": "warning",
+	"alert": "danger", "error": "danger", "critical": "danger", "bad": "danger", "fail": "danger", "failure": "danger", "stop": "danger",
+	"ok": "success", "done": "success", "good": "success", "pass": "success", "passed": "success", "positive": "success",
+	"important": "key", "highlight": "key", "keypoint": "key", "key-point": "key",
+}
+
 func calloutAlias(kind string) string {
-	switch kind {
-	case "", "info":
-		return "note"
-	case "warn", "caution":
-		return "warning"
-	case "alert", "error", "critical":
-		return "danger"
-	case "ok", "done":
-		return "success"
+	if to, ok := calloutAliases[kind]; ok {
+		return to
 	}
 	return kind
 }

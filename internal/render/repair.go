@@ -14,7 +14,7 @@ type noter func(n *html.Node, format string, args ...any)
 
 type rule func(n *html.Node, note noter) *html.Node
 
-var rules = []rule{mermaidBlock, aliasElement, nestedForm, misplaced, plainInside, looseContent, titleLead, attrAliases, enumValues, unrenderable}
+var rules = []rule{aliasElement, nestedForm, misplaced, plainInside, looseContent, titleLead, attrAliases, enumValues, unrenderable}
 
 const repairPasses = 16
 
@@ -48,6 +48,13 @@ func repair(root *html.Node) []string {
 		}
 		if !changed && len(notes) == noted {
 			break
+		}
+	}
+	for _, n := range repairable(root) {
+		if src, ok := mermaidPre(n); ok && n.Data == "pre" {
+			if err := mermaidError(src); err != nil {
+				note(n, "Mermaid in a <pre> %v: showed it as a code block", err)
+			}
 		}
 	}
 	return notes
@@ -165,24 +172,6 @@ func unwrap(n *html.Node) *html.Node {
 	}
 	n.Parent.RemoveChild(n)
 	return nil
-}
-
-func mermaidBlock(n *html.Node, note noter) *html.Node {
-	if n.Data != "pre" {
-		return n
-	}
-	src, ok := mermaidPre(n)
-	if !ok {
-		return n
-	}
-	err := mermaidError(src)
-	if err == nil {
-		return n
-	}
-	note(n, "Mermaid in a <pre> %v: showed it as a plain code block", err)
-	pre := element("pre", atom.Pre, dataAttrs(n), textNode(src))
-	replaceNode(n, pre)
-	return pre
 }
 
 func mermaidPre(n *html.Node) (string, bool) {
@@ -500,6 +489,15 @@ func attrAliases(n *html.Node, note noter) *html.Node {
 		renameAttr(n, "title", "key", note)
 	case "kapi-details":
 		renameAttr(n, "title", "summary", note)
+	case "kapi-form", "kapi-choice", "kapi-text":
+		if attrVal(n, "name") == "" {
+			name := attrVal(n, "data-kapi-id")
+			if name == "" {
+				name = strings.TrimPrefix(n.Data, "kapi-")
+			}
+			note(n, "<%s> without a name: named it %q", n.Data, name)
+			setAttr(n, "name", name)
+		}
 	case "kapi-opt":
 		if label := nodeText(n); attrVal(n, "value") == "" && label != "" {
 			note(n, "<kapi-opt> without a value: used its label %q", label)
@@ -515,14 +513,6 @@ func renameAttr(n *html.Node, from, to string, note noter) {
 		setAttr(n, to, v)
 		removeAttr(n, from)
 	}
-}
-
-var calloutAliases = map[string]string{
-	"tip": "note", "hint": "note", "information": "note", "fyi": "note", "aside": "note",
-	"important": "key", "highlight": "key", "keypoint": "key", "key-point": "key",
-	"attention": "warning", "careful": "warning", "notice": "warning",
-	"bad": "danger", "fail": "danger", "failure": "danger", "stop": "danger",
-	"good": "success", "pass": "success", "passed": "success", "positive": "success",
 }
 
 var stateAliases = map[string]string{

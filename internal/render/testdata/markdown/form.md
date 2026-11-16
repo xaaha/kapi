@@ -14,13 +14,15 @@ Notes (*free text*)
 
 No options
 
-x
+- [ ] x
+
+<!-- -->
 
 - [ ] no value
 
-no name
+no name (*free text*)
 
-a
+a (*free text*)
 
 Orphan
 

@@ -4,10 +4,10 @@
   <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="areas" data-kapi-choice="multiple" data-kapi-id="f0000004"><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="areas" value="ui"><span>ui</span></label><label class="kapi-opt" data-kapi-preset="opt"><input type="checkbox" name="areas" value="api"><span>API</span></label></div></fieldset>
   <label class="kapi-text" data-kapi-preset="text" data-kapi-field="notes" data-kapi-id="f0000005"><span class="kapi-text-label" data-kapi-text="f0000005">Notes</span><textarea name="notes" rows="3"></textarea></label>
   <div data-kapi-id="f0000006">No options</div>
-  <div data-kapi-id="f0000007">x</div>
+  <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="f0000007" data-kapi-choice="single" data-kapi-id="f0000007"><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt"><input type="radio" name="f0000007" value="x"><span>x</span></label></div></fieldset>
   <fieldset class="kapi-choice" data-kapi-preset="choice" data-kapi-field="noval" data-kapi-choice="single"><div class="kapi-choice-opts"><label class="kapi-opt" data-kapi-preset="opt" data-kapi-id="f0000008"><input type="radio" name="noval" value="no value"><span data-kapi-text="f0000008">no value</span></label></div></fieldset>
-  <div data-kapi-id="f0000009">no name</div>
+  <label class="kapi-text" data-kapi-preset="text" data-kapi-field="f0000009" data-kapi-id="f0000009"><span class="kapi-text-label" data-kapi-text="f0000009">no name</span><textarea name="f0000009" rows="3"></textarea></label>
 <div class="kapi-form-actions"><button type="submit">Send answers</button></div></form>
-<div data-kapi-id="f0000010" data-kapi-text="f0000010">a</div>
+<form class="kapi-form" data-kapi-preset="form" name="f0000010" data-kapi-form="f0000010" data-kapi-id="f0000010"><label class="kapi-text" data-kapi-preset="text" data-kapi-field="a"><span class="kapi-text-label">a</span><textarea name="a" rows="3"></textarea></label><div class="kapi-form-actions"><button type="submit">Send answers</button></div></form>
 <div data-kapi-id="f0000011" data-kapi-text="f0000011">Orphan</div>
 <div data-kapi-id="f0000012" data-kapi-text="f0000012">Orphan</div>

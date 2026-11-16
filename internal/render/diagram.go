@@ -207,7 +207,7 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	}
 	src := trimBlankLines(rawText(n))
 	var mermaid *graph
-	if mermaidSource(src) {
+	if mermaidDrawn(src) {
 		var drawn string
 		var err error
 		if kind, drawn, mermaid, err = parseMermaid(src); err != nil {
