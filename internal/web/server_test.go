@@ -1119,6 +1119,32 @@ func TestEventsResumeAfterLastEventID(t *testing.T) {
 	}
 }
 
+func TestTheStreamSendsMessagesAndNotesFormattedAlongsideTheirText(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	s.post("/messages", `{"kind":"message","text":"Left:\n\n1. **review**\n2. <script>x</script>"}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	live := s.stream(ctx, "")
+	var first struct {
+		Text string `json:"text"`
+		HTML string `json:"html"`
+	}
+	if _, data := live.raw(); json.Unmarshal([]byte(data), &first) != nil || first.Text != "Left:\n\n1. **review**\n2. <script>x</script>" {
+		t.Fatalf("message event = %s", data)
+	}
+	if want := "<p>Left:</p>\n<ol>\n<li><strong>review</strong></li>\n<li>\n&lt;script&gt;x&lt;/script&gt;\n</li>\n</ol>"; first.HTML != want {
+		t.Errorf("html = %q, want %q", first.HTML, want)
+	}
+	for _, e := range []eventlog.Event{{Kind: "answer", Text: `{"a":1}`}, {Kind: "revision", Text: "edited in the file"}, {Kind: "message", Text: "  "}} {
+		if got := messageHTML(&e); got != "" {
+			t.Errorf("%s %q formatted as %q, want plain text only", e.Kind, e.Text, got)
+		}
+	}
+	if got := messageHTML(&eventlog.Event{Kind: eventlog.KindNote, Text: "*why*"}); got != "<p><em>why</em></p>" {
+		t.Errorf("note html = %q", got)
+	}
+}
+
 func TestPollStreamsAFileEditAsARevision(t *testing.T) {
 	s := newSite(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n")
 	ctx, cancel := context.WithCancel(context.Background())

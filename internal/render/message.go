@@ -37,7 +37,11 @@ func (rawAsText) RegisterFuncs(r renderer.NodeRendererFuncRegisterer) {
 			return ast.WalkContinue, nil
 		}
 		block := n.(*ast.HTMLBlock)
-		_, _ = w.WriteString("<p>")
+		list, inList := n.Parent().Parent().(*ast.List)
+		paragraph := !inList || !list.IsTight
+		if paragraph {
+			_, _ = w.WriteString("<p>")
+		}
 		lines := block.Lines()
 		for i := range lines.Len() {
 			line := lines.At(i)
@@ -49,7 +53,10 @@ func (rawAsText) RegisterFuncs(r renderer.NodeRendererFuncRegisterer) {
 		if block.HasClosure() {
 			_, _ = w.Write(util.EscapeHTML(bytes.TrimRight(block.ClosureLine.Value(src), "\n")))
 		}
-		_, _ = w.WriteString("</p>\n")
+		if paragraph {
+			_, _ = w.WriteString("</p>")
+		}
+		_ = w.WriteByte('\n')
 		return ast.WalkSkipChildren, nil
 	})
 }
