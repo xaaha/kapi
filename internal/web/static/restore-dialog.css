@@ -1,0 +1,80 @@
+.kapi-dialog.kapi-restore-picker {
+  width: min(460px, calc(100vw - 32px));
+  height: auto;
+}
+
+.kapi-restore-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 24px 20px;
+}
+
+.kapi-restore-body[aria-busy="true"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.kapi-restore-body p {
+  margin: 0;
+}
+
+.kapi-restore-question {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.kapi-restore-where,
+.kapi-restore-done p {
+  color: var(--kapi-muted);
+  font-size: 13px;
+}
+
+.kapi-restore-body code {
+  font: 12.5px var(--kapi-mono);
+  overflow-wrap: anywhere;
+}
+
+.kapi-restore-error {
+  color: var(--kapi-red-text);
+  font-size: 13px;
+}
+
+.kapi-restore-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--kapi-green-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-green-fill);
+}
+
+.kapi-dialog .kapi-restore-done svg {
+  width: 22px;
+  height: 22px;
+  color: var(--kapi-green-text);
+}
+
+.kapi-restore-done strong {
+  display: block;
+  color: var(--kapi-green-text);
+  font-size: 15px;
+}
+
+.kapi-restore-picker .kapi-dialog-foot {
+  justify-content: flex-end;
+}
+
+.kapi-dialog-foot .kapi-secondary {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-surface);
+}
+
+.kapi-dialog-foot .kapi-secondary:hover {
+  background: var(--kapi-subtle);
+}
