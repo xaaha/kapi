@@ -980,7 +980,7 @@ test("deleting a note whose images another note shows keeps the images folder an
 });
 
 test("Flip on a plain Mermaid flowchart rewrites its header direction and flips back", async () => {
-  const project = join(dir, "gamma");
+  const project = join(dir, "mermaidflip");
   mkdirSync(project);
   const file = join(project, "flow.html");
   writeFileSync(file, `<pre class="mermaid">flowchart TD\n  a[Web] --> b[(Orders)]\n</pre>\n`);
