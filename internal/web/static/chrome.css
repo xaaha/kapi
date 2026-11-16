@@ -1145,6 +1145,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   overflow-wrap: break-word;
 }
 
+#kapi-chrome .kapi-md img { max-width: 100%; height: auto; }
 #kapi-chrome .kapi-md > :first-child { margin-top: 0; }
 #kapi-chrome .kapi-md > :last-child { margin-bottom: 0; }
 #kapi-chrome .kapi-md :is(p, ul, ol, blockquote, .kapi-table, .kapi-code) { margin: 0 0 0.6em; }
@@ -1710,7 +1711,6 @@ html { scroll-padding-top: var(--kapi-header-height); }
   align-items: baseline;
 }
 
-#kapi-chrome .kapi-diff-k,
 #kapi-chrome .kapi-pop-row {
   display: flex;
   align-items: center;
@@ -1755,6 +1755,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   #kapi-chrome .kapi-msg-copy { opacity: 1; }
 }
 
+#kapi-chrome .kapi-diff-k,
 #kapi-chrome .kapi-pop-who {
   color: var(--kapi-muted);
   font-size: 11px;
