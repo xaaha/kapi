@@ -300,7 +300,6 @@
     root.toggleAttribute("data-panel-collapsed", collapsed);
     root.toggleAttribute("data-panel-expanded", expanded);
     document.documentElement.toggleAttribute("data-kapi-panel-collapsed", collapsed);
-    document.documentElement.toggleAttribute("data-kapi-chat-expanded", expanded);
     main.inert = expanded;
     expandPanelButton.setAttribute("aria-pressed", String(expanded));
     expandPanelButton.setAttribute("aria-label", expanded ? "Back to page" : "Expand chat");
@@ -3341,7 +3340,7 @@
       }
     }
     if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
-    if (SHORTCUTS.is("dismiss", e) && root.hasAttribute("data-panel-expanded") && !e.defaultPrevented && !asking && !pop && !sheetOpen) {
+    if (SHORTCUTS.is("dismiss", e) && root.hasAttribute("data-panel-expanded") && !e.defaultPrevented && !e.isComposing && !asking && !pop && !sheetOpen) {
       e.preventDefault();
       return setPanelExpanded(false);
     }
