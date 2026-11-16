@@ -3732,7 +3732,7 @@ test("#39 an agent edit marks its note changed with Before and Now, and Resolve 
   assert.match(pop, /Before\s+… the new cluster in two steps\./i);
   assert.match(pop, /Now\s+… the new cluster in three careful steps\./i);
   assert.match(pop, /agent edited/);
-  assert.deepEqual(await page.eval(`(() => { const s = getComputedStyle(document.querySelector(".kapi-note-pop .kapi-diff-k")); return [s.display, s.textTransform, s.fontSize]; })()`), ["inline", "uppercase", "11px"]);
+  assert.deepEqual(await page.eval(`(() => { const s = getComputedStyle(document.querySelector(".kapi-note-pop .kapi-diff-k")); return [s.textTransform, s.fontSize, s.fontWeight]; })()`), ["uppercase", "11px", "600"]);
   await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Resolve").click()`);
   await until(() => requests("POST", "/resolve").length === 1);
   assert.deepEqual(requests("POST", "/resolve")[0].body, { note: 1 });
