@@ -1,0 +1,48 @@
+.kapi-frame-scrim {
+  position: fixed;
+  z-index: 2147483006;
+  inset: 0;
+  background: color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.kapi-frame {
+  position: fixed;
+  z-index: 2147483007;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  box-shadow: 0 26px 80px color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
+  font: 14px/1.45 var(--kapi-font);
+  transform: translate(-50%, -50%);
+}
+
+.kapi-frame *,
+.kapi-frame *::before,
+.kapi-frame *::after {
+  box-sizing: border-box;
+}
+
+.kapi-frame[hidden],
+.kapi-frame-scrim[hidden],
+.kapi-frame [hidden] {
+  display: none;
+}
+
+.kapi-frame button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.kapi-frame :focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 2px;
+}

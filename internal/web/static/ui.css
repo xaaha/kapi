@@ -1,52 +1,8 @@
-.kapi-dialog-scrim {
-  position: fixed;
-  z-index: 2147483006;
-  inset: 0;
-  background: color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
-  backdrop-filter: blur(2px);
-}
+@import url("./frame.css");
 
 .kapi-dialog {
-  position: fixed;
-  z-index: 2147483007;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
   width: min(920px, calc(100vw - 32px));
   height: min(680px, calc(100dvh - 48px));
-  overflow: hidden;
-  border: 1px solid var(--kapi-border-strong);
-  border-radius: var(--kapi-radius-lg);
-  background: var(--kapi-surface);
-  color: var(--kapi-fg);
-  box-shadow: 0 26px 80px color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
-  font: 14px/1.45 var(--kapi-font);
-  transform: translate(-50%, -50%);
-}
-
-.kapi-dialog *,
-.kapi-dialog *::before,
-.kapi-dialog *::after {
-  box-sizing: border-box;
-}
-
-.kapi-dialog[hidden],
-.kapi-dialog-scrim[hidden],
-.kapi-dialog [hidden] {
-  display: none;
-}
-
-.kapi-dialog button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-.kapi-dialog :focus-visible {
-  outline: 2px solid var(--kapi-blue-text);
-  outline-offset: 2px;
 }
 
 .kapi-dialog svg {

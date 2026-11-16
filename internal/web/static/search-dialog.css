@@ -1,33 +1,9 @@
-.kapi-search-scrim {
-  position: fixed;
-  z-index: 2147483006;
-  inset: 0;
-  background: color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
-  backdrop-filter: blur(2px);
-}
+@import url("./frame.css");
+
 .kapi-search-dialog {
-  position: fixed;
-  z-index: 2147483007;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
   width: min(640px, calc(100vw - 32px));
   max-height: min(760px, calc(100dvh - 48px));
-  overflow: hidden;
-  border: 1px solid var(--kapi-border-strong);
-  border-radius: var(--kapi-radius-lg);
-  background: var(--kapi-surface);
-  color: var(--kapi-fg);
-  box-shadow: 0 26px 80px color-mix(in srgb, var(--kapi-shadow-ink) 28%, transparent);
-  font: 14px/1.45 var(--kapi-font);
-  transform: translate(-50%, -50%);
 }
-.kapi-search-dialog *, .kapi-search-dialog { box-sizing: border-box; }
-.kapi-search-dialog[hidden], .kapi-search-scrim[hidden], .kapi-search-dialog [hidden] { display: none; }
-.kapi-search-dialog button { font: inherit; cursor: pointer; color: inherit; }
-.kapi-search-dialog :focus-visible { outline: 2px solid var(--kapi-blue-text); outline-offset: 2px; }
 .kapi-search-input-row { display: flex; flex: none; align-items: center; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--kapi-border); }
 .kapi-search-input-row > svg { width: 22px; height: 22px; flex: none; fill: var(--kapi-muted); }
 .kapi-search-input-row .kapi-search-input { width: 100%; min-width: 0; height: 30px; padding: 0; border: 0; outline: none; background: transparent; color: var(--kapi-fg); font: 17px var(--kapi-font); }

@@ -107,8 +107,8 @@ export function choiceGallery({ label, groups, items, text, card, isSelected, on
 export function dialog({ title, description, actions = [], body, footer = [], initialFocus, onOpen, onClose }) {
   const titleID = `kapi-dialog-${Math.random().toString(36).slice(2)}`;
   const close = h("button", { type: "button", class: "kapi-dialog-close", "aria-label": "Close" }, icon("x"));
-  const scrim = h("div", { class: "kapi-modal-scrim kapi-dialog-scrim", hidden: "" });
-  const el = h("div", { class: "kapi-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": titleID, tabindex: "-1", hidden: "" },
+  const scrim = h("div", { class: "kapi-modal-scrim kapi-frame-scrim kapi-dialog-scrim", hidden: "" });
+  const el = h("div", { class: "kapi-frame kapi-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": titleID, tabindex: "-1", hidden: "" },
     h("header", { class: "kapi-dialog-head" },
       h("div", { class: "kapi-dialog-titles" }, h("h2", { id: titleID, text: title }), ...(description ? [h("p", { text: description })] : [])),
       ...actions, close),
