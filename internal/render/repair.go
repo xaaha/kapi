@@ -352,8 +352,9 @@ func looseContent(n *html.Node, note noter) *html.Node {
 		for _, c := range content(n) {
 			if isElement(c, "li") {
 				note(c, "<li> inside <kapi-checklist>: rendered it as a <kapi-task>")
+				box := nativeTaskBox(c)
 				c.Data, c.DataAtom = "kapi-task", 0
-				if box := nativeTaskBox(c); box != nil {
+				if box != nil {
 					if _, checked := attr(box, "checked"); checked {
 						setAttr(c, "done", "")
 					}
