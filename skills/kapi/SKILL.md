@@ -17,6 +17,7 @@ metadata:
 - Write the fact first, with numbers. Say each thing once.
 - Use `kapi wait <page>` when its exit wakes the harness; restart it after each event. Use `kapi watch <page>` only when every line is delivered.
 - Acknowledge events with `say --seen`, `say --reply`, `seen`, or `pending`.
+- Chat takes Markdown: lists, `code`, short paragraphs.
 - A `repaired` event means kapi fixed your markup. Write it the fixed way next time.
 - Stop waiting or watching when the session ends.
 
@@ -29,7 +30,7 @@ Write ordinary HTML; kapi styles it:
 - Use `kapi-diagram` for architecture, or Mermaid `flowchart` and `sequenceDiagram` in `<pre class="mermaid">` for flows and sequences.
 - Use `kapi-render` for mockups, dashboards and charts.
 - Use other `kapi-*` presets only for what HTML cannot say: callout, badge, plan, compare, form, diff.
-- Use ASCII only for literal output, never instead of a diagram or interface.
+- ASCII only for literal output, never instead of a diagram or interface.
 - Images: `kapi attach <page> <image...>`; several form a gallery.
 
 ## Constraints
