@@ -111,7 +111,8 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Short: "Stream a page's events, one line each",
 		Long: "Stream every unseen event on a page, one line each, and keep streaming. Reconnects if the daemon restarts.\n" +
 			"A printed line shows as Queued on the page until you run kapi say --seen or kapi seen with its number, so a\n" +
-			"restarted watch prints every unseen event again. Prefer kapi wait where lines can be delayed or dropped.",
+			"restarted watch prints every unseen event again. Prefer kapi wait where lines can be delayed or dropped.\n" +
+			strings.TrimSpace(restoreHelp),
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -123,6 +124,9 @@ func watchCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 				return err
 			}
 			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
+			if err := recoverMissing(c, page); err != nil {
 				return err
 			}
 			return watch(c, page, *reader, out, sleep)
@@ -160,7 +164,8 @@ func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 		Short: "Wait for a page's next event, print every unseen one, and exit",
 		Long: "Block until the page has an event you have not been handed yet, print every unseen event, one line each,\n" +
 			"and exit. Run it as a background command whose exit wakes you, and start it again each time it exits.\n" +
-			"Printed events show as Queued on the page until you run kapi say --seen or kapi seen with its number.",
+			"Printed events show as Queued on the page until you run kapi say --seen or kapi seen with its number.\n" +
+			strings.TrimSpace(restoreHelp),
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -172,6 +177,9 @@ func waitCmd(c api, out io.Writer, sleep func(time.Duration)) *cli.Command {
 				return err
 			}
 			if err := eventlog.CheckReader(*reader); err != nil {
+				return err
+			}
+			if err := recoverMissing(c, page); err != nil {
 				return err
 			}
 			for {
@@ -243,6 +251,8 @@ func parseSeq(s string) (uint64, error) {
 	return n, nil
 }
 
+const restoreHelp = " If the page's file is gone, kapi first restores the newest version it kept and says which."
+
 func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	on := fs.String("on", "", "Element id the message is about")
@@ -257,7 +267,7 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 	return &cli.Command{
 		Name:       name,
 		Short:      short,
-		Long:       short + ". Prints the event number. Flags go before the page; every word after it is message text, and a word such as --on that names one of its flags is refused.",
+		Long:       short + ". Prints the event number. Flags go before the page; every word after it is message text, and a word such as --on that names one of its flags is refused." + restoreHelp,
 		Flags:      fs,
 		FlagsFirst: true,
 		Args:       []cli.ArgDef{pageArg, {Name: "text", Required: true, Desc: "Message text; several words are joined"}},
@@ -285,6 +295,9 @@ func messageCmd(c api, out io.Writer, name, author, short string) *cli.Command {
 				if seq, err = parseSeq(*seen); err != nil {
 					return err
 				}
+			}
+			if err := recoverMissing(c, page); err != nil {
+				return err
 			}
 			var re []uint64
 			if *replyTo != "" {
@@ -689,7 +702,7 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 	return &cli.Command{
 		Name:  "open",
 		Short: "Open a page in the browser",
-		Long:  "Print the page's local URL and open it in the default browser, unless KAPI_NO_BROWSER is set or a kapi tab is already open; then the page shows up in that tab's sidebar. The URL holds a token, so treat it like a password.",
+		Long:  "Print the page's local URL and open it in the default browser, unless KAPI_NO_BROWSER is set or a kapi tab is already open; then the page shows up in that tab's sidebar. The URL holds a token, so treat it like a password." + restoreHelp,
 		Flags: fs,
 		Args:  []cli.ArgDef{pageArg},
 		Examples: []cli.Example{
@@ -709,6 +722,9 @@ func newOpenCmd(c api, out io.Writer) *cli.Command {
 func openPage(c api, out io.Writer, page string, printOnly bool) error {
 	wd, err := os.Getwd()
 	if err != nil {
+		return err
+	}
+	if err := recoverMissing(c, page); err != nil {
 		return err
 	}
 	resp, err := c.Do(&daemon.Request{Op: "open", Page: page, Dir: wd})
@@ -1209,6 +1225,20 @@ func hookCommand() (string, error) {
 		}
 	}
 	return resolvedExe, nil
+}
+
+func recoverMissing(c api, page string) error {
+	if _, err := os.Lstat(page); !errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	resp, err := c.Do(&daemon.Request{Op: "recover", Page: page})
+	if err != nil {
+		return err
+	}
+	if resp.Notice != "" {
+		fmt.Fprintln(os.Stderr, "kapi: "+resp.Notice)
+	}
+	return nil
 }
 
 func pagePath(args []string, want int, command string) (string, error) {

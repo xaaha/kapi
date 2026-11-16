@@ -27,6 +27,9 @@ type fakeAPI struct {
 }
 
 func (f *fakeAPI) Do(req *daemon.Request) (daemon.Response, error) {
+	if req.Op == "recover" {
+		return daemon.Response{}, nil
+	}
 	f.requests = append(f.requests, *req)
 	if len(f.responses) > 0 {
 		resp := f.responses[0]

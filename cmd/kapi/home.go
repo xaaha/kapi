@@ -60,18 +60,19 @@ type listedPage struct {
 	Touched    time.Time `json:"touched"`
 	Saved      bool      `json:"saved"`
 	Archived   bool      `json:"archived"`
+	Missing    bool      `json:"missing"`
 	ArchivedAt time.Time `json:"archivedAt,omitzero"`
 	DeletesAt  time.Time `json:"deletesAt,omitzero"`
 }
 
 func newLsCmd(c api, out io.Writer) *cli.Command {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "Print a JSON array with id, title, path, state, the viewed and touched times in UTC, saved, archived, and for an archived page archivedAt and deletesAt")
+	asJSON := fs.Bool("json", false, "Print a JSON array with id, title, path, state, the viewed and touched times in UTC, saved, archived, missing, and for an archived page archivedAt and deletesAt")
 	all := fs.Bool("all", false, "Include archived pages")
 	return &cli.Command{
 		Name:  "ls",
 		Short: "List pages, most recently viewed first",
-		Long:  "List every page kapi knows about whose file still exists and that is not archived, most recently viewed in a browser first, then most recently changed. --all adds archived pages. Starts the daemon if it is not running.",
+		Long:  "List every page kapi knows about that is not archived, most recently viewed in a browser first, then most recently changed. A page whose file is gone is marked missing; kapi open, say, wait or watch on it restores the newest version kapi kept. --all adds archived pages. Starts the daemon if it is not running.",
 		Flags: fs,
 		Examples: []cli.Example{
 			{Command: "kapi ls", Description: "Title, state, when you last viewed it, and path"},
@@ -95,7 +96,7 @@ func newLsCmd(c api, out io.Writer) *cli.Command {
 				for i := range index {
 					p := &index[i]
 					pages = append(pages, listedPage{ID: p.ID, Title: p.Title, Path: p.Path, State: p.State, Viewed: p.Viewed.UTC(), Touched: p.Touched.UTC(),
-						Saved: p.Saved, Archived: !p.ArchivedAt.IsZero(), ArchivedAt: p.ArchivedAt.UTC(), DeletesAt: p.DeletesAt.UTC()})
+						Saved: p.Saved, Archived: !p.ArchivedAt.IsZero(), Missing: p.Missing, ArchivedAt: p.ArchivedAt.UTC(), DeletesAt: p.DeletesAt.UTC()})
 				}
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
@@ -117,6 +118,9 @@ func newLsCmd(c api, out io.Writer) *cli.Command {
 				state := p.State
 				if !p.ArchivedAt.IsZero() {
 					state += ", archived"
+				}
+				if p.Missing {
+					state += ", missing"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", oneLine(p.Title), state, ago(p.Viewed, at), oneLine(p.Path))
 			}

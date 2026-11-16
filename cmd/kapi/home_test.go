@@ -201,3 +201,27 @@ func TestLsLeavesOutArchivedPagesUnlessAll(t *testing.T) {
 		t.Errorf("kapi ls with only archived pages printed %q, %v", out, err)
 	}
 }
+
+func TestLsMarksPagesWhoseFileIsMissing(t *testing.T) {
+	at := fixNow(t)
+	pages := listed(at)
+	pages[0].Missing = true
+	out, err := run(t, &fakeAPI{resp: daemon.Response{Index: slices.Clone(pages)}}, "ls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := strings.Split(out, "\n")[1]; !strings.Contains(line, ", missing") || !strings.Contains(line, pages[0].Path) {
+		t.Errorf("kapi ls printed:\n%s\nwant the first page marked missing", out)
+	}
+	var got []map[string]any
+	out, err = run(t, &fakeAPI{resp: daemon.Response{Index: slices.Clone(pages)}}, "ls", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got[0]["missing"] != true || got[1]["missing"] != false {
+		t.Errorf("missing flags as JSON: %v", got)
+	}
+}
