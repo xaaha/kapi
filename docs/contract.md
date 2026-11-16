@@ -601,11 +601,15 @@ again rather than lost.
 
 Each line of the event log is one SSE message with `id: <seq>`. The browser
 reconnects with `Last-Event-ID` and gets everything after it. Event `data` is
-the `eventlog.Event` JSON. Kinds the browser cares about:
+the `eventlog.Event` JSON. A `message` or `note` with text also carries `html`:
+its `text` read as Markdown (GitHub tables, task lists, strikethrough and
+links), raw HTML shown as typed, and the result cleaned the way page HTML is.
+The log, `kapi wait`, `kapi watch` and exports keep only the plain `text`.
+Kinds the browser cares about:
 
 | `kind` | Meaning | Browser does |
 |---|---|---|
-| `message` | chat message from `human` or an agent | append to the chat panel |
+| `message` | chat message from `human` or an agent | append to the chat panel, formatted from `html` when present |
 | `note` | a human note on part of the page: `target` lists the blocks, `part` names a cell, item or step, `quote` is the selected text and `prefix` and `suffix` the text around it, `rev` the page revision it was written on; with `re`, a reply to those notes | append to the chat panel with its quote, and pin it on the page |
 | `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
