@@ -117,6 +117,21 @@
     return el;
   }
 
+  function copyMessage(text) {
+    const button = h("button", { type: "button", class: "kapi-msg-copy", "aria-label": "Copy message", "data-tip": "Copy" }, icon("copy"));
+    const show = (tip, copied) => {
+      button.dataset.tip = tip;
+      button.toggleAttribute("data-kapi-copied", copied);
+      button.replaceChildren(icon(copied ? "checkCircle" : "copy"));
+    };
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(text).then(() => show("Copied", true), () => show("Copy failed", false));
+      setTimeout(() => show("Copy", false), 1200);
+    });
+    return button;
+  }
+
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const MAX_IMAGES = 4;
   const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
@@ -2131,7 +2146,7 @@
         ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
     }
     const msg = (author, text, html, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
-      h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), prose(html ? "div" : "span", "kapi-pop-text", text, html), ...thumbs(files));
+      h("div", { class: "kapi-pop-row" }, h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), ...(text ? [copyMessage(text)] : [])), prose(html ? "div" : "span", "kapi-pop-text", text, html), ...thumbs(files));
     kids.push(msg("human", n.text, n.html, n.files));
     for (const r of n.replies) kids.push(msg(r.author, r.text, r.html, r.files));
     if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
@@ -2417,6 +2432,7 @@
       const where = ev.part ? (kind ? `${kind}: ${ev.part}` : ev.part) : describe(first);
       meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": first, title: `#${ev.target}`, text: where }));
     }
+    if (ev.text && (ev.kind === "message" || ev.kind === "note")) meta.append(copyMessage(ev.text));
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
     empty.hidden = true;
     if (near || human) goToLatest();

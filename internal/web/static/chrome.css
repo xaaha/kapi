@@ -272,7 +272,8 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome > .kapi-bar button[data-tip]:is(:hover, :focus-visible)::after,
-#kapi-chrome .kapi-copy-code:is(:hover, :focus-visible, [data-kapi-copied])::after {
+#kapi-chrome .kapi-copy-code:is(:hover, :focus-visible, [data-kapi-copied])::after,
+#kapi-chrome .kapi-msg-copy:is(:hover, :focus-visible, [data-kapi-copied])::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 6px);
@@ -1710,6 +1711,50 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome .kapi-diff-k,
+#kapi-chrome .kapi-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#kapi-chrome .kapi-msg-copy {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--kapi-radius);
+  background: transparent;
+  color: var(--kapi-muted);
+  cursor: pointer;
+  opacity: 0;
+  align-self: center;
+}
+
+#kapi-chrome .kapi-msg-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+#kapi-chrome :is(.kapi-msg, .kapi-pop-msg):is(:hover, :focus-within) .kapi-msg-copy,
+#kapi-chrome .kapi-msg-copy[data-kapi-copied] {
+  opacity: 1;
+}
+
+#kapi-chrome .kapi-msg-copy:is(:hover, :focus-visible) {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+#kapi-chrome .kapi-msg-copy[data-kapi-copied] {
+  color: var(--kapi-green-text);
+}
+
+@media (hover: none) {
+  #kapi-chrome .kapi-msg-copy { opacity: 1; }
+}
+
 #kapi-chrome .kapi-pop-who {
   color: var(--kapi-muted);
   font-size: 11px;

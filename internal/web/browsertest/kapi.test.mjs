@@ -3640,6 +3640,36 @@ test("#39 note pins still open while a block is being edited, and clicking one s
   assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, / kept$/);
 });
 
+test("note threads show replies formatted the same way as chat messages", async () => {
+  server.push(sessionNote);
+  server.push({ author: "agent", kind: "message", re: [1], text: "- `model.ts`\n- by hand", html: "<ul>\n<li><code>model.ts</code></li>\n<li>by hand</li>\n</ul>\n" });
+  await until(async () => (await pinStates()) === "1:answered");
+  await hoverPin(1);
+  const shown = await page.eval(`(() => {
+    const pop = document.querySelector('.kapi-note-pop .kapi-pop-msg[data-author="agent"] .kapi-pop-text');
+    const chat = [...document.querySelectorAll(".kapi-msg-text.kapi-md")].at(-1);
+    const chip = (root) => { const s = getComputedStyle(root.querySelector("code")); return [s.fontFamily, s.borderTopStyle, s.backgroundColor]; };
+    return { md: pop.classList.contains("kapi-md"), items: [...pop.querySelectorAll("li")].map((li) => li.textContent), same: JSON.stringify(chip(pop)) === JSON.stringify(chip(chat)) };
+  })()`);
+  assert.deepEqual(shown, { md: true, items: ["model.ts", "by hand"], same: true });
+});
+
+test("every chat message and note thread message has a copy button that copies its Markdown", async () => {
+  if (await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await click(".kapi-chat-button");
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  server.push(sessionNote);
+  server.push({ author: "agent", kind: "message", re: [1], text: "- `model.ts`\n- by hand", html: "<ul>\n<li><code>model.ts</code></li>\n<li>by hand</li>\n</ul>\n" });
+  await until(async () => (await pinStates()) === "1:answered");
+  await page.eval(`[...document.querySelectorAll(".kapi-msg .kapi-msg-copy")].at(-1).click()`);
+  await page.waitFor(`window.copied.length === 1`);
+  assert.equal(await page.eval(`[...document.querySelectorAll(".kapi-msg .kapi-msg-copy")].at(-1).dataset.tip`), "Copied");
+  await hoverPin(1);
+  await page.eval(`document.querySelector('.kapi-note-pop .kapi-pop-msg[data-author="human"] .kapi-msg-copy').click()`);
+  await page.waitFor(`window.copied.length === 2`);
+  assert.deepEqual(await page.eval(`window.copied`), ["- `model.ts`\n- by hand", "why this store?"]);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true, "copying keeps the thread open");
+});
+
 test("#39 note threads use the chat colours to distinguish the human and agent", async () => {
   server.push(sessionNote);
   server.push({ author: "agent", kind: "message", re: [1], text: "because it is shared" });
@@ -3715,7 +3745,7 @@ test("a note can be deleted from its popover", async () => {
   server.push(sessionNote);
   await until(async () => (await pinStates()) === "1:waiting");
   await hoverPin(1);
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].map((b) => b.textContent)`), ["Reply", "Resolve", "Delete"]);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-pop .kapi-pop-foot button")].map((b) => b.textContent)`), ["Reply", "Resolve", "Delete"]);
   assert.equal(await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").classList.contains("kapi-danger")`), true);
   await page.eval(`window.confirm = () => true; [...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").click()`);
   await until(() => requests("POST", "/delete-notes").length === 1);
