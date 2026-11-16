@@ -122,7 +122,7 @@ func TestPresetsNestedInProse(t *testing.T) {
 		for presetName, preset := range nestedPresets {
 			name := presetName + " in " + wrapName
 			src := strings.Replace(wrap, "%s", preset, 1)
-			out := render(t, src)
+			out := strict(t, src)
 			assertParseStable(t, name, out)
 			body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
 			nodes, err := html.ParseFragment(strings.NewReader(out), body)
@@ -145,7 +145,7 @@ func TestPresetsNestedInProse(t *testing.T) {
 				}
 			}
 			block, err := Block([]byte(src), "presaaaa")
-			if err != nil || !strings.Contains(out, string(block)) {
+			if err != nil || !strings.Contains(render(t, src), string(block)) {
 				t.Errorf("%s: Block = %q, %v; not a fragment of Render", name, block, err)
 			}
 		}
@@ -153,7 +153,7 @@ func TestPresetsNestedInProse(t *testing.T) {
 }
 
 func TestFormInsideFormIsAnError(t *testing.T) {
-	out := render(t, `<kapi-form name="outer"><kapi-text name="a">a</kapi-text><div><kapi-form name="inner" data-kapi-id="innerfrm"><kapi-text name="b">b</kapi-text></kapi-form></div></kapi-form>`)
+	out := strict(t, `<kapi-form name="outer"><kapi-text name="a">a</kapi-text><div><kapi-form name="inner" data-kapi-id="innerfrm"><kapi-text name="b">b</kapi-text></kapi-form></div></kapi-form>`)
 	assertParseStable(t, "nested form", out)
 	if strings.Count(out, "<form") != 1 || !strings.Contains(out, `kapi-error" data-kapi-preset="form"`) {
 		t.Errorf("nested kapi-form should render as an error box:\n%s", out)

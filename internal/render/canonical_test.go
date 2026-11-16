@@ -104,7 +104,7 @@ func renderedPreset(n *html.Node) bool {
 }
 
 func sourcePreset(n *html.Node) bool {
-	return n.Data == "table" || n.Data == "details" || n.Data == "pre" || n.Data == "dl" || n.Data == "figure" || nativeChecklist(n) || strings.HasPrefix(n.Data, "kapi-")
+	return n.Data == "table" || strings.HasPrefix(n.Data, "kapi-") || renderHTMLComponent(&bytes.Buffer{}, n)
 }
 
 func checkCanonical(t *testing.T, name, src string) {
@@ -117,7 +117,11 @@ func checkCanonical(t *testing.T, name, src string) {
 	if rc := render(t, c); rc != r {
 		t.Errorf("%s: Render(Canonical(src)) differs from Render(src)\nsrc:       %s\ncanonical: %s\nrender:    %s\nviaCanon:  %s", name, src, c, r, rc)
 	}
-	if pr, pc := proseOnly(t, unmarked(r), renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
+	notes, err := Repairs([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr, pc := proseOnly(t, unmarked(r), renderedPreset), proseOnly(t, c, sourcePreset); len(notes) == 0 && pr != pc {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
 	}
 	assertParseStable(t, name, r)

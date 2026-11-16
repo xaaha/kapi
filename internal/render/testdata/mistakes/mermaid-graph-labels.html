@@ -1,0 +1,14 @@
+<pre class="mermaid">graph TD;
+  A[Plan] -- approve --> B[Build] ==> C(Ship);
+  B -. retry .-> A
+  B & C --> D
+  classDef hot fill:#f00
+  class A hot</pre>
+<!-- renders as -->
+<kapi-diagram>
+Plan -> Build: approve
+Build -> Ship
+Build --> Plan: retry
+Build -> D
+Ship -> D
+</kapi-diagram>

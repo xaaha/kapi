@@ -1,0 +1,19 @@
+<pre><code class="language-mermaid">sequenceDiagram
+  actor U as Reader
+  participant B as Browser
+  participant D as Daemon
+  autonumber
+  U->>B: click save
+  B->>+D: POST /ops
+  D-->>-B: 200
+  D->>D: log revision</code></pre>
+<!-- renders as -->
+<kapi-diagram type="sequence">
+Reader
+Browser
+Daemon
+Reader -> Browser: click save
+Browser -> Daemon: POST /ops
+Daemon --> Browser: 200
+Daemon -> Daemon: log revision
+</kapi-diagram>

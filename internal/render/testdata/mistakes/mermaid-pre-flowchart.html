@@ -1,0 +1,14 @@
+<pre class="mermaid">flowchart LR
+  user[User] --> api(API service)
+  api -->|reads| db[(Orders)]
+  api -.-> q{{Email queue}}</pre>
+<!-- renders as -->
+<kapi-diagram type="flow" dir="lr">
+User: user
+API service: service
+Orders: database
+Email queue: queue
+User -> API service
+API service -> Orders: reads
+API service --> Email queue
+</kapi-diagram>

@@ -34,7 +34,7 @@ func TestRichRenderKeepsHTMLAndCSSButDropsExecution(t *testing.T) {
 }
 
 func TestPresetWarningsKeepSafeContentVisible(t *testing.T) {
-	out := render(t, `<kapi-callout kind="alarm"><p>Keep this explanation.</p></kapi-callout>`)
+	out := strict(t, `<kapi-callout kind="alarm"><p>Keep this explanation.</p></kapi-callout>`)
 	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "Keep this explanation.") {
 		t.Errorf("warning replaced the content: %s", out)
 	}

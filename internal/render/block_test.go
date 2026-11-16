@@ -147,7 +147,7 @@ func TestProseRendersAsItsSource(t *testing.T) {
 
 func TestPresetsCarryTheirName(t *testing.T) {
 	for name, src := range sources(t) {
-		doc, err := html.Parse(strings.NewReader("<body>" + render(t, string(src))))
+		doc, err := html.Parse(strings.NewReader("<body>" + strict(t, string(src))))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -203,9 +203,21 @@ func TestPresetExamplesRenderCleanly(t *testing.T) {
 		if p.Summary == "" || p.Example == "" {
 			t.Errorf("%s has no summary or example", p.Name)
 		}
-		out := render(t, p.Example)
+		out := strict(t, p.Example)
 		if strings.Contains(out, "kapi-error") {
 			t.Errorf("%s example renders an error box:\n%s", p.Name, out)
+		}
+		if notes, err := Repairs([]byte(p.Example)); err != nil || len(notes) > 0 {
+			t.Errorf("%s example needs repairs: %q, %v", p.Name, notes, err)
+		}
+		root, err := parse([]byte(p.Example))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for c := root.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.TextNode && strings.TrimSpace(c.Data) != "" {
+				t.Errorf("%s example has text outside any element, so a comment ended early: %q", p.Name, c.Data)
+			}
 		}
 		name := strings.TrimPrefix(p.Name, "kapi-")
 		if !strings.Contains(out, `data-kapi-preset="`+name+`"`) && !strings.Contains(out, `data-kapi-component="`+name+`"`) {
@@ -285,7 +297,7 @@ func TestTableRefusesContentBesideTheTable(t *testing.T) {
 		`<kapi-table><table><tr><td>1</td></tr></table><p>a note</p></kapi-table>`,
 		`<kapi-table><table><tr><td>1</td></tr></table><table><tr><td>2</td></tr></table></kapi-table>`,
 	} {
-		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+		if out := strict(t, src); !strings.Contains(out, "kapi-error") {
 			t.Errorf("Render(%q) = %q, want an error box instead of dropping content", src, out)
 		}
 	}

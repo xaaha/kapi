@@ -14,7 +14,7 @@ type Preset struct{ Name, Summary, Example string }
 var ErrNotFound = errors.New("render: no element with that data-kapi-id")
 
 func Render(src []byte) ([]byte, error) {
-	root, err := load(src)
+	root, _, err := loadRepaired(src)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func Render(src []byte) ([]byte, error) {
 }
 
 func Block(src []byte, id string) ([]byte, error) {
-	root, err := load(src)
+	root, _, err := loadRepaired(src)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +38,19 @@ func Block(src []byte, id string) ([]byte, error) {
 		}
 	}
 	return nil, ErrNotFound
+}
+
+func Repairs(src []byte) ([]string, error) {
+	_, notes, err := loadRepaired(src)
+	return notes, err
+}
+
+func loadRepaired(src []byte) (*html.Node, []string, error) {
+	root, err := load(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	return root, repair(root), nil
 }
 
 func load(src []byte) (*html.Node, error) {

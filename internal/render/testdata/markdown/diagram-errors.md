@@ -1,4 +1,4 @@
-```
+```kapi-diagram
 a -> b
 ```
 
@@ -8,9 +8,13 @@ this: is not an edge
 ```
 
 ```
--> b
+
 ```
 
 ```
+-> b
+```
+
+```kapi-diagram dir=tb
 a -> b
 ```

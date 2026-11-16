@@ -12,7 +12,7 @@ import (
 )
 
 func Markdown(src []byte, image func(src string) string) ([]byte, error) {
-	root, err := load(src)
+	root, _, err := loadRepaired(src)
 	if err != nil {
 		return nil, err
 	}
@@ -692,6 +692,9 @@ func codeLang(lang, file string) string {
 var languageClass = regexp.MustCompile(`(?:^|\s)(?:language|lang)-([A-Za-z0-9_+#.-]+)`)
 
 func lang(pre *html.Node) string {
+	if _, ok := mermaidPre(pre); ok {
+		return "mermaid"
+	}
 	for _, n := range append([]*html.Node{pre}, elementChildren(pre)...) {
 		if m := languageClass.FindStringSubmatch(attrVal(n, "class")); m != nil {
 			return m[1]

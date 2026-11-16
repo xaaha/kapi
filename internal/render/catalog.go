@@ -107,10 +107,28 @@ var catalog = []Preset{
 	},
 	{
 		Name:    "kapi-diagram",
-		Summary: "A flow chart, sequence diagram or architecture diagram drawn from one line per node or edge",
-		Example: `<!-- type: flow (default) or sequence (lifelines, messages in order).
+		Summary: "A flow chart, sequence diagram or architecture diagram, from Mermaid or one line per node or edge",
+		Example: `<!-- Write Mermaid in <pre class="mermaid"> or <pre><code class="language-mermaid">. Kapi draws it with its own styles, no script:
+     flowchart or graph with TB, TD or LR; nodes a, a[label], a(label), a{label} and a[(database)]; solid, dotted (-.->)
+     and thick (==>) links, labelled with |text| or written inline; a & b to fan out. sequenceDiagram with participant,
+     actor and messages, solid (->>) or dashed for replies. Nodes named like a database, queue, user, agent, service
+     or api get that icon. Mermaid outside this, such as subgraph or Note, shows as plain code. -->
+<pre class="mermaid">flowchart LR
+  agent[Agent] -->|writes| page[Page file]
+  page -.-> daemon(kapi daemon) --> db[(Revisions)]
+</pre>
+
+<pre class="mermaid">sequenceDiagram
+  participant B as Browser
+  participant D as Daemon
+  B->>D: POST /ops
+  D-->>B: 200 {"rev":N}
+</pre>
+
+<!-- For states, planned nodes and architecture boxes, write <kapi-diagram>. A Mermaid body works there too.
+     type: flow (default) or sequence (lifelines, messages in order).
      dir: tb (top to bottom, the default for flow) or lr (left to right). Sequence diagrams ignore dir.
-     Body: one edge per line, "a -> b: label". The label is optional. "a --> b" draws a dashed line.
+     Body: one edge per line, "a -> b: label". The label is optional. A second dash before the arrow draws a dashed line.
      A line with only a name declares a node (flow) or fixes participant order (sequence). Keep it under ~15 nodes.
      In a flow, "name: tags" gives a node a kind and a state (see architecture below). -->
 <kapi-diagram type="flow">
@@ -136,7 +154,7 @@ var catalog = []Preset{
        a kind, drawn as a large icon over the label: agent, database, user, service, page, file, queue, timer or external;
        a state, the only thing drawn in colour (border and a small icon): done, failed, blocked, progress, waiting or info;
        planned, drawn dashed.
-     Nodes are neutral otherwise. Edges: "a -> b: label", "a <-> b: label" (both ways), "a --> b: label" (dashed).
+     Nodes are neutral otherwise. Edges: "a -> b: label", "a <-> b: label" (both ways), and a second dash before the arrow for a dashed edge.
      Every edge names declared ids. A legend for the states in use is added. -->
 <kapi-diagram type="architecture">
   agent: Agent | kapi watch: one line per event | user

@@ -81,22 +81,18 @@ var phrasing = set("p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "a", "em", "
 	"small", "code", "mark", "sub", "sup", "q", "cite", "abbr", "kbd", "samp", "var", "del", "ins", "time",
 	"dfn", "summary", "caption", "kapi-opt", "kapi-text", "kapi-choice", "kapi-badge")
 
-func renderedParent(n *html.Node) *html.Node {
-	p := n.Parent
-	for p != nil && p.Type == html.ElementNode && !isPreset(p) && !hasAllowedTag(p.Data) {
-		p = p.Parent
+func inPhrasing(n *html.Node) bool {
+	for p := n.Parent; p != nil && !flowContainers[p.Data]; p = p.Parent {
+		if phrasing[p.Data] {
+			return true
+		}
 	}
-	return p
-}
-
-func hasAllowedTag(tag string) bool {
-	_, ok := allowedTags[tag]
-	return ok
+	return false
 }
 
 func fallbackPreset(b *bytes.Buffer, n *html.Node, msg string) {
 	tag := "div"
-	if p := renderedParent(n); p != nil && phrasing[p.Data] {
+	if inPhrasing(n) {
 		tag = "span"
 	}
 	writeStart(b, tag, outerAttrs(n, "kapi-error", "title", msg))
@@ -131,18 +127,22 @@ var calloutKinds = map[string]calloutKind{
 	"success": {"Success", "green"},
 }
 
-func renderCallout(b *bytes.Buffer, n *html.Node) error {
-	kind := attrVal(n, "kind")
+func calloutAlias(kind string) string {
 	switch kind {
 	case "", "info":
-		kind = "note"
+		return "note"
 	case "warn", "caution":
-		kind = "warning"
+		return "warning"
 	case "alert", "error", "critical":
-		kind = "danger"
+		return "danger"
 	case "ok", "done":
-		kind = "success"
+		return "success"
 	}
+	return kind
+}
+
+func renderCallout(b *bytes.Buffer, n *html.Node) error {
+	kind := calloutAlias(attrVal(n, "kind"))
 	k, ok := calloutKinds[kind]
 	if !ok {
 		return fmt.Errorf("kind must be note, warning, key, danger (or alert) or success, not %q", kind)

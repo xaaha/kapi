@@ -25,6 +25,9 @@ func renderHTMLComponent(b *bytes.Buffer, n *html.Node) bool {
 		writeEnd(b, "details")
 		return true
 	case "pre":
+		if src, ok := mermaidPre(n); ok && mermaidError(src) == nil && drawDiagram(b, element("kapi-diagram", 0, n.Attr, textNode(src)), false) == nil {
+			return true
+		}
 		return renderHTMLCode(b, n)
 	case "dl":
 		if !definitionList(n) {

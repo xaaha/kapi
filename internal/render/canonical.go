@@ -8,21 +8,23 @@ import (
 )
 
 var presetSourceAttrs = map[string]map[string]bool{
-	"kapi-callout": set("kind"),
-	"kapi-code":    set("lang", "file", "lines"),
-	"kapi-diff":    set("lang", "file"),
-	"kapi-diagram": set("type", "dir"),
-	"kapi-form":    set("name"),
-	"kapi-choice":  set("name", "multiple"),
-	"kapi-opt":     set("value"),
-	"kapi-text":    set("name"),
-	"kapi-option":  set("title"),
-	"kapi-badge":   set("tone", "state"),
-	"kapi-step":    set("state"),
-	"kapi-item":    set("key"),
-	"kapi-details": set("summary", "open"),
-	"kapi-task":    set("done"),
-	"kapi-render":  set("title"),
+	"kapi-callout":  set("kind", "title"),
+	"kapi-code":     set("lang", "file", "lines"),
+	"kapi-diff":     set("lang", "file"),
+	"kapi-diagram":  set("type", "dir"),
+	"kapi-form":     set("name"),
+	"kapi-choice":   set("name", "multiple"),
+	"kapi-opt":      set("value"),
+	"kapi-text":     set("name"),
+	"kapi-option":   set("title"),
+	"kapi-badge":    set("tone", "state"),
+	"kapi-step":     set("state", "title"),
+	"kapi-risk":     set("state", "title"),
+	"kapi-question": set("state", "title"),
+	"kapi-item":     set("key", "title"),
+	"kapi-details":  set("summary", "open", "title"),
+	"kapi-task":     set("done", "title"),
+	"kapi-render":   set("title"),
 }
 
 var rawEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;")
