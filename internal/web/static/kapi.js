@@ -250,7 +250,7 @@
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
-  const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
+  const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", "aria-keyshortcuts": keyWords("toggleChat"), "data-tip": `Chat ${keyHint("toggleChat")}`, onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
   const drawerScrim = h("button", { type: "button", class: "kapi-drawer-scrim", "aria-label": "Close navigation panels", hidden: "", onclick: () => {
     setPanelCollapsed(true);
     setOutline(false);
@@ -3269,6 +3269,10 @@
     if (SHORTCUTS.is("toggleWrite", e) && !asking && !e.isComposing && (inContent || !typing(focus))) {
       e.preventDefault();
       return setWriting(!writing);
+    }
+    if (SHORTCUTS.is("toggleChat", e) && !asking && !e.altKey && !e.isComposing && !typing(focus) && document.getSelection().isCollapsed) {
+      e.preventDefault();
+      return setPanelCollapsed(!panelIsCollapsed());
     }
     if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
