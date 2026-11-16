@@ -127,7 +127,7 @@ func TestArchitectureRefusesBadSource(t *testing.T) {
 		"a: A\nb: B\na <--> b":   "line 3",
 		"a: A\nb: B\na - > b: x": "line 3",
 	} {
-		out := render(t, diagram("architecture", src))
+		out := strict(t, diagram("architecture", src))
 		if !strings.Contains(out, "kapi-error") || !strings.Contains(out, escText(want)) {
 			t.Errorf("source %q: want an error box with %q:\n%s", src, want, out)
 		}

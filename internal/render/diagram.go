@@ -198,13 +198,25 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 	if !ok {
 		return fmt.Errorf("type must be flow, sequence or architecture, not %q", kind)
 	}
-	if given := attrVal(n, "dir"); given != "" && dir != "" {
+	given := attrVal(n, "dir")
+	if given != "" && dir != "" {
 		if given != "tb" && given != "lr" {
 			return fmt.Errorf("dir must be tb (top to bottom) or lr (left to right), not %q", given)
 		}
 		dir = given
 	}
 	src := trimBlankLines(rawText(n))
+	var mermaid *graph
+	if mermaidDrawn(src) {
+		var drawn string
+		var err error
+		if kind, drawn, mermaid, err = parseMermaid(src); err != nil {
+			return err
+		}
+		if dir = drawn; drawn != "" && (given == "tb" || given == "lr") {
+			dir = given
+		}
+	}
 	h := fnv.New32a()
 	h.Write([]byte(attrVal(n, "data-kapi-id") + "\x00" + kind + "\x00" + src))
 	svg := &svgWriter{marker: fmt.Sprintf("kapi-arrow-%08x", h.Sum32()), lr: dir == "lr"}
@@ -221,9 +233,12 @@ func renderDiagram(b *bytes.Buffer, n *html.Node) error {
 		}
 		legend = a.legend()
 	} else {
-		g, err := parseGraph(src)
-		if err != nil {
-			return err
+		g := mermaid
+		if g == nil {
+			var err error
+			if g, err = parseGraph(src); err != nil {
+				return err
+			}
 		}
 		if kind == "flow" {
 			layoutFlow(g, svg)

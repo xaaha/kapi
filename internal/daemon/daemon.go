@@ -900,7 +900,9 @@ func (s *Server) wait(dec *json.Decoder, enc *json.Encoder, req *Request, l *eve
 
 func unseenForAgent(l *eventlog.Log, reader string) (events []eventlog.Event, queued, ended uint64) {
 	events, queued, ended = l.Inbox(reader)
-	return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Author == "file" || e.Author == "kapi" }), queued, ended
+	return slices.DeleteFunc(events, func(e eventlog.Event) bool {
+		return (e.Author == "file" || e.Author == "kapi") && e.Kind != eventlog.KindRepaired
+	}), queued, ended
 }
 
 func (s *Server) inbox(dir, reader string) ([]PageStatus, error) {

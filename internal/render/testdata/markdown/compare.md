@@ -10,4 +10,6 @@ Bare text body.
 
 Missing title.
 
+**Orphan**
+
 Outside a compare.

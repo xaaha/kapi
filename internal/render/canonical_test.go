@@ -104,7 +104,7 @@ func renderedPreset(n *html.Node) bool {
 }
 
 func sourcePreset(n *html.Node) bool {
-	return n.Data == "table" || n.Data == "details" || n.Data == "pre" || n.Data == "dl" || n.Data == "figure" || nativeChecklist(n) || strings.HasPrefix(n.Data, "kapi-")
+	return n.Data == "table" || strings.HasPrefix(n.Data, "kapi-") || renderHTMLComponent(&bytes.Buffer{}, n)
 }
 
 func checkCanonical(t *testing.T, name, src string) {
@@ -117,8 +117,15 @@ func checkCanonical(t *testing.T, name, src string) {
 	if rc := render(t, c); rc != r {
 		t.Errorf("%s: Render(Canonical(src)) differs from Render(src)\nsrc:       %s\ncanonical: %s\nrender:    %s\nviaCanon:  %s", name, src, c, r, rc)
 	}
-	if pr, pc := proseOnly(t, unmarked(r), renderedPreset), proseOnly(t, c, sourcePreset); pr != pc {
+	notes, err := Repairs([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr, pc := proseOnly(t, unmarked(r), renderedPreset), proseOnly(t, c, sourcePreset); len(notes) == 0 && pr != pc {
 		t.Errorf("%s: prose in Render differs from prose in Canonical\nrender:    %s\ncanonical: %s", name, pr, pc)
+	}
+	if len(notes) > 0 {
+		assertTextKept(t, name, c, r)
 	}
 	assertParseStable(t, name, r)
 	for _, out := range []string{c, r} {
@@ -128,6 +135,42 @@ func checkCanonical(t *testing.T, name, src string) {
 				t.Errorf("%s: data-kapi-id %q appears twice:\n%s", name, m[1], out)
 			}
 			seen[m[1]] = true
+		}
+	}
+}
+
+func assertTextKept(t *testing.T, name, canonical, rendered string) {
+	t.Helper()
+	root, err := parse([]byte(canonical))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := html.ParseFragment(strings.NewReader(rendered), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[byte]int{}
+	var count func(n *html.Node, into map[byte]int, sign int)
+	count = func(n *html.Node, into map[byte]int, sign int) {
+		if n.Type == html.TextNode {
+			for _, b := range []byte(strings.Join(strings.Fields(n.Data), "")) {
+				into[b] += sign
+			}
+		}
+		if n.Type == html.ElementNode && (rawPresets[n.Data] || n.Data == "pre") && sign < 0 {
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			count(c, into, sign)
+		}
+	}
+	for _, n := range out {
+		count(n, have, 1)
+	}
+	count(root, have, -1)
+	for b, n := range have {
+		if n < 0 {
+			t.Errorf("%s: repairs dropped %d of byte %q from the text\ncanonical: %s\nrender:    %s", name, -n, b, canonical, rendered)
 		}
 	}
 }

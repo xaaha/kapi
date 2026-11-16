@@ -11,7 +11,8 @@
 
 > **Key point:** The key point.
 
-Bad kind.
+> [!NOTE]
+> Bad kind.
 
 > **Danger:** This drops the table.
 

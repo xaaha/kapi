@@ -13,9 +13,12 @@ import (
 
 const pageRules = `rules:
   A page is an HTML fragment: prose tags (h1-h3, p, ul, ol, li, a, code, em, strong, table, blockquote, pre)
-  plus the presets above. Top-level elements carry data-kapi-id; kapi adds the ones you leave out.
+  plus the presets above. Plain HTML comes first: a <table>, <dl>, <details>, <pre><code>, a checkbox <ul>
+  and Mermaid in <pre class="mermaid"> all render styled with no kapi-* element at all.
+  Top-level elements carry data-kapi-id; kapi adds the ones you leave out.
   <script>, <style>, style= and on* attributes and javascript: links are removed when the page renders.
-  A misspelled or misplaced kapi-* element renders as a red error box naming the problem.
+  A misspelled or misplaced kapi-* element is repaired so the reader still sees a styled page, and kapi wait
+  and kapi watch report a repaired event naming the fix.
 writing:
   Lead with the fact or the answer. Explanation, if any, comes after it.
   Use numbers, names and dates instead of adjectives: "103F, 23F over the safe limit", not "extremely hot".

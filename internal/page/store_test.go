@@ -1855,3 +1855,10 @@ func TestAnAgentsImageOpIsLoggedAsTheAgentAndCannotBeUndoneFromTheBrowser(t *tes
 		t.Error("the browser could undo the agent's image")
 	}
 }
+
+func TestAnswersReachAFormThatHasNoName(t *testing.T) {
+	src := []byte(`<kapi-form data-kapi-id="ffffffff"><kapi-text name="t">Why</kapi-text></kapi-form>`)
+	if id, err := FormID(src, "ffffffff"); err != nil || id != "ffffffff" {
+		t.Errorf("FormID by the default name = %q, %v", id, err)
+	}
+}

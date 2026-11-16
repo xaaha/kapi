@@ -4,6 +4,8 @@
 
 <!-- -->
 
-- not a task
+- [ ] not a task
 
-outside a checklist
+<!-- -->
+
+- [ ] outside a checklist

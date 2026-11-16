@@ -416,6 +416,14 @@ func TestRepliesAndResolvesNameTheirNotes(t *testing.T) {
 	}
 }
 
+func TestARepairedEventTellsTheAgentWhatToFix(t *testing.T) {
+	e := eventlog.Event{Seq: 9, Author: "kapi", Kind: eventlog.KindRepaired, Rev: 3, Text: "#aaaaaaaa <kapi-kv> around a <dl>: rendered the <dl>"}
+	want := "#9 kapi repaired the page at revision 3 so the reader still sees it styled: #aaaaaaaa <kapi-kv> around a <dl>: rendered the <dl>. Nothing to tell the human; write the plain form next time (kapi preset <name> shows it)"
+	if got := eventLine(&e); got != want {
+		t.Errorf("eventLine = %q, want %q", got, want)
+	}
+}
+
 func TestWaitPrintsEveryUnseenEventThenQueuesThem(t *testing.T) {
 	f := &fakeAPI{resp: daemon.Response{Events: []eventlog.Event{{Seq: 2, Author: "human", Kind: "message", Text: "one"}, {Seq: 5, Author: "human", Kind: "answer", Text: "two"}}}}
 	out, err := run(t, f, "wait", "--reader", "codex", "plan.html")

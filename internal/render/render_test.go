@@ -20,6 +20,18 @@ func render(t *testing.T, src string) string {
 	return string(out)
 }
 
+func strict(t *testing.T, src string) string {
+	t.Helper()
+	root, err := load([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	markText(root)
+	var b bytes.Buffer
+	renderChildren(&b, root)
+	return b.String()
+}
+
 func golden(t *testing.T, path string, got []byte) {
 	t.Helper()
 	if *update {

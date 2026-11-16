@@ -81,22 +81,18 @@ var phrasing = set("p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "a", "em", "
 	"small", "code", "mark", "sub", "sup", "q", "cite", "abbr", "kbd", "samp", "var", "del", "ins", "time",
 	"dfn", "summary", "caption", "kapi-opt", "kapi-text", "kapi-choice", "kapi-badge")
 
-func renderedParent(n *html.Node) *html.Node {
-	p := n.Parent
-	for p != nil && p.Type == html.ElementNode && !isPreset(p) && !hasAllowedTag(p.Data) {
-		p = p.Parent
+func inPhrasing(n *html.Node) bool {
+	for p := n.Parent; p != nil && !flowContainers[p.Data]; p = p.Parent {
+		if phrasing[p.Data] {
+			return true
+		}
 	}
-	return p
-}
-
-func hasAllowedTag(tag string) bool {
-	_, ok := allowedTags[tag]
-	return ok
+	return false
 }
 
 func fallbackPreset(b *bytes.Buffer, n *html.Node, msg string) {
 	tag := "div"
-	if p := renderedParent(n); p != nil && phrasing[p.Data] {
+	if inPhrasing(n) {
 		tag = "span"
 	}
 	writeStart(b, tag, outerAttrs(n, "kapi-error", "title", msg))
@@ -131,18 +127,23 @@ var calloutKinds = map[string]calloutKind{
 	"success": {"Success", "green"},
 }
 
-func renderCallout(b *bytes.Buffer, n *html.Node) error {
-	kind := attrVal(n, "kind")
-	switch kind {
-	case "", "info":
-		kind = "note"
-	case "warn", "caution":
-		kind = "warning"
-	case "alert", "error", "critical":
-		kind = "danger"
-	case "ok", "done":
-		kind = "success"
+var calloutAliases = map[string]string{
+	"": "note", "info": "note", "tip": "note", "hint": "note", "information": "note", "fyi": "note", "aside": "note",
+	"warn": "warning", "caution": "warning", "attention": "warning", "careful": "warning", "notice": "warning",
+	"alert": "danger", "error": "danger", "critical": "danger", "bad": "danger", "fail": "danger", "failure": "danger", "stop": "danger",
+	"ok": "success", "done": "success", "good": "success", "pass": "success", "passed": "success", "positive": "success",
+	"important": "key", "highlight": "key", "keypoint": "key", "key-point": "key",
+}
+
+func calloutAlias(kind string) string {
+	if to, ok := calloutAliases[kind]; ok {
+		return to
 	}
+	return kind
+}
+
+func renderCallout(b *bytes.Buffer, n *html.Node) error {
+	kind := calloutAlias(attrVal(n, "kind"))
 	k, ok := calloutKinds[kind]
 	if !ok {
 		return fmt.Errorf("kind must be note, warning, key, danger (or alert) or success, not %q", kind)

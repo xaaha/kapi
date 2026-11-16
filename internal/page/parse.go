@@ -163,7 +163,7 @@ func Inner(src []byte, id string) ([]byte, error) {
 // FormID returns the data-kapi-id of the kapi-form named name.
 func FormID(src []byte, name string) (string, error) {
 	for _, e := range parse(src) {
-		if n, _ := e.attr("name"); e.name == "kapi-form" && n == name {
+		if n, _ := e.attr("name"); e.name == "kapi-form" && (n == name || (n == "" && e.id == name)) {
 			return e.id, nil
 		}
 	}
@@ -464,6 +464,27 @@ func attrValue(tag []byte, key string) (int, int, int, bool) {
 		}
 	}
 	return 0, 0, 0, false
+}
+
+func mermaidFlowchart(src []byte, id string) bool {
+	out, err := render.Block(src, id)
+	return err == nil && bytes.Contains(out, []byte(` data-kapi-dir="`))
+}
+
+func orientMermaid(src []byte, els []element, e *element, dir string) ([]byte, bool) {
+	from, to := e.tagEnd, e.closeStart
+	if f, t, ok := nativeCodeRange(src, els, e); ok {
+		from, to = f, t
+	}
+	start, end, ok := render.MermaidDirection(src[from:to])
+	if !ok {
+		return nil, false
+	}
+	word := map[string]string{"tb": "TB", "lr": "LR"}[dir]
+	if start == end {
+		word = " " + word
+	}
+	return splice(src, from+start, from+end, word), true
 }
 
 func splice(src []byte, from, to int, with string) []byte {

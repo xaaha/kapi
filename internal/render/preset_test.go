@@ -16,7 +16,7 @@ func TestCalloutKindsMapToTones(t *testing.T) {
 	if out := render(t, `<kapi-callout kind="alert">x</kapi-callout>`); !strings.Contains(out, `kapi-callout-danger`) || !strings.Contains(out, `>Danger</div>`) {
 		t.Errorf("alert should render exactly like danger:\n%s", out)
 	}
-	out := render(t, `<kapi-callout kind="alarm">x</kapi-callout>`)
+	out := strict(t, `<kapi-callout kind="alarm">x</kapi-callout>`)
 	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "note, warning, key, danger (or alert) or success") {
 		t.Errorf("unknown kind should name every kind in an error box:\n%s", out)
 	}
@@ -119,7 +119,7 @@ func TestKVRendersADefinitionList(t *testing.T) {
 		`<kapi-kv></kapi-kv>`,
 		`<kapi-item key="a">b</kapi-item>`,
 	} {
-		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+		if out := strict(t, src); !strings.Contains(out, "kapi-error") {
 			t.Errorf("Render(%q) = %s, want an error box", src, out)
 		}
 	}
@@ -134,7 +134,7 @@ func TestDetailsIsClosedUnlessOpen(t *testing.T) {
 	if out := render(t, `<kapi-details summary="s" open>x</kapi-details>`); !strings.HasPrefix(out, `<details class="kapi-details" data-kapi-preset="details" open="">`) {
 		t.Errorf("open should carry over: %s", out)
 	}
-	if out := render(t, `<kapi-details>x</kapi-details>`); !strings.Contains(out, "needs a summary attribute") {
+	if out := strict(t, `<kapi-details>x</kapi-details>`); !strings.Contains(out, "needs a summary attribute") {
 		t.Errorf("a missing summary should be an error box: %s", out)
 	}
 	if got := canonical(t, `<kapi-details summary="s" open onclick="x()">x</kapi-details>`); got != `<kapi-details summary="s" open="">x</kapi-details>` {
@@ -155,7 +155,7 @@ func TestChecklistRendersTickableTasks(t *testing.T) {
 		`<kapi-checklist></kapi-checklist>`,
 		`<kapi-task>a</kapi-task>`,
 	} {
-		if out := render(t, src); !strings.Contains(out, "kapi-error") {
+		if out := strict(t, src); !strings.Contains(out, "kapi-error") {
 			t.Errorf("Render(%q) = %s, want an error box", src, out)
 		}
 	}
@@ -178,7 +178,7 @@ func TestBadgeStateAddsAStatusIconAndDefaultTone(t *testing.T) {
 	if out := render(t, `<p><kapi-badge state="done" tone="blue">shipped</kapi-badge></p>`); !strings.Contains(out, "kapi-tone-blue") {
 		t.Errorf("an explicit tone should win over the state's tone: %s", out)
 	}
-	out := render(t, `<p><kapi-badge state="maybe">x</kapi-badge></p>`)
+	out := strict(t, `<p><kapi-badge state="maybe">x</kapi-badge></p>`)
 	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "done, failed, blocked, progress, waiting or info") {
 		t.Errorf("an unknown state should be an error naming the states: %s", out)
 	}
@@ -192,7 +192,7 @@ func TestStepStateShowsItsIconInPlaceOfTheNumber(t *testing.T) {
 	if !strings.Contains(out, `<div class="kapi-plan-item kapi-step kapi-tone-purple" data-kapi-preset="step"><span class="kapi-plan-mark"></span>`) {
 		t.Errorf("a step without state keeps its number:\n%s", out)
 	}
-	if out := render(t, `<kapi-plan><kapi-step state="soon">a</kapi-step></kapi-plan>`); !strings.Contains(out, "kapi-error") {
+	if out := strict(t, `<kapi-plan><kapi-step state="soon">a</kapi-step></kapi-plan>`); !strings.Contains(out, "kapi-error") {
 		t.Errorf("an unknown step state should be an error: %s", out)
 	}
 }

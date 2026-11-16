@@ -16,16 +16,9 @@ var linesAttr = regexp.MustCompile(`^([1-9][0-9]*)(?:-([1-9][0-9]*))?$`)
 
 func renderCode(b *bytes.Buffer, n *html.Node) error {
 	lang, file := attrVal(n, "lang"), attrVal(n, "file")
-	start := 1
-	if lines := attrVal(n, "lines"); lines != "" {
-		m := linesAttr.FindStringSubmatch(lines)
-		if m == nil {
-			return fmt.Errorf("lines must look like 10-24, not %q", lines)
-		}
-		start, _ = strconv.Atoi(m[1])
-		if end, _ := strconv.Atoi(m[2]); m[2] != "" && end < start {
-			return fmt.Errorf("lines %q ends before it starts", lines)
-		}
+	start, err := firstLine(attrVal(n, "lines"))
+	if err != nil {
+		return err
 	}
 	src := dedent(trimBlankLines(rawText(n)))
 	if src == "" {
@@ -43,6 +36,21 @@ func renderCode(b *bytes.Buffer, n *html.Node) error {
 	}
 	b.WriteString("</code></pre></figure>")
 	return nil
+}
+
+func firstLine(lines string) (int, error) {
+	if lines == "" {
+		return 1, nil
+	}
+	m := linesAttr.FindStringSubmatch(lines)
+	if m == nil {
+		return 0, fmt.Errorf("lines must look like 10-24, not %q", lines)
+	}
+	start, _ := strconv.Atoi(m[1])
+	if end, _ := strconv.Atoi(m[2]); m[2] != "" && end < start {
+		return 0, fmt.Errorf("lines %q ends before it starts", lines)
+	}
+	return start, nil
 }
 
 func codeHead(b *bytes.Buffer, file, lang string, extra ...string) {
