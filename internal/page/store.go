@@ -77,6 +77,8 @@ type Store struct {
 	log    *eventlog.Log
 	event  *revEvent
 	logged uint64
+	fixed  *repairs
+	noted  uint64
 
 	viewed, touched, archived, released time.Time
 	saved                               bool
@@ -90,6 +92,7 @@ type state struct {
 	Temp  string     `json:"temp,omitempty"`
 	Held  []heldFile `json:"held,omitempty"`
 	Event *revEvent  `json:"event,omitempty"`
+	Fixed *repairs   `json:"repaired,omitempty"`
 
 	Viewed   time.Time `json:"viewed,omitzero"`
 	Touched  time.Time `json:"touched,omitzero"`
@@ -101,6 +104,11 @@ type state struct {
 type Lifecycle struct {
 	Viewed, Touched, Archived, Released time.Time
 	Saved                               bool
+}
+
+type repairs struct {
+	Rev  uint64 `json:"rev"`
+	Text string `json:"text"`
 }
 
 type revEvent struct {
@@ -159,8 +167,11 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 	s := &Store{path: path, dir: filepath.Join(home, "pages", ID(path)), log: l}
 	events, _ := l.After(0)
 	for i := range events {
-		if e := &events[i]; e.Kind == "revision" {
+		switch e := &events[i]; e.Kind {
+		case "revision":
 			s.logged = max(s.logged, e.Rev)
+		case eventlog.KindRepaired:
+			s.noted = max(s.noted, e.Rev)
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(s.dir, "revs"), 0o700); err != nil {
@@ -249,7 +260,7 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 }
 
 func (s *Store) load(st *state) error {
-	s.rev, s.undo, s.event = st.Rev, st.Undo, st.Event
+	s.rev, s.undo, s.event, s.fixed = st.Rev, st.Undo, st.Event, st.Fixed
 	s.viewed, s.touched, s.archived, s.released, s.saved = st.Viewed, st.Touched, st.Archived, st.Released, st.Saved
 	if s.rev > 0 {
 		src, err := osfile.ReadFile(s.revPath(s.rev))
@@ -267,6 +278,9 @@ func (s *Store) load(st *state) error {
 	}
 	if after, err := osfile.ReadFile(s.revPath(st.Next.Rev)); err == nil && bytes.Equal(raw, after) {
 		s.src, s.rev, s.undo, s.event = after, st.Next.Rev, st.Next.Undo, st.Next.Event
+		if st.Next.Fixed != nil {
+			s.fixed = st.Next.Fixed
+		}
 	}
 	return nil
 }
@@ -682,6 +696,13 @@ var (
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent) (uint64, error) {
+	fixed, err := newRepairs(s.src, src, rev)
+	if err != nil {
+		return 0, err
+	}
+	if fixed == nil {
+		fixed = s.fixed
+	}
 	written := modTime(s.path, clock().UTC())
 	swapped, err := s.checkHeld(false)
 	if err != nil {
@@ -712,7 +733,7 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 		if _, err := rand.Read(n[:]); err != nil {
 			return 0, err
 		}
-		intent := state{Rev: rev, Undo: undo, Event: ev, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
+		intent := state{Rev: rev, Undo: undo, Event: ev, Fixed: fixed, Temp: "." + filepath.Base(s.path) + tempMark + strconv.FormatUint(uint64(binary.BigEndian.Uint32(n[:])), 10)}
 		if err := s.saveState(&state{Rev: s.rev, Undo: s.undo, Next: &intent}); err != nil {
 			return 0, err
 		}
@@ -737,26 +758,21 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 	if !s.touched.Equal(touched) {
 		s.archived = time.Time{}
 	}
-	old := s.src
-	s.src, s.rev, s.undo, s.event = src, rev, undo, ev
+	s.src, s.rev, s.undo, s.event, s.fixed = src, rev, undo, ev, fixed
 	if err := s.saveState(&next); err != nil {
 		return 0, err
 	}
-	seq, err := s.logEvent()
-	if err != nil {
-		return 0, err
-	}
-	return seq, s.logRepairs(old, src)
+	return s.logEvent()
 }
 
-func (s *Store) logRepairs(old, cur []byte) error {
+func newRepairs(old, cur []byte, rev uint64) (*repairs, error) {
 	now, err := render.Repairs(cur)
 	if err != nil || len(now) == 0 {
-		return err
+		return nil, err
 	}
 	before, err := render.Repairs(old)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	known := map[string]int{}
 	for _, n := range before {
@@ -771,29 +787,33 @@ func (s *Store) logRepairs(old, cur []byte) error {
 		fresh = append(fresh, n)
 	}
 	if len(fresh) == 0 {
-		return nil
+		return nil, nil
 	}
-	_, err = appendEvent(s.log, &eventlog.Event{Author: "kapi", Kind: eventlog.KindRepaired, Rev: s.rev, Text: strings.Join(fresh, "; ")})
-	return err
+	return &repairs{Rev: rev, Text: strings.Join(fresh, "; ")}, nil
 }
 
 func (s *Store) logEvent() (uint64, error) {
-	if s.event == nil || s.event.Rev <= s.logged {
-		return 0, nil
+	var seq uint64
+	if s.event != nil && s.event.Rev > s.logged {
+		e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Changed: strings.Join(s.event.Changed, ","), Text: s.event.Text})
+		if err != nil {
+			return 0, err
+		}
+		s.logged, seq = s.event.Rev, e.Seq
 	}
-	e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Changed: strings.Join(s.event.Changed, ","), Text: s.event.Text})
-	if err != nil {
-		return 0, err
+	if s.fixed != nil && s.fixed.Rev > s.noted {
+		if _, err := appendEvent(s.log, &eventlog.Event{Author: "kapi", Kind: eventlog.KindRepaired, Rev: s.fixed.Rev, Text: s.fixed.Text}); err == nil {
+			s.noted = s.fixed.Rev
+		}
 	}
-	s.logged = s.event.Rev
-	return e.Seq, nil
+	return seq, nil
 }
 
 func (s *Store) saveState(st *state) error {
 	if s.gone != nil {
 		return s.gone
 	}
-	st.Held, st.Event = s.held, s.event
+	st.Held, st.Event, st.Fixed = s.held, s.event, s.fixed
 	st.Viewed, st.Touched, st.Archived, st.Released, st.Saved = s.viewed, s.touched, s.archived, s.released, s.saved
 	b, err := json.Marshal(st)
 	if err != nil {

@@ -313,8 +313,12 @@ After the revision event, a commit whose new source needs repairs that the
 previous source did not appends one `repaired` event with author `kapi`, the
 new `rev`, and the new notes joined with `; ` as `text`. Notes are compared as
 a multiset, so an edit that leaves an old mistake in place does not repeat it,
-and the same mistake added a second time is reported. A crash between the two
-appends loses the `repaired` event, which only advises.
+and the same mistake added a second time is reported. The pending note is
+saved in `state.json` as `"repaired":{"rev":N,"text":"..."}` with the
+revision, and logged the way the revision event is: when the log holds no
+`repaired` event at that `rev` yet, on open and at the start of every op and
+refresh. A failed `repaired` append never fails the commit; the next op,
+refresh or open retries it.
 
 `state.json` also holds two UTC times. `viewed` is set each time a browser
 connects to the page's `p/{id}/events`. `touched` is set by a revision from a
