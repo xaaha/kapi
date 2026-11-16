@@ -71,6 +71,12 @@ func TestMessageNeverPassesScriptsHandlersOrJavascriptLinks(t *testing.T) {
 	}
 }
 
+func TestMessageShowsADroppedLinkAsItsText(t *testing.T) {
+	if got := message(t, "[click **here**](javascript:alert(1)) now"); got != "<p>click <strong>here</strong> now</p>" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestMessageKeepsPlainTextReadable(t *testing.T) {
 	if got := message(t, "Status: done.\nRun kapi say <page> <text> next."); got != "<p>Status: done.<br/>\nRun kapi say &lt;page&gt; &lt;text&gt; next.</p>" {
 		t.Errorf("got %q", got)

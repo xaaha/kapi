@@ -93,9 +93,17 @@ func Message(text string) ([]byte, error) {
 func tidyMessage(n *html.Node) {
 	for c := n.FirstChild; c != nil; {
 		next := c.NextSibling
-		if c.Type == html.CommentNode {
+		switch {
+		case c.Type == html.CommentNode:
 			n.RemoveChild(c)
-		} else {
+		case c.Type == html.ElementNode && c.Data == "a" && attrVal(c, "href") == "":
+			tidyMessage(c)
+			for k := c.FirstChild; k != nil; k = c.FirstChild {
+				c.RemoveChild(k)
+				n.InsertBefore(k, c)
+			}
+			n.RemoveChild(c)
+		default:
 			tidyMessage(c)
 		}
 		c = next
