@@ -42,6 +42,15 @@ func TestMessageNeverPassesScriptsHandlersOrJavascriptLinks(t *testing.T) {
 		"<iframe src=https://example.com></iframe>",
 		"<style>body{display:none}</style>",
 		"<!-- <script>alert(1)</script> -->",
+		"[x](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)",
+		"![x](data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)",
+		"[x](vbscript:msgbox(1))",
+		"[x](&#106;avascript:alert(1))",
+		"[x]: javascript:alert(1)\n\n[x]",
+		`<a href="x" style="position:fixed;inset:0">x</a>`,
+		"`</div><script>alert(1)</script>`",
+		"<svg onload=alert(1)>",
+		"<input type=checkbox onclick=alert(1)>",
 	} {
 		got := message(t, src)
 		nodes, err := html.ParseFragment(strings.NewReader(got), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
@@ -57,6 +66,9 @@ func TestMessageNeverPassesScriptsHandlersOrJavascriptLinks(t *testing.T) {
 				t.Errorf("%q let a %s element through: %s", src, n.Data, got)
 			}
 			for _, a := range n.Attr {
+				if a.Key == "style" || (urlAttrs[a.Key] && !safeURL(a.Val, n.Data == "img")) {
+					t.Errorf("%q let %s=%q through: %s", src, a.Key, a.Val, got)
+				}
 				if strings.HasPrefix(a.Key, "on") || strings.HasPrefix(strings.ToLower(strings.TrimSpace(a.Val)), "javascript:") {
 					t.Errorf("%q let %s=%q through: %s", src, a.Key, a.Val, got)
 				}
