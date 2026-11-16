@@ -1,35 +1,3 @@
-.kapi-dialog.kapi-save-picker {
-  width: min(440px, calc(100vw - 32px));
-  height: auto;
-  max-height: min(560px, calc(100dvh - 48px));
-}
-
-.kapi-save-body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  padding: 16px 20px 20px 24px;
-  overflow-y: auto;
-}
-
-.kapi-save-body[aria-busy="true"] {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.kapi-save-where {
-  margin: 0 0 4px;
-  color: var(--kapi-muted);
-  font-size: 13px;
-}
-
-.kapi-save-where code {
-  font: 12.5px var(--kapi-mono);
-  overflow-wrap: anywhere;
-}
-
 .kapi-save-folders {
   display: grid;
   gap: 4px;
@@ -96,12 +64,6 @@
 .kapi-save-empty {
   margin: 0;
   color: var(--kapi-muted);
-  font-size: 13px;
-}
-
-.kapi-save-error {
-  margin: 4px 0 0;
-  color: var(--kapi-red-text);
   font-size: 13px;
 }
 

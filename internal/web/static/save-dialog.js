@@ -1,28 +1,29 @@
 import { getJSON, h, icon } from "./core.js";
-import { dialog, ready, stylesheet } from "./ui.js";
+import { popover, popoverContent } from "./popover.js";
+import { stylesheet } from "./ui.js";
 
-const styled = Promise.all([ready, stylesheet(new URL("./save-dialog.css", import.meta.url).href)]);
+const styled = stylesheet(new URL("./save-dialog.css", import.meta.url).href);
 
 let shared;
 
-function build() {
+async function build() {
   let save = async () => null;
   let busy = false;
-  const where = h("p", { class: "kapi-save-where" });
+  const where = h("p", { class: "kapi-pop-detail kapi-save-where" });
   const list = h("div", { class: "kapi-save-folders", role: "group", "aria-label": "Folders" });
   const name = h("input", { type: "text", class: "kapi-save-name", name: "folder", placeholder: "Folder name, like Work", "aria-label": "New folder name", autocomplete: "off", spellcheck: "false", maxlength: "100" });
   const create = h("button", { type: "submit", class: "kapi-primary", text: "Create and save" });
   const form = h("form", { class: "kapi-save-new", hidden: true }, name, create);
   const newFolder = h("button", { type: "button", class: "kapi-save-folder kapi-save-add", "data-new-folder": "" }, icon("folderPlus"), h("span", { text: "New folder" }));
-  const error = h("p", { class: "kapi-save-error", role: "alert", hidden: true });
-  const body = h("div", { class: "kapi-save-body" }, where, list, newFolder, form, error);
-  const ui = dialog({
+  const error = h("p", { class: "kapi-pop-error kapi-save-error", role: "alert", hidden: true });
+  const body = popoverContent({ children: [where, list, newFolder, form, error] });
+  const ui = await popover({
     title: "Save to library",
     description: "Saved notes are kept until you delete them. kapi moves the file into the folder you pick.",
-    body,
+    className: "kapi-save-picker",
     initialFocus: () => list.querySelector("button") || newFolder,
   });
-  ui.el.classList.add("kapi-save-picker");
+  ui.render({ content: body });
 
   const showForm = (on) => {
     form.hidden = !on;
@@ -37,7 +38,7 @@ function build() {
     body.setAttribute("aria-busy", "true");
     const problem = await save(folder);
     busy = false;
-    body.removeAttribute("aria-busy");
+    body.setAttribute("aria-busy", "false");
     if (!problem) return;
     error.textContent = problem;
     error.hidden = false;
@@ -86,5 +87,5 @@ function build() {
 export async function openSavePicker(options) {
   await styled;
   shared ??= build();
-  return shared.open(options);
+  return (await shared).open(options);
 }

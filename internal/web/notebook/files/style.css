@@ -1,6 +1,7 @@
 @import url("home.css");
 @import url("organizer.css");
 @import url("trash.css");
+@import url("../../static/popover.css");
 @import url("missing.css");
 
 #kapi-chrome .kapi-breadcrumbs .kapi-switcher-launcher {
