@@ -272,7 +272,8 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome > .kapi-bar button[data-tip]:is(:hover, :focus-visible)::after,
-#kapi-chrome .kapi-copy-code:is(:hover, :focus-visible, [data-kapi-copied])::after {
+#kapi-chrome .kapi-copy-code:is(:hover, :focus-visible, [data-kapi-copied])::after,
+#kapi-chrome .kapi-msg-copy:is(:hover, :focus-visible, [data-kapi-copied])::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 6px);
@@ -350,6 +351,74 @@ html { scroll-padding-top: var(--kapi-header-height); }
 #kapi-chrome .kapi-chat-head strong { display: inline-flex; align-items: center; gap: 8px; }
 #kapi-chrome .kapi-chat-head strong svg { width: 18px; height: 18px; fill: currentColor; }
 #kapi-chrome .kapi-chat-head .kapi-panel-collapse { width: 32px; height: 32px; padding: 8px; }
+#kapi-chrome .kapi-chat-head-tools { display: inline-flex; align-items: center; gap: 2px; }
+#kapi-chrome .kapi-chat-head .kapi-panel-expand { width: 32px; height: 32px; padding: 8px; color: var(--kapi-muted); }
+#kapi-chrome .kapi-chat-head .kapi-panel-expand:hover { color: var(--kapi-fg); }
+#kapi-chrome .kapi-panel-expand svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+#kapi-chrome .kapi-chat-back { display: none; }
+
+@media screen and (min-width: 761px) {
+  #kapi-chrome[data-panel-expanded] .kapi-panel {
+    left: 0;
+    width: auto;
+    border-left: 0;
+    --kapi-chat-gutter: max(24px, calc((100% - 720px) / 2));
+  }
+
+  #kapi-chrome[data-panel-expanded] :is(.kapi-outline-tools, .kapi-write-tools, .kapi-pins, .kapi-rail) { visibility: hidden; }
+
+  #kapi-chrome[data-panel-expanded] .kapi-chat-head {
+    justify-content: flex-start;
+    gap: 12px;
+    padding-inline: var(--kapi-chat-gutter);
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-chat-head strong { margin-right: auto; color: var(--kapi-muted); font-weight: 500; }
+  #kapi-chrome[data-panel-expanded] .kapi-chat-head strong svg { display: none; }
+
+  #kapi-chrome[data-panel-expanded] .kapi-chat-back {
+    display: inline-flex;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--kapi-border);
+    border-radius: var(--kapi-radius-sm);
+    color: var(--kapi-fg);
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-chat-back svg { width: 14px; height: 14px; fill: currentColor; }
+
+  #kapi-chrome[data-panel-expanded] .kapi-chat-back kbd {
+    padding: 0 5px;
+    border: 1px solid var(--kapi-border);
+    border-radius: var(--kapi-radius-sm);
+    font: 11px/1.6 var(--kapi-font);
+    color: var(--kapi-muted);
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-panel > :is(.kapi-tabs, .kapi-presence, .kapi-composer, .kapi-queue, .kapi-notes-strip, .kapi-notes, .kapi-restart, .kapi-notice) {
+    padding-inline: var(--kapi-chat-gutter);
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-composer { border-top: 0; padding-bottom: 20px; }
+  #kapi-chrome[data-panel-expanded] .kapi-scroll { padding: 24px var(--kapi-chat-gutter); scrollbar-gutter: stable both-edges; }
+  #kapi-chrome[data-panel-expanded] .kapi-scroll-bottom { right: calc(var(--kapi-chat-gutter) + 8px); }
+  #kapi-chrome[data-panel-expanded] .kapi-log { gap: 18px; }
+
+  #kapi-chrome[data-panel-expanded] .kapi-msg[data-author="agent"] {
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-msg[data-author="human"] {
+    max-width: 75%;
+    padding: 9px 14px;
+    border-radius: var(--kapi-radius-lg);
+  }
+
+  #kapi-chrome[data-panel-expanded] .kapi-msg-text { font-size: 15.5px; line-height: 1.6; }
+}
 
 #kapi-chrome .kapi-panel > .kapi-tabs {
   min-height: 54px;
@@ -1070,6 +1139,93 @@ html { scroll-padding-top: var(--kapi-header-height); }
   overflow-wrap: anywhere;
 }
 
+#kapi-chrome .kapi-md {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+#kapi-chrome .kapi-md img { max-width: 100%; height: auto; }
+#kapi-chrome .kapi-md > :first-child { margin-top: 0; }
+#kapi-chrome .kapi-md > :last-child { margin-bottom: 0; }
+#kapi-chrome .kapi-md :is(p, ul, ol, blockquote, .kapi-table, .kapi-code) { margin: 0 0 0.6em; }
+#kapi-chrome .kapi-md :is(ul, ol) { padding-left: 1.35em; }
+#kapi-chrome .kapi-md li { margin: 0.15em 0; }
+#kapi-chrome .kapi-md li > :is(ul, ol) { margin: 0.15em 0 0; }
+#kapi-chrome .kapi-md li::marker { color: var(--kapi-muted); }
+
+#kapi-chrome .kapi-md :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.9em 0 0.3em;
+  font: 600 12px/1.4 var(--kapi-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-md a {
+  color: var(--kapi-blue-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#kapi-chrome .kapi-md :not(pre) > code {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-subtle);
+  font: 0.86em/1.4 var(--kapi-mono);
+  overflow-wrap: anywhere;
+}
+
+#kapi-chrome .kapi-md blockquote {
+  padding-left: 0.75em;
+  border-left: 3px solid var(--kapi-border-strong);
+  color: var(--kapi-muted);
+}
+
+#kapi-chrome .kapi-md hr {
+  margin: 0.8em 0;
+  border: 0;
+  border-top: 1px solid var(--kapi-border);
+}
+
+#kapi-chrome .kapi-md .kapi-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+#kapi-chrome .kapi-md table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#kapi-chrome .kapi-md :is(th, td) {
+  padding: 4px 8px;
+  border: 1px solid var(--kapi-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+#kapi-chrome .kapi-md th { background: var(--kapi-subtle); font-weight: 600; white-space: nowrap; cursor: default; }
+#kapi-chrome .kapi-md th::after { content: none; }
+
+#kapi-chrome .kapi-md .kapi-code {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-subtle);
+  box-shadow: none;
+}
+
+#kapi-chrome .kapi-md .kapi-code-head,
+#kapi-chrome .kapi-md .kapi-ln { display: none; }
+#kapi-chrome .kapi-md pre.kapi-hl { padding: 0.5em 0.75em; font-size: 12.5px; line-height: 1.55; }
+#kapi-chrome .kapi-md .kapi-line { padding-right: 0.75em; }
+#kapi-chrome .kapi-md .kapi-checklist { padding-left: 0.2em; list-style: none; }
+#kapi-chrome .kapi-md .kapi-task input { margin: 0 0.4em 0 0; vertical-align: -1px; }
+
 #kapi-chrome .kapi-composer {
   display: flex;
   flex-direction: column;
@@ -1555,6 +1711,50 @@ html { scroll-padding-top: var(--kapi-header-height); }
   align-items: baseline;
 }
 
+#kapi-chrome .kapi-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#kapi-chrome .kapi-msg-copy {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--kapi-radius);
+  background: transparent;
+  color: var(--kapi-muted);
+  cursor: pointer;
+  opacity: 0;
+  align-self: center;
+}
+
+#kapi-chrome .kapi-msg-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+#kapi-chrome :is(.kapi-msg, .kapi-pop-msg):is(:hover, :focus-within) .kapi-msg-copy,
+#kapi-chrome .kapi-msg-copy[data-kapi-copied] {
+  opacity: 1;
+}
+
+#kapi-chrome .kapi-msg-copy:is(:hover, :focus-visible) {
+  background: var(--kapi-subtle);
+  color: var(--kapi-fg);
+}
+
+#kapi-chrome .kapi-msg-copy[data-kapi-copied] {
+  color: var(--kapi-green-text);
+}
+
+@media (hover: none) {
+  #kapi-chrome .kapi-msg-copy { opacity: 1; }
+}
+
 #kapi-chrome .kapi-diff-k,
 #kapi-chrome .kapi-pop-who {
   color: var(--kapi-muted);
@@ -1593,6 +1793,8 @@ html { scroll-padding-top: var(--kapi-header-height); }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+#kapi-chrome .kapi-pop-text.kapi-md { white-space: normal; overflow-wrap: break-word; }
 
 #kapi-chrome .kapi-pop-gone {
   margin: 0;
@@ -1848,6 +2050,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   }
 
   #kapi-chrome .kapi-panel-collapse { display: inline-flex; }
+  #kapi-chrome .kapi-panel-expand { display: none; }
 
   #kapi-chrome .kapi-panel-head {
     position: relative;

@@ -378,7 +378,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, st *page.S
 		events, changed := l.After(after)
 		for i := range events {
 			e := &events[i]
-			data, err := json.Marshal(e)
+			data, err := json.Marshal(streamed{Event: e, HTML: messageHTML(e)})
 			if err != nil {
 				return
 			}
@@ -435,6 +435,24 @@ func touch(st *page.Store) {
 	if err := st.Touch(); err != nil {
 		log.Printf("touch: %v", err)
 	}
+}
+
+type streamed struct {
+	*eventlog.Event
+	HTML string `json:"html,omitempty"`
+}
+
+const maxFormattedText = 64 << 10
+
+func messageHTML(e *eventlog.Event) string {
+	if (e.Kind != "message" && e.Kind != eventlog.KindNote) || strings.TrimSpace(e.Text) == "" || len(e.Text) > maxFormattedText {
+		return ""
+	}
+	out, err := render.Message(e.Text)
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 type readReceipt struct {

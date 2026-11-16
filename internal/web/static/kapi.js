@@ -110,6 +110,28 @@
     return svg;
   }
 
+  function prose(tag, className, text, html) {
+    const el = h(tag, { class: html ? `${className} kapi-md` : className });
+    if (html) el.innerHTML = html;
+    else el.textContent = text;
+    return el;
+  }
+
+  function copyMessage(text) {
+    const button = h("button", { type: "button", class: "kapi-msg-copy", "aria-label": "Copy message", "data-tip": "Copy" }, icon("copy"));
+    const show = (tip, copied) => {
+      button.dataset.tip = tip;
+      button.toggleAttribute("data-kapi-copied", copied);
+      button.replaceChildren(icon(copied ? "checkCircle" : "copy"));
+    };
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(text).then(() => show("Copied", true), () => show("Copy failed", false));
+      setTimeout(() => show("Copy", false), 1200);
+    });
+    return button;
+  }
+
   const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const MAX_IMAGES = 4;
   const fileURL = (nameOrPath) => `${base}/files/${encodeURIComponent(nameOrPath.split("/").pop())}`;
@@ -150,6 +172,8 @@
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
   const searchButton = searchTrigger();
   const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Close chat", title: "Close chat", onclick: () => setPanelCollapsed(true) }, icon("x"));
+  const expandPanelButton = h("button", { type: "button", class: "kapi-panel-expand", "aria-label": "Expand chat", "data-tip": "Expand chat", "aria-pressed": "false", onclick: () => setPanelExpanded(!panelExpanded) }, icon("expand"));
+  const backToPage = h("button", { type: "button", class: "kapi-chat-back", onclick: () => setPanelExpanded(false) }, icon("back"), h("span", { text: "Back to page" }), h("kbd", { text: keyHint("dismiss") }));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
@@ -244,7 +268,7 @@
   };
   syncSaved();
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("div", { class: "kapi-chat-head" }, h("strong", {}, icon("chat"), "Agent chat"), collapsePanelButton), tabs,
+    h("div", { class: "kapi-chat-head" }, backToPage, h("strong", {}, icon("chat"), "Agent chat"), h("span", { class: "kapi-chat-head-tools" }, expandPanelButton, collapsePanelButton)), tabs,
     restartBox, notice, chat, notesView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
@@ -259,6 +283,7 @@
   const phone = matchMedia("(max-width: 760px)");
   // Each page starts conversational; panel state does not leak between pages.
   let panelCollapsed = false;
+  let panelExpanded = false;
   let phoneChatOpen = true;
   const panelIsCollapsed = () => phone.matches ? !phoneChatOpen : panelCollapsed;
   const pageAreaRight = () => document.documentElement.clientWidth - (panelIsCollapsed() ? 0 : panel.getBoundingClientRect().width);
@@ -271,8 +296,15 @@
 
   function syncPanel(focus = false) {
     const collapsed = panelIsCollapsed();
+    const expanded = panelExpanded && !collapsed && !phone.matches;
     root.toggleAttribute("data-panel-collapsed", collapsed);
+    root.toggleAttribute("data-panel-expanded", expanded);
     document.documentElement.toggleAttribute("data-kapi-panel-collapsed", collapsed);
+    main.inert = expanded;
+    expandPanelButton.setAttribute("aria-pressed", String(expanded));
+    expandPanelButton.setAttribute("aria-label", expanded ? "Back to page" : "Expand chat");
+    expandPanelButton.dataset.tip = expanded ? "Back to page" : "Expand chat";
+    expandPanelButton.replaceChildren(icon(expanded ? "collapse" : "expand"));
     panel.inert = collapsed;
     panel.toggleAttribute("aria-hidden", collapsed);
     if (!collapsed && !panel.hasAttribute("data-notes") && !panel.hasAttribute("data-outline")) markPanelUnread(false);
@@ -294,7 +326,20 @@
     } else {
       panelCollapsed = on;
     }
+    if (on) panelExpanded = false;
     syncPanel(true);
+  }
+
+  function setPanelExpanded(on) {
+    const atLatest = !awayFromLatest();
+    const top = () => logScroll.getBoundingClientRect().top;
+    const anchor = [...log.children].find((li) => li.getBoundingClientRect().bottom > top());
+    const offset = anchor ? anchor.getBoundingClientRect().top - top() : 0;
+    panelExpanded = on;
+    syncPanel();
+    if (atLatest) goToLatest("auto");
+    else if (anchor) logScroll.scrollTop += anchor.getBoundingClientRect().top - top() - offset;
+    (on ? input : chatButton).focus({ preventScroll: true });
   }
 
   syncPanel();
@@ -1751,14 +1796,14 @@
     const re = Array.isArray(ev.re) ? ev.re : [];
     if (ev.kind === "note" && !re.length && ev.author === "human") {
       const n = { seq: ev.seq, num: notes.length + 1, target: ev.target || "", part: ev.part || "", quote: ev.quote || "", prefix: ev.prefix || "",
-        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false, files: ev.files || [] };
+        suffix: ev.suffix || "", rev: ev.rev || 0, text: ev.text, html: ev.html || "", time: ev.time, replies: [], last: "waiting", touched: 0, changedTime: "", resolved: false, files: ev.files || [] };
       notes.push(n);
       noteBySeq.set(ev.seq, n);
     } else if ((ev.kind === "note" || ev.kind === "message") && re.length) {
       for (const seq of re) {
         const n = noteBySeq.get(seq);
         if (!n) continue;
-        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, time: ev.time, files: ev.files || [] });
+        n.replies.push({ seq: ev.seq, author: ev.author, text: ev.text, html: ev.html || "", time: ev.time, files: ev.files || [] });
         if (ev.kind === "note" && !noteBySeq.has(ev.seq)) noteBySeq.set(ev.seq, n);
         n.last = ev.author === "human" ? "waiting" : "answered";
       }
@@ -2099,10 +2144,10 @@
         ...(c.before ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Before" }), h("span", { class: "kapi-diff-old", text: clip(c.before, 400) }))] : []),
         ...(c.now ? [h("div", { class: "kapi-diff-row" }, h("span", { class: "kapi-diff-k", text: "Now" }), h("span", { class: "kapi-diff-new", text: clip(c.now, 400) }))] : [])));
     }
-    const msg = (author, text, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
-      h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), h("span", { class: "kapi-pop-text", text }), ...thumbs(files));
-    kids.push(msg("human", n.text, n.files));
-    for (const r of n.replies) kids.push(msg(r.author, r.text, r.files));
+    const msg = (author, text, html, files) => h("div", { class: "kapi-pop-msg", "data-author": author === "human" ? "human" : "agent" },
+      h("div", { class: "kapi-pop-row" }, h("span", { class: "kapi-pop-who", text: author === "human" ? "You" : author }), ...(text ? [copyMessage(text)] : [])), prose(html ? "div" : "span", "kapi-pop-text", text, html), ...thumbs(files));
+    kids.push(msg("human", n.text, n.html, n.files));
+    for (const r of n.replies) kids.push(msg(r.author, r.text, r.html, r.files));
     if (!n.replies.some((r) => r.author !== "human") && state !== "changed") kids.push(h("p", { class: "kapi-pop-gone", text: "The agent has not answered yet." }));
     const foot = h("div", { class: "kapi-pop-foot" }, h("span", { class: "kapi-pop-hint", text: matchMedia("(hover: hover)").matches ? "Move away to close" : "Tap outside to close" }));
     if (!n.resolved) {
@@ -2386,6 +2431,7 @@
       const where = ev.part ? (kind ? `${kind}: ${ev.part}` : ev.part) : describe(first);
       meta.append(h("button", { type: "button", class: "kapi-ref", "data-ref": first, title: `#${ev.target}`, text: where }));
     }
+    if (ev.text && (ev.kind === "message" || ev.kind === "note")) meta.append(copyMessage(ev.text));
     log.append(h("li", { class: `kapi-msg kapi-${ev.kind}`, "data-author": human ? "human" : "agent", "data-seq": ev.seq }, meta, body));
     empty.hidden = true;
     if (near || human) goToLatest();
@@ -2458,11 +2504,11 @@
     }
     trackNote(ev);
     if (ended && ev.author === "human" && ["message", "answer", "note"].includes(ev.kind)) log.append(h("li", { class: "kapi-again", "data-seq": ev.seq, text: `Session started again${clock(ev.time)}` }));
-    if (ev.kind === "message") addEntry(ev, h("div", {}, h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
+    if (ev.kind === "message") addEntry(ev, h("div", {}, prose("div", "kapi-msg-text", ev.text, ev.html), ...thumbs(ev.files)));
     else if (ev.kind === "answer") addEntry(ev, h("div", { class: "kapi-msg-text", text: `Sent form answer: ${ev.text}` }));
     else if (ev.kind === "note") {
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
-        h("div", { class: "kapi-msg-text", text: ev.text }), ...thumbs(ev.files)));
+        prose("div", "kapi-msg-text", ev.text, ev.html), ...thumbs(ev.files)));
     }
     if (ev.kind === "end" && ev.text === "deleted" && new Date(ev.time) >= loadedAt && !deleteYes.disabled) return leaveDeleted();
     if (ev.kind === "end") {
@@ -3294,6 +3340,10 @@
       }
     }
     if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
+    if (SHORTCUTS.is("dismiss", e) && root.hasAttribute("data-panel-expanded") && !e.defaultPrevented && !e.isComposing && !asking && !pop && !sheetOpen) {
+      e.preventDefault();
+      return setPanelExpanded(false);
+    }
     if (SHORTCUTS.is("dismiss", e) && phoneChatOpen && phone.matches && !editing && !asking) {
       input.blur();
       return setPanelCollapsed(true);
