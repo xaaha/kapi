@@ -12,13 +12,14 @@ import (
 	"github.com/xaaha/kapi/internal/web/app"
 )
 
-func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
+func TestIndexTitlesPagesByHeadingAndMarksDeletedFiles(t *testing.T) {
 	dir := t.TempDir()
 	titled := filepath.Join(dir, "rollout.html")
 	plain := filepath.Join(dir, "notes.html")
 	gone := filepath.Join(dir, "gone.html")
+	kept := filepath.Join(dir, "kept.html")
 	notAFile := filepath.Join(dir, ".kapi")
-	for path, src := range map[string]string{titled: "<h1>Rollout plan</h1><p>Two steps.</p>", plain: "<p>no heading</p>", gone: "<h1>Gone</h1>"} {
+	for path, src := range map[string]string{titled: "<h1>Rollout plan</h1><p>Two steps.</p>", plain: "<p>no heading</p>", gone: "<h1>Gone</h1>", kept: "<h1>Kept copy</h1><p>Still here.</p>"} {
 		if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -30,8 +31,13 @@ func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
 	if err := s.addOpener(titled, dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(gone); err != nil {
+	if _, _, err := s.store(kept); err != nil {
 		t.Fatal(err)
+	}
+	for _, path := range []string{gone, kept} {
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pages, err := s.Index()
 	if err != nil {
@@ -44,8 +50,8 @@ func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
 			t.Errorf("%s: id %q, want %q", p.Path, p.ID, page.ID(p.Path))
 		}
 	}
-	if len(pages) != 2 {
-		t.Fatalf("pages = %+v, want only the two files that still exist", pages)
+	if len(pages) != 4 {
+		t.Fatalf("pages = %+v, want the two files that exist and the two that are missing", pages)
 	}
 	if p := pages[byPath[titled]]; p.Title != "Rollout plan" || p.Summary != "Two steps." || len(p.Folders) != 1 || p.Folders[0] != resolved(dir) || p.Missing || p.Changed.IsZero() {
 		t.Errorf("titled page = %+v", p)
@@ -53,8 +59,11 @@ func TestIndexTitlesPagesByHeadingAndOmitsDeletedFiles(t *testing.T) {
 	if p := pages[byPath[plain]]; p.Title != "notes" || p.Missing {
 		t.Errorf("plain page = %+v", p)
 	}
-	if _, ok := byPath[gone]; ok {
-		t.Errorf("deleted page is still in the index: %+v", pages)
+	if p := pages[byPath[gone]]; !p.Missing || p.Rev != 0 || p.Title != "gone" {
+		t.Errorf("missing page with no copy = %+v, want missing with rev 0", p)
+	}
+	if p := pages[byPath[kept]]; !p.Missing || p.Rev != 1 || p.RevAt.IsZero() || p.Title != "Kept copy" || p.Summary != "Still here." || p.Changed.IsZero() {
+		t.Errorf("missing page with a copy = %+v, want missing, rev 1, titled from the copy", p)
 	}
 	if _, ok := byPath[notAFile]; ok {
 		t.Errorf("directory is still in the index: %+v", pages)

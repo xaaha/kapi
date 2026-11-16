@@ -47,7 +47,11 @@ type Page struct {
 	Viewed  time.Time `json:"viewed,omitzero"`
 	Touched time.Time `json:"touched,omitzero"`
 	State   string    `json:"state"`
-	Missing bool      `json:"missing,omitempty"`
+
+	Missing    bool      `json:"missing,omitempty"`
+	Unreadable bool      `json:"unreadable,omitempty"`
+	Rev        uint64    `json:"rev,omitempty"`
+	RevAt      time.Time `json:"revAt,omitzero"`
 
 	ArchivesAt time.Time `json:"archivesAt,omitzero"`
 	ArchivedAt time.Time `json:"archivedAt,omitzero"`
@@ -61,6 +65,15 @@ type Deleted struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	KeptImages bool   `json:"keptImages,omitempty"`
+}
+
+// Missing is a page whose file is gone, with the newest version kapi kept of it; Rev 0 means it kept none.
+type Missing struct {
+	ID    string    `json:"id"`
+	Path  string    `json:"path"`
+	Title string    `json:"title"`
+	Rev   uint64    `json:"rev"`
+	At    time.Time `json:"at,omitzero"`
 }
 
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {

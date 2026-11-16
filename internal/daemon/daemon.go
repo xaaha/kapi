@@ -550,6 +550,10 @@ func (s *Server) handle(conn net.Conn) {
 		s.open(enc, &req)
 		return
 	}
+	if req.Op == "recover" {
+		reply(enc, s.recoverOp(req.Page))
+		return
+	}
 	if req.Op == "inbox" || req.Op == "unwatched" {
 		if !filepath.IsAbs(req.Page) {
 			reply(enc, &Response{Error: fmt.Sprintf("%s directory must be absolute: %q", req.Op, req.Page)})
