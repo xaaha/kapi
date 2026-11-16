@@ -1180,6 +1180,102 @@ test("desktop conversation panel collapses without losing its working state", as
   assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
 });
 
+test("chat messages show their formatted Markdown and fall back to plain text", async () => {
+  if (await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await click(".kapi-chat-button");
+  const html = `<p>All 8 checks pass on <code>f6cf9a4b</code>.</p>\n<h2>Left</h2>\n<ol>\n<li>A teammate review</li>\n<li>Retarget to main</li>\n</ol>\n` +
+    `<div class="kapi-table"><table><thead><tr><th>Piece</th><th>Blocked by</th><th>Owner</th><th>Since</th></tr></thead><tbody><tr><td>averylongunbrokencellvaluethatiswiderthanthepanel</td><td>nobody</td><td>me</td><td>today</td></tr></tbody></table></div>\n` +
+    `<figure class="kapi-code"><pre class="kapi-hl"><code>gh pr edit 1111 --base main --title "a long command line that does not wrap at all"</code></pre></figure>`;
+  server.push({ kind: "message", text: "All 8 checks pass on `f6cf9a4b`.", html });
+  server.push({ kind: "message", text: "plain *stars*\nsecond line" });
+  await page.waitFor(`[...document.querySelectorAll(".kapi-message .kapi-msg-text")].some((el) => el.textContent.includes("plain *stars*"))`);
+  const shown = await page.eval(`(() => {
+    const [md, plain] = [...document.querySelectorAll(".kapi-message .kapi-msg-text")].slice(-2);
+    const scroll = document.querySelector(".kapi-scroll");
+    const style = getComputedStyle(md.querySelector("h2"));
+    return {
+      items: [...md.querySelectorAll("ol > li")].map((li) => li.textContent),
+      chip: getComputedStyle(md.querySelector("p code")).borderTopStyle,
+      heading: [style.textTransform, parseFloat(style.fontSize) < 14],
+      whiteSpace: getComputedStyle(md).whiteSpace,
+      plain: [plain.classList.contains("kapi-md"), plain.textContent, getComputedStyle(plain).whiteSpace],
+      fits: scroll.scrollWidth <= scroll.clientWidth,
+      tableScrolls: md.querySelector(".kapi-table").scrollWidth > md.querySelector(".kapi-table").clientWidth,
+    };
+  })()`);
+  assert.deepEqual(shown.items, ["A teammate review", "Retarget to main"]);
+  assert.equal(shown.chip, "solid");
+  assert.deepEqual(shown.heading, ["uppercase", true]);
+  assert.equal(shown.whiteSpace, "normal");
+  assert.deepEqual(shown.plain, [false, "plain *stars*\nsecond line", "pre-wrap"]);
+  assert.equal(shown.fits, true, "a wide table or code block never widens the chat");
+  assert.equal(shown.tableScrolls, true);
+});
+
+test("the expand toggle opens the chat over the page and Escape brings the side panel back with its draft and place", async () => {
+  if (await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await click(".kapi-chat-button");
+  for (let i = 0; i < 30; i++) server.push({ kind: "message", text: `filler ${i}` });
+  await page.waitFor(`document.querySelectorAll(".kapi-message").length >= 30`);
+  await page.eval(`(() => {
+    document.querySelector(".kapi-composer textarea").value = "half written";
+    const scroll = document.querySelector(".kapi-scroll");
+    scroll.scrollTop = 0;
+  })()`);
+  const firstShown = () => page.eval(`(() => {
+    const top = document.querySelector(".kapi-scroll").getBoundingClientRect().top;
+    return [...document.querySelectorAll(".kapi-log > li")].find((li) => li.getBoundingClientRect().bottom > top)?.dataset.seq;
+  })()`);
+  const before = await firstShown();
+  const expanded = () => page.eval(`document.getElementById("kapi-chrome").hasAttribute("data-panel-expanded")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel-expand").getAttribute("aria-label")`), "Expand chat");
+
+  await click(".kapi-panel-expand");
+  assert.equal(await expanded(), true);
+  const open = await page.eval(`(() => {
+    const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
+    const log = document.querySelector(".kapi-log").getBoundingClientRect();
+    return {
+      wide: panel.left === 0 && Math.round(panel.width) === document.documentElement.clientWidth,
+      column: Math.round(log.width) <= 720 && Math.abs((log.left + log.right) / 2 - panel.width / 2) < 2,
+      back: document.querySelector(".kapi-chat-back").checkVisibility(),
+      inert: document.getElementById("kapi-page").inert,
+      pressed: document.querySelector(".kapi-panel-expand").getAttribute("aria-pressed"),
+      draft: document.querySelector(".kapi-composer textarea").value,
+      focus: document.activeElement === document.querySelector(".kapi-composer textarea"),
+    };
+  })()`);
+  assert.deepEqual(open, { wide: true, column: true, back: true, inert: true, pressed: "true", draft: "half written", focus: true });
+  assert.equal(await firstShown(), before, "the first message in view stays in view");
+
+  await page.key("Escape");
+  await page.waitFor(`!document.getElementById("kapi-chrome").hasAttribute("data-panel-expanded")`);
+  assert.equal(await page.eval(`Math.round(document.querySelector(".kapi-panel").getBoundingClientRect().width)`), 355);
+  assert.equal(await page.eval(`document.getElementById("kapi-page").inert`), false);
+  assert.equal(await page.eval(`document.querySelector(".kapi-composer textarea").value`), "half written");
+  assert.equal(await firstShown(), before);
+
+  await click(".kapi-panel-expand");
+  await click(".kapi-chat-back");
+  assert.equal(await expanded(), false, "Back to page returns to the side panel");
+
+  await click(".kapi-panel-expand");
+  server.push({ kind: "message", text: "while expanded" });
+  await page.waitFor(`document.querySelector(".kapi-log > li:last-child")?.textContent.includes("while expanded")`);
+  await click(".kapi-panel-collapse");
+  assert.equal(await page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`), true);
+  await click(".kapi-chat-button");
+  assert.equal(await expanded(), false, "reopening the chat starts in the side panel");
+
+  await click(".kapi-panel-expand");
+  await page.eval(`document.activeElement.blur(); document.getSelection().removeAllRanges()`);
+  const modifiers = process.platform === "darwin" ? 4 : 2;
+  await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "c", code: "KeyC", windowsVirtualKeyCode: 67, modifiers });
+  await page.call("Input.dispatchKeyEvent", { type: "keyUp", key: "c", code: "KeyC", windowsVirtualKeyCode: 67, modifiers });
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+  await click(".kapi-chat-button");
+  assert.equal(await expanded(), false, "the chat shortcut closes the expanded chat and reopens the side panel");
+  await page.eval(`document.querySelector(".kapi-composer textarea").value = ""`);
+});
+
 test("command C toggles the chat only when no text is selected and nothing is being typed", async () => {
   const modifiers = process.platform === "darwin" ? 4 : 2;
   const press = async () => {
@@ -1264,6 +1360,7 @@ test("phone chat is an explicit drawer and closes with Escape without losing the
     assert.equal(box.bottom, 800);
     assert.equal(box.right, await phone.eval(`document.documentElement.clientWidth`));
     assert.ok(box.width <= 365);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-panel-expand").checkVisibility()`), false, "the phone drawer has no expand toggle");
     await phone.eval(`document.querySelector(".kapi-composer textarea").value = "draft"`);
     await phone.key("Escape");
     await phone.waitFor(`!document.querySelector(".kapi-panel").checkVisibility()`);

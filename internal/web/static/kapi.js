@@ -157,6 +157,8 @@
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
   const searchButton = searchTrigger();
   const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Close chat", title: "Close chat", onclick: () => setPanelCollapsed(true) }, icon("x"));
+  const expandPanelButton = h("button", { type: "button", class: "kapi-panel-expand", "aria-label": "Expand chat", "data-tip": "Expand chat", "aria-pressed": "false", onclick: () => setPanelExpanded(!panelExpanded) }, icon("expand"));
+  const backToPage = h("button", { type: "button", class: "kapi-chat-back", onclick: () => setPanelExpanded(false) }, icon("back"), h("span", { text: "Back to page" }), h("kbd", { text: keyHint("dismiss") }));
   const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
@@ -251,7 +253,7 @@
   };
   syncSaved();
   const panel = h("aside", { class: "kapi-panel", "aria-label": "kapi chat" },
-    h("div", { class: "kapi-chat-head" }, h("strong", {}, icon("chat"), "Agent chat"), collapsePanelButton), tabs,
+    h("div", { class: "kapi-chat-head" }, backToPage, h("strong", {}, icon("chat"), "Agent chat"), h("span", { class: "kapi-chat-head-tools" }, expandPanelButton, collapsePanelButton)), tabs,
     restartBox, notice, chat, notesView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
@@ -266,6 +268,7 @@
   const phone = matchMedia("(max-width: 760px)");
   // Each page starts conversational; panel state does not leak between pages.
   let panelCollapsed = false;
+  let panelExpanded = false;
   let phoneChatOpen = true;
   const panelIsCollapsed = () => phone.matches ? !phoneChatOpen : panelCollapsed;
   const pageAreaRight = () => document.documentElement.clientWidth - (panelIsCollapsed() ? 0 : panel.getBoundingClientRect().width);
@@ -278,8 +281,16 @@
 
   function syncPanel(focus = false) {
     const collapsed = panelIsCollapsed();
+    const expanded = panelExpanded && !collapsed && !phone.matches;
     root.toggleAttribute("data-panel-collapsed", collapsed);
+    root.toggleAttribute("data-panel-expanded", expanded);
     document.documentElement.toggleAttribute("data-kapi-panel-collapsed", collapsed);
+    document.documentElement.toggleAttribute("data-kapi-chat-expanded", expanded);
+    main.inert = expanded;
+    expandPanelButton.setAttribute("aria-pressed", String(expanded));
+    expandPanelButton.setAttribute("aria-label", expanded ? "Back to page" : "Expand chat");
+    expandPanelButton.dataset.tip = expanded ? "Back to page" : "Expand chat";
+    expandPanelButton.replaceChildren(icon(expanded ? "collapse" : "expand"));
     panel.inert = collapsed;
     panel.toggleAttribute("aria-hidden", collapsed);
     if (!collapsed && !panel.hasAttribute("data-notes") && !panel.hasAttribute("data-outline")) markPanelUnread(false);
@@ -301,7 +312,20 @@
     } else {
       panelCollapsed = on;
     }
+    if (on) panelExpanded = false;
     syncPanel(true);
+  }
+
+  function setPanelExpanded(on) {
+    const atLatest = !awayFromLatest();
+    const top = () => logScroll.getBoundingClientRect().top;
+    const anchor = [...log.children].find((li) => li.getBoundingClientRect().bottom > top());
+    const offset = anchor ? anchor.getBoundingClientRect().top - top() : 0;
+    panelExpanded = on;
+    syncPanel();
+    if (atLatest) goToLatest("auto");
+    else if (anchor) logScroll.scrollTop += anchor.getBoundingClientRect().top - top() - offset;
+    (on ? input : chatButton).focus({ preventScroll: true });
   }
 
   syncPanel();
@@ -3301,6 +3325,10 @@
       }
     }
     if (SHORTCUTS.is("dismiss", e) && outlineSheet && phone.matches) return setOutline(false);
+    if (SHORTCUTS.is("dismiss", e) && root.hasAttribute("data-panel-expanded") && !e.defaultPrevented && !asking && !pop && !sheetOpen) {
+      e.preventDefault();
+      return setPanelExpanded(false);
+    }
     if (SHORTCUTS.is("dismiss", e) && phoneChatOpen && phone.matches && !editing && !asking) {
       input.blur();
       return setPanelCollapsed(true);
