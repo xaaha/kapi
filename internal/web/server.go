@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -53,6 +54,8 @@ type Pages interface {
 	Unsave(path string) error
 	Delete(id string) (app.Deleted, error)
 	Restore(id string) (app.Deleted, error)
+	Missing(id string) (app.Missing, bool)
+	Recover(id string) (app.Missing, error)
 }
 
 type Server struct {
@@ -99,6 +102,7 @@ func newServer(pages Pages, prefs settings.Store, token, host string, previous [
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
+	s.mux.HandleFunc("POST /p/{id}/recover", s.handleRecover)
 	s.libraryRoutes()
 	s.mount(list)
 	return s
@@ -135,7 +139,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|delete-notes|end|save|unsave|files|images|ops|answers|export/html|export/markdown)?$`)
+var reopenable = regexp.MustCompile(`^p/([0-9a-f]{16})/(events|messages|notes|resolve|delete-notes|end|save|unsave|files|images|ops|answers|recover|export/html|export/markdown)?$`)
 
 func (s *Server) refuseToken(w http.ResponseWriter, seg, rest string) {
 	m := reopenable.FindStringSubmatch(rest)
@@ -198,18 +202,23 @@ func (s *Server) withPage(h pageHandler) http.HandlerFunc {
 			s.redirectMoved(w, r, id, moved.To)
 			return
 		}
+		if err == nil {
+			s.mu.Lock()
+			s.seen[id] = true
+			s.mu.Unlock()
+			_, _, err = st.Refresh()
+		}
+		if err != nil {
+			if m, ok := s.pages.Missing(id); ok {
+				s.serveMissing(w, r, &m)
+				return
+			}
+		}
 		if errors.Is(err, fs.ErrNotExist) {
 			http.NotFound(w, r)
 			return
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		s.mu.Lock()
-		s.seen[id] = true
-		s.mu.Unlock()
-		if _, _, err := st.Refresh(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -344,7 +353,7 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request, st *page.S
 	}
 }
 
-func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.Store, l *eventlog.Log) {
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
 	var after uint64
 	if last := r.Header.Get("Last-Event-ID"); last != "" {
 		n, err := strconv.ParseUint(last, 10, 64)
@@ -361,7 +370,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		return
 	}
 	sent := map[[2]string]uint64{}
-	defer s.pages.Viewing(r.PathValue("id"))()
+	id := r.PathValue("id")
+	defer s.pages.Viewing(id)()
+	check := time.NewTicker(missingCheck)
+	defer check.Stop()
 	for {
 		events, changed := l.After(after)
 		for i := range events {
@@ -401,6 +413,13 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, _ *page.St
 		select {
 		case <-changed:
 		case <-acked:
+		case <-check.C:
+			if _, err := os.Lstat(st.Path()); errors.Is(err, fs.ErrNotExist) {
+				if m, ok := s.pages.Missing(id); ok && sendMissing(w, &m) == nil {
+					_ = rc.Flush()
+				}
+				return
+			}
 		case <-r.Context().Done():
 			return
 		case <-l.Gone():

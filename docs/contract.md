@@ -509,10 +509,26 @@ all of them under 512 MB by deleting the least recently used first, but never
 one used in the last hour; an upload that still does not fit is refused.
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S,"ids":[...]}`, where `seq` is the revision event the op logged and `ids` names the blocks it changed, the new one for an `image` op, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
+| `POST /p/{id}/recover` | `{}` | `{"id":...,"path":...,"title":...,"rev":N,"at":...}`; writes the newest kept revision back to the page's missing file, recreating its folder; 409 when a file is already there or kapi kept no revision |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 
 `{id}` is the same 16-hex page id the daemon already uses for
 `pages/<id>/`.
+
+A page whose file is gone, and that did not move and is not being deleted,
+is missing. `GET /p/{id}/` then serves an empty `<main>` with
+`data-missing` holding `{"id","path","title","rev","at"}`, where `rev` is the
+newest kept revision (0 when there is none) and `at` when it was kept; other
+`/p/{id}/` routes answer 410 with that object under `missing`. An open
+`/events` stream sends `event: missing` with the same object within a second
+of the file going away and closes; the next stream sends it again, then
+`event: present` with `{"rev":N,"restored":bool}` once the file is back, and
+closes so the browser reconnects as usual. `restored` is true when the file
+holds the kept revision, so every open tab shows the same restore. The tab
+asks to restore that revision or go home; the home card is marked Page
+missing and asks the same inside the card, then offers Delete. `kapi open`,
+`say`, `send`, `wait` and `watch` restore a missing page first and print
+which revision, and `kapi ls` marks it missing.
 
 Ask AI writes the notes: on any text selection, across blocks too, it
 targets the blocks the selection touches, and on a selected block it targets

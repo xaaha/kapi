@@ -1,0 +1,251 @@
+.kapi-dialog.kapi-popover {
+  width: min(460px, calc(100vw - 32px));
+  height: auto;
+  max-height: min(560px, calc(100dvh - 48px));
+}
+
+.kapi-pop-holder {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.kapi-pop {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 24px 20px;
+  overflow-y: auto;
+}
+
+.kapi-pop[aria-busy="true"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.kapi-pop p {
+  margin: 0;
+}
+
+.kapi-pop code {
+  font: 12.5px var(--kapi-mono);
+  overflow-wrap: anywhere;
+}
+
+.kapi-pop-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--kapi-red-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kapi-pop .kapi-pop-kicker svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.kapi-pop-subject {
+  overflow: hidden;
+  color: var(--kapi-muted);
+  font: 500 13px/1.3 var(--kapi-font-body, var(--kapi-font));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kapi-pop-question {
+  color: var(--kapi-fg);
+  font: 600 15px/1.35 var(--kapi-font);
+}
+
+.kapi-pop-detail {
+  color: var(--kapi-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kapi-pop-error {
+  color: var(--kapi-red-text);
+  font-size: 13px;
+}
+
+.kapi-pop-note {
+  padding: 10px 12px;
+  border: 1px solid var(--kapi-yellow-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-yellow-fill);
+  color: var(--kapi-fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kapi-pop-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kapi-pop-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-bg);
+  color: var(--kapi-fg);
+  font: 400 14px var(--kapi-font);
+}
+
+.kapi-pop-field input:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 1px;
+}
+
+.kapi-pop-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--kapi-muted);
+  font-size: 12.5px;
+}
+
+.kapi-pop-agent::before {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--kapi-faint);
+  content: "";
+}
+
+.kapi-pop-agent[data-attached]::before {
+  background: var(--kapi-green-text);
+}
+
+.kapi-pop-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--kapi-green-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-green-fill);
+}
+
+.kapi-pop .kapi-pop-done svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  fill: var(--kapi-green-text);
+}
+
+.kapi-pop-done strong {
+  display: block;
+  color: var(--kapi-green-text);
+  font-size: 15px;
+}
+
+.kapi-pop-done p {
+  color: var(--kapi-muted);
+  font-size: 13px;
+}
+
+.kapi-pop-actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.kapi-pop-actions > .kapi-pop-button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--kapi-border-strong);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  cursor: pointer;
+  font: 600 13.5px/1 var(--kapi-font);
+}
+
+.kapi-pop-actions > .kapi-pop-button:hover:not(:disabled) {
+  background: var(--kapi-subtle);
+}
+
+.kapi-pop-actions > .kapi-pop-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.kapi-pop-actions > .kapi-pop-button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 2px;
+}
+
+.kapi-pop-actions > .kapi-pop-button[data-kind="primary"] {
+  border-color: var(--kapi-fg);
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+}
+
+.kapi-pop-actions > .kapi-pop-button[data-kind="danger"] {
+  border-color: var(--kapi-red-text);
+  background: var(--kapi-red-text);
+  color: var(--kapi-bg);
+}
+
+.kapi-pop-actions > .kapi-pop-button:is([data-kind="primary"], [data-kind="danger"]):hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.kapi-pop-inline {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border: 1px solid var(--kapi-red-border);
+  border-radius: var(--kapi-radius);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-card-shadow);
+}
+
+.kapi-pop-inline > .kapi-pop {
+  flex: none;
+  gap: 6px;
+  padding: 18px 18px 0;
+  overflow: visible;
+}
+
+.kapi-pop-inline .kapi-pop-question {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.kapi-pop-inline .kapi-pop-detail,
+.kapi-pop-inline .kapi-pop-error {
+  font-size: 12.5px;
+}
+
+.kapi-pop-inline > .kapi-pop-actions {
+  flex: none;
+  margin-top: auto;
+  padding: 12px 18px 18px;
+}
+
+.kapi-pop-inline[aria-busy="true"] {
+  opacity: 0.7;
+}

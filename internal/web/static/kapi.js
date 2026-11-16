@@ -7,6 +7,7 @@
   const { searchDialog, searchTrigger } = await import(new URL("../../static/search-dialog.js", location.href));
   const unifiedSearch = searchDialog();
   const { icon: sharedIcon } = await import(new URL("../../static/core.js", location.href));
+  const { restorePrompt } = await import(new URL("../../static/restore-dialog.js", location.href));
 
   const STATUS = {
     connecting: "Connecting to kapi\u2026",
@@ -86,7 +87,6 @@
     pencil: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
     flip: "M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z",
     copy: "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
-    checkCircle: "M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z",
     minus: "M216,136H40a8,8,0,0,1,0-16H216a8,8,0,0,1,0,16Z",
     expand: "M216,48V96a8,8,0,0,1-16,0V67.31l-50.34,50.35a8,8,0,0,1-11.32-11.32L188.69,56H160a8,8,0,0,1,0-16h48A8,8,0,0,1,216,48ZM106.34,138.34,56,188.69V160a8,8,0,0,0-16,0v48a8,8,0,0,0,8,8H96a8,8,0,0,0,0-16H67.31l50.35-50.34a8,8,0,0,0-11.32-11.32Z",
     collapse: "M213.66,53.66,163.31,104H192a8,8,0,0,1,0,16H144a8,8,0,0,1-8-8V64a8,8,0,0,1,16,0V92.69l50.34-50.35a8,8,0,0,1,11.32,11.32ZM112,136H64a8,8,0,0,0,0,16H92.69L42.34,202.34a8,8,0,0,0,11.32,11.32L104,163.31V192a8,8,0,0,0,16,0V144A8,8,0,0,0,112,136Z",
@@ -250,7 +250,7 @@
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
-  const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
+  const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", "aria-keyshortcuts": keyWords("toggleChat"), "data-tip": `Chat ${keyHint("toggleChat")}`, onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
   const drawerScrim = h("button", { type: "button", class: "kapi-drawer-scrim", "aria-label": "Close navigation panels", hidden: "", onclick: () => {
     setPanelCollapsed(true);
     setOutline(false);
@@ -900,7 +900,54 @@
     }
     if (await restartedReply(res)) return null;
     const data = await res.json().catch(() => ({}));
+    if (res.status === 410 && data.missing) {
+      askRestore(data.missing);
+      return null;
+    }
     return { status: res.status, ok: res.ok, data };
+  }
+
+  let missing = main.dataset.missing ? JSON.parse(main.dataset.missing) : null;
+  const blank = Boolean(missing);
+  const restoredURL = (rev) => `${base}/?restored=${rev}`;
+
+  function missingBox() {
+    const again = h("button", { type: "button", class: "kapi-copy", text: "Restore" });
+    again.addEventListener("click", () => askRestore(missing));
+    restartBox.replaceChildren(h("p", { text: "This page's file is missing." }), again);
+    restartBox.hidden = false;
+  }
+
+  async function askRestore(m) {
+    missing = m;
+    const prompt = await restorePrompt();
+    prompt.open({
+      missing: m,
+      restore: async () => {
+        const res = await request("/recover", {});
+        if (!res) return { error: "Could not restore the page. Check that the daemon is running." };
+        if (!res.ok) return { error: res.data.error || `Not restored (HTTP ${res.status}).` };
+        if (blank) location.replace(restoredURL(res.data.rev));
+        missing = null;
+        restartBox.hidden = true;
+        return { rev: res.data.rev };
+      },
+      leave: () => location.assign(homeURL),
+      dismissed: missingBox,
+    });
+  }
+
+  async function fileBack(back) {
+    if (blank) return location.replace(back.restored ? restoredURL(back.rev) : `${base}/`);
+    if (!missing) return;
+    missing = null;
+    restartBox.hidden = true;
+    const prompt = await restorePrompt();
+    if (back.restored) prompt.restored(back.rev, pagePath);
+    else {
+      prompt.close();
+      say("The page's file is back.");
+    }
   }
 
   const STALE = "The page changed before your change landed. This is the latest version, so try again.";
@@ -2256,6 +2303,7 @@
     if (!res.ok) throw new Error(res.status);
     const fresh = new DOMParser().parseFromString(await res.text(), "text/html").getElementById("kapi-page");
     if (!fresh) throw new Error("no page");
+    if (fresh.dataset.missing) return;
     if (editing) return void (pending = "page");
     const keep = selected && idOf(selected);
     selected = null;
@@ -2463,6 +2511,8 @@
       es.close();
       location.replace(pageURL(e.data));
     });
+    es.addEventListener("missing", (e) => missing || askRestore(JSON.parse(e.data)));
+    es.addEventListener("present", (e) => fileBack(JSON.parse(e.data)));
     es.onerror = () => {
       if (restarted) return;
       setStatus("disconnected");
@@ -3220,6 +3270,10 @@
       e.preventDefault();
       return setWriting(!writing);
     }
+    if (SHORTCUTS.is("toggleChat", e) && !asking && !e.altKey && !e.isComposing && !typing(focus) && document.getSelection().isCollapsed) {
+      e.preventDefault();
+      return setPanelCollapsed(!panelIsCollapsed());
+    }
     if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
         if (undoButton.hidden || busy) return;
@@ -3357,5 +3411,11 @@
   addEventListener("storage", (e) => {
     if (e.key === handoffKey && e.newValue) takeOver();
   });
+  if (missing) askRestore(missing);
+  const restoredRev = Number(new URLSearchParams(location.search).get("restored"));
+  if (restoredRev) {
+    history.replaceState(history.state, "", location.pathname);
+    restorePrompt().then((prompt) => prompt.restored(restoredRev, pagePath));
+  }
   connect();
 })();

@@ -1180,6 +1180,38 @@ test("desktop conversation panel collapses without losing its working state", as
   assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").hasAttribute("data-unread")`), false);
 });
 
+test("command C toggles the chat only when no text is selected and nothing is being typed", async () => {
+  const modifiers = process.platform === "darwin" ? 4 : 2;
+  const press = async () => {
+    await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "c", code: "KeyC", windowsVirtualKeyCode: 67, modifiers });
+    await page.call("Input.dispatchKeyEvent", { type: "keyUp", key: "c", code: "KeyC", windowsVirtualKeyCode: 67, modifiers });
+  };
+  const collapsed = () => page.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-chat-button").getAttribute("aria-keyshortcuts")`), await page.eval(`window.kapiShortcuts.key("toggleChat").words`));
+  await page.eval(`document.activeElement.blur(); document.getSelection().removeAllRanges()`);
+  const start = await collapsed();
+  await press();
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") === ${!start}`);
+  await press();
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") === ${start}`);
+
+  await page.eval(`(() => {
+    const r = document.createRange();
+    r.selectNodeContents(document.querySelector('[data-kapi-id="bbbbbbbb"]'));
+    document.getSelection().removeAllRanges();
+    document.getSelection().addRange(r);
+  })()`);
+  await press();
+  assert.equal(await collapsed(), start, "a text selection keeps command C as copy");
+
+  await page.eval(`document.getSelection().removeAllRanges()`);
+  if (start) await click(".kapi-chat-button");
+  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await press();
+  assert.equal(await collapsed(), false, "typing in the composer keeps command C as copy");
+  if (start) await click(".kapi-chat-button");
+});
+
 test("wide side panes toggle without moving the reading column", async () => {
   const wide = await browser.open(server.url, { width: 1920, height: 800 });
   try {

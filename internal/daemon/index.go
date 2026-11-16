@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"cmp"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,13 +56,23 @@ func (s *Server) Index() ([]app.Page, error) {
 		if d.err != nil {
 			continue
 		}
-		at, ok := stampOf(d.path)
+		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir), Opened: s.openedAt(d.path)}
+		file := d.path
+		at, ok := stampOf(file)
 		if !ok {
-			continue
+			m, c, gone := s.missing(d.path)
+			if !gone {
+				continue
+			}
+			p.Missing, p.Rev, p.RevAt, file = true, m.Rev, m.At, c.File
+			at, _ = stampOf(file)
 		}
-		p := app.Page{ID: filepath.Base(d.dir), Path: d.path, Title: page.Title(d.path), Folders: s.openers(d.path), State: s.state(d.path, d.dir), Opened: s.openedAt(d.path), Changed: at.mod}
-		title, summary := s.preview(d.path, at)
-		p.Title, p.Summary = cmp.Or(title, p.Title), summary
+		p.Changed = at.mod
+		if file != "" {
+			title, summary := s.preview(file, at)
+			p.Title, p.Summary = cmp.Or(title, p.Title), summary
+			p.Unreadable = !p.Missing && title == "" && summary == "" && unreadable(file)
+		}
 		if at, ok := stampOf(filepath.Join(d.dir, "events.ndjson")); ok && at.mod.After(p.Changed) {
 			p.Changed = at.mod
 		}
@@ -82,6 +94,14 @@ func (s *Server) Index() ([]app.Page, error) {
 		return cmp.Compare(a.Title, b.Title)
 	})
 	return out, nil
+}
+
+func unreadable(path string) bool {
+	f, err := os.Open(path)
+	if err == nil {
+		f.Close()
+	}
+	return errors.Is(err, fs.ErrPermission)
 }
 
 func (s *Server) preview(path string, at stamp) (title, summary string) {

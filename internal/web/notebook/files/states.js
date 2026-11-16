@@ -6,7 +6,7 @@ const DEFINITIONS = Object.freeze({
 });
 
 const UNKNOWN = Object.freeze({ label: "", tone: "grey", working: false });
-const MISSING = Object.freeze({ label: "File moved or deleted", tone: "red", working: false });
+const MISSING = Object.freeze({ label: "Page missing", tone: "red", working: false });
 
 export const stateInfo = (page) => page.missing ? MISSING : DEFINITIONS[page.state] ?? UNKNOWN;
 export const stateLabel = (page) => stateInfo(page).label;

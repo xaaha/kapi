@@ -6,6 +6,7 @@ import { searchTrigger } from "../../static/search-dialog.js";
 import { registerNotesSearch } from "./sidebar.js";
 import { ARCHIVE_NOTICE, VIEWS, badge, bannerCopy, policyOf } from "./lifecycle.js";
 import { stateLabel, stateTone } from "./states.js";
+import { keptNote, missingCards } from "./missing.js";
 
 const href = (p) => `${root}p/${p.id}/`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -20,9 +21,16 @@ export function savedFolders(pages) {
   return [...folders.values()];
 }
 
-function card(p, fresh, folder, menu, savedBadge = true) {
+function card(p, fresh, folder, menu, missing, savedBadge = true) {
   const title = pageTitle(p);
-  return h("div", { class: "nb-card-wrap" }, link(p, fresh, folder, title, savedBadge), menu.button(p, title));
+  const a = link(p, fresh, folder, title, savedBadge);
+  if (p.missing) {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      missing.open(p);
+    });
+  }
+  return h("div", { class: "nb-card-wrap" }, a, menu.button(p, title), missing.panel(p, title));
 }
 
 function link(p, fresh, folder, title, savedBadge) {
@@ -33,6 +41,7 @@ function link(p, fresh, folder, title, savedBadge) {
     title: p.path,
     "data-ended": p.state === "ended",
     "data-archived": Boolean(p.archivedAt),
+    "data-missing": Boolean(p.missing),
     "data-new": fresh || false,
   },
   h("span", { class: "nb-card-top" },
@@ -43,7 +52,7 @@ function link(p, fresh, folder, title, savedBadge) {
   h("span", { class: "nb-card-summary", text: p.summary || "No summary yet." }),
   h("span", { class: "nb-card-foot" },
     badge(p, { saved: savedBadge }),
-    h("span", { class: "nb-card-activity", text: `${stateLabel(p)} · ${ago(p.changed)}` }),
+    h("span", { class: "nb-card-activity", text: `${p.missing ? keptNote(p) : stateLabel(p)} · ${ago(p.changed)}` }),
     fresh ? h("span", { class: "nb-new", text: "New" }) : null));
 }
 
@@ -102,6 +111,7 @@ export function showHome(main) {
   const library = h("section", { class: "nb-library", "aria-label": "Notes" }, toolbar, banner, context, grid, shelf, empty);
   const note = undoNote();
   const menu = cardMenu(note);
+  const missing = missingCards(note, () => draw());
   main.append(h("div", { class: "nb-home" }, top, h("main", { class: "nb-main" }, header, library)), menu.el, note.el);
   const arrived = new URLSearchParams(location.search);
   if (/^[0-9a-f]{16}$/.test(arrived.get("deleted") ?? "")) {
@@ -141,10 +151,10 @@ export function showHome(main) {
       grid.replaceChildren();
       shelf.replaceChildren(...savedFolders(shown).map((f) => h("section", { class: "nb-folder", "aria-label": folderTitle(f.dir) },
         h("h2", { class: "nb-folder-head", text: folderTitle(f.dir) }, h("span", { text: `${f.shown} · ${plural(f.pages.length, "note")}` })),
-        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, menu, false))))));
+        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, menu, missing, false))))));
     } else {
       shelf.replaceChildren();
-      grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null, menu)));
+      grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null, menu, missing)));
     }
     menu.redrawn();
     empty.hidden = shown.length > 0;

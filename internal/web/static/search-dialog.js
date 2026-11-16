@@ -22,8 +22,8 @@ export function searchDialog() {
   const body = h("div", { class: "kapi-search-body" });
   const empty = h("p", { class: "kapi-switcher-empty", text: "Loading notes…" });
   const footer = h("div", { class: "kapi-search-footer", text: `${shortcuts.key("searchJump").words} to open · ${shortcuts.key("searchPrevious").hint}${shortcuts.key("searchNext").hint} to move` });
-  const scrim = h("div", { class: "kapi-modal-scrim kapi-search-scrim kapi-switcher-scrim", hidden: "" });
-  const dialog = h("div", { class: "kapi-search-dialog kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Search", tabindex: "-1", hidden: "" },
+  const scrim = h("div", { class: "kapi-modal-scrim kapi-frame-scrim kapi-search-scrim kapi-switcher-scrim", hidden: "" });
+  const dialog = h("div", { class: "kapi-frame kapi-search-dialog kapi-switcher", role: "dialog", "aria-modal": "true", "aria-label": "Search", tabindex: "-1", hidden: "" },
     h("div", { class: "kapi-search-input-row" }, icon("search"), input, h("kbd", { text: shortcuts.key("dismiss").hint })), pills, body, footer);
   body.append(empty);
   document.body.append(scrim, dialog);

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -86,6 +87,30 @@ func (f *fakePages) Restore(id string) (app.Deleted, error) {
 	delete(f.deleted, id)
 	f.paths[id] = path
 	return app.Deleted{ID: id, Title: page.Title(path)}, nil
+}
+
+func (f *fakePages) Missing(id string) (app.Missing, bool) {
+	path, err := f.PagePath(id)
+	if err != nil {
+		return app.Missing{}, false
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+		return app.Missing{}, false
+	}
+	c, _ := page.LatestCopy(f.home, path)
+	return app.Missing{ID: id, Path: path, Title: page.Title(path), Rev: c.Rev, At: c.At}, true
+}
+
+func (f *fakePages) Recover(id string) (app.Missing, error) {
+	path, err := f.PagePath(id)
+	if err != nil {
+		return app.Missing{}, err
+	}
+	c, err := page.Recover(f.home, path)
+	if err != nil {
+		return app.Missing{}, err
+	}
+	return app.Missing{ID: id, Path: path, Title: page.Title(path), Rev: c.Rev, At: c.At}, nil
 }
 
 func (f *fakePages) Viewing(string) func() { return func() {} }
