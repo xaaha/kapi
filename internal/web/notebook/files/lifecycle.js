@@ -81,6 +81,7 @@ function deletesIn(deletesAt, now) {
 }
 
 export function badge(p, { now = Date.now(), saved = true } = {}) {
+  if (p.missing) return pill("missing", "warning", "Page missing");
   if (p.saved) return saved ? pill("saved", "bookmark", "Saved") : null;
   if (isArchived(p)) {
     const left = time(p.deletesAt) - now;

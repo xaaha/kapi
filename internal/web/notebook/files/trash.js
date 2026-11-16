@@ -14,6 +14,13 @@ async function post(path) {
   return { ok: res.ok, data, error: data.error || `HTTP ${res.status}` };
 }
 
+export async function deletePage(id, title, note) {
+  const res = await post(`pages/${id}/delete`);
+  if (res.ok) note.deleted({ id, title, kept: res.data.keptImages === true });
+  else note.failed(`Could not delete ${title}: ${res.error}`);
+  return res.ok;
+}
+
 export function undoNote() {
   const text = h("span", { class: "nb-undo-text" });
   const undo = h("button", { type: "button", class: "nb-undo-button", text: "Undo" });
@@ -110,19 +117,18 @@ export function cardMenu(note) {
     place();
   }
 
-  async function deletePage() {
+  async function deleteOpen() {
     if (!open || !yes.hasAttribute("data-armed") || yes.disabled) return;
     const { page, title } = open;
     yes.disabled = true;
-    const res = await post(`pages/${page.id}/delete`);
+    const done = deletePage(page.id, title, note);
     close(false);
-    if (res.ok) note.deleted({ id: page.id, title, kept: res.data.keptImages === true });
-    else note.failed(`Could not delete ${title}: ${res.error}`);
+    await done;
   }
 
   remove.addEventListener("click", () => confirm(true));
   no.addEventListener("click", () => yes.hasAttribute("data-armed") && confirm(false));
-  yes.addEventListener("click", deletePage);
+  yes.addEventListener("click", deleteOpen);
   menu.addEventListener("keydown", (e) => {
     const list = items();
     const at = list.indexOf(document.activeElement);

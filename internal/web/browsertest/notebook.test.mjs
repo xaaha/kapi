@@ -340,23 +340,57 @@ test("on a phone unified search fits above the keyboard without sideways scrolli
   }
 });
 
-test("deleted notes disappear from the switcher and home", async () => {
+test("a note whose file is gone stays in the switcher and on home, marked missing, until it is deleted", async () => {
   const path = join(projectA, "temporary.html");
   write(path, "Temporary note", "Delete me.");
   kapi(projectA, "open", "temporary.html");
   const p = await withSwitcher();
   const h = await home();
+  const row = `[...document.querySelectorAll(".kapi-switcher-row")].find((t) => t.textContent.includes("Temporary note"))`;
+  const card = `[...document.querySelectorAll(".nb-card-wrap")].find((c) => c.querySelector(".nb-card-title")?.textContent === "Temporary note")`;
   try {
     await refresh(p);
-    await p.waitFor(`[...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("Temporary note"))`);
+    await p.waitFor(`!!${row}`);
     unlinkSync(path);
     await refresh(p);
     await refresh(h);
-    await p.waitFor(`![...document.querySelectorAll(".kapi-switcher-row")].some((t) => t.textContent.includes("Temporary note"))`);
-    await h.waitFor(`![...document.querySelectorAll(".nb-card-title")].some((t) => t.textContent === "Temporary note")`);
+    await p.waitFor(`!!${row}?.title.includes("Page missing")`);
+    await h.waitFor(`${card}?.querySelector(".nb-badge-missing")?.textContent === "Page missing"`);
+    await h.eval(`${card}.querySelector(".nb-card").click()`);
+    await h.waitFor(`${card}?.querySelector(".nb-missing-question")?.textContent.startsWith("Restore version 1, from ")`);
+    await h.eval(`${card}.querySelector(".nb-missing-secondary").click()`);
+    await h.waitFor(`${card}?.querySelector(".nb-missing-question")?.textContent === "Delete it instead?"`);
+    await h.eval(`${card}.querySelector(".nb-missing-secondary").click()`);
+    await h.waitFor(`!!${card} && !${card}.querySelector(".nb-missing-ask")`);
+    await h.eval(`${card}.querySelector(".nb-card").click()`);
+    await h.waitFor(`!!${card}?.querySelector(".nb-missing-question")`);
+    await h.eval(`${card}.querySelector(".nb-missing-secondary").click()`);
+    await h.waitFor(`!!${card}?.querySelector(".nb-missing-danger")`);
+    await h.eval(`${card}.querySelector(".nb-missing-danger").click()`);
+    await p.waitFor(`!${row}`);
+    await h.waitFor(`!${card}`);
   } finally {
     await p.close();
     await h.close();
+  }
+});
+
+test("an open page whose file goes missing asks to restore it, and Restore puts the newest version back", async () => {
+  const path = join(projectA, "comeback.html");
+  write(path, "Comeback note", "Restore me.");
+  const url = kapi(projectA, "open", "comeback.html").split("\n")[0];
+  const kept = readFileSync(path, "utf8");
+  const p = await browser.open(url, { ready: "!!document.getElementById('kapi-chrome')" });
+  const dialog = `document.querySelector(".kapi-restore-picker")`;
+  try {
+    unlinkSync(path);
+    await p.waitFor(`${dialog}?.hidden === false && ${dialog}.querySelector(".kapi-restore-question").textContent.startsWith("Restore version 1, from ")`, 5000);
+    assert.equal(await p.eval(`document.querySelector("#kapi-page h1").textContent`), "Comeback note");
+    await p.eval(`${dialog}.querySelector(".kapi-primary").click()`);
+    await p.waitFor(`${dialog}.querySelector(".kapi-restore-done strong").textContent === "Restored version 1" && ${dialog}.querySelector("h2").textContent === "Page restored"`);
+    assert.equal(readFileSync(path, "utf8"), kept);
+  } finally {
+    await p.close();
   }
 });
 
