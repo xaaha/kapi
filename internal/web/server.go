@@ -448,7 +448,6 @@ func messageHTML(e *eventlog.Event) string {
 	}
 	out, err := render.Message(e.Text)
 	if err != nil {
-		log.Printf("format message %d: %v", e.Seq, err)
 		return ""
 	}
 	return string(out)
