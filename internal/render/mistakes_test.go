@@ -8,13 +8,10 @@ import (
 	"testing"
 )
 
-var (
-	arrowMarker = regexp.MustCompile(`kapi-arrow-[0-9a-f]{8}`)
-	flipMarker  = regexp.MustCompile(` data-kapi-dir="\w+"`)
-)
+var arrowMarker = regexp.MustCompile(`kapi-arrow-[0-9a-f]{8}`)
 
 func drawing(s string) string {
-	return flipMarker.ReplaceAllString(arrowMarker.ReplaceAllString(s, "kapi-arrow"), "")
+	return arrowMarker.ReplaceAllString(s, "kapi-arrow")
 }
 
 func TestEveryMistakeRendersStyledWithoutAnErrorBox(t *testing.T) {

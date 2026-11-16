@@ -466,6 +466,24 @@ func attrValue(tag []byte, key string) (int, int, int, bool) {
 	return 0, 0, 0, false
 }
 
+func mermaidFlowchart(src []byte, id string) bool {
+	out, err := render.Block(src, id)
+	return err == nil && bytes.Contains(out, []byte(` data-kapi-dir="`))
+}
+
+func orientMermaid(src []byte, els []element, e *element, dir string) []byte {
+	from, to := e.tagEnd, e.closeStart
+	if f, t, ok := nativeCodeRange(src, els, e); ok {
+		from, to = f, t
+	}
+	start, end, _ := render.MermaidDirection(src[from:to])
+	word := map[string]string{"tb": "TB", "lr": "LR"}[dir]
+	if start == end {
+		word = " " + word
+	}
+	return splice(src, from+start, from+end, word)
+}
+
 func splice(src []byte, from, to int, with string) []byte {
 	out := make([]byte, 0, len(src)-(to-from)+len(with))
 	out = append(out, src[:from]...)

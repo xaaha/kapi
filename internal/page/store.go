@@ -1704,13 +1704,17 @@ func apply(src []byte, op *Op) ([]byte, Summary, error) {
 		}
 		return removeAttr(src, target, flag), Summary{Text: "unchecked", IDs: one}, nil
 	case "orient":
-		if t, _ := e.attr("type"); e.name != "kapi-diagram" || (t != "" && t != "flow" && t != "architecture") {
-			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram, and #%s is not one", op.ID)
+		flowchart := e.name == "pre" && mermaidFlowchart(src, e.id)
+		if t, _ := e.attr("type"); !flowchart && (e.name != "kapi-diagram" || (t != "" && t != "flow" && t != "architecture")) {
+			return nil, Summary{}, fmt.Errorf("orient needs a flow or architecture kapi-diagram or a Mermaid flowchart, and #%s is not one", op.ID)
 		}
 		texts := map[string]string{"tb": "drew top to bottom", "lr": "drew left to right"}
 		text, ok := texts[op.Dir]
 		if !ok {
 			return nil, Summary{}, fmt.Errorf("orient needs dir tb or lr, not %q", op.Dir)
+		}
+		if flowchart {
+			return orientMermaid(src, els, e, op.Dir), Summary{Text: text, IDs: one}, nil
 		}
 		return setAttr(src, e, "dir", op.Dir), Summary{Text: text, IDs: one}, nil
 	case "deleterow":

@@ -190,10 +190,6 @@ func parseGraph(src string) (*graph, error) {
 var defaultDir = map[string]string{"flow": "tb", "sequence": "", "architecture": "lr"}
 
 func renderDiagram(b *bytes.Buffer, n *html.Node) error {
-	return drawDiagram(b, n, true)
-}
-
-func drawDiagram(b *bytes.Buffer, n *html.Node, flippable bool) error {
 	kind := attrVal(n, "type")
 	if kind == "" {
 		kind = "flow"
@@ -253,7 +249,7 @@ func drawDiagram(b *bytes.Buffer, n *html.Node, flippable bool) error {
 		names = g.names
 	}
 	var extra []string
-	if dir != "" && flippable {
+	if dir != "" {
 		extra = []string{"data-kapi-dir", dir}
 	}
 	class := "kapi-diagram kapi-diagram-" + kind

@@ -46,6 +46,24 @@ func TestACheckOpTicksANativeChecklistItem(t *testing.T) {
 	}
 }
 
+func TestAnOrientOpFlipsAPlainMermaidFlowchartAndRefusesASequence(t *testing.T) {
+	s := newSite(t, "<pre class=\"mermaid\" data-kapi-id=\"mmmmmmmm\">graph\n  a --> b</pre>\n<pre class=\"mermaid\" data-kapi-id=\"qqqqqqqq\">sequenceDiagram\n  a->>b: hi</pre>\n")
+	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"orient","id":"mmmmmmmm","dir":"lr"}}`)
+	if code != http.StatusOK || out["rev"] != 2.0 {
+		t.Fatalf("orient: %d %v", code, out)
+	}
+	if b, _ := os.ReadFile(s.path); !strings.Contains(string(b), "graph LR\n  a --> b</pre>") {
+		t.Errorf("file after orient:\n%s", b)
+	}
+	if b := s.get("/p/" + s.id + "/blocks/mmmmmmmm"); !strings.Contains(b.body, `data-kapi-dir="lr"`) {
+		t.Errorf("block after orient: %s", b.body)
+	}
+	code, out = s.post("/ops", `{"rev":2,"op":{"kind":"orient","id":"qqqqqqqq","dir":"lr"}}`)
+	if code != http.StatusUnprocessableEntity {
+		t.Errorf("orient on a sequence diagram: %d %v, want 422", code, out)
+	}
+}
+
 func TestAnOrientOpFlipsTheDiagram(t *testing.T) {
 	s := newSite(t, "<kapi-diagram data-kapi-id=\"ffffffff\">\na -> b\n</kapi-diagram>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"orient","id":"ffffffff","dir":"lr"}}`)

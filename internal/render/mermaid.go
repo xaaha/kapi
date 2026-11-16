@@ -1,6 +1,7 @@
 package render
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -53,6 +54,26 @@ func mermaidSource(src string) bool {
 	}
 	words := strings.Fields(head)
 	return mermaidHeaders[strings.ToLower(words[0])] && !strings.Contains(head, "->")
+}
+
+var mermaidDirection = regexp.MustCompile(`^[ \t]*(?i:flowchart|graph)(?:[ \t]+(TB|TD|BT|RL|LR)\b)?`)
+
+func MermaidDirection(src []byte) (start, end int, ok bool) {
+	at := 0
+	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
+		if t := bytes.TrimSpace(line); len(t) > 0 && !bytes.HasPrefix(t, []byte("%%")) {
+			m := mermaidDirection.FindSubmatchIndex(line)
+			switch {
+			case m == nil:
+				return 0, 0, false
+			case m[2] >= 0:
+				return at + m[2], at + m[3], true
+			}
+			return at + m[1], at + m[1], true
+		}
+		at += len(line)
+	}
+	return 0, 0, false
 }
 
 func mermaidError(src string) error {

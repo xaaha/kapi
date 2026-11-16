@@ -978,3 +978,27 @@ test("deleting a note whose images another note shows keeps the images folder an
     await p.close();
   }
 });
+
+test("Flip on a plain Mermaid flowchart rewrites its header direction and flips back", async () => {
+  const project = join(dir, "gamma");
+  mkdirSync(project);
+  const file = join(project, "flow.html");
+  writeFileSync(file, `<pre class="mermaid">flowchart TD\n  a[Web] --> b[(Orders)]\n</pre>\n`);
+  const p = await browser.open(kapi(project, "open", "flow.html").split("\n")[0], { ready: `!!document.querySelector('[data-kapi-preset="diagram"][data-kapi-dir="tb"]')` });
+  const opened = readFileSync(file, "utf8");
+  const source = (header) => opened.replace("flowchart TD", header);
+  try {
+    const flip = async (want, header) => {
+      await p.eval(`document.querySelector('[data-kapi-preset="diagram"]').click()`);
+      await p.waitFor(`!!document.querySelector('.kapi-bar [data-action="flip"]')`);
+      await p.eval(`document.querySelector('.kapi-bar [data-action="flip"]').click()`);
+      await p.waitFor(`document.querySelector('[data-kapi-preset="diagram"]').dataset.kapiDir === "${want}"`, 5000);
+      assert.equal(readFileSync(file, "utf8"), source(header));
+    };
+    await flip("lr", "flowchart LR");
+    await flip("tb", "flowchart TB");
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});

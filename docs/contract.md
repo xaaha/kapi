@@ -72,8 +72,9 @@ takes `participant` and `actor`, with `as` aliases, and solid or dashed
 messages; `autonumber`, `activate` and `deactivate` are skipped. Nodes whose
 label or id holds a word such as db, database, queue, user, agent, service,
 api, cron or file get that kind's icon. A flowchart in `<kapi-diagram>` keeps
-its header's direction unless `dir` is set, so the reader can flip it; one in a
-plain `<pre>` has no `data-kapi-dir`, since orient cannot rewrite it. Anything
+its header's direction unless `dir` is set; one in a plain `<pre>` takes its
+direction from the header alone. Both carry `data-kapi-dir`, so the reader can
+flip them. Anything
 else (`subgraph`, `Note`, `loop`, other diagram types) is shown as a plain code
 block.
 
@@ -221,8 +222,12 @@ Archive.
 removes the `done` attribute on a `<kapi-task>` and is refused with 422 for
 any other element; its summary is `checked` or `unchecked`. `orient`, sent as
 `{"kind":"orient","id":"<diagram id>","dir":"lr"}`, sets `dir` on a flow or
-architecture `<kapi-diagram>`; a sequence diagram, any other element, or a
-`dir` other than `tb` or `lr` is refused with 422. The browser shows a Flip
+architecture `<kapi-diagram>`. On a plain `<pre>` Mermaid flowchart that the
+renderer draws, it rewrites only the direction word on the header line to `LR`
+or `TB`, adding it after `flowchart` or `graph` when the header has none, and
+leaves every other byte alone. A sequence diagram, Mermaid outside the drawn
+subset, any other element, or a `dir` other than `tb` or `lr` is refused with
+422. The browser shows a Flip
 action for diagrams that carry `data-kapi-dir`, except an archived one.
 Every applied op saves the previous source as `revs/<rev>.html` so `undo`
 restores it.
