@@ -25,9 +25,11 @@ A page is an HTML fragment file the agent writes, for example `plan.html`. It
 contains plain prose tags (`h1` to `h3`, `p`, `ul`, `ol`, `li`, `a`, `code`,
 `em`, `strong`, `table`) and the preset elements below. Kapi progressively
 enhances semantic HTML: `table`, `details`/`summary`, `pre`/`code`, `dl`/`dt`/`dd`,
-`figure`/`img`/`figcaption`, and lists whose items begin with checkbox inputs.
+`figure`/`img`/`figcaption`, lists whose items begin with checkbox inputs, and
+Mermaid in `<pre class="mermaid">` or `<pre><code class="language-mermaid">`.
 These receive the corresponding formatting and controls while their source stays
-ordinary HTML. No `<script>`, no `<style>`, no `style=` attributes: the renderer
+ordinary HTML. Agents should reach for these plain forms first; the presets
+below add what plain HTML cannot say. No `<script>`, no `<style>`, no `style=` attributes: the renderer
 drops them.
 
 Every top-level element and every preset element carries `data-kapi-id`. The
@@ -46,7 +48,7 @@ load and writes the file back. Ids never change after that.
 | `<kapi-render>` | optional `title` | ordinary HTML and CSS for a visual mockup; rendered in a sandboxed frame with Kapi theme tokens, with scripts, event handlers and unsafe URLs removed |
 | `<kapi-compare>` | none | `<kapi-option title="...">` children, each prose |
 | `<kapi-plan>` | none; a `<kapi-step>` takes optional `state` (as on `kapi-badge`), which shows its status icon in place of the number | `<kapi-step>`, `<kapi-risk>`, `<kapi-question>` children, each prose |
-| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored |
+| `<kapi-diagram>` | `type` = `flow`, `sequence` or `architecture`; optional `dir` = `tb` (flow default) or `lr` (architecture default), ignored by `sequence` | one edge per line: `a -> b: label` (flow) or `a -> b: message` (sequence); architecture adds node lines `id: Title \| subtitle \| tags` and edges `a -> b`, `a <-> b`, `a --> b` (dashed); a flow takes `name: tags`. Tags are space separated: one kind (`agent`, `database`, `user`, `service`, `page`, `file`, `queue`, `timer`, `external`), drawn as a large icon over the label; one state as on `kapi-badge`, the only colour on a node (its border and a small icon); `planned`, drawn dashed. Nodes are otherwise neutral. The old `built`, `review` and colour tags still parse and draw neutral, and unknown flow tags are ignored. A body that starts with a Mermaid header is read as Mermaid instead, as below |
 | `<kapi-badge>` | optional `tone`: the shared `red`, `orange`, `yellow`, `green`, `blue`, `purple` or `grey` (default), common aliases such as `gray`, `violet` and `teal`, any other name (deterministically assigned a shared theme tone), or a hex colour; optional `state` = `done` (green), `failed` or `blocked` (red), `progress` (orange), `waiting` (grey) or `info` (blue), which leads the label with that status icon and sets the tone unless `tone` is given | short inline text; allowed inside prose and table cells. Empty with a `state`, it renders the icon alone |
 | `<kapi-kv>` | legacy wrapper; new pages should use `<dl>` with alternating `<dt>` and `<dd>` children | `<kapi-item key="...">` children, each prose |
 | `<kapi-details>` | legacy wrapper; new pages should use `<details><summary>…</summary>…</details>` | prose, hidden until the reader opens it; closed unless `open` is set |
@@ -60,7 +62,42 @@ aliases and arbitrary names resolve to these theme-aware tones. Hex badge tones
 derive the same roles with `color-mix()` against the active palette, so they
 adapt to light, dark and custom palettes.
 
-Unknown or malformed `kapi-*` elements render a small warning and keep their safe body visible instead of replacing it. Known aliases such as `kind="warn"` are normalized.
+Mermaid is drawn by the renderer with the diagram styles, with no script. The
+subset is `flowchart` or `graph` with `TB`, `TD`, `BT`, `LR` or `RL`; nodes `a`,
+`a[label]`, `a(label)`, `a{label}`, `a[(label)]` (a database) and the other
+bracket shapes; solid, dotted (`-.->`) and thick (`==>`) links, labelled with
+`|text|` or inline (`-- text`); chains and `a & b`; and `classDef`, `class`,
+`style`, `linkStyle` and `click` lines, which are skipped. `sequenceDiagram`
+takes `participant` and `actor`, with `as` aliases, and solid or dashed
+messages; `autonumber`, `activate` and `deactivate` are skipped. Nodes whose
+label or id holds a word such as db, database, queue, user, agent, service,
+api, cron or file get that kind's icon. A flowchart in `<kapi-diagram>` keeps
+its header's direction unless `dir` is set, so the reader can flip it; one in a
+plain `<pre>` has no `data-kapi-dir`, since orient cannot rewrite it. Anything
+else (`subgraph`, `Note`, `loop`, other diagram types) is shown as a plain code
+block.
+
+Nothing a page holds renders an error box for the reader. Before the presets
+render, one repair pass runs over the parsed page: a list of small rules, each
+applied only when the mistake has one obvious intent, otherwise the children
+render as plain HTML. A preset around its own plain form (`<kapi-kv><dl>`,
+`<kapi-checklist><ul>`, `<kapi-details><details>`) renders the plain form. A
+child in the wrong parent moves out to its nearest valid parent, or is wrapped
+in a new `kapi-plan`, `kapi-kv`, `kapi-checklist` or `kapi-compare`; a form
+part outside its form renders as plain HTML. Loose text becomes a step in a
+plan or a task in a checklist, and a `<p>` beside a kv, compare or table. An
+unknown enum value (callout `kind`, `state`, diagram `type` and `dir`) uses a
+fixed alias, else the default; bad code `lines` number from 1. A `title` on a
+step, risk, question, task or callout is shown as a bold lead-in, and on an item
+or details it is the `key` or `summary` when that is missing; an option with no
+`value` uses its label. `kapi-note`, `kapi-warning` and the other callout kinds
+become that callout, `kapi-mermaid` and friends a diagram; other unknown
+`kapi-*` elements render their content. A code block, diff or diagram that
+still cannot render is shown as a plain `<pre>`. A repaired element keeps its
+`data-kapi-id`, on the single element left in its place or on a plain `div` (or
+`span` in prose) holding what it held. `render.Repairs` lists what was repaired
+as short notes, which reach the agent as `repaired` events. The strict path,
+which still draws the warning box, is kept for `kapi preset` examples and tests.
 
 The renderer puts `data-kapi-preset="<name>"` on the outer element of every
 rendered preset. A rendered flow diagram also carries `data-kapi-dir` with the
@@ -132,6 +169,7 @@ or a `data-kapi-preset` attribute in it is refused with 422.
 // package render
 func Render(src []byte) ([]byte, error)          // page source to body HTML; keeps data-kapi-id on each outer element
 func Block(src []byte, id string) ([]byte, error) // one element by id, same output as inside Render
+func Repairs(src []byte) ([]string, error)        // what the repair pass fixed, one note each, "#<id> " first when it has one
 func CSS() []byte                                 // the design system, light theme
 func Presets() []Preset                           // name, one-line summary, example source
 type Preset struct{ Name, Summary, Example string }
@@ -265,6 +303,13 @@ next open, an append that failed is retried by the next op or refresh, and a
 reopen with nothing lost logs nothing. A commit that logs no
 event, such as the first load, records none. A file edit made while kapi was
 down is logged on the next open like any file edit, with author `file`.
+
+After the revision event, a commit whose new source needs repairs that the
+previous source did not appends one `repaired` event with author `kapi`, the
+new `rev`, and the new notes joined with `; ` as `text`. Notes are compared as
+a multiset, so an edit that leaves an old mistake in place does not repeat it,
+and the same mistake added a second time is reported. A crash between the two
+appends loses the `repaired` event, which only advises.
 
 `state.json` also holds two UTC times. `viewed` is set each time a browser
 connects to the page's `p/{id}/events`. `touched` is set by a revision from a
@@ -537,6 +582,7 @@ the `eventlog.Event` JSON. Kinds the browser cares about:
 | `end` | the human ended the session; it stays ended until the next human `message`, `note` or `answer` | add an "ended" line to the chat and show "Session ended. Send a message to start again." as the status until then; the human event that lifts it gets a "Session started again" line before it |
 | `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
+| `repaired` | author `kapi`: the page at `rev` had preset mistakes that kapi repaired so it still renders styled; `text` lists them | nothing; it is for the agent |
 
 Read receipts are not in the event log. Each reader has two positions:
 queued, the highest seq handed to its harness (printed by `kapi watch` or
@@ -727,8 +773,9 @@ and `kapi pending` and the home view's unread counts leave them out.
 
 A harness may hold or drop a line it was handed, so printing an event never
 marks it seen. `kapi wait` and the hooks below leave out the agent's own
-page edits (authors `file` and `kapi`); `kapi watch` and `kapi pending` still
-show them. Events reach the agent three ways:
+page edits (authors `file` and `kapi`), except `repaired` events, which wake
+`kapi wait` and reach the hooks so the agent learns what it wrote wrong;
+`kapi watch` and `kapi pending` show them all. Events reach the agent three ways:
 
 - `kapi wait <page>` blocks until the page has an unseen event that is not
   queued yet, prints every unseen event, queues them and exits. The agent runs

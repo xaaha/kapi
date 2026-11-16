@@ -737,11 +737,44 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ev *revEvent
 	if !s.touched.Equal(touched) {
 		s.archived = time.Time{}
 	}
+	old := s.src
 	s.src, s.rev, s.undo, s.event = src, rev, undo, ev
 	if err := s.saveState(&next); err != nil {
 		return 0, err
 	}
-	return s.logEvent()
+	seq, err := s.logEvent()
+	if err != nil {
+		return 0, err
+	}
+	return seq, s.logRepairs(old, src)
+}
+
+func (s *Store) logRepairs(old, cur []byte) error {
+	now, err := render.Repairs(cur)
+	if err != nil || len(now) == 0 {
+		return err
+	}
+	before, err := render.Repairs(old)
+	if err != nil {
+		return err
+	}
+	known := map[string]int{}
+	for _, n := range before {
+		known[n]++
+	}
+	var fresh []string
+	for _, n := range now {
+		if known[n] > 0 {
+			known[n]--
+			continue
+		}
+		fresh = append(fresh, n)
+	}
+	if len(fresh) == 0 {
+		return nil
+	}
+	_, err = appendEvent(s.log, &eventlog.Event{Author: "kapi", Kind: eventlog.KindRepaired, Rev: s.rev, Text: strings.Join(fresh, "; ")})
+	return err
 }
 
 func (s *Store) logEvent() (uint64, error) {

@@ -1231,6 +1231,9 @@ func eventLine(e *eventlog.Event) string {
 	if e.Kind == eventlog.KindEnd {
 		return eventlog.Printable(fmt.Sprintf("#%d %s ended the session: stop working on this page and do not run kapi wait or kapi watch on it again; a new message from the human starts it again", e.Seq, e.Author))
 	}
+	if e.Kind == eventlog.KindRepaired {
+		return eventlog.Printable(fmt.Sprintf("#%d %s repaired the page at revision %d so the reader still sees it styled: %s. Nothing to tell the human; write the plain form next time (kapi preset <name> shows it)", e.Seq, e.Author, e.Rev, e.Text))
+	}
 	if e.Kind == eventlog.KindResolve {
 		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
 	}

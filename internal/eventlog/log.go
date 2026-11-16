@@ -39,6 +39,7 @@ const (
 	KindResolve     = "resolve"
 	KindDeleteNotes = "delete-notes"
 	KindEnd         = "end"
+	KindRepaired    = "repaired"
 	EndDeleted      = "deleted"
 	EndForgotten    = "forgotten"
 )
