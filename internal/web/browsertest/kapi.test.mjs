@@ -832,6 +832,47 @@ test("editing a table cell with an image saves it without the thumbnail's own at
   assert.match(inner, /^<img src="\.\/plan\.files\/before\.png" alt="Before tiles">(\s|&nbsp;)x$/);
 });
 
+test("Copy on a single image copies the picture as PNG with its Markdown, and falls back to Markdown", async () => {
+  const jpeg = await pictureFile("shot.jpg", 40, 30, "image/jpeg");
+  server.state.blocks.find((b) => b.id === "bbbbbbbb").markdown = "![Shot](./plan.files/shot.jpg)\n";
+  server.agentEdit("bbbbbbbb", `<figure data-kapi-id="bbbbbbbb"><img src="${jpeg}" alt="Shot"></figure>`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"] img')?.complete`);
+  await page.eval(`window.items = []; window.copied = [];
+    navigator.clipboard.write = async (list) => { for (const item of list) window.items.push(Object.fromEntries(await Promise.all(item.types.map(async (t) => { const b = await item.getType(t); return [t, t === "text/plain" ? await b.text() : b.type + ":" + b.size]; })))); };
+    navigator.clipboard.writeText = async (text) => { window.copied.push(text); };`);
+  await select("bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="copy"]').getAttribute("aria-label")`), "Copy image");
+  await page.key("c");
+  await until(async () => (await page.eval(`window.items.length`)) === 1);
+  const item = await page.eval(`window.items[0]`);
+  assert.equal(item["text/plain"], "![Shot](./plan.files/shot.jpg)\n");
+  assert.match(item["image/png"], /^image\/png:[1-9]/);
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="copy"]').getAttribute("aria-label")`), "Copied image");
+  assert.deepEqual(await page.eval(`window.copied`), []);
+
+  await page.eval(`navigator.clipboard.write = async () => { throw new DOMException("denied", "NotAllowedError"); }`);
+  await select("aaaaaaaa");
+  await select("bbbbbbbb");
+  await page.key("c");
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["![Shot](./plan.files/shot.jpg)\n"]);
+  assert.match(await notice(), /Copied as Markdown/);
+});
+
+test("Copy on a gallery of several images stays Markdown only", async () => {
+  await pictureFile("a.png", 40, 30);
+  await pictureFile("b.png", 40, 30);
+  server.state.blocks.find((b) => b.id === "bbbbbbbb").markdown = "![](./plan.files/a.png)\n\n![](./plan.files/b.png)\n";
+  server.agentEdit("bbbbbbbb", '<div data-kapi-id="bbbbbbbb" data-kapi-preset="gallery" class="kapi-gallery"><figure><img src="./plan.files/a.png" alt=""></figure><figure><img src="./plan.files/b.png" alt=""></figure></div>');
+  await page.waitFor(`document.querySelectorAll('[data-kapi-id="bbbbbbbb"] img').length === 2`);
+  await page.eval(`window.written = 0; window.copied = []; navigator.clipboard.write = async () => { window.written++; }; navigator.clipboard.writeText = async (text) => { window.copied.push(text); };`);
+  await select("bbbbbbbb");
+  assert.equal(await page.eval(`document.querySelector('.kapi-bar [data-action="copy"]').getAttribute("aria-label")`), "Copy as Markdown");
+  await page.key("c");
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`[window.written, window.copied[0]]`), [0, "![](./plan.files/a.png)\n\n![](./plan.files/b.png)\n"]);
+});
+
 test("a selected diagram has Phosphor zoom controls that resize only its SVG", async () => {
   await page.eval(`(() => {
     const block = document.querySelector('[data-kapi-id="bbbbbbbb"]');
