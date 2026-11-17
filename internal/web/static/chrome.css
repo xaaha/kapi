@@ -2671,7 +2671,7 @@ html[data-kapi-head-hidden] {
 }
 
 #kapi-chrome .kapi-outline-tools {
-  left: max(calc(var(--kapi-page-left) - 56px), 8px);
+  left: max(min(20px, calc(var(--kapi-page-left) - 40px)), 8px);
 }
 
 #kapi-chrome .kapi-write-tools {

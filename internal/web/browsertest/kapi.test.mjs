@@ -2068,6 +2068,12 @@ test("on a narrow desktop with the outline and chat open, Write stays at the top
       await p.waitFor(`document.querySelector(".kapi-outline-button").checkVisibility()`);
       const o = await p.eval(`(r => ({ left: r.left, right: r.right }))(document.querySelector(".kapi-outline-button").getBoundingClientRect())`);
       assert.ok(o.left >= 0 && o.right <= width, `${width}px: Outline must be fully on screen ${JSON.stringify(o)}`);
+      const sides = await p.eval(`(() => {
+        const o = document.querySelector(".kapi-outline-button").getBoundingClientRect(), w = document.querySelector(".kapi-write-button").getBoundingClientRect();
+        const page = document.getElementById("kapi-page").getBoundingClientRect(), chat = document.querySelector(".kapi-panel").getBoundingClientRect();
+        return { left: o.left, right: chat.left - w.right, clear: o.right <= page.left && w.left >= page.right };
+      })()`);
+      if (sides.clear) assert.ok(Math.abs(sides.left - sides.right) < 1, `${width}px: Outline and Edit mode sit the same distance from their edges ${JSON.stringify(sides)}`);
     } finally {
       await p.close();
     }
