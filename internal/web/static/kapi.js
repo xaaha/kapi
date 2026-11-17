@@ -553,7 +553,7 @@
       const picture = !archived && shown && new URL(shown.src, location.href).origin === location.origin;
       const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
       const part = targetLabel();
-      const tools = [tool("android", "Ask AI", "ask"), tool("copy", `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", `Unarchive${part}`, "unarchive")] : [
+      const tools = [tool("android", "Ask AI", "ask"), tool("copy", singleImage({}) ? "Copy image" : `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", `Unarchive${part}`, "unarchive")] : [
         ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
         ...(preview ? [tool("expand", "Open image", "preview")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
@@ -564,7 +564,7 @@
         tool("trash", `Delete${part}`, "delete")];
       bar.replaceChildren(...tools.filter((b) => b.dataset.action === "ask" || scopedAction(b.dataset.action)));
     }
-    if (copiedBlock?.block === selected && copiedBlock.unit === targetLabel() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'));
+    if (copiedBlock?.block === selected && copiedBlock.unit === targetLabel() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'), copiedBlock.label);
     const zoom = selected && diagramZoom.get(selected)?.level;
     for (const b of bar.querySelectorAll("button")) {
       b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
@@ -876,37 +876,82 @@
     navigator.clipboard.writeText(pagePath).then(() => say("Copied the page path"), () => say("Could not copy the page path", "error"));
   }
 
-  function markCopied(button) {
+  function markCopied(button, label = "Copied") {
     if (!button) return;
     button.dataset.copyState = "copied";
-    button.dataset.tip = "Copied";
-    button.setAttribute("aria-label", "Copied");
-    button.replaceChildren(icon("checkCircle"), h("span", { class: "kapi-tool-label", text: "Copied" }));
+    button.dataset.tip = label;
+    button.setAttribute("aria-label", label);
+    button.replaceChildren(icon("checkCircle"), h("span", { class: "kapi-tool-label", text: label }));
   }
 
-  async function copyBlock(part = {}) {
-    if (!selected) return;
+  function singleImage(part) {
+    if (Object.keys(part).length || scope() !== "block") return null;
+    const imgs = selected.querySelectorAll("img[src]");
+    return imgs.length === 1 && selected.matches('figure, [data-kapi-preset="gallery"]') ? imgs[0] : null;
+  }
+
+  async function blockMarkdown(part) {
     const { id, section } = blockTarget();
     let res;
     try {
       res = await fetch(`${base}/export/markdown?${new URLSearchParams({ block: id, ...(section && { section: 1 }), ...part })}`);
     } catch {
-      return say("Could not reach kapi. Check that the daemon is running.", "error");
+      say("Could not reach kapi. Check that the daemon is running.", "error");
+      return null;
     }
-    if (await restartedReply(res)) return;
-    if (!res.ok) return say(`Could not copy the block: ${(await res.text()).trim()}`, "error");
-    const markdown = await res.text();
-    navigator.clipboard.writeText(markdown).then(() => {
-      notice.hidden = true;
-      const state = { block: selected, unit: targetLabel(), until: performance.now() + 1600 };
-      copiedBlock = state;
-      renderBar();
-      setTimeout(() => {
-        if (copiedBlock !== state) return;
-        copiedBlock = null;
-        if (selected === state.block) renderBar();
-      }, 1600);
-    }, () => say("Could not copy the block", "error"));
+    if (await restartedReply(res)) return null;
+    if (!res.ok) {
+      say(`Could not copy the block: ${(await res.text()).trim()}`, "error");
+      return null;
+    }
+    return res.text();
+  }
+
+  async function pngOf(img) {
+    const res = await fetch(img.currentSrc || img.src);
+    if (!res.ok) throw new Error(`image ${res.status}`);
+    const blob = await res.blob();
+    if (blob.type === "image/png") return blob;
+    const bitmap = await createImageBitmap(blob);
+    const canvas = h("canvas", { width: bitmap.width, height: bitmap.height });
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    bitmap.close();
+    return new Promise((resolve, reject) => canvas.toBlob((png) => (png ? resolve(png) : reject(new Error("png"))), "image/png"));
+  }
+
+  function showCopied(label) {
+    notice.hidden = true;
+    const state = { block: selected, unit: targetLabel(), label, until: performance.now() + 1600 };
+    copiedBlock = state;
+    renderBar();
+    setTimeout(() => {
+      if (copiedBlock !== state) return;
+      copiedBlock = null;
+      if (selected === state.block) renderBar();
+    }, 1600);
+  }
+
+  async function copyBlock(part = {}) {
+    if (!selected) return;
+    const img = singleImage(part);
+    const markdown = blockMarkdown(part);
+    if (img) {
+      try {
+        const text = markdown.then((t) => (t === null ? Promise.reject(new Error("markdown")) : new Blob([t], { type: "text/plain" })));
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": pngOf(img), "text/plain": text })]);
+        return showCopied("Copied image");
+      } catch {
+        const text = await markdown;
+        if (text === null) return;
+        return navigator.clipboard.writeText(text).then(() => {
+          showCopied("Copied");
+          say("Copied as Markdown. The picture itself could not be copied.");
+        }, () => say("Could not copy the block", "error"));
+      }
+    }
+    const text = await markdown;
+    if (text === null) return;
+    navigator.clipboard.writeText(text).then(() => showCopied("Copied"), () => say("Could not copy the block", "error"));
   }
 
   function zoomDiagram(delta) {
@@ -1057,7 +1102,7 @@
   }
 
   const SINGLE_LINE = "td, th, span, dt, summary, legend, [data-kapi-attr]";
-  const innerOf = (host) => (host.dataset.kapiAttr ? host.textContent : host.innerHTML);
+  const innerOf = (host) => (host.dataset.kapiAttr ? host.textContent : media.clean(host.cloneNode(true)).innerHTML);
 
   function caretAtEnd(host) {
     host.focus();

@@ -76,6 +76,11 @@
   font-weight: 600;
 }
 
+#kapi-page :is(td, th) img[src] { box-sizing: border-box; width: auto; max-width: 100%; height: auto; max-height: 96px; margin: 2px 6px 2px 0; border: 1px solid var(--kapi-border); border-radius: var(--kapi-radius-sm); vertical-align: middle; cursor: zoom-in; }
+#kapi-page :is(td, th) figure { margin: 0; }
+html[data-kapi-writing] #kapi-page :is(td, th) img[src] { cursor: text; }
+#kapi-page :is(td, th) img[src]:focus-visible { outline: 2px solid var(--kapi-blue-border); outline-offset: 2px; }
+
 .kapi-media-scrim {
   position: fixed;
   inset: 0;
