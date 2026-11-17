@@ -1,6 +1,8 @@
 window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
   const imageSelector = 'figure > img[src], [data-kapi-preset="gallery"] img[src]';
+  const cellImage = ":is(td, th) img[src]";
   let current = -1;
+  let pool = null;
   let before = null;
   let inerted = [];
 
@@ -38,8 +40,9 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     const text = img.closest("figure")?.querySelector("figcaption")?.textContent.trim() || img.alt.trim();
     return `${at + 1} of ${total}${text ? ` · ${text}` : ""}`;
   };
+  const showing = () => (pool ? pool().filter((img) => img.isConnected && img.getClientRects().length) : images());
   const show = (at) => {
-    const all = images();
+    const all = showing();
     if (!all.length) return closeViewer();
     current = (at + all.length) % all.length;
     const img = all[current];
@@ -60,8 +63,11 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     for (const el of inerted) el.inert = false;
     inerted = [];
   };
+  const tableOf = (img) => img.closest(cellImage.replace(" img[src]", ""))?.closest("table");
   const openImage = (img) => {
-    const all = images();
+    const table = tableOf(img);
+    pool = table ? () => [...table.querySelectorAll(cellImage)] : null;
+    const all = showing();
     const at = all.indexOf(img);
     if (at < 0) return;
     if (!isOpen()) {
@@ -79,6 +85,7 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     viewer.hidden = true;
     scrim.hidden = true;
     picture.removeAttribute("src");
+    pool = null;
     document.documentElement.removeAttribute("data-kapi-media-open");
     setBackgroundInert(false);
     if (before?.isConnected) before.focus({ preventScroll: true });
@@ -90,8 +97,17 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
   previous.addEventListener("click", () => step(-1));
   next.addEventListener("click", () => step(1));
   scrim.addEventListener("click", closeViewer);
+  const editable = (img) => !!img.closest('[contenteditable=""], [contenteditable="true"]');
+  const opensOnClick = (img) => main.contains(img) && !editable(img) && !document.documentElement.hasAttribute("data-kapi-writing");
   document.addEventListener("keydown", (event) => {
-    if (!isOpen()) return;
+    if (!isOpen()) {
+      const img = closest(document.activeElement, cellImage);
+      if (!img || !main.contains(img) || editable(img) || !shortcuts.is("activate", event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openImage(img);
+      return;
+    }
     if (shortcuts.is("dismiss", event)) {
       closeViewer();
       event.preventDefault();
@@ -111,6 +127,13 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     event.stopImmediatePropagation();
   }, true);
   document.addEventListener("click", (event) => {
+    const thumb = closest(event.target, cellImage);
+    if (thumb && opensOnClick(thumb)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openImage(thumb);
+      return;
+    }
     const link = closest(event.target, "a.kapi-thumb");
     if (!link) return;
     const img = link.querySelector("img[src]");
@@ -119,8 +142,8 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     openImage(img);
   }, true);
   document.addEventListener("dblclick", (event) => {
-    const img = closest(event.target, imageSelector);
-    if (!img || !main.contains(img)) return;
+    const img = closest(event.target, `${imageSelector}, ${cellImage}`);
+    if (!img || !main.contains(img) || editable(img)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     openImage(img);
@@ -173,7 +196,17 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
   function prepare(scope = main) {
     const galleryImages = scope.matches?.(imageSelector) ? [scope] : [...scope.querySelectorAll(imageSelector)];
     for (const img of galleryImages) {
-      if (!img.title) img.title = "Double-click to open · P";
+      if (!img.title && !img.matches(cellImage)) img.title = "Double-click to open · P";
+    }
+    const thumbs = scope.matches?.(cellImage) ? [scope] : [...scope.querySelectorAll(cellImage)];
+    for (const img of thumbs) {
+      if (img.hasAttribute("data-kapi-thumb")) continue;
+      const added = ["tabindex", "role", "aria-label", "title"].filter((name) => !img.hasAttribute(name));
+      img.setAttribute("data-kapi-thumb", added.join(" "));
+      if (added.includes("tabindex")) img.tabIndex = 0;
+      if (added.includes("role")) img.setAttribute("role", "button");
+      if (added.includes("aria-label")) img.setAttribute("aria-label", img.alt.trim() ? `Open image: ${img.alt.trim()}` : "Open image");
+      if (added.includes("title")) img.title = "Click to open";
     }
     const frames = scope.matches?.("iframe.kapi-render-frame") ? [scope] : [...scope.querySelectorAll("iframe.kapi-render-frame")];
     for (const frame of frames) {
@@ -184,7 +217,16 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
     }
   }
 
+  function clean(node) {
+    for (const img of node.querySelectorAll("img[data-kapi-thumb]")) {
+      for (const name of img.getAttribute("data-kapi-thumb").split(" ").filter(Boolean)) img.removeAttribute(name);
+      img.removeAttribute("data-kapi-thumb");
+    }
+    return node;
+  }
+
   return Object.freeze({
+    clean,
     has: (block) => !!block?.querySelector("img[src]"),
     open: (block) => {
       const img = block?.matches("img[src]") ? block : block?.querySelector("img[src]");

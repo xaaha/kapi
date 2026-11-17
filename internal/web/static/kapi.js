@@ -1057,7 +1057,7 @@
   }
 
   const SINGLE_LINE = "td, th, span, dt, summary, legend, [data-kapi-attr]";
-  const innerOf = (host) => (host.dataset.kapiAttr ? host.textContent : host.innerHTML);
+  const innerOf = (host) => (host.dataset.kapiAttr ? host.textContent : media.clean(host.cloneNode(true)).innerHTML);
 
   function caretAtEnd(host) {
     host.focus();

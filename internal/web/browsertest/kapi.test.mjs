@@ -763,6 +763,75 @@ test("Copy copies the selected block through the Markdown export", async () => {
   assert.deepEqual(await page.eval(`(() => { const b = document.querySelector('.kapi-bar [data-action="copy"]'); return [b.dataset.copyState, b.getAttribute("aria-label"), b.textContent]; })()`), ["copied", "Copied", "Copied"]);
 });
 
+const pictureFile = async (name, width, height, type = "image/png") => {
+  const url = await page.eval(`(() => { const c = document.createElement("canvas"); c.width = ${width}; c.height = ${height}; const g = c.getContext("2d"); g.fillStyle = "#3a7"; g.fillRect(0, 0, ${width}, ${height}); return c.toDataURL(${JSON.stringify(type)}); })()`);
+  server.state.pageFiles[name] = Buffer.from(url.split(",")[1], "base64");
+  return url;
+};
+const imageCell = (row, col, inner) => `<td data-kapi-text="gggggggg" data-kapi-cell="${row},${col}">${inner}</td>`;
+const imageTable = (a, b) =>
+  '<div class="kapi-table" data-kapi-preset="table" data-kapi-id="gggggggg"><table>' +
+  '<thead><tr><th data-kapi-text="gggggggg" data-kapi-cell="0,0">Shot</th><th data-kapi-text="gggggggg" data-kapi-cell="0,1">Screen</th></tr></thead><tbody>' +
+  `<tr>${imageCell(1, 0, "Before")}${imageCell(1, 1, a)}</tr><tr>${imageCell(2, 0, "After")}${imageCell(2, 1, b)}</tr>` +
+  "</tbody></table></div>";
+const viewerCaption = () => page.eval(`(v => v.hidden ? "" : v.querySelector(".kapi-media-caption").textContent)(document.querySelector(".kapi-media-viewer"))`);
+
+test("table cell images show as thumbnails that open the viewer and step through that table only", async () => {
+  await pictureFile("before.png", 400, 300);
+  await pictureFile("after.png", 400, 300);
+  await pictureFile("other.png", 400, 300);
+  server.agentEdit("bbbbbbbb", '<figure data-kapi-id="bbbbbbbb"><img src="./plan.files/other.png" alt="Other"></figure>');
+  server.agentEdit("gggggggg", imageTable('<img src="./plan.files/before.png" alt="Before tiles">', '<img src="./plan.files/after.png" alt="After tiles">'));
+  await page.waitFor(`[...document.querySelectorAll('[data-kapi-id="gggggggg"] td img')].length === 2 && [...document.querySelectorAll('[data-kapi-id="gggggggg"] td img')].every((i) => i.complete && i.naturalWidth)`);
+  const thumb = await page.eval(`(() => {
+    const img = document.querySelector('[data-kapi-id="gggggggg"] td img'), r = img.getBoundingClientRect(), cell = img.closest("td").getBoundingClientRect();
+    return { height: Math.round(r.height), shape: Math.abs(r.width / r.height - 4 / 3) < 0.05, fits: r.width <= cell.width, tab: img.tabIndex, role: img.getAttribute("role"), label: img.getAttribute("aria-label"), cursor: getComputedStyle(img).cursor };
+  })()`);
+  assert.deepEqual(thumb, { height: 96, shape: true, fits: true, tab: 0, role: "button", label: "Open image: Before tiles", cursor: "zoom-in" });
+
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').scrollIntoView({ block: "center" })`);
+  await mouseClick('[data-kapi-id="gggggggg"] td img');
+  await page.waitFor(`!document.querySelector(".kapi-media-viewer").hidden`);
+  assert.equal(await viewerCaption(), "1 of 2 · Before tiles");
+  await page.eval(`document.querySelector(".kapi-media-next").click()`);
+  assert.equal(await viewerCaption(), "2 of 2 · After tiles");
+  await page.eval(`document.querySelector(".kapi-media-next").click()`);
+  assert.equal(await viewerCaption(), "1 of 2 · Before tiles", "next stays inside the table");
+  await page.key("Escape");
+  await page.waitFor(`document.querySelector(".kapi-media-viewer").hidden`);
+
+  await page.eval(`document.querySelectorAll('[data-kapi-id="gggggggg"] td img')[1].focus()`);
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector(".kapi-media-viewer").hidden`);
+  assert.equal(await viewerCaption(), "2 of 2 · After tiles");
+  await page.key("Escape");
+  await page.waitFor(`document.querySelector(".kapi-media-viewer").hidden`);
+  assert.equal(await page.eval(`document.activeElement === document.querySelectorAll('[data-kapi-id="gggggggg"] td img')[1]`), true, "focus returns to the thumbnail");
+});
+
+test("editing a table cell with an image saves it without the thumbnail's own attributes", async () => {
+  await pictureFile("before.png", 400, 300);
+  server.agentEdit("gggggggg", imageTable('<img src="./plan.files/before.png" alt="Before tiles">', "none"));
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"] td img')?.hasAttribute("data-kapi-thumb")`);
+  await page.eval(`document.querySelector('[data-kapi-id="gggggggg"]').scrollIntoView({ block: "center" })`);
+  await mouseClick('[data-kapi-id="gggggggg"] th');
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').hasAttribute("data-kapi-selected")`);
+  await editSelected();
+  await page.waitFor(`document.querySelectorAll('[data-kapi-id="gggggggg"] [contenteditable="true"]').length > 0`);
+  await mouseClick('[data-kapi-id="gggggggg"] td img');
+  assert.equal(await page.eval(`document.querySelector(".kapi-media-viewer").hidden`), true, "a click while editing never opens the viewer");
+  await page.eval(`(() => {
+    const cell = document.querySelector('[data-kapi-id="gggggggg"] td img').closest("td");
+    cell.focus();
+    getSelection().collapse(cell, cell.childNodes.length);
+  })()`);
+  await page.type(" x");
+  await page.key("Enter", { ctrl: true });
+  await until(() => requests("POST", "/ops").length === 1);
+  const inner = requests("POST", "/ops")[0].body.op.parts.find((p) => p.row === 1 && p.col === 1).inner;
+  assert.match(inner, /^<img src="\.\/plan\.files\/before\.png" alt="Before tiles">(\s|&nbsp;)x$/);
+});
+
 test("a selected diagram has Phosphor zoom controls that resize only its SVG", async () => {
   await page.eval(`(() => {
     const block = document.querySelector('[data-kapi-id="bbbbbbbb"]');
