@@ -728,7 +728,7 @@ test("a plain prose table gets the same wrapper and expansion as kapi-table", as
   const column = await width();
   await page.key("w");
   await page.waitFor(`!!document.querySelector('.kapi-bar [data-action="collapse"]')`);
-  assert.ok((await width()) > column + 100, `expanded to ${await width()} from ${column}`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width > ${column + 100}`);
   await page.eval(`localStorage.removeItem("kapi-expanded-tables:" + location.pathname)`);
   server.agentEdit("gggggggg", original);
   await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"] table tbody tr')?.cells[0].textContent === "beta"`);
@@ -1308,42 +1308,31 @@ test("command C toggles the chat only when no text is selected and nothing is be
   if (start) await click(".kapi-chat-button");
 });
 
-test("wide side panes toggle without moving the reading column", async () => {
+test("the reading column stays centred in the space the open side panes leave", async () => {
   const wide = await browser.open(server.url, { width: 1920, height: 800 });
   try {
     await wide.waitFor(`document.querySelector(".kapi-panel").checkVisibility()`);
     const layout = () => wide.eval(`(() => {
       const page = document.getElementById("kapi-page").getBoundingClientRect();
-      const panel = document.querySelector(".kapi-panel").getBoundingClientRect();
-      const outline = document.querySelector("#kapi-chrome > .kapi-outline").getBoundingClientRect();
-      const html = getComputedStyle(document.documentElement);
-      return {
-        center: (page.left + page.right) / 2,
-        page: { left: page.left, right: page.right },
-        panel: { left: panel.left, right: panel.right },
-        outline: { left: outline.left, right: outline.right },
-        paddingLeft: html.paddingLeft,
-        paddingRight: html.paddingRight,
-      };
+      const open = (sel) => { const el = document.querySelector(sel); return el.checkVisibility() ? el.getBoundingClientRect() : null; };
+      const outline = open("#kapi-chrome > .kapi-outline");
+      const panel = document.documentElement.hasAttribute("data-kapi-panel-collapsed") ? null : open(".kapi-panel");
+      const left = outline ? outline.right : 0;
+      const right = panel ? panel.left : document.documentElement.clientWidth;
+      return { center: (page.left + page.right) / 2, free: (left + right) / 2, clear: page.left >= left && page.right <= right };
     })()`);
-    const initial = await layout();
-    assert.equal(initial.paddingRight, "0px");
+    const centred = (l, label) => assert.ok(Math.abs(l.center - l.free) < 1 && l.clear, `${label}: ${JSON.stringify(l)}`);
 
-    await wide.eval(`document.querySelector(".kapi-panel-collapse").click()`);
-    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    centred(await layout(), "chat open");
     await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
     await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-outline-open")`);
-    const outlineOnly = await layout();
-    assert.equal(outlineOnly.paddingLeft, "0px");
-    assert.ok(Math.abs(outlineOnly.center - initial.center) < 1, JSON.stringify({ initial, outlineOnly }));
-
-    await wide.eval(`document.querySelector(".kapi-chat-button").click()`);
-    await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
-    const both = await layout();
-    assert.equal(both.paddingLeft, "0px");
-    assert.equal(both.paddingRight, "0px");
-    assert.ok(Math.abs(both.center - initial.center) < 1, JSON.stringify({ initial, both }));
-    assert.ok(both.outline.right <= both.page.left && both.page.right <= both.panel.left, JSON.stringify(both));
+    centred(await layout(), "chat and outline open");
+    await wide.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    centred(await layout(), "outline open");
+    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-outline-open")`);
+    centred(await layout(), "both closed");
     assert.deepEqual(wide.errors, []);
   } finally {
     await wide.close();
@@ -2079,6 +2068,12 @@ test("on a narrow desktop with the outline and chat open, Write stays at the top
       await p.waitFor(`document.querySelector(".kapi-outline-button").checkVisibility()`);
       const o = await p.eval(`(r => ({ left: r.left, right: r.right }))(document.querySelector(".kapi-outline-button").getBoundingClientRect())`);
       assert.ok(o.left >= 0 && o.right <= width, `${width}px: Outline must be fully on screen ${JSON.stringify(o)}`);
+      const sides = await p.eval(`(() => {
+        const o = document.querySelector(".kapi-outline-button").getBoundingClientRect(), w = document.querySelector(".kapi-write-button").getBoundingClientRect();
+        const page = document.getElementById("kapi-page").getBoundingClientRect(), chat = document.querySelector(".kapi-panel").getBoundingClientRect();
+        return { left: o.left, right: chat.left - w.right, clear: o.right <= page.left && w.left >= page.right };
+      })()`);
+      if (sides.clear) assert.ok(Math.abs(sides.left - sides.right) < 1, `${width}px: Outline and Edit mode sit the same distance from their edges ${JSON.stringify(sides)}`);
     } finally {
       await p.close();
     }
