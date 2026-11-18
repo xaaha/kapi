@@ -3361,9 +3361,13 @@
       e.preventDefault();
       return setWriting(!writing);
     }
-    if (SHORTCUTS.is("toggleChat", e) && !asking && !e.altKey && !e.isComposing && !typing(focus) && document.getSelection().isCollapsed) {
+    const caretInComposer = focus === input && input.selectionStart === input.selectionEnd;
+    if (SHORTCUTS.is("toggleChat", e) && !asking && !e.altKey && !e.isComposing && (caretInComposer || (!typing(focus) && document.getSelection().isCollapsed))) {
       e.preventDefault();
-      return setPanelCollapsed(!panelIsCollapsed());
+      const opening = panelIsCollapsed();
+      setPanelCollapsed(!opening);
+      if (opening && input.checkVisibility()) input.focus({ preventScroll: true });
+      return;
     }
     if (free && !e.shiftKey) {
       if (SHORTCUTS.is("undo", e)) {
