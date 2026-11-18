@@ -163,6 +163,23 @@ rules as `edit`. A `text` op at an older `rev` applies when the source of
 every part it sets is unchanged since that `rev`, so ticking a task while
 its checklist is being edited does not refuse the save.
 
+The browser has no edit mode. One click on a block selects it and shows its
+toolbar. A second click on the selected block, a double click, Enter or the
+toolbar's Edit button starts typing at the spot clicked, and the toolbar gives
+way to a thin outline and a Saving, then Saved pill above the block's top
+right. The text saves itself one second after the last keystroke and again
+when typing ends: Escape, Cmd or Ctrl+Enter, Enter in a one-line part, or a
+click outside the block. Escape keeps the text; nothing is ever discarded,
+and Cmd or Ctrl+Z after typing ends, or the Undo button, takes back the whole
+typing session. Every save after the first in a session sends `"amend":R`,
+the revision the session's previous save made. When `R` is still the current
+revision and the top undo step ends there, the save is a new revision as
+usual but joins that undo step instead of adding one, so the session undoes
+in one step. `state.json` keeps `"ends":{"<back>":<rev>}` for an undo step
+that ends later than one revision after it. Any other `amend` is ignored and
+the save adds its own undo step. A save that 409s keeps the text in the
+block, says so, and the next save sends the newer `rev`.
+
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
 or a `data-kapi-preset` attribute in it is refused with 422.
@@ -193,6 +210,7 @@ type Op struct {
     Done bool // check: true adds done to the kapi-task, false removes it
     Dir string // orient: tb or lr
     Section bool // archive/unarchive: include the heading's section
+    Amend uint64 // text: the revision this typing session's last save made, so the save joins its undo step
 }
 type Summary struct{ Text string; IDs []string; Seq uint64 } // `deleted callout "Freeze writes."` etc.; Seq is the revision event the store logged
 var ErrStale, ErrNotFound, ErrInboundLinks error

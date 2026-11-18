@@ -623,6 +623,87 @@ func TestUndoWalksBackThroughRevisions(t *testing.T) {
 	}
 }
 
+func TestAmendedTextOpsUndoAsOneTypingSession(t *testing.T) {
+	orig := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	beforeTyping := onDisk(t, path)
+	typed := func(inner string, amend uint64) uint64 {
+		t.Helper()
+		_, rev := s.Source()
+		got, _, err := s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: inner}}, Amend: amend})
+		if err != nil {
+			t.Fatalf("text %q: %v", inner, err)
+		}
+		return got
+	}
+	rev := typed("ab", 0)
+	rev = typed("abc", rev)
+	typed("abcd", rev)
+
+	s = open(t, home, path)
+	if !s.CanUndo() {
+		t.Fatal("a typing session can be undone after a reopen")
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != beforeTyping {
+		t.Fatalf("one undo after three amended saves =\n%s\nwant\n%s", got, beforeTyping)
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != orig {
+		t.Fatalf("second undo =\n%s\nwant\n%s", got, orig)
+	}
+}
+
+func TestAnAmendAfterAnotherChangeStartsANewUndoStep(t *testing.T) {
+	orig := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	_, rev := s.Source()
+	rev, _, err := s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "ab"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterFirst := onDisk(t, path)
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	_, now := s.Source()
+	if _, _, err := s.Apply(now, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "abc"}}, Amend: rev}); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != afterFirst {
+		t.Fatalf("two undos after a stale amend =\n%s\nwant the first save\n%s", got, afterFirst)
+	}
+}
+
+func TestAnAmendOverAFileEditCannotUndoTheFileEdit(t *testing.T) {
+	orig := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	_, rev := s.Source()
+	rev, _, err := s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "ab"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalWrite(t, path, strings.Replace(onDisk(t, path), ">b<", ">b by the agent<", 1))
+	if _, changed, err := s.Refresh(); err != nil || !changed {
+		t.Fatalf("Refresh: changed=%v err=%v", changed, err)
+	}
+	_, now := s.Source()
+	if _, _, err := s.Apply(now, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "abc"}}, Amend: rev}); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); !strings.Contains(got, "b by the agent") || !strings.Contains(got, ">ab<") {
+		t.Fatalf("undo of a save after a file edit reached past the file edit:\n%s", got)
+	}
+	if _, _, err := s.Apply(now+2, &Op{Kind: "undo"}); !errors.Is(err, ErrUndoConflict) {
+		t.Fatalf("undo across the file edit: err = %v, want ErrUndoConflict", err)
+	}
+}
+
 func TestCanUndoOnlyWhenTheLastBrowserOpIsStillOnTop(t *testing.T) {
 	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
 	s := open(t, home, path)

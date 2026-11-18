@@ -209,7 +209,8 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       if (linked) return { status: 422, body: { error: `#${linkedTarget} is linked from #${linked.id}` } };
     }
     let changedIDs;
-    state.history.push(state.blocks.map((b) => ({ ...b })));
+    const amends = op.kind === "text" && op.amend === state.rev && state.amendable === state.rev;
+    if (!amends) state.history.push(state.blocks.map((b) => ({ ...b })));
     if (op.kind === "orient") state.blocks[i].html = state.blocks[i].html.replace(/data-kapi-dir="[^"]*"/, `data-kapi-dir="${op.dir}"`);
     else if (op.kind === "text") {
       for (const part of op.parts) {
@@ -260,6 +261,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       state.blocks = prev;
     }
     state.rev++;
+    state.amendable = op.kind === "text" ? state.rev : 0;
     const target = ["text", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
     const ev = push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
     return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: ev.seq, ...(changedIDs && { ids: changedIDs }) } };
