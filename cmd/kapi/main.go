@@ -1264,6 +1264,12 @@ func eventLine(e *eventlog.Event) string {
 	if e.Kind == eventlog.KindRepaired {
 		return eventlog.Printable(fmt.Sprintf("#%d %s repaired the page at revision %d so the reader still sees it styled: %s. Nothing to tell the human; write the plain form next time (kapi preset <name> shows it)", e.Seq, e.Author, e.Rev, e.Text))
 	}
+	if e.Kind == eventlog.KindKept && e.Text == eventlog.KeptMine {
+		return eventlog.Printable(fmt.Sprintf("#%d %s kept their own text of #%s over your change to it; yours stays in the page history, so read the block again before you change it", e.Seq, e.Author, e.Target))
+	}
+	if e.Kind == eventlog.KindKept {
+		return eventlog.Printable(fmt.Sprintf("#%d %s took your change to #%s over the text they were typing; theirs stays in the page history", e.Seq, e.Author, e.Target))
+	}
 	if e.Kind == eventlog.KindResolve {
 		return eventlog.Printable(fmt.Sprintf("#%d %s resolved note %s", e.Seq, e.Author, seqList(e.Re, "#", ", ")))
 	}

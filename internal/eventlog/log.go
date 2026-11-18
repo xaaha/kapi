@@ -40,6 +40,9 @@ const (
 	KindDeleteNotes = "delete-notes"
 	KindEnd         = "end"
 	KindRepaired    = "repaired"
+	KindKept        = "kept"
+	KeptMine        = "mine"
+	KeptTheirs      = "theirs"
 	EndDeleted      = "deleted"
 	EndForgotten    = "forgotten"
 )
