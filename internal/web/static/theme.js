@@ -105,26 +105,27 @@
     return node;
   }
 
-  const swatch = (id) => el("span", { class: "kapi-swatch", "data-palette-preview": id, "aria-hidden": "true" }, el("span", { class: "kapi-swatch-ink" }));
+  const preview = (id) => el("span", { class: "kapi-theme-preview", "data-palette-preview": id, "aria-hidden": "true" },
+    el("span", { class: "kapi-theme-preview-bar" }, el("b"), el("i"), el("i"), el("i")),
+    el("span", { class: "kapi-theme-preview-page" }, el("b"), el("i"), el("i"), el("u")));
 
   function openGallery() {
     import(new URL("theme-gallery.js", here)).then((m) => m.openThemeGallery());
   }
 
   function entries({ icon, close = () => {} }) {
-    const item = (attrs, label, ...after) => el("button", { type: "button", tabindex: "-1", ...attrs }, icon("check"), el("span", { class: "kapi-menu-label", text: label }), ...after);
     const modes = MODES.map((name) => {
-      const button = item({ role: "menuitemradio", "data-theme-choice": name }, MODE_LABELS[name], icon(name));
+      const button = el("button", { type: "button", tabindex: "-1", role: "menuitemradio", "data-theme-choice": name, "aria-label": MODE_LABELS[name], "data-tip": MODE_LABELS[name] }, icon(name));
       button.addEventListener("click", () => set(name));
       return button;
     });
     let shown = recentChoices();
     const palettes = shown.map(() => {
-      const button = item({ role: "menuitemradio", "data-palette": "" }, "", swatch("default"));
+      const button = el("button", { type: "button", tabindex: "-1", role: "menuitemradio", "data-palette": "" }, preview("default"), el("span", { class: "kapi-menu-label" }));
       button.addEventListener("click", () => setPalette(button.dataset.palette));
       return button;
     });
-    const browse = el("button", { type: "button", tabindex: "-1", role: "menuitem", "data-theme-browse": "" }, el("span"), el("span", { class: "kapi-menu-label", text: "Browse all themes" }), icon("chevron"));
+    const browse = el("button", { type: "button", tabindex: "-1", role: "menuitem", "data-theme-browse": "" }, el("span", { class: "kapi-menu-label", text: "Browse all themes" }), icon("chevron"));
     browse.addEventListener("click", () => {
       close();
       openGallery();
@@ -135,7 +136,7 @@
         const p = paletteOf(shown[i]);
         button.dataset.palette = p.id;
         button.querySelector(".kapi-menu-label").textContent = p.label;
-        button.querySelector(".kapi-swatch").dataset.palettePreview = p.id;
+        button.querySelector(".kapi-theme-preview").dataset.palettePreview = p.id;
         button.setAttribute("aria-checked", String(p.id === palette));
       });
       for (const button of modes) button.setAttribute("aria-checked", String(button.dataset.themeChoice === choice));
@@ -144,7 +145,13 @@
     document.addEventListener("kapi-palette", sync);
     sync();
     const rule = () => el("div", { class: "kapi-menu-sep", role: "separator" });
-    return [...modes, rule(), ...palettes, rule(), browse];
+    return [
+      el("div", { class: "kapi-theme-modes", role: "group", "aria-label": "Mode" }, ...modes),
+      rule(),
+      el("div", { class: "kapi-theme-tiles", role: "group", "aria-label": "Palette" }, ...palettes),
+      rule(),
+      browse,
+    ];
   }
 
   function control({ icon, shortcuts }) {
@@ -226,6 +233,7 @@
     setPalette,
     entries,
     control,
+    preview,
     openGallery,
   });
   apply();
