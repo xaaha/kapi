@@ -648,7 +648,7 @@ test("the archive banner on Recent stays dismissed after a reload", async () => 
   const p = await home();
   try {
     await p.waitFor(`!document.querySelector(".nb-banner").hidden`);
-    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-banner strong, .nb-banner p")].map((n) => n.textContent)`), ["Kapi now tidies up after itself", "Notes nobody edits for 24 hours move to Archived. Archived notes are deleted after 30 days. Save a note to keep it."]);
+    assert.deepEqual(await p.eval(`[...document.querySelectorAll(".nb-banner strong, .nb-banner p")].map((n) => n.textContent)`), ["Kapi tidies up after itself", "Notes nobody edits for 24 hours move to Archived. Archived notes are deleted after 30 days. Save a note to keep it."]);
     await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
     assert.equal(await p.eval(`document.querySelector(".nb-banner").hidden`), true);
     await p.eval(`document.querySelector('[data-tab="recent"]').click()`);
