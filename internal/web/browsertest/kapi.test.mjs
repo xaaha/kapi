@@ -2359,15 +2359,24 @@ for (const width of [390, 360]) {
     }
   });
 
-  test(`on a ${width} px touch phone the outline control sits in thumb reach at the right edge and works by tap`, async () => {
+  test(`on a ${width} px touch phone the outline and read view controls sit in thumb reach and work by tap`, async () => {
     const phone = await mobilePage(width);
     try {
       await phone.eval(`document.querySelector(".kapi-chat-button").click(); document.activeElement.blur()`);
-      const b = await phone.eval(`(({ left, right, top, bottom, width, height }) => ({ left, right, top, bottom, width, height }))(document.querySelector(".kapi-outline-tools .kapi-outline-button").getBoundingClientRect())`);
-      assert.ok(b.width >= 44 && b.height >= 44, JSON.stringify(b));
-      assert.ok(b.left >= 0 && b.right <= width && width - b.right <= 17 && b.bottom <= 800 && b.top >= 800 - 120, JSON.stringify(b));
+      const boxes = await phone.eval(`[".kapi-outline-tools .kapi-outline-button", ".kapi-read-tools .kapi-read-button"].map((s) => (({ left, right, top, bottom, width, height }) => ({ left, right, top, bottom, width, height }))(document.querySelector(s).getBoundingClientRect()))`);
+      for (const b of boxes) {
+        assert.ok(b.width >= 44 && b.height >= 44, JSON.stringify(b));
+        assert.ok(b.left >= 0 && b.right <= width && b.bottom <= 800 && b.top >= 800 - 120, JSON.stringify(b));
+      }
+      assert.ok(boxes[0].right <= boxes[1].left, JSON.stringify(boxes));
       await tap(phone, ".kapi-outline-button");
       await phone.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
+      await tap(phone, ".kapi-read-button");
+      await phone.waitFor(`document.documentElement.hasAttribute("data-kapi-reading") && !document.querySelector(".kapi-outline").checkVisibility()`);
+      const back = await phone.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-read-button").getBoundingClientRect())`);
+      assert.ok(back.right <= width && back.bottom <= 800 && back.top >= 0, JSON.stringify(back));
+      await tap(phone, ".kapi-read-button");
+      await phone.waitFor(`!document.documentElement.hasAttribute("data-kapi-reading")`);
     } finally {
       await phone.close();
     }
@@ -5466,6 +5475,97 @@ test("Cmd or Ctrl click on a link inside an open edit opens it in a new tab", as
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
   await page.waitFor(`!!window.opened`);
   assert.deepEqual(await page.eval(`window.opened`), [new URL("#bbbbbbbb", server.url).href, "_blank"]);
+});
+
+const readOn = () => page.eval(`document.documentElement.hasAttribute("data-kapi-reading")`);
+const CHROME_PARTS = [".kapi-panel", ".kapi-outline-tools", ".kapi-site-head", ".kapi-bar", ".kapi-ring", ".kapi-pins"];
+const shown = () => page.eval(`Object.fromEntries(${JSON.stringify(CHROME_PARTS)}.map((q) => [q, !!document.querySelector(q)?.checkVisibility()]))`);
+
+test("Cmd or Ctrl+E turns on read view, which hides the chat, outline, header, toolbar and ring, and pressing it again brings them back", async () => {
+  await page.eval(`document.querySelector(".kapi-outline-button").click()`);
+  await page.waitFor(`document.querySelector(".kapi-outline").checkVisibility()`);
+  await select("bbbbbbbb");
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  const before = await shown();
+  await page.key("e", await modifier());
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+  assert.deepEqual(await shown(), Object.fromEntries(CHROME_PARTS.map((q) => [q, false])));
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), false);
+  assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected]")`), false);
+  const button = await page.eval(`(b => [b.checkVisibility(), b.getAttribute("aria-pressed"), b.dataset.tip, b.getAttribute("aria-keyshortcuts"), b.getAttribute("aria-label")])(document.querySelector(".kapi-read-button"))`);
+  assert.deepEqual(button, [true, "true", `Read view ${await page.eval(`window.kapiShortcuts.key("readView").hint`)}`, await page.eval(`window.kapiShortcuts.key("readView").words`), "Read view"]);
+
+  await page.key("e", await modifier());
+  await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-reading")`);
+  assert.deepEqual({ ...(await shown()), ".kapi-bar": true, ".kapi-ring": true }, { ...before, ".kapi-bar": true, ".kapi-ring": true });
+  assert.equal(await page.eval(`document.querySelector(".kapi-outline").checkVisibility()`), true);
+  assert.equal(await page.eval(`document.querySelector(".kapi-read-button").getAttribute("aria-pressed")`), "false");
+});
+
+test("in read view clicks only follow links: no selection, no typing, no ticked boxes, no sorting and no letter keys", async () => {
+  await addBlock({ id: "mmmmmmmm", html: '<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="mmmmmmmm"><li class="kapi-task" data-kapi-preset="task" data-kapi-id="nnnnnnnn"><input type="checkbox"><span class="kapi-task-body" data-kapi-text="nnnnnnnn">one</span></li></ul>' });
+  await mouseClick(".kapi-read-button");
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]', 2);
+  await mouseClick('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="gggggggg"] th');
+  await mouseClick('[data-kapi-id="nnnnnnnn"] input');
+  await page.key("Enter");
+  await page.key("a");
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected], [contenteditable], .kapi-ask, [aria-sort]")`), false);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="nnnnnnnn"] input').checked`), false);
+  assert.equal(requests("POST", "").length, 0);
+  await mouseClick('[data-kapi-id="dddddddd"] a');
+  await page.waitFor(`location.hash === "#bbbbbbbb"`);
+});
+
+test("turning on read view while typing saves the text first", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type("!");
+  await page.key("e", await modifier());
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading") && !document.querySelector("[contenteditable]")`);
+  assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, /!/);
+});
+
+test("read view survives a reload, and its button pulses only while read view is on and motion is allowed", async () => {
+  const animations = () => page.eval(`(b => [getComputedStyle(b.querySelector("svg")).animationName, getComputedStyle(b.querySelector("svg path:last-child")).animationName])(document.querySelector(".kapi-read-button"))`);
+  assert.deepEqual(await animations(), ["none", "none"]);
+  await mouseClick(".kapi-read-button");
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+  assert.deepEqual(await animations(), ["kapi-reading-book", "kapi-reading-arc"]);
+  assert.equal(await page.eval(`document.querySelectorAll(".kapi-read-button svg path").length`), 2);
+  await page.call("Page.reload");
+  await page.waitFor(`document.readyState === "complete" && !!document.querySelector(".kapi-read-button")`, 5000);
+  assert.equal(await readOn(), true);
+  assert.equal(await page.eval(`document.querySelector(".kapi-read-button").getAttribute("aria-pressed")`), "true");
+  await page.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  assert.deepEqual(await animations(), ["none", "none"]);
+  await page.call("Emulation.setEmulatedMedia", { features: [] });
+  await mouseClick(".kapi-read-button");
+  await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-reading")`);
+});
+
+test("on a wide desktop the read view button sits at the top right of the reading area, level with Outline, and stays put in read view", async () => {
+  const wide = await browser.open(server.url, { width: 1600, height: 800 });
+  const box = (q) => wide.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(${JSON.stringify(q)}).getBoundingClientRect())`);
+  try {
+    if (await wide.eval(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`)) await wide.eval(`document.querySelector(".kapi-chat-button").click()`);
+    const [read, outline, text, edge] = [await box(".kapi-read-button"), await box(".kapi-outline-button"), await box("#kapi-page"), (await box(".kapi-panel")).left];
+    assert.equal(read.top, outline.top);
+    assert.ok(read.left >= text.right - 33 && edge - read.right <= 32, JSON.stringify({ read, text, edge }));
+    await wide.eval(`document.querySelector(".kapi-read-button").click()`);
+    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+    const on = await box(".kapi-read-button");
+    assert.ok(on.top >= 0 && on.right <= 1600 && on.top < 100, JSON.stringify(on));
+    const at = await wide.eval(`(r => !!document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest(".kapi-read-button"))(document.querySelector(".kapi-read-button").getBoundingClientRect())`);
+    assert.equal(at, true);
+  } finally {
+    await wide.close();
+  }
 });
 
 test("End session is a submenu like Export, and the keys reach End session and End and delete", async () => {

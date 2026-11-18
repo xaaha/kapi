@@ -213,6 +213,12 @@
   const pagePath = main.dataset.path || "";
   const pageName = pagePath.split(/[\\/]/).pop() || document.title;
   let leaving = null;
+  const readKey = `kapi-read:${base.split("/").pop()}`;
+  let reading = false;
+  try {
+    reading = localStorage.getItem(readKey) === "true";
+  } catch {}
+  const readButton = h("button", { type: "button", class: "kapi-read-button", "aria-label": "Read view", "aria-keyshortcuts": keyWords("readView"), "data-tip": `Read view ${keyHint("readView")}`, onclick: () => setReading(!reading) }, icon("book"));
   const menuButton = h("button", { type: "button", class: "kapi-menu-button", "aria-label": "Page menu", title: "Page menu", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("dots"));
   const EXPORTS = [
     { glyph: "download", label: "HTML", run: () => exportFile("html", () => pageName) },
@@ -355,8 +361,10 @@
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
     h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, chatButton, menuButton, menu));
   const outlineTools = h("div", { class: "kapi-page-tools kapi-outline-tools" }, outlineButton);
+  const readTools = h("div", { class: "kapi-page-tools kapi-read-tools" }, readButton);
   root.prepend(siteHead);
-  root.append(outlineTools);
+  root.append(outlineTools, readTools);
+  syncReading();
   main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -1198,6 +1206,29 @@
   }
 
   const archived = (el) => el.getAttribute("data-kapi-state") === "archived";
+
+  async function setReading(on) {
+    if (on && editing) await leaveEdit();
+    if (on && editing) return;
+    reading = on;
+    try {
+      localStorage.setItem(readKey, String(on));
+    } catch {}
+    if (on) {
+      if (asking) closeAsk();
+      hidePop(true);
+      setSheet(false);
+      getSelection().removeAllRanges();
+      textRange = null;
+      select(null);
+    }
+    syncReading();
+  }
+
+  function syncReading() {
+    readButton.setAttribute("aria-pressed", String(reading));
+    document.documentElement.toggleAttribute("data-kapi-reading", reading);
+  }
 
   function editable(el) {
     return !archived(el) && (el.hasAttribute("data-kapi-raw") || partsOf(el).length > 0);
@@ -3336,6 +3367,13 @@
   });
 
   main.addEventListener("click", (e) => {
+    if (!reading || closest(e.target, "a[href], summary")) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  main.addEventListener("click", (e) => {
+    if (reading) return;
     if (editing) {
       if (closest(e.target, "summary")?.isContentEditable) e.preventDefault();
       const link = closest(e.target, "a[href]");
@@ -3365,7 +3403,7 @@
 
   function trackSelection() {
     const sel = getSelection();
-    const r = !editing && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
+    const r = !reading && !editing && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
     const next = r && main.contains(r.startContainer) && main.contains(r.endContainer) && r.toString().trim() ? r : null;
     const had = !!textRange;
     textRange = next;
@@ -3452,7 +3490,12 @@
     const focus = document.activeElement;
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
-    const free = !editing && !asking && !typing(focus) && !e.defaultPrevented && !e.isComposing && e.keyCode !== 229 && !e.altKey;
+    const free = !reading && !editing && !asking && !typing(focus) && !e.defaultPrevented && !e.isComposing && e.keyCode !== 229 && !e.altKey;
+    if (SHORTCUTS.is("readView", e) && !asking && !e.altKey && !e.isComposing && (inContent || !typing(focus))) {
+      e.preventDefault();
+      return setReading(!reading);
+    }
+    if (reading) return;
     if (SHORTCUTS.is("toggleOutline", e) && !asking && !e.altKey && !e.isComposing) {
       e.preventDefault();
       return setOutline(!outlineShown());
@@ -3529,13 +3572,13 @@
     document.addEventListener(type, (e) => {
       if (![...(e.dataTransfer?.types || [])].includes("Files")) return;
       e.preventDefault();
-      if (type !== "drop" || editing || !main.contains(e.target)) return;
+      if (type !== "drop" || reading || editing || !main.contains(e.target)) return;
       const at = closest(e.target, BLOCK);
       addImages([...e.dataTransfer.files], at && main.contains(at) ? idOf(at) : "");
     });
   }
   document.addEventListener("paste", (e) => {
-    if (e.defaultPrevented || editing || asking || root.contains(e.target) || typing(document.activeElement) || root.contains(document.activeElement)) return;
+    if (e.defaultPrevented || reading || editing || asking || root.contains(e.target) || typing(document.activeElement) || root.contains(document.activeElement)) return;
     const files = [...(e.clipboardData?.files || [])];
     if (!files.length || e.clipboardData.getData("text/plain")) return;
     e.preventDefault();

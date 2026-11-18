@@ -396,7 +396,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
     --kapi-chat-gutter: max(24px, calc((100% - 720px) / 2));
   }
 
-  #kapi-chrome[data-panel-expanded] :is(.kapi-outline-tools, .kapi-pins, .kapi-rail) { visibility: hidden; }
+  #kapi-chrome[data-panel-expanded] :is(.kapi-outline-tools, .kapi-read-tools, .kapi-pins, .kapi-rail) { visibility: hidden; }
 
   #kapi-chrome[data-panel-expanded] .kapi-chat-head {
     justify-content: flex-start;
@@ -703,7 +703,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   background: var(--kapi-blue-text);
 }
 
-#kapi-chrome :is(.kapi-search-button, .kapi-outline-button) svg {
+#kapi-chrome :is(.kapi-search-button, .kapi-outline-button, .kapi-read-button) svg {
   display: block;
   width: 16px;
   height: 16px;
@@ -2816,6 +2816,58 @@ html[data-kapi-head-hidden] {
   left: max(min(20px, calc(var(--kapi-page-left) - 40px)), 8px);
 }
 
+#kapi-chrome .kapi-read-tools {
+  left: min(max(calc(100% - var(--kapi-panel-gutter) - 56px), calc(var(--kapi-page-right) + 4px)), calc(100% - var(--kapi-panel-gutter) - 44px));
+}
+
+#kapi-chrome .kapi-page-tools > .kapi-read-button[aria-pressed="true"] {
+  background: var(--kapi-blue-fill);
+  color: var(--kapi-blue-text);
+}
+
+#kapi-chrome .kapi-read-button[aria-pressed="true"] svg {
+  animation: kapi-reading-book 1.6s ease-in-out infinite;
+}
+
+#kapi-chrome .kapi-read-button[aria-pressed="true"] svg path:last-child {
+  animation: kapi-reading-arc 1.6s ease-in-out infinite;
+}
+
+@keyframes kapi-reading-book {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
+}
+
+@keyframes kapi-reading-arc {
+  0%, 100% { opacity: 1; transform: translateY(0); }
+  50% { opacity: 0.35; transform: translateY(-14px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kapi-chrome .kapi-read-button[aria-pressed="true"] svg,
+  #kapi-chrome .kapi-read-button[aria-pressed="true"] svg path:last-child { animation: none; }
+}
+
+#kapi-chrome .kapi-read-tools > button[data-tip]:is(:hover, :focus-visible)::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+html[data-kapi-reading] {
+  --kapi-panel-gutter: 0px;
+  --kapi-outline-gutter: 0px;
+}
+
+html[data-kapi-reading] #kapi-chrome > :not(.kapi-read-tools),
+html[data-kapi-reading] #kapi-page .kapi-undo-note {
+  display: none !important;
+}
+
+@media (min-width: 761px) {
+  html[data-kapi-reading] #kapi-chrome .kapi-read-tools { top: 28px; }
+}
+
 html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   display: none;
 }
@@ -2864,7 +2916,8 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
     top: auto;
     bottom: calc(16px + var(--kapi-bar-space) + env(safe-area-inset-bottom));
   }
-  #kapi-chrome .kapi-outline-tools { left: auto; right: 16px; }
+  #kapi-chrome .kapi-read-tools { left: auto; right: 16px; }
+  #kapi-chrome .kapi-outline-tools { left: auto; right: 68px; }
   #kapi-chrome .kapi-page-tools > button { width: 44px; height: 44px; box-shadow: var(--kapi-shadow); }
   #kapi-chrome .kapi-page-tools { transition: transform 0.2s ease; }
   html[data-kapi-head-hidden] #kapi-chrome .kapi-page-tools { transform: translateY(calc(100% + 32px)); }

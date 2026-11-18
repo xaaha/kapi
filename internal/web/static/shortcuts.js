@@ -34,6 +34,7 @@ window.kapiShortcuts = (() => {
     search: { keys: ["/"], mod: false, hint: "/", words: "/" },
     switchNote: { keys: ["k"], mod: true, hint: `${command}K`, words: `${command}K` },
     printPage: { keys: ["p"], mod: true, hint: `${command}P`, words: `${command}P` },
+    readView: { keys: ["e"], mod: true, shift: false, hint: `${command}E`, words: `${command}E` },
     toggleChat: { keys: ["c"], mod: true, shift: false, hint: `${command}C`, words: `${command}C` },
     toggleOutline: { keys: ["o"], mod: true, shift: false, hint: `${command}O`, words: `${command}O` },
     searchNext: { keys: ["ArrowDown"], hint: "↓", words: "Down arrow", also: { keys: ["n"], ctrl: true, meta: false } },

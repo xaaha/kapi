@@ -191,6 +191,14 @@ above the other. Either choice posts `POST /p/{id}/kept`. A block the agent
 rewrites while the human is not typing in it shows an "Agent changed this"
 tag for a moment.
 
+Cmd or Ctrl+E, or the book button at the top right of the reading area,
+turns on read view: the header, chat, outline, toolbar, selection ring, note
+pins and every other page control hide, the reading column takes the whole
+width, and clicks only follow links and open or close details. The book
+button stays, pressed, as the way back. Turning it on while typing saves the
+text first. The choice is kept per page in the browser
+(`localStorage["kapi-read:<page id>"]`).
+
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
 or a `data-kapi-preset` attribute in it is refused with 422.
