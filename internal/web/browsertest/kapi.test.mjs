@@ -1386,7 +1386,7 @@ test("the expand toggle opens the chat over the page and Escape brings the side 
   await page.eval(`document.querySelector(".kapi-composer textarea").value = ""`);
 });
 
-test("command C toggles the chat only when no text is selected and nothing is being typed", async () => {
+test("command C toggles the chat when no text is selected and focuses the message box on open", async () => {
   const modifiers = process.platform === "darwin" ? 4 : 2;
   const press = async () => {
     await page.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "c", code: "KeyC", windowsVirtualKeyCode: 67, modifiers });
@@ -1402,6 +1402,7 @@ test("command C toggles the chat only when no text is selected and nothing is be
   await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed") === ${start}`);
 
   await page.eval(`(() => {
+    document.activeElement.blur();
     const r = document.createRange();
     r.selectNodeContents(document.querySelector('[data-kapi-id="bbbbbbbb"]'));
     document.getSelection().removeAllRanges();
@@ -1410,12 +1411,22 @@ test("command C toggles the chat only when no text is selected and nothing is be
   await press();
   assert.equal(await collapsed(), start, "a text selection keeps command C as copy");
 
-  await page.eval(`document.getSelection().removeAllRanges()`);
-  if (start) await click(".kapi-chat-button");
-  await page.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+  await page.eval(`document.getSelection().removeAllRanges(); document.activeElement.blur()`);
+  if (!start) await click(".kapi-chat-button");
+  await page.eval(`document.activeElement.blur()`);
   await press();
-  assert.equal(await collapsed(), false, "typing in the composer keeps command C as copy");
-  if (start) await click(".kapi-chat-button");
+  await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-composer textarea")`), true);
+
+  await page.eval(`(() => { const t = document.querySelector(".kapi-composer textarea"); t.value = "draft"; t.select(); })()`);
+  await press();
+  assert.equal(await collapsed(), false, "a selection in the composer keeps command C as copy");
+
+  await page.eval(`(() => { const t = document.querySelector(".kapi-composer textarea"); t.setSelectionRange(5, 5); })()`);
+  await press();
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+  await page.eval(`(() => { const t = document.querySelector(".kapi-composer textarea"); t.value = ""; })()`);
+  if (!start) await click(".kapi-chat-button");
 });
 
 test("the reading column stays centred in the space the open side panes leave", async () => {
