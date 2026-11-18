@@ -4419,7 +4419,7 @@ test("#30 an image from another site has no Download tool", async () => {
 
 const menuOpen = () => page.eval(`!document.querySelector(".kapi-menu").hidden`);
 const expanded = () => page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`);
-const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? document.activeElement.querySelector(".kapi-menu-label").textContent : document.activeElement.className`);
+const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? (document.activeElement.querySelector(".kapi-menu-label")?.textContent ?? document.activeElement.getAttribute("aria-label")) : document.activeElement.className`);
 const topLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].filter((b) => !b.closest(".kapi-submenu")).map((b) => b.querySelector(".kapi-menu-label").textContent)`);
 const submenuOpen = () => page.eval(`!document.querySelector(".kapi-submenu").hidden`);
 const exportExpanded = () => page.eval(`document.querySelector(".kapi-menu [data-menu=export]").getAttribute("aria-expanded")`);
@@ -4939,8 +4939,14 @@ test("clicking an outline heading unfolds what hides it, scrolls there, and brow
 test("a page keeps Theme only in its menu, with Light, Dark and System above the palettes", async () => {
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-site-head .kapi-theme, .kapi-site-head .kapi-theme-button").length`), 0);
   await openThemeMenu();
-  assert.deepEqual(await page.eval(`[...document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").children].map((b) => b.getAttribute("role") === "separator" ? "|" : [b.textContent, b.getAttribute("aria-checked")].join(":"))`),
-    ["Light:false", "Dark:false", "System:true", "|", "Default:true", "Paper:false", "Ocean:false", "|", "Browse all themes:"]);
+  assert.deepEqual(await page.eval(`(() => {
+    const entry = (b) => [b.getAttribute("aria-label") ?? b.textContent, b.getAttribute("aria-checked")].join(":");
+    return [...document.querySelector(".kapi-menu [data-menu=theme] + .kapi-submenu").children].map((c) => {
+      const role = c.getAttribute("role");
+      return role === "separator" ? "|" : role === "group" ? [c.getAttribute("aria-label"), ...[...c.children].map(entry)].join(" ") : entry(c);
+    });
+  })()`),
+    ["Mode Light:false Dark:false System:true", "|", "Palette Default:true Paper:false Ocean:false", "|", "Browse all themes:"]);
   assert.equal(await page.eval(`getComputedStyle(document.querySelector('.kapi-menu [data-theme-choice="dark"] svg:last-child')).visibility`), "visible");
   await pickMode("dark");
   await page.waitFor(`document.documentElement.dataset.theme === "dark"`);

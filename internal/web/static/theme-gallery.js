@@ -5,12 +5,6 @@ const styled = Promise.all([ready, stylesheet(new URL("./theme-gallery.css", imp
 
 let shared;
 
-function preview(id) {
-  return h("span", { class: "kapi-theme-preview", "data-palette-preview": id, "aria-hidden": "true" },
-    h("span", { class: "kapi-theme-preview-bar" }, h("b"), h("i"), h("i"), h("i")),
-    h("span", { class: "kapi-theme-preview-page" }, h("b"), h("i"), h("i"), h("u")));
-}
-
 function build() {
   const theme = window.kapiTheme;
   const groups = ["All themes", ...new Set(theme.palettes.map((p) => p.group))];
@@ -20,7 +14,7 @@ function build() {
     items: theme.palettes,
     noun: ["theme", "themes"],
     text: (p) => `${p.label} ${p.note} ${p.group}`,
-    card: (p) => [preview(p.id), h("span", { class: "kapi-theme-caption" }, h("strong", { text: p.label }), h("small", { text: p.note }))],
+    card: (p) => [theme.preview(p.id), h("span", { class: "kapi-theme-caption" }, h("strong", { text: p.label }), h("small", { text: p.note }))],
     isSelected: (p) => p.id === theme.palette(),
     onPick: (p) => theme.setPalette(p.id),
   });

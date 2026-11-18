@@ -98,7 +98,7 @@ export function badge(p, { now = Date.now(), saved = true } = {}) {
 export function bannerCopy(policy) {
   if (!policy.archiveAfter) return null;
   return [
-    "Kapi now tidies up after itself",
+    "Kapi tidies up after itself",
     `Notes nobody edits for ${spell(policy.archiveAfter)} move to Archived.${policy.deleteAfter ? ` Archived notes are deleted after ${spell(policy.deleteAfter)}.` : ""} Save a note to keep it.`,
   ];
 }

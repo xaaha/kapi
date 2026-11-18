@@ -696,7 +696,7 @@
     return true;
   }
 
-  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemradio"]):not([hidden]), :scope > [role="none"] > [role="menuitem"]')];
+  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemradio"]):not([hidden]), :scope > [role="none"] > [role="menuitem"], :scope > [role="group"] > [role="menuitemradio"]')];
   let hoverOpened = false;
   let submenuTimer;
 
