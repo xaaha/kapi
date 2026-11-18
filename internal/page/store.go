@@ -89,14 +89,14 @@ type Store struct {
 }
 
 type state struct {
-	Rev   uint64     `json:"rev"`
+	Rev   uint64            `json:"rev"`
 	Undo  []uint64          `json:"undo"`
 	Ends  map[uint64]uint64 `json:"ends,omitempty"`
 	Next  *state            `json:"next,omitempty"`
-	Temp  string     `json:"temp,omitempty"`
-	Held  []heldFile `json:"held,omitempty"`
-	Event *revEvent  `json:"event,omitempty"`
-	Fixed *repairs   `json:"repaired,omitempty"`
+	Temp  string            `json:"temp,omitempty"`
+	Held  []heldFile        `json:"held,omitempty"`
+	Event *revEvent         `json:"event,omitempty"`
+	Fixed *repairs          `json:"repaired,omitempty"`
 
 	Viewed   time.Time `json:"viewed,omitzero"`
 	Touched  time.Time `json:"touched,omitzero"`
