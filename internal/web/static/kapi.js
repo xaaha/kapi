@@ -174,7 +174,7 @@
   const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Close chat", title: "Close chat", onclick: () => setPanelCollapsed(true) }, icon("x"));
   const expandPanelButton = h("button", { type: "button", class: "kapi-panel-expand", "aria-label": "Expand chat", "data-tip": "Expand chat", "aria-pressed": "false", onclick: () => setPanelExpanded(!panelExpanded) }, icon("expand"));
   const backToPage = h("button", { type: "button", class: "kapi-chat-back", onclick: () => setPanelExpanded(false) }, icon("back"), h("span", { text: "Back to page" }), h("kbd", { text: keyHint("dismiss") }));
-  const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "data-tip": "Outline", "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
+  const outlineButton = h("button", { type: "button", class: "kapi-outline-button", "aria-label": "Outline", "aria-keyshortcuts": keyWords("toggleOutline"), "data-tip": `Outline ${keyHint("toggleOutline")}`, "aria-pressed": "false", onclick: () => setOutline(!outlineShown()) }, icon("outline"));
   const outlineTree = h("ul", { class: "kapi-outline-tree" });
   const outlineEmpty = h("p", { class: "kapi-outline-empty", text: "Headings on this page show up here." });
   const outlineScroll = h("div", { class: "kapi-outline-scroll" }, outlineEmpty, outlineTree);
@@ -3360,6 +3360,10 @@
     if (SHORTCUTS.is("toggleWrite", e) && !asking && !e.isComposing && (inContent || !typing(focus))) {
       e.preventDefault();
       return setWriting(!writing);
+    }
+    if (SHORTCUTS.is("toggleOutline", e) && !asking && !e.altKey && !e.isComposing) {
+      e.preventDefault();
+      return setOutline(!outlineShown());
     }
     const caretInComposer = focus === input && input.selectionStart === input.selectionEnd;
     if (SHORTCUTS.is("toggleChat", e) && !asking && !e.altKey && !e.isComposing && (caretInComposer || (!typing(focus) && document.getSelection().isCollapsed))) {

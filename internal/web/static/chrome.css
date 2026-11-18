@@ -36,6 +36,7 @@
   --kapi-page-left: 0px;
   --kapi-page-right: 100vw;
   --kapi-bar-space: 0px;
+  --kapi-bar-room: 150px;
   --kapi-panel-width: 355px;
   --kapi-panel-gutter: var(--kapi-panel-width);
   --kapi-outline-gutter: 0px;
@@ -47,8 +48,9 @@ html[data-kapi-panel-collapsed] {
 
 @media screen and (min-width: 761px) {
   html {
-    padding-left: var(--kapi-outline-gutter);
-    padding-right: var(--kapi-panel-gutter);
+    --kapi-page-slack: max(0px, 100% - var(--kapi-outline-gutter) - var(--kapi-panel-gutter) - var(--kapi-measure));
+    padding-left: calc(var(--kapi-outline-gutter) + clamp(0px, var(--kapi-panel-gutter) - var(--kapi-outline-gutter), var(--kapi-page-slack) - 2 * var(--kapi-bar-room)));
+    padding-right: calc(var(--kapi-panel-gutter) + clamp(0px, var(--kapi-outline-gutter) - var(--kapi-panel-gutter), var(--kapi-page-slack)));
   }
 }
 
@@ -2650,7 +2652,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   position: fixed;
   z-index: 2147482999;
   bottom: 20px;
-  left: calc(var(--kapi-outline-gutter) + (100vw - var(--kapi-outline-gutter) - var(--kapi-panel-gutter)) / 2);
+  left: calc((var(--kapi-page-left) + var(--kapi-page-right)) / 2);
   transform: translateX(-50%);
   max-width: min(440px, calc(100vw - var(--kapi-outline-gutter) - var(--kapi-panel-gutter) - 32px));
   gap: 8px;

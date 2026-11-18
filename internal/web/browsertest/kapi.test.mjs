@@ -1429,31 +1429,65 @@ test("command C toggles the chat when no text is selected and focuses the messag
   if (!start) await click(".kapi-chat-button");
 });
 
-test("the reading column stays centred in the space the open side panes leave", async () => {
-  const wide = await browser.open(server.url, { width: 1920, height: 800 });
+for (const [width, roomy] of [[2400, true], [1920, false], [1300, false]]) {
+  test(`at ${width} px the reading column stays at the window centre when it fits clear of the open side panes, and moves only as far as it must when not`, async () => {
+    const wide = await browser.open(server.url, { width, height: 800 });
+    try {
+      await wide.waitFor(`document.querySelector(".kapi-panel").checkVisibility()`);
+      const layout = () => wide.eval(`(() => {
+        const page = document.getElementById("kapi-page").getBoundingClientRect();
+        const open = (sel) => { const el = document.querySelector(sel); return el.checkVisibility() ? el.getBoundingClientRect() : null; };
+        const outline = open("#kapi-chrome > .kapi-outline");
+        const panel = document.documentElement.hasAttribute("data-kapi-panel-collapsed") ? null : open(".kapi-panel");
+        const left = outline ? outline.right : 0;
+        const right = panel ? panel.left : document.documentElement.clientWidth;
+        return { left: page.left, right: page.right, panes: [left, right], window: document.documentElement.clientWidth / 2 };
+      })()`);
+      const placed = (l, label) => {
+        const at = `${label}: ${JSON.stringify(l)}`;
+        assert.ok(l.left >= l.panes[0] - 1 && l.right <= l.panes[1] + 1, `clear of the panes, ${at}`);
+        const centre = (l.left + l.right) / 2;
+        const free = (l.panes[0] + l.panes[1]) / 2;
+        assert.ok(centre >= Math.min(free, l.window) - 1 && centre <= Math.max(free, l.window) + 1, `between the free space centre and the window centre, ${at}`);
+        return centre;
+      };
+
+      const chat = placed(await layout(), "chat open");
+      await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+      await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-outline-open")`);
+      const both = placed(await layout(), "chat and outline open");
+      await wide.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+      await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+      const outline = placed(await layout(), "outline open");
+      await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+      await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-outline-open")`);
+      const none = placed(await layout(), "both closed");
+      if (roomy) assert.deepEqual([chat, both, outline].map((c) => Math.round(c - none)), [0, 0, 0], "toggling a pane never moves the column");
+      else assert.notEqual(Math.round(chat), Math.round(none), "a narrow window still makes room for the chat");
+      assert.deepEqual(wide.errors, []);
+    } finally {
+      await wide.close();
+    }
+  });
+}
+
+test("command O toggles the outline, even while typing a message", async () => {
+  const wide = await browser.open(server.url, { width: 1400, height: 800 });
   try {
     await wide.waitFor(`document.querySelector(".kapi-panel").checkVisibility()`);
-    const layout = () => wide.eval(`(() => {
-      const page = document.getElementById("kapi-page").getBoundingClientRect();
-      const open = (sel) => { const el = document.querySelector(sel); return el.checkVisibility() ? el.getBoundingClientRect() : null; };
-      const outline = open("#kapi-chrome > .kapi-outline");
-      const panel = document.documentElement.hasAttribute("data-kapi-panel-collapsed") ? null : open(".kapi-panel");
-      const left = outline ? outline.right : 0;
-      const right = panel ? panel.left : document.documentElement.clientWidth;
-      return { center: (page.left + page.right) / 2, free: (left + right) / 2, clear: page.left >= left && page.right <= right };
-    })()`);
-    const centred = (l, label) => assert.ok(Math.abs(l.center - l.free) < 1 && l.clear, `${label}: ${JSON.stringify(l)}`);
-
-    centred(await layout(), "chat open");
-    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    const modifiers = process.platform === "darwin" ? 4 : 2;
+    const press = async () => {
+      await wide.call("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "o", code: "KeyO", windowsVirtualKeyCode: 79, modifiers });
+      await wide.call("Input.dispatchKeyEvent", { type: "keyUp", key: "o", code: "KeyO", windowsVirtualKeyCode: 79, modifiers });
+    };
+    const button = ".kapi-outline-button";
+    assert.equal(await wide.eval(`document.querySelector("${button}").getAttribute("aria-keyshortcuts")`), await wide.eval(`window.kapiShortcuts.key("toggleOutline").words`));
+    assert.equal(await wide.eval(`document.querySelector("${button}").dataset.tip`), await wide.eval(`"Outline " + window.kapiShortcuts.key("toggleOutline").hint`));
+    await press();
     await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-outline-open")`);
-    centred(await layout(), "chat and outline open");
-    await wide.eval(`document.querySelector(".kapi-panel-collapse").click()`);
-    await wide.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
-    centred(await layout(), "outline open");
-    await wide.eval(`document.querySelector(".kapi-outline-button").click()`);
+    await wide.eval(`document.querySelector(".kapi-composer textarea").focus()`);
+    await press();
     await wide.waitFor(`!document.documentElement.hasAttribute("data-kapi-outline-open")`);
-    centred(await layout(), "both closed");
     assert.deepEqual(wide.errors, []);
   } finally {
     await wide.close();
