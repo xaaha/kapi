@@ -1374,6 +1374,16 @@ test("an agent change to a block nobody is typing in flashes an Agent changed th
   assert.equal(await page.eval(`!!document.querySelector(".kapi-changed-tag")`), false);
 });
 
+test("an agent change from before the page opened does not flash the tag when the page loads", async () => {
+  server.agentEdit("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  server.state.events.at(-1).time = new Date(Date.now() - 60000).toISOString();
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.getElementById("kapi-chrome")`);
+  await until(() => requests("GET", "/blocks/cccccccc").length >= 1 || pageLoads() >= 2);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-changed-tag")`), false);
+});
+
 test("edits a code block as its inner source in a textarea", async () => {
   await select("jjjjjjjj");
   await editSelected();

@@ -2605,7 +2605,7 @@
     if (ownSeqs.delete(ev.seq)) return;
     const ids = ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null;
     if (ev.author !== "human") {
-      for (const id of ids || []) agentChanged.add(id);
+      if (new Date(ev.time) >= loadedAt) for (const id of ids || []) agentChanged.add(id);
       if (editing && ids?.some((id) => touchesEdit(find(id)))) clashed(editing, Math.max(Number(ev.rev) || 0, editing.rev));
     }
     schedule(ids);
