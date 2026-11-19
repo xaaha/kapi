@@ -500,6 +500,10 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       const ev = push({ author: "human", kind: "end" });
       return json(res, 200, { seq: ev.seq });
     }
+    if (req.method === "POST" && rest === "kept") {
+      const ev = push({ author: "human", kind: "kept", target: parsed.block, text: parsed.kept });
+      return json(res, 200, { seq: ev.seq });
+    }
     if (req.method === "POST" && rest === "answers") {
       const ev = push({ author: "human", kind: "answer", text: `${parsed.form} ${JSON.stringify(parsed.values)}` });
       return json(res, 200, { seq: ev.seq });

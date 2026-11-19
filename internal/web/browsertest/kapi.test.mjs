@@ -36,6 +36,7 @@ const click = (selector) => page.eval(`document.querySelector(${JSON.stringify(s
 const select = (id) => page.eval(`(b => b.hasAttribute("data-kapi-selected") || b.click())(document.querySelector('[data-kapi-id="${id}"]'))`);
 const editSelected = () => page.eval(`document.querySelector("[data-kapi-selected]").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
 const notice = () => page.eval(`(n => n.hidden ? "" : n.textContent)(document.querySelector(".kapi-notice"))`);
+const CLASH = "The agent also changed this block. Yours is showing.";
 const text = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"]')?.textContent ?? null`);
 
 async function until(fn, timeout = 3000) {
@@ -1232,16 +1233,27 @@ test("chrome styles do not reach page content that reuses chrome class names", a
   assert.deepEqual(leaks, []);
 });
 
-test("refetches other changed blocks while one is being edited", async () => {
+test("refetches other changed blocks while one is being edited, and ends typing in a block the agent changed before anything was typed", async () => {
   await select("aaaaaaaa");
   await editSelected();
   await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
   server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
   server.push({ kind: "revision", target: "aaaaaaaa,cccccccc", text: "edited" });
   await until(async () => (await text("cccccccc")) === "Agent rewrote this");
-  assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0);
-  assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "aaaaaaaa");
+  await page.waitFor(`!document.querySelector("[contenteditable], .kapi-clash")`);
+  await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
+  assert.equal(await text("aaaaaaaa"), "Migration plan");
   assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
+test("a held refetch of the block being typed in lands once the typing ends", async () => {
+  await select("aaaaaaaa");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
+  server.push({ author: "human", kind: "revision", target: "aaaaaaaa", text: "edited in another tab" });
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0);
   await page.key("Escape");
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
@@ -1260,13 +1272,14 @@ test("an edit started while its block is being refetched keeps the block it is e
   assert.match(await text("bbbbbbbb"), /Mine\.$/);
   server.state.blocksDelay = 0;
   await page.key("Escape");
-  await until(async () => /changed while you were typing/.test(await notice()));
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"] + .kapi-clash')?.textContent.startsWith(${JSON.stringify(CLASH)})`);
+  assert.equal(await notice(), "");
   assert.match(await text("bbbbbbbb"), /Mine\.$/);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`), true);
   assert.equal(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, '<p data-kapi-id="bbbbbbbb">Agent rewrote this.</p>');
 });
 
-test("a save sends the rev from when the edit started, and a stale save keeps the text", async () => {
+test("a save sends the rev from when the edit started, a stale save keeps the text in a clash, and Keep mine saves it at the newer rev", async () => {
   await select("bbbbbbbb");
   await editSelected();
   await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
@@ -1279,18 +1292,26 @@ test("a save sends the rev from when the edit started, and a stale save keeps th
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
   assert.equal(requests("POST", "/ops")[0].body.rev, 1);
-  await until(async () => /changed/.test(await notice()));
+  await page.waitFor(`!!document.querySelector(".kapi-clash")`);
   assert.equal(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, '<p data-kapi-id="bbbbbbbb">Other tab wrote this.</p>');
   assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "bbbbbbbb");
   assert.match(await text("bbbbbbbb"), /Mine\.$/);
 
   await page.key("Enter", { ctrl: true });
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(requests("POST", "/ops").length, 1, "nothing saves while the clash is open");
+  await click('.kapi-clash [data-clash="mine"]');
   await until(() => requests("POST", "/ops").length === 2);
   assert.equal(requests("POST", "/ops")[1].body.rev, 3);
   await until(async () => /Mine\.<\/p>$/.test(server.state.blocks.find((b) => b.id === "bbbbbbbb").html));
+  await until(() => requests("POST", "/kept").length === 1);
+  assert.deepEqual(requests("POST", "/kept")[0].body, { block: "bbbbbbbb", kept: "mine" });
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-clash")`), false);
+  assert.equal(await page.eval(`document.activeElement.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`), true, "Keep mine leaves the typing open");
+  assert.equal(await saveState(), "Saved");
 });
 
-test("a stale source save keeps the source text", async () => {
+test("a stale source save keeps the source text and shows the clash bar under the text box", async () => {
   await select("jjjjjjjj");
   await editSelected();
   await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
@@ -1300,8 +1321,9 @@ test("a stale source save keeps the source text", async () => {
   await page.key("Enter", { ctrl: true });
   await until(() => requests("POST", "/ops").length === 1);
   assert.equal(requests("POST", "/ops")[0].body.rev, 1);
-  await until(async () => /changed/.test(await notice()));
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="jjjjjjjj"] + .kapi-clash')`);
   assert.equal(await page.eval(`document.querySelector(".kapi-source")?.value`), mine);
+  assert.equal(await page.eval(`document.querySelector(".kapi-source-box").nextElementSibling.nextElementSibling.classList.contains("kapi-clash")`), true);
 });
 
 test("a whole-page refresh waits until the edit ends", async () => {
@@ -1329,6 +1351,103 @@ test("server error text renders as text in the notice", async () => {
   await until(async () => (await notice()) === evil);
   assert.equal(await page.eval(`document.querySelectorAll("#kapi-chrome img").length`), 0);
   assert.equal(await page.eval(`window.pwned`), undefined);
+});
+
+async function typeThenAgentEdits(words = " Mine.") {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  await page.type(words);
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+  await page.waitFor(`!!document.querySelector('[data-kapi-id="bbbbbbbb"] + .kapi-clash')`);
+}
+
+test("an agent change to a block you are in but have not typed in shows the agent's version without a clash bar", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+  await until(async () => (await text("bbbbbbbb")) === "Agent wrote this.");
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-clash") || !!document.querySelector("[contenteditable]")`), false);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
+test("an agent change to the block being typed in keeps your text under a clash bar, and nothing saves until you choose", async () => {
+  await typeThenAgentEdits();
+  assert.deepEqual(await page.eval(`(b => [b.querySelector("p").textContent, ...[...b.querySelectorAll("button")].map((x) => x.textContent)])(document.querySelector(".kapi-clash"))`),
+    [CLASH, "Keep mine", "Use theirs", "Compare"]);
+  assert.equal(await text("bbbbbbbb"), "Move the session store to the new cluster in two steps. Mine.");
+  assert.equal(await saveState(), "");
+  await new Promise((r) => setTimeout(r, 1300));
+  assert.equal(requests("POST", "/ops").length, 0);
+  await page.key("Escape");
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable && !!document.querySelector(".kapi-clash")`), true, "Escape keeps the text and the clash");
+  assert.equal(requests("POST", "/ops").length, 0);
+  assert.equal(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+});
+
+test("Use theirs shows the agent's version, saves yours into the history first, and tells the agent", async () => {
+  await typeThenAgentEdits();
+  await click('.kapi-clash [data-clash="theirs"]');
+  await until(async () => (await text("bbbbbbbb")) === "Agent wrote this.");
+  const ops = requests("POST", "/ops").map((r) => r.body);
+  assert.deepEqual(ops.map((b) => [b.rev, b.op.kind]), [[2, "text"], [3, "undo"]]);
+  assert.equal(ops[0].op.parts[0].inner, "Move the session store to the new cluster in two steps. Mine.");
+  assert.equal(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+  await until(() => requests("POST", "/kept").length === 1);
+  assert.deepEqual(requests("POST", "/kept")[0].body, { block: "bbbbbbbb", kept: "theirs" });
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-clash, [contenteditable]")`), false);
+  assert.equal(await page.eval(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId`), "bbbbbbbb");
+});
+
+test("Use theirs after your text already saved posts nothing more, since yours is in the history", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" saved");
+  await until(() => requests("POST", "/ops").length === 1, 2500);
+  await until(async () => (await saveState()) === "Saved");
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+  await page.waitFor(`!!document.querySelector(".kapi-clash")`);
+  await click('.kapi-clash [data-clash="theirs"]');
+  await until(async () => (await text("bbbbbbbb")) === "Agent wrote this.");
+  assert.equal(requests("POST", "/ops").length, 1);
+  await until(() => requests("POST", "/kept").length === 1);
+});
+
+test("Compare shows your text and the agent's one above the other, and a second press hides them", async () => {
+  await typeThenAgentEdits();
+  await click('.kapi-clash [data-clash="compare"]');
+  await page.waitFor(`!document.querySelector(".kapi-clash-compare").hidden`);
+  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-clash-side")].map((s) => [s.querySelector("strong").textContent, s.querySelector("p").textContent])`),
+    [["Yours", "Move the session store to the new cluster in two steps. Mine."], ["Theirs", "Agent wrote this."]]);
+  assert.equal(await page.eval(`document.querySelector('.kapi-clash [data-clash="compare"]').getAttribute("aria-expanded")`), "true");
+  await click('.kapi-clash [data-clash="compare"]');
+  await page.waitFor(`document.querySelector(".kapi-clash-compare").hidden`);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`), true, "Compare leaves the typing open");
+});
+
+test("an agent change to a block nobody is typing in flashes an Agent changed this tag that goes away", async () => {
+  server.agentEdit("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  await page.waitFor(`document.querySelector(".kapi-changed-tag")?.textContent === "Agent changed this"`);
+  const [tag, block] = await page.eval(`[".kapi-changed-tag", '[data-kapi-id="cccccccc"]'].map((q) => (({ top, bottom, right }) => ({ top, bottom, right }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(tag.bottom <= block.top && Math.abs(tag.right - (block.right + 4)) < 1, JSON.stringify({ tag, block }));
+  await page.waitFor(`!document.querySelector(".kapi-changed-tag")`, 4000);
+  server.push({ author: "human", kind: "revision", target: "cccccccc", text: "edited in another tab" });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-changed-tag")`), false);
+});
+
+test("an agent change from before the page opened does not flash the tag when the page loads", async () => {
+  server.agentEdit("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
+  server.state.events.at(-1).time = new Date(Date.now() - 60000).toISOString();
+  await page.eval(`location.reload()`);
+  await page.waitFor(`document.readyState === "complete" && !!document.getElementById("kapi-chrome")`);
+  await until(() => requests("GET", "/blocks/cccccccc").length >= 1 || pageLoads() >= 2);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-changed-tag")`), false);
 });
 
 test("edits a code block as its inner source in a textarea", async () => {

@@ -845,6 +845,25 @@ func editFile(t *testing.T, path, src string) {
 	}
 }
 
+func TestKeptTellsTheAgentWhichVersionOfABlockTheHumanKept(t *testing.T) {
+	s := newSite(t, `<p data-kapi-id="aaaaaaaa">a</p>`)
+	if code, out := s.post("/kept", `{"block":"aaaaaaaa","kept":"mine"}`); code != http.StatusOK || out["seq"] != 1.0 {
+		t.Errorf("kept mine: %d %v", code, out)
+	}
+	if code, out := s.post("/kept", `{"block":"aaaaaaaa","kept":"theirs"}`); code != http.StatusOK || out["seq"] != 2.0 {
+		t.Errorf("kept theirs: %d %v", code, out)
+	}
+	for _, body := range []string{`{"block":"aaaaaaaa","kept":"both"}`, `{"kept":"mine"}`} {
+		if code, _ := s.post("/kept", body); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d, want 422", body, code)
+		}
+	}
+	ev := s.events()
+	if len(ev) != 2 || ev[0].Author != "human" || ev[0].Kind != "kept" || ev[0].Target != "aaaaaaaa" || ev[0].Text != "mine" || ev[1].Text != "theirs" {
+		t.Errorf("events = %+v", ev)
+	}
+}
+
 func TestMessagesAndAnswersAppendEvents(t *testing.T) {
 	s := newSite(t, `<kapi-form data-kapi-id="ffffffff" name="env"><kapi-choice data-kapi-id="cccccccc" name="where"><kapi-opt data-kapi-id="oooooooo" value="prod">Prod</kapi-opt></kapi-choice></kapi-form>`)
 	if code, out := s.post("/messages", `{"kind":"message","target":"ffffffff","text":"why prod?"}`); code != http.StatusOK || out["seq"] != 1.0 {

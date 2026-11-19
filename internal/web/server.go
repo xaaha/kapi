@@ -102,6 +102,7 @@ func newServer(pages Pages, prefs settings.Store, token, host string, previous [
 	s.mux.HandleFunc("GET /p/{id}/export/markdown", s.withPage(s.handleMarkdown))
 	s.mux.HandleFunc("POST /p/{id}/ops", s.withPage(s.handleOp))
 	s.mux.HandleFunc("POST /p/{id}/answers", s.withPage(s.handleAnswer))
+	s.mux.HandleFunc("POST /p/{id}/kept", s.withPage(s.handleKept))
 	s.mux.HandleFunc("POST /p/{id}/recover", s.handleRecover)
 	s.libraryRoutes()
 	s.mount(list)
@@ -798,6 +799,27 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 		return
 	}
 	app.JSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq, Deferred: sum.Deferred, IDs: sum.IDs})
+}
+
+func (s *Server) handleKept(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
+	var in struct {
+		Block string `json:"block"`
+		Kept  string `json:"kept"`
+	}
+	if !app.Decode(w, r, &in) {
+		return
+	}
+	if in.Block == "" || (in.Kept != eventlog.KeptMine && in.Kept != eventlog.KeptTheirs) {
+		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": `kept needs a block and "mine" or "theirs"`})
+		return
+	}
+	e, err := l.Append(&eventlog.Event{Author: "human", Kind: eventlog.KindKept, Target: in.Block, Text: in.Kept})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	touch(st)
+	app.JSON(w, http.StatusOK, map[string]uint64{"seq": e.Seq})
 }
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {

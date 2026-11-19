@@ -412,6 +412,8 @@ func TestRepliesAndResolvesNameTheirNotes(t *testing.T) {
 		{eventlog.Event{Seq: 15, Author: "codex", Kind: "message", Re: []uint64{12, 14}, Text: "fixed"}, `#15 codex reply to note #12, #14: fixed`},
 		{eventlog.Event{Seq: 16, Author: "human", Kind: "resolve", Re: []uint64{12}}, `#16 human resolved note #12`},
 		{eventlog.Event{Seq: 18, Author: "human", Kind: eventlog.KindDeleteNotes, Re: []uint64{12, 14}}, `#18 human deleted note #12, #14`},
+		{eventlog.Event{Seq: 19, Author: "human", Kind: eventlog.KindKept, Target: "a", Text: eventlog.KeptMine}, `#19 human kept their own text of #a over your change to it; yours stays in the page history, so read the block again before you change it`},
+		{eventlog.Event{Seq: 20, Author: "human", Kind: eventlog.KindKept, Target: "a", Text: eventlog.KeptTheirs}, `#20 human took your change to #a over the text they were typing; theirs stays in the page history`},
 	} {
 		if got := eventLine(&c.e); got != c.want {
 			t.Errorf("eventLine = %q, want %q", got, c.want)

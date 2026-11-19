@@ -1037,7 +1037,7 @@
   }
 
   const STALE = "The page changed before your change landed. This is the latest version, so try again.";
-  const STALE_EDIT = "The page changed while you were typing. Your text is still here, and it replaces the newer version when it saves again.";
+  const CLASH = "The agent also changed this block. Yours is showing.";
   const AUTOSAVE_MS = 1000;
 
   async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
@@ -1058,7 +1058,7 @@
       }
       if (res.status === 409) {
         await refresh(null);
-        say(stale, "error");
+        if (stale) say(stale, "error");
       } else if (res.status === 422) {
         say(res.data.error || "kapi refused that change.", "error");
       } else {
@@ -1131,8 +1131,8 @@
       for (const island of islandsOf(host)) island.contentEditable = "false";
     }
     const parts = hosts.map((host) => ({ host, own: ownText(host) }));
-    const op = () => {
-      const changed = parts.filter(({ host, own }) => ownText(host) !== own);
+    const op = (all) => {
+      const changed = parts.filter(({ host, own }) => all || ownText(host) !== own);
       return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: innerOf(host) })) } : null;
     };
     const snap = () => parts.map(({ host }) => ownText(host));
@@ -1181,7 +1181,7 @@
     el.setAttribute("data-kapi-editing-source", "");
     const id = el.dataset.kapiText;
     let saved = src;
-    editing = session({ el, area, box, rev, op: () => (area.value === saved ? null : { kind: "text", parts: [{ id, inner: area.value }] }), snap: () => area.value, mark: (sent) => (saved = sent) });
+    editing = session({ el, area, box, rev, op: (all) => (!all && area.value === saved ? null : { kind: "text", parts: [{ id, inner: area.value }] }), snap: () => area.value, mark: (sent) => (saved = sent) });
     area.focus();
     renderBar();
   }
@@ -1204,7 +1204,7 @@
   }
 
   function session(fields) {
-    return { ...fields, amend: 0, saved: false, refused: false, status: "", timer: 0, saving: Promise.resolve(true) };
+    return { ...fields, amend: 0, saved: false, refused: false, status: "", timer: 0, saving: Promise.resolve(true), clash: null };
   }
 
   function writeTarget(el, e) {
@@ -1241,8 +1241,9 @@
   }
 
   function endEdit() {
-    const { el, area, box, hosts, timer } = editing;
+    const { el, area, box, hosts, timer, clash } = editing;
     clearTimeout(timer);
+    clash?.box.remove();
     if (area) {
       box.remove();
       el.removeAttribute("data-kapi-editing-source");
@@ -1256,20 +1257,21 @@
     if (pending) scheduleFlush();
   }
 
-  function saveEdit(s, all = false) {
+  function saveEdit(s, all = false, force = false) {
     clearTimeout(s.timer);
-    s.saving = s.saving.then(() => sendEdit(s, all));
+    s.saving = s.saving.then(() => sendEdit(s, all, force));
     return s.saving;
   }
 
-  async function sendEdit(s, all) {
+  async function sendEdit(s, all, force) {
+    if (s.clash && !force) return false;
     let ok = true;
-    for (let change = s.op(); change && editing === s; change = all && ok ? s.op() : null) {
+    for (let change = s.op(force); change && editing === s; change = all && ok ? s.op() : null) {
       const sent = s.snap();
       s.status = "Saving";
       placeSaveState();
       const { kind, ...fields } = change;
-      const res = await op(kind, { id: idOf(s.el), ...fields, ...(s.amend && { amend: s.amend }) }, { rev: s.rev, stale: STALE_EDIT });
+      const res = await op(kind, { id: idOf(s.el), ...fields, ...(s.amend && { amend: s.amend }) }, { rev: s.rev, stale: "" });
       ok = !!res?.ok;
       s.refused = !!res && !ok && res.status !== 409;
       if (s.refused) copyTyped.textContent = "Copy text";
@@ -1280,13 +1282,76 @@
         s.saved = true;
         s.mark(sent);
       } else if (res?.status === 409) {
-        s.rev = Number(res.data.rev);
-        s.amend = 0;
+        clashed(s, Number(res.data.rev));
       }
     }
-    s.status = !ok ? "Not saved" : s.op() ? "Saving" : s.saved ? "Saved" : "";
+    s.status = s.clash ? "" : !ok ? "Not saved" : s.op() ? "Saving" : s.saved ? "Saved" : "";
     if (editing === s) placeSaveState();
     return ok;
+  }
+
+  function clashed(s, rev) {
+    s.amend = 0;
+    if (s.clash) return void (s.clash.rev = Math.max(s.clash.rev, rev));
+    clearTimeout(s.timer);
+    const choice = (kept, label, run) => h("button", { type: "button", "data-clash": kept, text: label, onclick: run });
+    const compare = h("div", { class: "kapi-clash-compare", hidden: "" });
+    const box = h("div", { class: "kapi-clash", role: "alert" },
+      h("p", { text: CLASH }),
+      choice("mine", "Keep mine", () => keepMine(s)), choice("theirs", "Use theirs", () => useTheirs(s)),
+      choice("compare", "Compare", () => compareClash(s)), compare);
+    box.querySelector("[data-clash=mine]").classList.add("kapi-clash-primary");
+    s.clash = { rev, box, compare };
+    s.el.after(box);
+    s.status = "";
+    placeRing();
+  }
+
+  async function keepMine(s) {
+    s.rev = s.clash.rev;
+    if (await saveEdit(s, true, true)) settleClash(s, "mine");
+  }
+
+  async function useTheirs(s) {
+    const id = idOf(s.el);
+    if (s.op()) {
+      s.rev = s.clash.rev;
+      if (!(await saveEdit(s, false, true))) return;
+      if (!(await op("undo", { id: "" }))?.ok) return;
+    }
+    settleClash(s, "theirs");
+    if (editing === s) endEdit();
+    await refresh(null);
+    select(find(id));
+  }
+
+  function settleClash(s, kept) {
+    s.clash.box.remove();
+    s.clash = null;
+    s.status = s.saved ? "Saved" : "";
+    agentChanged.delete(idOf(s.el));
+    request("/kept", { block: idOf(s.el), kept });
+    placeRing();
+  }
+
+  async function compareClash(s) {
+    const { compare, box } = s.clash;
+    const button = box.querySelector("[data-clash=compare]");
+    if (!compare.hidden) {
+      compare.hidden = true;
+      return button.setAttribute("aria-expanded", "false");
+    }
+    const id = idOf(s.el);
+    const res = await fetch(s.area ? `${base}/source/${encodeURIComponent(id)}?part=inner` : `${base}/blocks/${encodeURIComponent(id)}`).catch(() => null);
+    if (!res?.ok || s.clash?.compare !== compare) return say("Could not load the agent's version of this block.", "error");
+    const tpl = h("template");
+    tpl.innerHTML = await res.text();
+    const theirs = s.area ? tpl.content.textContent : textOf(tpl.content.firstElementChild ?? tpl.content);
+    const mine = s.area ? s.area.value : textOf(s.el);
+    const side = (label, text) => h("div", { class: "kapi-clash-side" }, h("strong", { text: label }), h("p", { text: text.trim() }));
+    compare.replaceChildren(side("Yours", mine), side("Theirs", theirs));
+    compare.hidden = false;
+    button.setAttribute("aria-expanded", "true");
   }
 
   async function action(name) {
@@ -2420,6 +2485,7 @@
     if (editing) return void (pending = "page");
     const keep = selected && idOf(selected);
     selected = null;
+    agentChanged.clear();
     main.replaceChildren(...fresh.childNodes);
     main.dataset.rev = fresh.dataset.rev;
     showUndo(fresh.dataset.undo);
@@ -2451,6 +2517,7 @@
         continue;
       }
       el.replaceWith(next);
+      if (agentChanged.delete(id)) flashChanged(next);
       labelArchived(next);
       tables.prepare(next);
       media.prepare(next);
@@ -2539,10 +2606,29 @@
   let opsInFlight = 0;
   const ownRevs = new Set();
 
+  const agentChanged = new Set();
+
   function onRevision(ev) {
     if (opsInFlight) return void heldRevisions.push(ev);
     if (ownRevs.delete(ev.rev)) return;
-    schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
+    const ids = ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null;
+    if (ev.author !== "human") {
+      if (new Date(ev.time) >= loadedAt) for (const id of ids || []) agentChanged.add(id);
+      if (editing && ids?.some((id) => touchesEdit(find(id)))) {
+        if (editing.saved || editing.op()) clashed(editing, Math.max(Number(ev.rev) || 0, editing.rev));
+        else endEdit();
+      }
+    }
+    schedule(ids);
+  }
+
+  function flashChanged(el) {
+    const r = el.getBoundingClientRect();
+    const tag = h("span", { class: "kapi-changed-tag", text: "Agent changed this" });
+    root.append(tag);
+    tag.style.left = `${r.right + scrollX + 4 - tag.offsetWidth}px`;
+    tag.style.top = `${r.top + scrollY - 8 - tag.offsetHeight}px`;
+    setTimeout(() => tag.remove(), 2400);
   }
 
   function releaseRevisions() {
@@ -3306,7 +3392,7 @@
   document.addEventListener("pointerdown", (e) => {
     if (editing && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(outlineTools) || path.includes(saveState);
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || (editing.clash && path.includes(editing.clash.box)) || path.includes(outlineTools) || path.includes(saveState);
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);

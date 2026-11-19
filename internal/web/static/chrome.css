@@ -2880,3 +2880,88 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
     transition: none;
   }
 }
+
+#kapi-page .kapi-clash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--kapi-yellow-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-yellow-fill);
+  color: var(--kapi-fg);
+  font: 14px/1.45 var(--kapi-font);
+  list-style: none;
+}
+
+#kapi-page .kapi-clash > p {
+  flex: 1 1 240px;
+  margin: 0;
+  font-weight: 500;
+}
+
+#kapi-page .kapi-clash button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-surface);
+  color: var(--kapi-fg);
+  font: 500 13px/1 var(--kapi-font);
+  cursor: pointer;
+}
+
+#kapi-page .kapi-clash button.kapi-clash-primary {
+  border-color: transparent;
+  background: var(--kapi-blue-solid);
+  color: var(--kapi-on-solid);
+}
+
+#kapi-page .kapi-clash button:focus-visible {
+  outline: 2px solid var(--kapi-blue-text);
+  outline-offset: 1px;
+}
+
+#kapi-page .kapi-clash-compare {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 8px;
+}
+
+#kapi-page .kapi-clash-compare[hidden] {
+  display: none;
+}
+
+#kapi-page .kapi-clash-side {
+  padding: 8px 10px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-surface);
+}
+
+#kapi-page .kapi-clash-side strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--kapi-muted);
+  font-size: 12px;
+}
+
+#kapi-page .kapi-clash-side p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+#kapi-chrome .kapi-changed-tag {
+  position: absolute;
+  z-index: 2147482998;
+  padding: 1px 10px;
+  border: 1px solid var(--kapi-blue-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  color: var(--kapi-blue-text);
+  font: 12px/1.6 var(--kapi-font);
+  pointer-events: none;
+  animation: kapi-note-in 120ms ease-out;
+}

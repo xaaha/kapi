@@ -185,11 +185,26 @@ so once the new revision commits kapi deletes `revs/<R>.html`, and a session
 keeps one revision file, its last. Revision numbers still only go up: `R` is
 never reused, a `?rev=R` read is 404, and an op sent at `R` is 409. Any other
 `amend` is ignored and the save adds its own undo step. A save that 409s keeps the text in the
-block, says so, and the next save sends the newer `rev`. A save that cannot reach
-kapi keeps trying when typing ends. A save kapi refuses, such as a 404 for a
-block the agent deleted or a 422, shows Not saved with a Copy text button,
-and the next Escape or click outside drops the typed text and shows the
-block as kapi has it.
+block and pauses saving until the human settles the clash.
+
+When the agent changes a block the human is in but has not typed in yet,
+typing ends and the block shows the agent's version. When the human has typed
+in it, by a revision event that names the block or a save
+that 409s, the browser keeps
+the human's text and shows a bar under the block: "The agent also changed
+this block. Yours is showing." with Keep mine, Use theirs and Compare. Keep
+mine saves the human's text over the agent's change. Use theirs first saves
+the human's unsaved text and then undoes that save, so the page shows the
+agent's version and the human's stays in `revs/` for as long as the
+retention rule below keeps it. Compare shows the two texts one
+above the other. Either choice posts `POST /p/{id}/kept`. A block the agent
+rewrites while the human is not typing in it shows an "Agent changed this"
+tag for a moment.
+
+A save that cannot reach kapi keeps trying when typing ends. A save kapi
+refuses, such as a 404 for a block the agent deleted or a 422, shows Not
+saved with a Copy text button, and the next Escape or click outside drops the
+typed text and shows the block as kapi has it.
 
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
@@ -559,6 +574,7 @@ all of them under 512 MB by deleting the least recently used first, but never
 one used in the last hour; an upload that still does not fit is refused.
 | `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S,"ids":[...]}`, where `seq` is the revision event the op logged, replaced by `"deferred":true` for a human `text` op whose event waits for typing to pause and `ids` names the blocks it changed, the new one for an `image` op, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
+| `POST /p/{id}/kept` | `{"block":"<id>","kept":"mine"}` or `"theirs"`, sent when the human settles a clash | `{"seq":N}`; 422 without a block or with any other `kept` |
 | `POST /p/{id}/recover` | `{}` | `{"id":...,"path":...,"title":...,"rev":N,"at":...}`; writes the newest kept revision back to the page's missing file, recreating its folder; 409 when a file is already there or kapi kept no revision |
 | `GET /static/kapi.js`, `GET /static/chrome.css` | | the embedded files |
 
@@ -822,7 +838,11 @@ cannot undo a browser op made before one. Reader names cannot be empty, and
 the daemon refuses a number that is not a note on the page; other readers see
 `#15 agent reply to note #13, #14: ...`, and a human reply to a note prints
 as `#16 human reply to note #13 on #k3f9a2bq: ...`. Resolve prints as
-`#17 human resolved note #13`. A `resolve` event never wakes a reader: `kapi
+`#17 human resolved note #13`. A `kept` event prints as `#19 human kept
+their own text of #a over your change to it; yours stays in the page history,
+so read the block again before you change it`, or `#19 human took your change
+to #a over the text they were typing; theirs stays in the page history`, and
+wakes the agent like a message. A `resolve` event never wakes a reader: `kapi
 wait` and the `Stop` hook ignore it, and `kapi watch` holds it until the next
 event, so it reaches the agent with whatever comes next. An end prints as
 `#18 human ended the session: stop working on this page and do not run kapi
