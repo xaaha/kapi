@@ -229,6 +229,21 @@ func TestATextOpSetsTextHeldInAttributes(t *testing.T) {
 	}
 }
 
+func TestATextOpSetsTheTitleOfARenderAndNeverItsSource(t *testing.T) {
+	const src = "<kapi-render data-kapi-id=\"aaaaaaaa\" title=\"Cards\"><style>.a{color:red}</style><div class=\"a\">x</div></kapi-render>\n"
+	home, path := newPage(t, src)
+	s := open(t, home, path)
+	mustApply(t, s, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Attr: "title", Inner: " Status\n cards "}}})
+	if got, want := onDisk(t, path), strings.Replace(src, `title="Cards"`, `title="Status cards"`, 1); got != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	for _, p := range []Part{{ID: "aaaaaaaa", Inner: "<p>y</p>"}, {ID: "aaaaaaaa", Attr: "title", Inner: " "}} {
+		if _, _, err := s.Apply(2, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{p}}); err == nil {
+			t.Errorf("%+v was accepted", p)
+		}
+	}
+}
+
 func TestATextOpSetsTheQuestionOfAChoiceAndKeepsItsOptions(t *testing.T) {
 	const src = "<kapi-form data-kapi-id=\"aaaaaaaa\" name=\"f\"><kapi-choice data-kapi-id=\"bbbbbbbb\" name=\"w\">When?\n  <kapi-opt data-kapi-id=\"cccccccc\" value=\"now\">Now</kapi-opt></kapi-choice></kapi-form>\n"
 	home, path := newPage(t, src)

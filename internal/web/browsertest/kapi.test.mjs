@@ -448,6 +448,50 @@ test("plain Enter in the block and source editors is a new line, not the end of 
   assert.equal(requests("POST", "/ops")[1].body.op.parts[0].inner, "if a &lt; b {\n\tswap()\n}\nmore");
 });
 
+const RENDER = [{ id: "rrrrrrrr", source: '<kapi-render data-kapi-id="rrrrrrrr" title="Status cards"><style>.a { padding: 40px }</style><div class="a">Preview</div></kapi-render>' }];
+const RENDER_TITLE = '[data-kapi-id="rrrrrrrr"] .kapi-render-title';
+
+test("a real double click on a render's title edits only the title, in place on one line, and saves it as the title attribute", async () => {
+  await reopenWith(RENDER);
+  await mouseClick(RENDER_TITLE, 2);
+  await page.waitFor(`document.activeElement?.matches(${JSON.stringify(RENDER_TITLE)})`);
+  assert.equal(await page.eval(`document.activeElement.getAttribute("contenteditable")`), "plaintext-only");
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable], .kapi-source").length`), 1);
+  await page.eval(`getSelection().collapse(document.activeElement.firstChild, document.activeElement.textContent.length)`);
+  await page.type(" v2");
+  await page.key("Enter");
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op.parts, [{ id: "rrrrrrrr", attr: "title", inner: "Status cards v2" }]);
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector(${JSON.stringify(RENDER_TITLE)}).textContent === "Status cards v2"`);
+  assert.match(server.state.blocks[0].source, /^<kapi-render data-kapi-id="rrrrrrrr" title="Status cards v2"><style>/);
+  assert.equal(requests("GET", "/source/rrrrrrrr").length, 0);
+});
+
+test("Enter, a second click and the Edit button on a render all edit its title, and a double click in its preview opens nothing", async () => {
+  await reopenWith(RENDER);
+  const titleFocused = `document.activeElement?.matches(${JSON.stringify(RENDER_TITLE)}) && document.activeElement.isContentEditable`;
+  const idle = `!document.querySelector("[contenteditable], .kapi-source") && !document.querySelector(".kapi-bar").hidden`;
+  await select("rrrrrrrr");
+  await page.waitFor(idle);
+  await page.key("Enter");
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await mouseClick(RENDER_TITLE);
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await mouseClick('[data-kapi-id="rrrrrrrr"] iframe', 2);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable], .kapi-source").length`), 0);
+  assert.equal(requests("GET", "/source/rrrrrrrr").length, 0);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
 test("edits a prose preset's rendered body in place and saves it as inner", async () => {
   await select("ffffffff");
   await editSelected();
