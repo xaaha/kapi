@@ -575,7 +575,7 @@
     if (!floating) bar.removeAttribute("data-place");
   }
 
-  function coversContent(box, target) {
+  function coversContent(box) {
     const hit = (r) => r.width && r.height && r.left < box.right && box.left < r.right && r.top < box.bottom && box.top < r.bottom;
     const range = document.createRange();
     const within = (el) => [...el.childNodes].some((n) => {
@@ -589,9 +589,7 @@
       if (n.matches(SOLID)) return hit(r);
       return (!r.width && !r.height) || hit(r) ? within(n) : false;
     });
-    if (!target) return within(main);
-    const t = target.getBoundingClientRect();
-    return hit(new DOMRect(t.x - 4, t.y - 4, t.width + 8, t.height + 8)) || within(main);
+    return within(main);
   }
 
   function selectionRect() {
@@ -607,7 +605,8 @@
     dockBar(true);
     const areaRight = pageAreaRight();
     const { width, height } = bar.getBoundingClientRect();
-    const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight;
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kapi-head-offset")) || 0;
+    const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= top && y + height <= innerHeight;
     const p = selectionRect();
     const py = p && Math.min(Math.max(p.top + p.height / 2 - height / 2, 4), innerHeight - height - 4);
     const right = p && ["point", p.right + POINT_GAP, py];
@@ -616,21 +615,20 @@
     const under = p && ["point", above[1], p.bottom + BAR_GAP];
     const near = !p ? [] : textBackward ? [above, under, left, right] : [above, under, right, left];
     let spot = near.find(([, x, y]) => fits(x, y));
-    if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height), null)) {
+    if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height))) {
       const host = closest(textRange.endContainer.nodeType === Node.ELEMENT_NODE ? textRange.endContainer : textRange.endContainer.parentElement, BLOCK);
       const gutter = host && ["point", host.getBoundingClientRect().right + BAR_GAP, py];
-      const clear = [above, under, ...(gutter ? [gutter] : [])].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height), null));
+      const clear = [above, under, ...(gutter ? [gutter] : [])].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height)));
       if (clear) spot = clear;
     }
     if (!spot && target?.isConnected && !text) {
       const r = target.getBoundingClientRect();
-      const left = Math.min(r.right, areaRight - 4) - width;
+      const left = Math.max(Math.min(r.right, areaRight - 4) - width, 4);
       spot = [
-        ["outside", r.right + BAR_GAP, Math.min(Math.max(r.top, Math.min(8, r.bottom - height)), innerHeight - height - 8)],
         ["above", left, r.top - BAR_GAP - height],
         ["below", left, r.bottom + BAR_GAP],
-        ["pinned", left, 8],
-      ].find(([place, x, y]) => fits(x, y) && (place === "pinned" ? r.top < y && r.bottom > y + height : !coversContent(new DOMRect(x, y, width, height), target)));
+        ["pinned", left, top + 8],
+      ].find(([place, x, y]) => fits(x, y) && (place !== "pinned" || (r.top < y && r.bottom > y + height)));
     }
     if (!spot) return dockBar(false);
     bar.dataset.place = spot[0];
