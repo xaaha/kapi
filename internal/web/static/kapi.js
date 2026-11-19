@@ -64,6 +64,10 @@
   let pointerDown = false;
   let sending = false;
   let copiedBlock = null;
+  let chipLink = null;
+  let handleFor = null;
+  const HANDLE_GAP = 6;
+  const HANDLE_REACH = 72;
 
   function h(tag, props = {}, ...kids) {
     const el = document.createElement(tag);
@@ -96,6 +100,8 @@
     outline: "M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z",
     chat: "M128,24A104,104,0,0,0,37,178L24,224l46-13A104,104,0,1,0,128,24Zm0,192a87,87,0,0,1-52-17l-3-2-26,7,7-26-2-3A88,88,0,1,1,128,216Z",
     back: "M232,200a8,8,0,0,1-16,0,88.1,88.1,0,0,0-88-88H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,61.66L51.31,96H128A104.11,104.11,0,0,1,232,200Z",
+    note: "M88,96a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H96A8,8,0,0,1,88,96Zm8,40h64a8,8,0,0,0,0-16H96a8,8,0,0,0,0,16Zm32,16H96a8,8,0,0,0,0,16h32a8,8,0,0,0,0-16ZM224,48V156.69A15.86,15.86,0,0,1,219.31,168L168,219.31A15.86,15.86,0,0,1,156.69,224H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32H208A16,16,0,0,1,224,48ZM48,208H152V160a8,8,0,0,1,8-8h48V48H48Zm120-40v28.69L196.69,168Z",
+    grip: "M104,60a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,60a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM104,128a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,128a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM104,196a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,196a12,12,0,1,1-24,0a12,12,0,1,1,24,0Z",
   };
 
   function icon(name) {
@@ -274,13 +280,16 @@
   const copyTyped = h("button", { type: "button", class: "kapi-link", text: "Copy text", onclick: () => copyEdit() });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
+  const handle = h("button", { type: "button", class: "kapi-handle", "aria-label": "Block actions", "aria-keyshortcuts": "Escape", "data-tip": "Block actions", hidden: "" }, icon("grip"));
+  const linkChip = h("button", { type: "button", class: "kapi-link-chip", text: "Open", hidden: "" });
   const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", "aria-keyshortcuts": keyWords("toggleChat"), "data-tip": `Chat ${keyHint("toggleChat")}`, onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
   const drawerScrim = h("button", { type: "button", class: "kapi-drawer-scrim", "aria-label": "Close navigation panels", hidden: "", onclick: () => {
     setPanelCollapsed(true);
     setOutline(false);
   } });
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, saveState, panel, outlineView, drawerScrim, copyButton, tableFrame, backChip);
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, saveState, panel, outlineView, drawerScrim, copyButton, tableFrame, handle, linkChip, backChip);
   const phone = matchMedia("(max-width: 760px)");
+  const docked = matchMedia("(min-width: 1031px)");
   // Each page starts conversational; panel state does not leak between pages.
   let panelCollapsed = false;
   let panelExpanded = false;
@@ -530,13 +539,13 @@
 
   function renderBar() {
     markPicked();
-    const text = !editing && !!textRange;
-    if (editing || asking || (!text && (!selected || !selected.isConnected))) {
+    const text = !!textRange;
+    if (asking || (!text && (editing || !selected || !selected.isConnected))) {
       bar.hidden = true;
       return placeRing();
     }
     if (text) {
-      bar.replaceChildren(tool("android", "Ask AI", "ask"));
+      bar.replaceChildren(tool("android", "Ask AI", "ask"), tool("note", "Note", "note"), tool("copy", "Copy", "copy"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
@@ -557,7 +566,7 @@
         tool("trash", `Delete${part}`, "delete")];
       bar.replaceChildren(...tools.filter((b) => b.dataset.action === "ask" || scopedAction(b.dataset.action)));
     }
-    if (copiedBlock?.block === selected && copiedBlock.unit === targetLabel() && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'), copiedBlock.label);
+    if (copiedBlock?.block === (text ? "text" : selected) && (text || copiedBlock.unit === targetLabel()) && performance.now() < copiedBlock.until) markCopied(bar.querySelector('[data-action="copy"]'), copiedBlock.label);
     const zoom = selected && diagramZoom.get(selected)?.level;
     for (const b of bar.querySelectorAll("button")) {
       b.disabled ||= busy || (b.dataset.action === "zoom-out" && zoom === 0.5) || (b.dataset.action === "zoom-in" && zoom === 3);
@@ -600,14 +609,14 @@
   }
 
   function selectionRect() {
-    if (editing || !textRange) return null;
+    if (!textRange) return null;
     const rects = [...textRange.getClientRects()].filter((r) => r.width || r.height);
     return (textBackward ? rects[0] : rects.at(-1)) ?? null;
   }
 
   function placeBar() {
     const target = editing?.box || selected;
-    const text = !editing && !!textRange;
+    const text = !!textRange;
     if (phone.matches || bar.hidden || (!text && !target?.isConnected)) return dockBar(false);
     dockBar(true);
     const areaRight = pageAreaRight();
@@ -624,8 +633,10 @@
     let spot = near.find(([, x, y]) => fits(x, y));
     if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height))) {
       const host = closest(textRange.endContainer.nodeType === Node.ELEMENT_NODE ? textRange.endContainer : textRange.endContainer.parentElement, BLOCK);
-      const gutter = host && ["point", host.getBoundingClientRect().right + BAR_GAP, py];
-      const clear = [above, under, ...(gutter ? [gutter] : [])].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height)));
+      const box = host?.getBoundingClientRect();
+      const slid = box ? [above, under].flatMap(([, , y]) => [["point", box.right - width, y], ["point", box.left, y]]) : [];
+      const gutter = box ? [["point", box.right + BAR_GAP, py]] : [];
+      const clear = [above, under, ...gutter, ...slid].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height)));
       if (clear) spot = clear;
     }
     if (!spot && target?.isConnected && !text) {
@@ -661,6 +672,8 @@
       if (editing) ring.removeAttribute("data-flash");
     }
     placeSaveState();
+    placeHandle();
+    placeChip();
   }
 
   function placeSaveState() {
@@ -1103,12 +1116,20 @@
     }
   }
 
-  function caretAt({ host, x, y }) {
-    host.focus({ preventScroll: true });
+  function caretPoint(x, y) {
     const pos = document.caretPositionFromPoint?.(x, y);
-    const range = pos ? null : document.caretRangeFromPoint?.(x, y);
-    const [node, offset] = pos ? [pos.offsetNode, pos.offset] : range ? [range.startContainer, range.startOffset] : [];
-    if (node && host.contains(node)) getSelection().collapse(node, offset);
+    if (pos) return { node: pos.offsetNode, offset: pos.offset };
+    const range = document.caretRangeFromPoint?.(x, y);
+    return range ? { node: range.startContainer, offset: range.startOffset } : {};
+  }
+
+  function caretAt({ host, node, offset, range }) {
+    host.focus({ preventScroll: true });
+    const sel = getSelection();
+    if (range) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else if (node && host.contains(node)) sel.collapse(node, offset);
     else caretAtEnd(host);
   }
 
@@ -1224,7 +1245,29 @@
     const host = partsOf(el).findLast((n) => n.contains(e.target));
     if (!host) return null;
     e.preventDefault();
-    return { host, x: e.clientX, y: e.clientY };
+    return { host, ...caretPoint(e.clientX, e.clientY) };
+  }
+
+  const OBJECT = '[data-kapi-raw], [data-kapi-preset="render"], [data-kapi-preset="diagram"], figure:has(> img)';
+  const writable = (el) => !archived(el) && !tables.matches(el) && !el.matches(OBJECT) && partsOf(el).length > 0;
+
+  function typeTarget(el, e) {
+    const hosts = partsOf(el);
+    const sel = getSelection();
+    if (!sel.isCollapsed) {
+      const r = sel.getRangeAt(0);
+      const host = hosts.findLast((n) => n.contains(r.startContainer) && n.contains(r.endContainer));
+      return host ? { host, range: r.cloneRange() } : null;
+    }
+    const gap = (n) => (([r]) => (r ? Math.max(r.top - e.clientY, e.clientY - r.bottom, 0) : Infinity))(n.getClientRects());
+    const host = hosts.findLast((n) => n.contains(e.target)) ?? hosts.reduce((a, b) => (gap(b) < gap(a) ? b : a));
+    e.preventDefault();
+    return { host, ...caretPoint(e.clientX, e.clientY) };
+  }
+
+  function pick(el, at) {
+    select(el);
+    if (at) startEdit(at);
   }
 
   function typed() {
@@ -1265,6 +1308,13 @@
       for (const n of host.querySelectorAll("[contenteditable]")) n.removeAttribute("contenteditable");
     }
     editing = null;
+    const sel = getSelection();
+    if (sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      sel.removeAllRanges();
+      textRange = null;
+    }
+    chipLink = null;
+    placeChip();
     renderBar();
     if (pending) scheduleFlush();
   }
@@ -1376,8 +1426,22 @@
       await refresh(null);
       return dismissNote();
     }
-    if (name === "ask") return openAsk();
+    if (name === "ask" || name === "note") return openAsk(name);
+    if (name === "copy" && textRange) return copyText();
     return scopedAction(name)?.();
+  }
+
+  function copyText() {
+    navigator.clipboard.writeText(getSelection().toString()).then(() => {
+      const state = { block: "text", label: "Copied", until: performance.now() + 1600 };
+      copiedBlock = state;
+      renderBar();
+      setTimeout(() => {
+        if (copiedBlock !== state) return;
+        copiedBlock = null;
+        if (textRange) renderBar();
+      }, 1600);
+    }, () => say("Could not copy the text", "error"));
   }
 
   function scope() {
@@ -1591,12 +1655,11 @@
     else CSS.highlights.delete("kapi-ask");
   }
 
-  function openAsk() {
-    if (editing) return;
+  function openAsk(mode = "ask") {
     if (textRange) {
       const anchor = rangeAnchor(textRange);
-      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange());
-    } else if (selected) {
+      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange(), mode);
+    } else if (selected && !editing) {
       const anchor = blockAnchor(selected);
       let range = null;
       if (anchor.part) {
@@ -1747,8 +1810,9 @@
     if (images.length < files.length) say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
   }
 
-  function showAsk(anchor, range, restore) {
+  function showAsk(anchor, range, restore, mode = "ask") {
     closeAsk();
+    const noting = mode === "note";
     const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
     const head = h("div", { class: "kapi-ask-head" }, about);
     if (anchor.part && !anchor.target.includes(",") && !anchor.re?.length) {
@@ -1760,10 +1824,10 @@
         asking.text.focus();
       } }, icon("x")));
     }
-    const text = h("textarea", { rows: "3", placeholder: "Ask the agent about this", "aria-label": "Note for the agent" });
-    const queueButton = h("button", { type: "button", class: "kapi-ask-queue", title: `Queue (${keyWords("send")})`, onclick: () => queueAsk() },
+    const text = h("textarea", { rows: "3", placeholder: noting ? "Write a note for the agent" : "Ask the agent about this", "aria-label": "Note for the agent" });
+    const queueButton = h("button", { type: "button", class: noting ? "kapi-primary kapi-ask-queue" : "kapi-ask-queue", title: `Queue (${keyWords("send")})`, onclick: () => queueAsk() },
       "Queue", h("span", { class: "kapi-key", text: ` ${keyHint("send")}` }));
-    const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${keyWords("submit")})`, onclick: () => sendAsk() },
+    const sendNow = h("button", { type: "button", class: noting ? "kapi-ask-send" : "kapi-primary kapi-ask-send", title: `Send with everything queued (${keyWords("submit")})`, onclick: () => sendAsk() },
       "Send", h("span", { class: "kapi-key", text: ` ${keyHint("submit")}` }));
     const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: `Cancel (${keyWords("dismiss")})`, text: "Cancel", onclick: () => closeAsk(true) });
     const tray = imageTray(() => sync());
@@ -1820,7 +1884,14 @@
     box.remove();
     highlight(null);
     renderBar();
-    if (restore && range && main.contains(range.startContainer) && !range.collapsed && range.startContainer.isConnected) {
+    const host = range && editing?.hosts?.find(({ host }) => host.contains(range.startContainer))?.host;
+    if (host) {
+      if (!restore) range.collapse(false);
+      host.focus({ preventScroll: true });
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      trackSelection();
+    } else if (restore && range && main.contains(range.startContainer) && !range.collapsed && range.startContainer.isConnected) {
       getSelection().removeAllRanges();
       getSelection().addRange(range);
       trackSelection();
@@ -3373,14 +3444,24 @@
     e.stopPropagation();
   }, true);
 
+  function clickTarget(el, e) {
+    if (!writable(el)) return el === selected && writeTarget(el, e);
+    return closest(e.target, `${SOLID}, summary, label`) ? null : typeTarget(el, e);
+  }
+
   main.addEventListener("click", (e) => {
     if (reading) return;
+    const link = closest(e.target, "a[href]");
     if (editing) {
       if (closest(e.target, "summary")?.isContentEditable) e.preventDefault();
-      const link = closest(e.target, "a[href]");
-      if (link?.isContentEditable && (e.metaKey || e.ctrlKey)) open(link.href, "_blank", "noopener");
+      if (link?.isContentEditable) {
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) open(link.href, "_blank", "noopener");
+      }
       const next = leaving && closest(e.target, BLOCK);
-      if (next && main.contains(next) && !next.contains(editing.el)) leaving.then(() => !editing && next.isConnected && select(next));
+      if (!next || !main.contains(next) || next.contains(editing.el) || (link && (e.metaKey || e.ctrlKey))) return;
+      const at = writable(next) && clickTarget(next, e);
+      leaving.then(() => !editing && next.isConnected && pick(next, at));
       return;
     }
     const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
@@ -3391,28 +3472,57 @@
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
     const sorted = tables.handleClick(e, selected, lastPoint);
     const el = closest(e.target, BLOCK);
-    if (!el || !main.contains(el)) return;
-    const again = el === selected && !sorted && (lastPoint?.el !== el || lastPoint.cell === closest(e.target, "td, th"));
+    if (!el || !main.contains(el) || (link && (e.metaKey || e.ctrlKey))) return;
+    if (writable(el) && closest(e.target, "input, textarea, select, button")) return;
+    const again = !sorted && (lastPoint?.el !== el || lastPoint.cell === closest(e.target, "td, th"));
+    const at = (writable(el) || again) && clickTarget(el, e);
     if (e.isTrusted) {
       const r = el.getBoundingClientRect();
       lastPoint = { el, dx: e.clientX - r.left, dy: e.clientY - r.top, cell: closest(e.target, "td, th") };
     } else lastPoint = null;
-    select(el);
-    const at = again && writeTarget(el, e);
-    if (at) startEdit(at);
+    if (!at && writable(el) && !closest(e.target, `${SOLID}, summary, label`) && !getSelection().isCollapsed) return select(null);
+    pick(el, at);
   });
 
   function trackSelection() {
     const sel = getSelection();
-    const r = !reading && !editing && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
+    const r = !reading && !editing?.area && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
     const next = r && main.contains(r.startContainer) && main.contains(r.endContainer) && r.toString().trim() ? r : null;
     const had = !!textRange;
     textRange = next;
     textBackward = !!next && sel.anchorNode !== null && (sel.anchorNode === sel.focusNode ? sel.focusOffset < sel.anchorOffset
       : !!(sel.anchorNode.compareDocumentPosition(sel.focusNode) & Node.DOCUMENT_POSITION_PRECEDING));
+    const at = editing?.hosts && sel.rangeCount && sel.isCollapsed ? sel.anchorNode : null;
+    const link = at && closest(at.nodeType === Node.ELEMENT_NODE ? at : at.parentElement, "a[href]");
+    chipLink = link?.isContentEditable && editing.el.contains(link) ? link : null;
+    placeChip();
     if (had !== !!next) renderBar();
     else placeRing();
   }
+
+  function placeChip() {
+    linkChip.hidden = !chipLink?.isConnected;
+    if (linkChip.hidden) return;
+    linkChip.title = chipLink.href;
+    const sel = getSelection();
+    const caret = sel.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+    const rects = [...chipLink.getClientRects()];
+    const line = rects.find((r) => caret && caret.top + caret.height / 2 >= r.top && caret.top + caret.height / 2 <= r.bottom) ?? rects[0];
+    const { width, height } = linkChip.getBoundingClientRect();
+    const below = line.bottom + 4;
+    linkChip.style.left = `${Math.max(4, Math.min(line.left, pageAreaRight() - width - 4))}px`;
+    linkChip.style.top = `${below + height <= innerHeight - 4 ? below : line.top - 4 - height}px`;
+  }
+
+  function follow(link) {
+    const url = new URL(link.href, location.href);
+    const here = new URL(location.href);
+    if (url.hash && url.origin === here.origin && url.pathname === here.pathname && url.search === here.search) location.assign(url.href);
+    else open(url.href, "_blank", "noopener");
+  }
+
+  linkChip.addEventListener("mousedown", (e) => e.preventDefault());
+  linkChip.addEventListener("click", () => chipLink && follow(chipLink));
 
   document.addEventListener("selectionchange", () => {
     if (!pointerDown) trackSelection();
@@ -3420,7 +3530,7 @@
   document.addEventListener("pointerdown", (e) => {
     if (editing && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || (editing.clash && path.includes(editing.clash.box)) || path.includes(outlineTools) || path.includes(saveState);
+      const inside = [editing.el, editing.box, editing.clash?.box, asking?.box, outlineTools, saveState, linkChip, ...(textRange ? [bar] : [])].some((n) => n && path.includes(n));
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
@@ -3438,8 +3548,128 @@
     }, true);
   }
   bar.addEventListener("mousedown", (e) => {
-    if (textRange && !editing) e.preventDefault();
+    if (textRange) e.preventDefault();
   });
+
+  function firstLine(el) {
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, (n) => (n.data.trim() && !n.parentElement.closest("svg") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP));
+    const range = document.createRange();
+    while (walk.nextNode()) {
+      range.selectNodeContents(walk.currentNode);
+      const line = [...range.getClientRects()].find((r) => r.width && r.height);
+      if (line) return line;
+    }
+    return null;
+  }
+
+  function placeHandle() {
+    if (handleFor && !handleFor.isConnected) handleFor = find(idOf(handleFor));
+    const r = handleFor?.getBoundingClientRect();
+    handle.hidden = !r?.height || reading || phone.matches;
+    if (handle.hidden) return;
+    const { width, height } = handle.getBoundingClientRect();
+    const line = media.has(handleFor) || handleFor.matches('[data-kapi-preset="diagram"]') ? null : firstLine(handleFor);
+    const fold = handleFor.parentElement === main && levelOf(handleFor) ? FOLD_HIT : tables.matches(handleFor) ? FRAME_PAD : 0;
+    const floor = outlineShown() && docked.matches ? outlineView.getBoundingClientRect().right : 0;
+    handle.style.left = `${Math.max(floor + 2, r.left - fold - HANDLE_GAP - width)}px`;
+    handle.style.top = `${line ? line.top + line.height / 2 - height / 2 : r.top + HANDLE_GAP}px`;
+  }
+
+  function showHandle(el) {
+    if (el === handleFor && !handle.hidden) return;
+    handleFor = el;
+    placeHandle();
+  }
+
+  function marginBlock(x, y) {
+    const r = main.getBoundingClientRect();
+    const left = r.left + parseFloat(getComputedStyle(main).paddingLeft);
+    if (x < left - HANDLE_REACH || x > r.right || y < r.top || y > r.bottom) return null;
+    const at = document.elementFromPoint(left + 1, y);
+    const el = at && main.contains(at) ? closest(at, BLOCK) : null;
+    return el && main.contains(el) ? el : handleFor;
+  }
+
+  document.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse" || e.buttons || reading || phone.matches || handle.contains(e.target)) return;
+    if (root.contains(e.target)) return showHandle(null);
+    const over = main.contains(e.target) && e.target !== main ? closest(e.target, BLOCK) : null;
+    if (handleFor?.isConnected && !handle.hidden && (!over || over.contains(handleFor))) {
+      const r = handleFor.getBoundingClientRect();
+      if (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX >= handle.getBoundingClientRect().left - 8 && e.clientX <= r.left) return;
+    }
+    showHandle(over && main.contains(over) ? over : marginBlock(e.clientX, e.clientY));
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => showHandle(null));
+
+  function pickWhole(id) {
+    const el = !editing && find(id);
+    if (!el) return false;
+    getSelection().removeAllRanges();
+    textRange = null;
+    lastPoint = null;
+    select(el);
+    return true;
+  }
+
+  handle.addEventListener("mousedown", (e) => e.preventDefault());
+  handle.addEventListener("click", async (e) => {
+    const id = handleFor && idOf(handleFor);
+    if (!id) return;
+    if (editing) await leaveEdit();
+    if (pickWhole(id) && !e.detail) bar.querySelector("button:not(:disabled)")?.focus();
+  });
+  handle.addEventListener("keydown", (e) => {
+    if (!editing || !SHORTCUTS.is("focusCycle", e) || e.shiftKey) return;
+    e.preventDefault();
+    caretAtEnd(editing.hosts?.[0].host ?? editing.area);
+  });
+
+  const LONG_PRESS_MS = 500;
+  const PRESS_SLOP = 10;
+  const CLICK_AFTER_PRESS_MS = 400;
+  let press = null;
+
+  function longPress() {
+    if (!press || press.fired) return;
+    clearTimeout(press.timer);
+    press.fired = true;
+    const { id } = press;
+    (editing ? leaveEdit() : Promise.resolve()).then(() => pickWhole(id));
+  }
+
+  main.addEventListener("pointerdown", (e) => {
+    clearTimeout(press?.timer);
+    press = null;
+    const el = closest(e.target, BLOCK);
+    if (reading || e.pointerType !== "touch" || !e.isPrimary || !el || !main.contains(el)) return;
+    press = { id: idOf(el), x: e.clientX, y: e.clientY, fired: false, timer: setTimeout(longPress, LONG_PRESS_MS) };
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!press || press.fired || Math.hypot(e.clientX - press.x, e.clientY - press.y) <= PRESS_SLOP) return;
+    clearTimeout(press.timer);
+    press = null;
+  }, true);
+  for (const type of ["pointerup", "pointercancel"]) {
+    document.addEventListener(type, () => {
+      const p = press;
+      if (!p) return;
+      clearTimeout(p.timer);
+      if (p.fired) setTimeout(() => press === p && (press = null), CLICK_AFTER_PRESS_MS);
+      else press = null;
+    }, true);
+  }
+  main.addEventListener("contextmenu", (e) => {
+    if (!press) return;
+    e.preventDefault();
+    longPress();
+  });
+  main.addEventListener("click", (e) => {
+    if (!press?.fired) return;
+    press = null;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
 
   document.addEventListener("click", (e) => {
     if (!selected || !getSelection().isCollapsed) return;
@@ -3552,10 +3782,16 @@
       if (editing && !panel.contains(focus)) leaveEdit();
       else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
+      else if (textRange) getSelection().removeAllRanges();
       else if (!editing) select(null);
       return;
     }
     if (!inContent || e.isComposing || e.keyCode === 229) return;
+    if (SHORTCUTS.is("focusCycle", e) && e.shiftKey && editing.hosts?.[0].host.contains(focus)) {
+      e.preventDefault();
+      showHandle(editing.el);
+      return handle.focus();
+    }
     if (SHORTCUTS.is("newLine", e) && singleLine) {
       e.preventDefault();
     } else if (SHORTCUTS.is("submit", e) || (SHORTCUTS.is("send", e) && singleLine)) {

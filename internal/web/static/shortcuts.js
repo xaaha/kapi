@@ -5,6 +5,7 @@ window.kapiShortcuts = (() => {
 
   const toolbar = {
     ask: letter("a"),
+    note: letter("n"),
     copy: letter("c"),
     archive: letter("e"),
     unarchive: letter("e"),

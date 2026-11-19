@@ -56,7 +56,7 @@ html[data-kapi-panel-collapsed] {
 
 @media screen and (min-width: 1031px) {
   html[data-kapi-outline-open] {
-    --kapi-outline-gutter: 240px;
+    --kapi-outline-gutter: 272px;
   }
 }
 
@@ -214,6 +214,53 @@ html { scroll-padding-top: var(--kapi-header-height); }
 
 #kapi-chrome .kapi-ring[data-editing] {
   box-shadow: 0 0 0 1px var(--kapi-border-strong);
+}
+
+#kapi-chrome .kapi-handle {
+  position: fixed;
+  z-index: 2147481000;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  padding: 0;
+  color: var(--kapi-faint);
+  cursor: pointer;
+}
+
+#kapi-chrome .kapi-handle:is(:hover, :focus-visible) {
+  color: var(--kapi-fg);
+}
+
+#kapi-chrome .kapi-handle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+#kapi-chrome .kapi-handle:is(:hover, :focus-visible)::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  padding: 3px 8px;
+  border-radius: var(--kapi-radius-sm);
+  background: var(--kapi-fg);
+  color: var(--kapi-bg);
+  font: 500 12px/1.4 var(--kapi-font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+#kapi-chrome .kapi-link-chip {
+  position: fixed;
+  z-index: 2147483000;
+  padding: 2px 10px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  box-shadow: var(--kapi-shadow);
+  color: var(--kapi-blue-text);
+  font: 500 12px/1.6 var(--kapi-font);
 }
 
 #kapi-chrome .kapi-save-state {
