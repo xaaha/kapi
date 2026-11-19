@@ -166,11 +166,35 @@ rules as `edit`. A `text` op at an older `rev` applies when the source of
 every part it sets is unchanged since that `rev`, so ticking a task while
 its checklist is being edited does not refuse the save.
 
-The browser has no edit mode. One click on a block selects it and shows its
-toolbar. A second click on the selected block, a double click, Enter or the
-toolbar's Edit button starts typing at the spot clicked (a raw block such as a
-diagram opens its source box on a double click, Enter or Edit, not a second
-click), and the toolbar gives
+The browser has no edit mode and edits text the way a document does. A text
+block is any block with a text part that is not raw, a table, a render, a
+diagram or an image. One click on a text block puts the caret where it lands
+and starts typing, with no selected state first; a double click selects a
+word. A click on a link inside text puts the caret in and shows an Open chip
+by the link, which follows it; Cmd or Ctrl+click opens the link at once. A
+click on a task's box ticks it and does nothing else. Tables, renders,
+diagrams, images, raw blocks and blocks with no text keep a block first
+model: one click selects the block and shows its toolbar, and a second click,
+a double click, Enter or the toolbar's Edit button opens a table cell, a
+render's title, or a raw block's source box (a raw block opens on a double
+click, Enter or Edit, not a second click).
+
+Hovering any block shows a handle in its left margin, beside its first line
+(left of a heading's fold arrow, and left of a table's frame). Clicking it
+selects the whole block and shows the block toolbar; while typing, it saves
+the text first. Escape while typing does the same, and Escape on a selected
+block deselects it. From the first text part, Shift+Tab moves focus to the
+handle, Enter or Space on it selects the block and moves focus to the
+toolbar, and Tab goes back to the text. On a touch screen a tap puts the caret
+in, a long press of about half a second selects the block and shows its
+toolbar, and no handle shows. Selecting text, while typing or not, shows one
+text toolbar with Ask AI and Copy (A and C when nothing is being typed).
+Copy copies the selected text as plain text; Cmd or Ctrl+C copies it as
+usual without the toolbar. A note opened while typing keeps
+the typing session, and the caret goes back into the text when the box
+closes.
+
+While typing the toolbar gives
 way to a thin outline and a Saving, then Saved pill above the block's top
 right. The text saves itself one second after the last keystroke and again
 when typing ends: Escape, Cmd or Ctrl+Enter, Enter in a one-line part, or a
@@ -207,8 +231,8 @@ saved with a Copy text button, and the next Escape or click outside drops the
 typed text and shows the block as kapi has it.
 
 Cmd or Ctrl+E, or the book button at the top right of the reading area,
-turns on read view: the header, chat, outline, toolbar, selection ring, note
-pins and every other page control hide, the reading column takes the whole
+turns on read view: the header, chat, outline, toolbar, selection ring, block
+handle, note pins and every other page control hide, the reading column takes the whole
 width, and clicks only follow links and open or close details. The book
 button stays, pressed, as the way back. Turning it on while typing saves the
 text first. The choice is kept per page in the browser

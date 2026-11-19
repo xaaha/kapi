@@ -413,6 +413,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       return res.end("# Plan\n");
     }
     if (req.method === "GET" && rest.startsWith("source/")) {
+      if (state.sourceDelay) await new Promise((r) => setTimeout(r, state.sourceDelay));
       const b = state.blocks.find((x) => x.id === rest.slice(7));
       if (!b) return json(res, 404, { error: "no block" });
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Kapi-Rev": String(state.rev) });
