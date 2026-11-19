@@ -1261,7 +1261,7 @@
     leaving = (s.refused ? Promise.resolve(true) : saveEdit(s, true)).then((ok) => {
       if (!ok || editing !== s) return;
       endEdit();
-      if (s.saved || s.refused) return refresh([idOf(s.el)]);
+      if (s.saved || s.refused) refresh([idOf(s.el)]);
     }).finally(() => (leaving = null));
     return leaving;
   }

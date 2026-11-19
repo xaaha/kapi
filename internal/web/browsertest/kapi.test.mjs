@@ -753,6 +753,24 @@ test("Cmd or Ctrl+Enter and Escape both stop typing in every editor, posting onl
   }
 });
 
+test("Escape in a second block stops typing even while the first block is still reloading after its save", async () => {
+  server.state.blocksDelay = 800;
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type("x");
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => requests("GET", "/blocks/bbbbbbbb").length === 1);
+  await select("ffffffff");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`, 400);
+  server.state.blocksDelay = 0;
+});
+
 test("in a table cell plain Enter stops typing and saves, and Tab leaves the typing open", async () => {
   await click('[data-kapi-id="gggggggg"] th');
   await editSelected();
