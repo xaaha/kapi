@@ -39,7 +39,7 @@ var textParts = map[string]TextPart{
 	"kapi-details":   BodyText,
 	"kapi-checklist": NoText,
 	"kapi-task":      BodyText,
-	"kapi-render":    RawText,
+	"kapi-render":    NoText,
 	"kapi-gallery":   NoText,
 }
 
@@ -47,6 +47,7 @@ var textAttrs = map[string]string{
 	"kapi-item":    "key",
 	"kapi-option":  "title",
 	"kapi-details": "summary",
+	"kapi-render":  "title",
 }
 
 func TextAttr(tag string) string { return textAttrs[tag] }

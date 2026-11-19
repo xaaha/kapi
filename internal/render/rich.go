@@ -81,7 +81,7 @@ func renderRich(b *bytes.Buffer, n *html.Node) error {
 	doc.WriteString("</body></html>")
 
 	writeStart(b, "figure", outerAttrs(n, "kapi-render"))
-	b.WriteString(`<figcaption class="kapi-render-title">`)
+	writeStart(b, "figcaption", attrHost(n, "kapi-render-title"))
 	writeText(b, title)
 	b.WriteString(`</figcaption>`)
 	writeStart(b, "iframe", kv("class", "kapi-render-frame", "title", title, "sandbox", "allow-same-origin", "loading", "lazy", "srcdoc", doc.String()))

@@ -774,10 +774,11 @@ func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request, _ *page.Store
 }
 
 type opResult struct {
-	Rev  uint64   `json:"rev"`
-	Undo bool     `json:"undo"`
-	Seq  uint64   `json:"seq,omitempty"`
-	IDs  []string `json:"ids,omitempty"`
+	Rev      uint64   `json:"rev"`
+	Undo     bool     `json:"undo"`
+	Seq      uint64   `json:"seq,omitempty"`
+	Deferred bool     `json:"deferred,omitempty"`
+	IDs      []string `json:"ids,omitempty"`
 }
 
 func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store, _ *eventlog.Log) {
@@ -797,7 +798,7 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request, st *page.Store
 		app.JSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	app.JSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq, IDs: sum.IDs})
+	app.JSON(w, http.StatusOK, opResult{Rev: rev, Undo: st.CanUndo(), Seq: sum.Seq, Deferred: sum.Deferred, IDs: sum.IDs})
 }
 
 func (s *Server) handleKept(w http.ResponseWriter, r *http.Request, st *page.Store, l *eventlog.Log) {
