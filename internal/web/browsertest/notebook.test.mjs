@@ -76,6 +76,19 @@ test("the token root without a trailing slash opens the notes home", async () =>
   }
 });
 
+test("home uses the full window width: the header spans edge to edge and the notes sit in the middle", async () => {
+  for (const width of [900, 1440, 2000]) {
+    const p = await home(base, { width, height: 900 });
+    try {
+      const [head, main] = await p.eval(`[".nb-top", ".nb-main"].map((q) => (({ left, right }) => ({ left, right }))(document.querySelector(q).getBoundingClientRect()))`);
+      assert.deepEqual([head.left, head.right], [0, width], `header at ${width}px`);
+      assert.ok(Math.abs(main.left - (width - main.right)) <= 1, `notes centred at ${width}px: ${JSON.stringify(main)}`);
+    } finally {
+      await p.close();
+    }
+  }
+});
+
 test("home has the shared search trigger and universal theme control", async () => {
   const p = await home();
   try {
