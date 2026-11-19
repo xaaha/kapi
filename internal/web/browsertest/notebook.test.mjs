@@ -987,6 +987,7 @@ test("the page menu and the home card menu confirm a delete with the same shared
       return [part, s.color, s.backgroundColor, s.fontSize, part.includes("label") ? "" : s.fontWeight, s.opacity, s.padding];
     })`;
     const hover = async (q, selector) => {
+      await q.call("Page.bringToFront");
       const { x, y } = await q.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
       await q.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
     };
@@ -1005,11 +1006,13 @@ test("the page menu and the home card menu confirm a delete with the same shared
     await h.waitFor(`document.querySelector(".nb-card-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
     assert.equal(await p.eval(`document.querySelectorAll(".kapi-menu .kapi-confirm[data-layout=menu][data-confirming]").length`), 1);
     assert.equal(await h.eval(`document.querySelectorAll(".nb-card-menu .kapi-confirm[data-layout=menu][data-confirming]").length`), 1);
-    await hover(p, ".kapi-menu .kapi-confirm-yes");
-    await hover(h, ".nb-card-menu .kapi-confirm-yes");
-    await new Promise((r) => setTimeout(r, 200));
-    const yes = await h.eval(look(".nb-card-menu", [".kapi-confirm-yes"]));
-    assert.deepEqual(yes, await p.eval(look(".kapi-menu", [".kapi-confirm-yes"])));
+    const hovered = async (q, scope) => {
+      await hover(q, `${scope} .kapi-confirm-yes`);
+      await new Promise((r) => setTimeout(r, 200));
+      return q.eval(look(scope, [".kapi-confirm-yes"]));
+    };
+    const yes = await hovered(h, ".nb-card-menu");
+    assert.deepEqual(yes, await hovered(p, ".kapi-menu"));
     assert.equal(yes[0][5], "1");
     assert.notEqual(yes[0][2], "rgba(0, 0, 0, 0)");
     assert.equal(existsSync(path), true);
