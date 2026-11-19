@@ -810,7 +810,7 @@ test("W widens a selected table into the margins and W again puts it back in the
 test("a plain prose table gets the same wrapper and expansion as kapi-table", async () => {
   const original = server.state.blocks.find((block) => block.id === "gggggggg").html;
   server.agentEdit("gggggggg", '<table data-kapi-id="gggggggg" data-kapi-text="gggggggg"><thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody></table>');
-  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]')`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]') && document.querySelector('[data-kapi-id="gggggggg"] th')?.textContent === "Screen"`);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] > table')?.hasAttribute("data-kapi-id")`), false);
   const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
   await select("gggggggg");
