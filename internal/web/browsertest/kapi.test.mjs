@@ -1334,6 +1334,45 @@ test("a block reload asked for before a save and landing after it keeps the save
   server.state.staleBlocksDelay = 0;
 });
 
+test("a page reload asked for before a save and landing after it keeps the saved text and revision", async () => {
+  let open;
+  server.state.pageGate = new Promise((r) => (open = r));
+  const before = pageLoads();
+  server.push({ author: "agent", kind: "revision", text: "rewrote the page" });
+  await until(() => pageLoads() === before + 1);
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector("[contenteditable]") && /Mine\\.$/.test(document.querySelector('[data-kapi-id="bbbbbbbb"]').textContent)`);
+  await page.eval(`window.lostSave = false; new MutationObserver(() => { const b = document.querySelector('[data-kapi-id="bbbbbbbb"]'); if (!b || !/Mine\\.$/.test(b.textContent) || document.getElementById("kapi-page").dataset.rev !== "2") window.lostSave = true; }).observe(document.getElementById("kapi-page"), { childList: true, subtree: true, characterData: true, attributes: true })`);
+  server.state.pageGate = null;
+  open();
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(await page.eval(`window.lostSave`), false);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
+});
+
+test("a page whose revision count restarted reloads a block and the page at most twice, then shows what the server has", async () => {
+  await page.eval(`document.getElementById("kapi-page").dataset.rev = "99"`);
+  server.push({ author: "agent", kind: "revision", target: "bbbbbbbb", text: "edited" });
+  await until(() => requests("GET", "/blocks/bbbbbbbb").length === 2);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(requests("GET", "/blocks/bbbbbbbb").length, 2);
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "1");
+
+  await page.eval(`document.getElementById("kapi-page").dataset.rev = "99"`);
+  const before = pageLoads();
+  server.push({ author: "agent", kind: "revision", text: "rewrote the page" });
+  await until(() => pageLoads() === before + 2);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(pageLoads(), before + 2);
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "1");
+});
+
 test("an edit started while its block is being refetched keeps the block it is editing", async () => {
   server.state.blocksDelay = 300;
   server.bumpBehindBrowser("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent rewrote this.</p>');
