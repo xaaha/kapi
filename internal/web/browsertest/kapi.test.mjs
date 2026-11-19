@@ -6054,6 +6054,31 @@ test("selecting text while typing shows the same text toolbar: Copy copies the t
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
+test("the text toolbar never covers the save pill when the first word of the typed block is selected", async () => {
+  const word = (end) => page.eval(`(() => {
+    const r = document.createRange();
+    const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
+    r.setStart(t, 0);
+    r.setEnd(t, ${end});
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  })()`);
+  const at = await word(4);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x: at.x, y: at.y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: at.x, y: at.y, button: "left", clickCount: 1 });
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  await page.type("X");
+  await until(async () => (await saveState()) === "Saved");
+  const { x, y } = await word(4);
+  for (const clickCount of [1, 2]) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount });
+  }
+  await page.waitFor(`!getSelection().isCollapsed && !document.querySelector(".kapi-bar").hidden`);
+  const [bar, pill] = await page.eval(`[".kapi-bar", ".kapi-save-state"].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(bar.right <= pill.left || bar.left >= pill.right || bar.bottom <= pill.top || bar.top >= pill.bottom, JSON.stringify({ bar, pill }));
+});
+
 test("a selection outside any typing session shows the same text toolbar, and A, N and C act on it", async () => {
   await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
   await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="dddddddd"]', 3);

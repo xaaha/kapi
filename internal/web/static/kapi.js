@@ -631,13 +631,15 @@
     const under = p && ["point", above[1], p.bottom + BAR_GAP];
     const near = !p ? [] : textBackward ? [above, under, left, right] : [above, under, right, left];
     let spot = near.find(([, x, y]) => fits(x, y));
-    if (text && spot && coversContent(new DOMRect(spot[1], spot[2], width, height))) {
+    const pill = !saveState.hidden && saveState.getBoundingClientRect();
+    const clear = (x, y) => !coversContent(new DOMRect(x, y, width, height))
+      && !(pill && x < pill.right && pill.left < x + width && y < pill.bottom && pill.top < y + height);
+    if (text && spot && !clear(spot[1], spot[2])) {
       const host = closest(textRange.endContainer.nodeType === Node.ELEMENT_NODE ? textRange.endContainer : textRange.endContainer.parentElement, BLOCK);
       const box = host?.getBoundingClientRect();
       const slid = box ? [above, under].flatMap(([, , y]) => [["point", box.right - width, y], ["point", box.left, y]]) : [];
       const gutter = box ? [["point", box.right + BAR_GAP, py]] : [];
-      const clear = [above, under, ...gutter, ...slid].find(([, x, y]) => fits(x, y) && !coversContent(new DOMRect(x, y, width, height)));
-      if (clear) spot = clear;
+      spot = [above, under, ...gutter, ...slid].find(([, x, y]) => fits(x, y) && clear(x, y)) ?? spot;
     }
     if (!spot && target?.isConnected && !text) {
       const r = target.getBoundingClientRect();
