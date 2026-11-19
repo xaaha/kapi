@@ -363,8 +363,10 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     const rest = m[2];
 
     if (req.method === "GET" && rest === "") {
+      const body = pageHTML();
+      if (state.pageGate) await state.pageGate;
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(pageHTML());
+      return res.end(body);
     }
     if (req.method === "GET" && rest.startsWith("blocks/")) {
       if (state.blocksDelay) await new Promise((r) => setTimeout(r, state.blocksDelay));

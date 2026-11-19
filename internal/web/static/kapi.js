@@ -2572,7 +2572,7 @@
     }, 30);
   }
 
-  async function loadPage() {
+  async function loadPage(retried = false) {
     if (editing) return void (pending = "page");
     const res = await fetch(base + "/", { headers: { Accept: "text/html" } });
     if (!res.ok) throw new Error(res.status);
@@ -2580,6 +2580,7 @@
     if (!fresh) throw new Error("no page");
     if (fresh.dataset.missing) return;
     if (editing) return void (pending = "page");
+    if (!retried && Number(fresh.dataset.rev) < Number(main.dataset.rev)) return loadPage(true);
     const keep = selected && idOf(selected);
     selected = null;
     agentChanged.clear();
@@ -2594,6 +2595,8 @@
     placeNote();
     schedulePaint();
   }
+
+  const staleBlocks = new Set();
 
   async function loadBlocks(ids) {
     for (const id of ids) {
@@ -2610,10 +2613,13 @@
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
       const rev = res.headers.get("Kapi-Rev");
-      if (touchesEdit(el) || (rev && Number(rev) < Number(main.dataset.rev))) {
+      const stale = rev && Number(rev) < Number(main.dataset.rev) && !staleBlocks.has(id);
+      if (stale) staleBlocks.add(id);
+      if (touchesEdit(el) || stale) {
         schedule([id]);
         continue;
       }
+      staleBlocks.delete(id);
       el.replaceWith(next);
       if (agentChanged.delete(id)) flashChanged(next);
       labelArchived(next);
