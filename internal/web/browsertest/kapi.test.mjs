@@ -4074,7 +4074,7 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   server.push(sessionNote);
   server.push({ author: "human", kind: "note", target: "gggggggg", part: "row 2, Shard", quote: "Alpha", prefix: "Rows beta 10", suffix: "9 gamma", rev: 1, text: "why so few?" });
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
-  assert.deepEqual(await highlighted("kapi-note-waiting"), ["session store", "Alpha"]);
+  await until(async () => JSON.stringify(await highlighted("kapi-note-waiting")) === JSON.stringify(["session store", "Alpha"]));
   const [pin, quote] = await page.eval(`(() => {
     const r = [...CSS.highlights.get("kapi-note-waiting")][0].getClientRects();
     const q = r[r.length - 1];
@@ -4091,7 +4091,7 @@ test("#39 every note gets a numbered pin coloured by its state, and only --reply
   assert.equal(await pinStates(), "1:waiting 2:waiting");
   server.push({ author: "agent", kind: "message", re: [1], text: "it is the only one" });
   await until(async () => (await pinStates()) === "1:answered 2:waiting");
-  assert.deepEqual(await highlighted("kapi-note-answered"), ["session store"]);
+  await until(async () => JSON.stringify(await highlighted("kapi-note-answered")) === JSON.stringify(["session store"]));
   server.push({ author: "human", kind: "note", target: "bbbbbbbb", quote: "session store", re: [1], text: "and later?" });
   await until(async () => (await pinStates()) === "1:waiting 2:waiting");
 });
