@@ -5652,6 +5652,7 @@ test("in read view clicks only follow links: no selection, no typing, no ticked 
   assert.equal(await page.eval(`!!document.querySelector("[data-kapi-selected], [contenteditable], .kapi-ask, [aria-sort]")`), false);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="nnnnnnnn"] input').checked`), false);
   assert.equal(requests("POST", "").length, 0);
+  assert.deepEqual(await page.eval(`(th => [getComputedStyle(th, "::after").content, getComputedStyle(th).cursor])(document.querySelector('[data-kapi-id="gggggggg"] th'))`), ["none", "auto"], "a table that cannot be sorted shows no sort arrows");
   await mouseClick('[data-kapi-id="dddddddd"] a');
   await page.waitFor(`location.hash === "#bbbbbbbb"`);
 });

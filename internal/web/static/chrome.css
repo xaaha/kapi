@@ -2864,6 +2864,14 @@ html[data-kapi-reading] {
   --kapi-outline-gutter: 0px;
 }
 
+html[data-kapi-reading] #kapi-page .kapi-table th {
+  cursor: auto;
+}
+
+html[data-kapi-reading] #kapi-page .kapi-table th:not([aria-sort])::after {
+  content: none;
+}
+
 html[data-kapi-reading] #kapi-chrome > :not(.kapi-read-tools),
 html[data-kapi-reading] #kapi-page .kapi-undo-note {
   display: none !important;
