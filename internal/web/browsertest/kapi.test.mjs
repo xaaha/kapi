@@ -3560,7 +3560,7 @@ const queued = () => page.eval(`[...document.querySelectorAll(".kapi-queued-note
 const barActions = () => page.eval(`document.querySelector(".kapi-bar").hidden ? null : [...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`);
 const modifier = async () => ((await page.eval(`/Mac/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true });
 
-test("#39 selected text copies with the keyboard as usual, and the text toolbar offers Ask AI, Note and Copy", async () => {
+test("#39 selected text copies with the keyboard as usual, and the text toolbar offers Ask AI and Copy", async () => {
   const [x1, x2, y] = await page.eval(`(() => {
     const p = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
     const r = document.createRange();
@@ -3575,7 +3575,7 @@ test("#39 selected text copies with the keyboard as usual, and the text toolbar 
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: x2, y, button: "left", clickCount: 1 });
   assert.equal(await page.eval(`getSelection().toString()`), "session store");
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask", "note", "copy"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   const line = await page.eval(`(r => ({ top: r.top, bottom: r.bottom }))([...getSelection().getRangeAt(0).getClientRects()].at(-1))`);
   const box = await barBox();
   assert.ok(box.bottom > line.top - 60 && box.top < line.bottom + 60, "the toolbar stays next to the selected line");
@@ -3734,7 +3734,7 @@ test("#39 A asks, E archives and Delete deletes only while a block is selected a
   assert.equal(requests("POST", "/ops").length, 0);
 
   await selectText('[data-kapi-id="cccccccc"] li', 0, '[data-kapi-id="cccccccc"] li', 4);
-  await page.waitFor(`document.querySelector(".kapi-bar").childElementCount === 3`);
+  await page.waitFor(`document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("e");
   await page.key("Delete");
   await new Promise((r) => setTimeout(r, 100));
@@ -3887,7 +3887,7 @@ test("#39 a selection that ends at the start of the next block targets only the 
     getSelection().removeAllRanges();
     getSelection().addRange(r);
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 3`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("just this");
@@ -3930,7 +3930,7 @@ test("#39 a selection across a block with no text keeps that block in the note",
     getSelection().addRange(r);
     return changed;
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 3`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("ends in the picture");
@@ -3947,7 +3947,7 @@ test("#39 a selection across a block with no text keeps that block in the note",
     getSelection().addRange(r);
     return changed;
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 3`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("only the text");
@@ -3961,7 +3961,7 @@ test("#39 a cancelled pointer never stops the toolbar following the selection", 
   await page.eval(`document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }))`);
   await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 4);
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask", "note", "copy"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
 });
 
 test("#39 a section row inside the body is a row, not a column", async () => {
@@ -5680,7 +5680,7 @@ test("dragging across text selects it with the text toolbar and keeps it typed o
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.to, y: r.y, button: "left", buttons: 1 });
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: r.to, y: r.y, button: "left", clickCount: 1 });
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask", "note", "copy"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   assert.equal(await page.eval(`getSelection().isCollapsed`), false);
   assert.equal(await editingId(), "bbbbbbbb");
   await page.type("Shift");
@@ -6014,7 +6014,7 @@ test("Shift+Tab from the text reaches the handle, Enter on it selects the block 
   await page.waitFor(`document.activeElement === document.querySelector('.kapi-bar [data-action="ask"]')`);
 });
 
-test("selecting text while typing shows the same text toolbar: Copy copies the text and Note opens a note on it", async () => {
+test("selecting text while typing shows the same text toolbar, and Copy or the keyboard copies the text", async () => {
   await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
   const { x, y } = await page.eval(`(() => {
     const r = document.createRange();
@@ -6030,7 +6030,7 @@ test("selecting text while typing shows the same text toolbar: Copy copies the t
   }
   await page.waitFor(`getSelection().toString() === "session" && !document.querySelector(".kapi-bar").hidden`);
   assert.equal(await editingId(), "bbbbbbbb");
-  assert.deepEqual(await barActions(), ["ask", "note", "copy"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   const [bar, line] = [await barBox(), await firstLineOf("bbbbbbbb")];
   assert.ok(bar.bottom <= line.top || bar.top >= line.bottom || bar.left >= (await boxOf("bbbbbbbb")).right, JSON.stringify({ bar, line }));
   await mouseClick('.kapi-bar [data-action="copy"]');
@@ -6040,11 +6040,15 @@ test("selecting text while typing shows the same text toolbar: Copy copies the t
   assert.equal(await editingId(), "bbbbbbbb", "Copy keeps the typing session");
   assert.equal(await page.eval(`getSelection().toString()`), "session");
 
-  await mouseClick('.kapi-bar [data-action="note"]');
+  await page.eval(`window.copyPrevented = null; addEventListener("copy", (e) => (window.copyPrevented = e.defaultPrevented))`);
+  await page.key("c", { ...(await modifier()), commands: ["copy"] });
+  assert.equal(await page.eval(`window.copyPrevented`), false);
+  assert.equal(await editingId(), "bbbbbbbb", "the keyboard copy keeps the typing session");
+  assert.equal(await page.eval(`getSelection().toString()`), "session");
+
+  await mouseClick('.kapi-bar [data-action="ask"]');
   await page.waitFor(`document.activeElement === document.querySelector(".kapi-ask textarea")`);
   assert.equal(await asking(), "About: “session”");
-  assert.equal(await page.eval(`document.querySelector(".kapi-ask textarea").placeholder`), "Write a note for the agent");
-  assert.equal(await page.eval(`document.querySelector(".kapi-ask .kapi-primary").classList.contains("kapi-ask-queue")`), true);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`), true);
   await page.type("rename this");
   await page.key("Enter");
@@ -6097,19 +6101,17 @@ test("clicking from one text block into another moves the caret without flashing
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').textContent.includes("X")`), true);
 });
 
-test("a selection outside any typing session shows the same text toolbar, and A, N and C act on it", async () => {
+test("a selection outside any typing session shows the same text toolbar, and A and C act on it", async () => {
   await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
   await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="dddddddd"]', 3);
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask", "note", "copy"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable], [data-kapi-selected]")`), false);
   await page.key("c");
   await until(async () => (await page.eval(`window.copied.length`)) === 1);
   assert.match(await page.eval(`window.copied[0]`), /^Move the session store[\s\S]*See$/);
   await page.key("n");
-  await page.waitFor(`!!document.querySelector(".kapi-ask") && document.querySelector(".kapi-ask textarea").placeholder === "Write a note for the agent"`);
-  await page.key("Escape");
-  await page.waitFor(`!document.querySelector(".kapi-ask") && !document.querySelector(".kapi-bar").hidden`);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-ask")`), false);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask") && document.querySelector(".kapi-ask textarea").placeholder === "Ask the agent about this"`);
   await page.key("Escape");

@@ -188,9 +188,9 @@ handle, Enter or Space on it selects the block and moves focus to the
 toolbar, and Tab goes back to the text. On a touch screen a tap puts the caret
 in, a long press of about half a second selects the block and shows its
 toolbar, and no handle shows. Selecting text, while typing or not, shows one
-text toolbar with Ask AI, Note and Copy (A, N and C when nothing is being
-typed). Note opens the same note box as Ask AI with Queue as its main button;
-Copy copies the selected text as plain text. A note opened while typing keeps
+text toolbar with Ask AI and Copy (A and C when nothing is being typed).
+Copy copies the selected text as plain text; Cmd or Ctrl+C copies it as
+usual without the toolbar. A note opened while typing keeps
 the typing session, and the caret goes back into the text when the box
 closes.
 

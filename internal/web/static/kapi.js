@@ -100,7 +100,6 @@
     outline: "M80,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H88A8,8,0,0,1,80,64Zm136,56H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H88a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM44,52A12,12,0,1,0,56,64,12,12,0,0,0,44,52Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,116Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,44,180Z",
     chat: "M128,24A104,104,0,0,0,37,178L24,224l46-13A104,104,0,1,0,128,24Zm0,192a87,87,0,0,1-52-17l-3-2-26,7,7-26-2-3A88,88,0,1,1,128,216Z",
     back: "M232,200a8,8,0,0,1-16,0,88.1,88.1,0,0,0-88-88H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,61.66L51.31,96H128A104.11,104.11,0,0,1,232,200Z",
-    note: "M88,96a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H96A8,8,0,0,1,88,96Zm8,40h64a8,8,0,0,0,0-16H96a8,8,0,0,0,0,16Zm32,16H96a8,8,0,0,0,0,16h32a8,8,0,0,0,0-16ZM224,48V156.69A15.86,15.86,0,0,1,219.31,168L168,219.31A15.86,15.86,0,0,1,156.69,224H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32H208A16,16,0,0,1,224,48ZM48,208H152V160a8,8,0,0,1,8-8h48V48H48Zm120-40v28.69L196.69,168Z",
     grip: "M104,60a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,60a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM104,128a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,128a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM104,196a12,12,0,1,1-24,0a12,12,0,1,1,24,0ZM176,196a12,12,0,1,1-24,0a12,12,0,1,1,24,0Z",
   };
 
@@ -545,7 +544,7 @@
       return placeRing();
     }
     if (text) {
-      bar.replaceChildren(tool("android", "Ask AI", "ask"), tool("note", "Note", "note"), tool("copy", "Copy", "copy"));
+      bar.replaceChildren(tool("android", "Ask AI", "ask"), tool("copy", "Copy", "copy"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
       const flip = selected.matches('[data-kapi-preset="diagram"][data-kapi-dir]');
@@ -1432,7 +1431,7 @@
       await refresh(null);
       return dismissNote();
     }
-    if (name === "ask" || name === "note") return openAsk(name);
+    if (name === "ask") return openAsk();
     if (name === "copy" && textRange) return copyText();
     return scopedAction(name)?.();
   }
@@ -1661,10 +1660,10 @@
     else CSS.highlights.delete("kapi-ask");
   }
 
-  function openAsk(mode = "ask") {
+  function openAsk() {
     if (textRange) {
       const anchor = rangeAnchor(textRange);
-      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange(), mode);
+      if (anchor) showAsk(anchor, textRange.cloneRange(), textRange.cloneRange());
     } else if (selected && !editing) {
       const anchor = blockAnchor(selected);
       let range = null;
@@ -1816,9 +1815,8 @@
     if (images.length < files.length) say("Only PNG, JPEG, GIF and WebP images can be added to the page.", "error");
   }
 
-  function showAsk(anchor, range, restore, mode = "ask") {
+  function showAsk(anchor, range, restore) {
     closeAsk();
-    const noting = mode === "note";
     const about = h("span", { class: "kapi-ask-about", text: `About: ${aboutText(anchor)}` });
     const head = h("div", { class: "kapi-ask-head" }, about);
     if (anchor.part && !anchor.target.includes(",") && !anchor.re?.length) {
@@ -1830,10 +1828,10 @@
         asking.text.focus();
       } }, icon("x")));
     }
-    const text = h("textarea", { rows: "3", placeholder: noting ? "Write a note for the agent" : "Ask the agent about this", "aria-label": "Note for the agent" });
-    const queueButton = h("button", { type: "button", class: noting ? "kapi-primary kapi-ask-queue" : "kapi-ask-queue", title: `Queue (${keyWords("send")})`, onclick: () => queueAsk() },
+    const text = h("textarea", { rows: "3", placeholder: "Ask the agent about this", "aria-label": "Note for the agent" });
+    const queueButton = h("button", { type: "button", class: "kapi-ask-queue", title: `Queue (${keyWords("send")})`, onclick: () => queueAsk() },
       "Queue", h("span", { class: "kapi-key", text: ` ${keyHint("send")}` }));
-    const sendNow = h("button", { type: "button", class: noting ? "kapi-ask-send" : "kapi-primary kapi-ask-send", title: `Send with everything queued (${keyWords("submit")})`, onclick: () => sendAsk() },
+    const sendNow = h("button", { type: "button", class: "kapi-primary kapi-ask-send", title: `Send with everything queued (${keyWords("submit")})`, onclick: () => sendAsk() },
       "Send", h("span", { class: "kapi-key", text: ` ${keyHint("submit")}` }));
     const cancel = h("button", { type: "button", class: "kapi-ask-cancel", title: `Cancel (${keyWords("dismiss")})`, text: "Cancel", onclick: () => closeAsk(true) });
     const tray = imageTray(() => sync());
