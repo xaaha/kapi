@@ -605,7 +605,8 @@
     dockBar(true);
     const areaRight = pageAreaRight();
     const { width, height } = bar.getBoundingClientRect();
-    const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= 0 && y + height <= innerHeight;
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kapi-head-offset")) || 0;
+    const fits = (x, y) => x >= 4 && x + width <= areaRight - 4 && y >= top && y + height <= innerHeight;
     const p = selectionRect();
     const py = p && Math.min(Math.max(p.top + p.height / 2 - height / 2, 4), innerHeight - height - 4);
     const right = p && ["point", p.right + POINT_GAP, py];
@@ -626,7 +627,7 @@
       spot = [
         ["above", left, r.top - BAR_GAP - height],
         ["below", left, r.bottom + BAR_GAP],
-        ["pinned", left, 8],
+        ["pinned", left, top + 8],
       ].find(([place, x, y]) => fits(x, y) && (place !== "pinned" || (r.top < y && r.bottom > y + height)));
     }
     if (!spot) return dockBar(false);

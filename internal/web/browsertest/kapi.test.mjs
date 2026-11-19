@@ -2047,6 +2047,28 @@ test("a paragraph right under a heading gets its toolbar above its top right cor
   await page.call("Emulation.clearDeviceMetricsOverride");
 });
 
+test("the toolbar never sits under the site header and stays clear of a block just below it", async () => {
+  const ids = Array.from({ length: 40 }, (_, i) => `p${String(i).padStart(2, "0")}aaaaa`.slice(0, 8));
+  await reopenWith(ids.map((id, i) => ({ id, html: `<p data-kapi-id="${id}">Paragraph ${i} with enough words to wrap a little across the reading column.</p>` })));
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 800, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`innerWidth === 1600`);
+  const target = ids[6];
+  await page.eval(`scrollTo(0, document.documentElement.scrollHeight)`);
+  await new Promise((r) => setTimeout(r, 100));
+  await page.eval(`(h => scrollBy(0, document.querySelector('[data-kapi-id="${target}"]').getBoundingClientRect().top - h - 24))(document.querySelector(".kapi-site-head").offsetHeight)`);
+  await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden")`);
+  await mouseClick(`[data-kapi-id="${target}"]`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.waitFor(`(h => h.getBoundingClientRect().bottom === h.offsetHeight)(document.querySelector(".kapi-site-head"))`);
+  const head = await page.eval(`document.querySelector(".kapi-site-head").offsetHeight`);
+  const [bar, el] = [await barBox(), await boxOf(target)];
+  assert.ok(head > 0, "the site header is showing");
+  assert.ok(el.top - head < 60, JSON.stringify({ head, el }));
+  assert.ok(bar.top >= head, JSON.stringify({ head, bar, el }));
+  assert.ok(bar.bottom <= el.top || bar.top >= el.bottom, JSON.stringify({ bar, el }));
+  await page.call("Emulation.clearDeviceMetricsOverride");
+});
+
 test("in a narrow window the toolbar floats at the block's top right edge, and pins to the top when the block's top scrolls away", async () => {
   const narrow = await browser.open(server.url, { width: 900, height: 700 });
   try {
