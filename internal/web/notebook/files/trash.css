@@ -27,10 +27,6 @@
   padding-right: 34px;
 }
 
-.nb-grid[data-view="list"] .nb-card-wrap > .nb-card {
-  padding-right: 60px;
-}
-
 .nb-card-menu-button {
   position: absolute;
   top: 12px;
