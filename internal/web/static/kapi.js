@@ -272,6 +272,7 @@
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
   const saveState = h("span", { class: "kapi-save-state", role: "status", hidden: "" });
+  const copyTyped = h("button", { type: "button", class: "kapi-link", text: "Copy text", onclick: () => copyEdit() });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
   const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", "aria-keyshortcuts": keyWords("toggleChat"), "data-tip": `Chat ${keyHint("toggleChat")}`, onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
@@ -668,7 +669,8 @@
   function placeSaveState() {
     saveState.hidden = !editing?.status;
     if (saveState.hidden) return;
-    saveState.textContent = editing.status;
+    const stuck = editing.refused && editing.status === "Not saved";
+    saveState.replaceChildren(stuck ? "Not saved. Esc discards" : editing.status, ...(stuck ? [copyTyped] : []));
     saveState.dataset.state = { Saving: "saving", Saved: "saved" }[editing.status] || "failed";
     const r = (editing.box || editing.el).getBoundingClientRect();
     saveState.style.left = `${r.right + 4 - saveState.offsetWidth}px`;
@@ -1235,7 +1237,7 @@
   }
 
   function session(fields) {
-    return { ...fields, amend: 0, saved: false, status: "", timer: 0, saving: Promise.resolve(true), clash: null };
+    return { ...fields, amend: 0, saved: false, refused: false, status: "", timer: 0, saving: Promise.resolve(true), clash: null };
   }
 
   function writeTarget(el, e) {
@@ -1249,6 +1251,7 @@
   function typed() {
     const s = editing;
     clearTimeout(s.timer);
+    s.refused = false;
     s.status = s.op() ? "Saving" : s.saved ? "Saved" : "";
     s.timer = setTimeout(() => saveEdit(s), AUTOSAVE_MS);
     placeSaveState();
@@ -1257,12 +1260,17 @@
   function leaveEdit() {
     if (leaving) return leaving;
     const s = editing;
-    leaving = saveEdit(s, true).then((ok) => {
+    leaving = (s.refused ? Promise.resolve(true) : saveEdit(s, true)).then((ok) => {
       if (!ok || editing !== s) return;
       endEdit();
-      if (s.saved) return refresh([idOf(s.el)]);
+      if (s.saved || s.refused) return refresh([idOf(s.el)]);
     }).finally(() => (leaving = null));
     return leaving;
+  }
+
+  function copyEdit() {
+    const text = editing.area ? editing.area.value : editing.hosts.map(({ host }) => host.innerText).join("\n");
+    navigator.clipboard.writeText(text).then(() => (copyTyped.textContent = "Copied"), () => (copyTyped.textContent = "Copy failed"));
   }
 
   function endEdit() {
@@ -1298,6 +1306,8 @@
       const { kind, ...fields } = change;
       const res = await op(kind, { id: idOf(s.el), ...fields, ...(s.amend && { amend: s.amend }) }, { rev: s.rev, stale: "" });
       ok = !!res?.ok;
+      s.refused = !!res && !ok && res.status !== 409;
+      if (s.refused) copyTyped.textContent = "Copy text";
       if (ok) {
         const rev = Number(res.data.rev);
         if (rev !== s.rev) s.amend = rev;
@@ -3419,7 +3429,7 @@
   document.addEventListener("pointerdown", (e) => {
     if (editing && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || (editing.clash && path.includes(editing.clash.box)) || path.includes(outlineTools);
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || (editing.clash && path.includes(editing.clash.box)) || path.includes(outlineTools) || path.includes(saveState);
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
