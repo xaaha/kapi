@@ -6079,6 +6079,24 @@ test("the text toolbar never covers the save pill when the first word of the typ
   assert.ok(bar.right <= pill.left || bar.left >= pill.right || bar.bottom <= pill.top || bar.top >= pill.bottom, JSON.stringify({ bar, pill }));
 });
 
+test("clicking from one text block into another moves the caret without flashing the block toolbar in between", async () => {
+  const start = async (id) => {
+    const { x, y } = await page.eval(`(r => ({ x: r.left + 20, y: r.top + 10 }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await new Promise((r) => setTimeout(r, 150));
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  };
+  await start("bbbbbbbb");
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  await page.type("X");
+  await page.eval(`window.barSeen = 0; (function tick() { if (!document.querySelector(".kapi-bar").hidden) window.barSeen++; requestAnimationFrame(tick); })()`);
+  await start("dddddddd");
+  await page.waitFor(`document.querySelector('[data-kapi-id="dddddddd"]').isContentEditable`);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`window.barSeen`), 0);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').textContent.includes("X")`), true);
+});
+
 test("a selection outside any typing session shows the same text toolbar, and A, N and C act on it", async () => {
   await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
   await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="dddddddd"]', 3);

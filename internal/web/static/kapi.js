@@ -1281,11 +1281,15 @@
     placeSaveState();
   }
 
-  function leaveEdit() {
+  function leaveEdit(away = false) {
     if (leaving) return leaving;
     const s = editing;
     leaving = (s.refused ? Promise.resolve(true) : saveEdit(s, true)).then((ok) => {
       if (!ok || editing !== s) return;
+      if (away) {
+        selected?.removeAttribute("data-kapi-selected");
+        selected = null;
+      }
       endEdit();
       if (s.saved || s.refused) refresh([idOf(s.el)]);
     }).finally(() => (leaving = null));
@@ -3533,7 +3537,8 @@
     if (editing && e.button === 0) {
       const path = e.composedPath();
       const inside = [editing.el, editing.box, editing.clash?.box, asking?.box, outlineTools, saveState, linkChip, ...(textRange ? [bar] : [])].some((n) => n && path.includes(n));
-      if (!inside) leaveEdit();
+      const next = closest(e.target, BLOCK);
+      if (!inside) leaveEdit(!!next && main.contains(next));
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
   }, true);
