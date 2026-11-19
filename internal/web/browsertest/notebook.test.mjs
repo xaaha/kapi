@@ -431,21 +431,13 @@ test("an ended session is red in the switcher and on its home card", async () =>
   }
 });
 
-test("home switches between cards and list, remembers the choice, and keeps filters", async () => {
-  const p = await home();
+test("home shows notes only as cards, with no view toggle", async () => {
+  const p = await home(base, { width: 1440, height: 900 });
   try {
-    const before = await p.eval(`document.querySelectorAll(".nb-card").length`);
-    await p.eval(`[...document.querySelectorAll(".nb-view-button")].find((b) => b.textContent === "List").click()`);
-    assert.equal(await p.eval(`document.querySelector(".nb-grid").dataset.view`), "list");
-    assert.equal(await p.eval(`document.querySelectorAll(".nb-card").length`), before);
-    assert.equal(await p.eval(`getComputedStyle(document.querySelector(".nb-grid")).gridTemplateColumns.split(" ").length`), 1);
-    await p.eval(`location.reload()`);
-    await p.waitFor(`document.querySelector(".nb-grid")?.dataset.view === "list" && document.querySelector(".nb-count").textContent !== ""`);
+    assert.equal(await p.eval(`document.querySelector(".nb-view-toggle, .nb-view-button")`), null);
+    assert.ok(await p.eval(`getComputedStyle(document.querySelector(".nb-grid")).gridTemplateColumns.split(" ").length`) > 1);
     await p.eval(`document.querySelector('[data-tab="archived"]').click()`);
     assert.equal(await p.eval(`document.querySelector(".nb-filter-context strong").textContent`), "Deleted 30 days after archiving");
-    await p.eval(`[...document.querySelectorAll(".nb-view-button")].find((b) => b.textContent === "Cards").click()`);
-    assert.equal(await p.eval(`document.querySelector('[data-tab="archived"]').getAttribute("aria-pressed")`), "true");
-    assert.equal(await p.eval(`document.querySelector(".nb-grid").dataset.view`), "cards");
     assert.deepEqual(p.errors, []);
   } finally { await p.close(); }
 });

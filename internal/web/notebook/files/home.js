@@ -1,4 +1,4 @@
-import { getJSON, h, icon, prefs, root, shortcuts } from "../../static/core.js";
+import { getJSON, h, icon, root, shortcuts } from "../../static/core.js";
 import { createOrganizer } from "./organizer.js";
 import { ago, byFolder, dirname, folderOf, folderTitle, foldersOf, newIDs, onLayout, onVisit, orderForHome, pageTitle, redraw, watch } from "./pages.js";
 import { cardMenu, undoNote } from "./trash.js";
@@ -63,18 +63,7 @@ export function showHome(main) {
   const project = h("select", { class: "nb-select", "aria-label": "Folder" }, h("option", { value: "", text: "All folders" }));
   const tabs = h("div", { class: "nb-status", role: "group", "aria-label": "View" });
   const count = h("span", { class: "nb-count" });
-  const grid = h("div", { class: "nb-grid", "data-view": prefs.get("kapi-home-view") === "list" ? "list" : "cards" });
-  const viewButtons = ["cards", "list"].map((view) => {
-    const button = h("button", { type: "button", class: "nb-view-button", "aria-pressed": String(grid.dataset.view === view), text: view === "cards" ? "Cards" : "List" });
-    button.addEventListener("click", () => {
-      grid.dataset.view = view;
-      for (const g of shelf.querySelectorAll(".nb-grid")) g.dataset.view = view;
-      prefs.set("kapi-home-view", view);
-      for (const item of viewButtons) item.setAttribute("aria-pressed", String(item === button));
-    });
-    return button;
-  });
-  const viewToggle = h("div", { class: "nb-view-toggle", role: "group", "aria-label": "Note view" }, ...viewButtons);
+  const grid = h("div", { class: "nb-grid" });
   const empty = h("p", { class: "nb-empty" });
   const shelf = h("div", { class: "nb-shelf", hidden: true });
   let picked = VIEWS.find((view) => location.hash === `#${view.name}`) ?? VIEWS[0];
@@ -104,7 +93,7 @@ export function showHome(main) {
   const top = h("header", { class: "nb-top kapi-site-head" }, brand,
     h("div", { class: "kapi-site-actions nb-top-actions" }, searchButton, theme));
   const organizer = createOrganizer();
-  const toolbar = h("div", { class: "nb-toolbar" }, tabs, h("div", { class: "nb-toolbar-right" }, viewToggle, organizer.button, h("span", { class: "nb-select-wrap" }, project, h("span", { class: "nb-select-caret", "aria-hidden": "true" })), count));
+  const toolbar = h("div", { class: "nb-toolbar" }, tabs, h("div", { class: "nb-toolbar-right" }, organizer.button, h("span", { class: "nb-select-wrap" }, project, h("span", { class: "nb-select-caret", "aria-hidden": "true" })), count));
   const title = h("h1");
   const intro = h("p", { class: "nb-intro" });
   const header = h("div", { class: "nb-title-row" }, h("div", {}, h("p", { class: "nb-eyebrow", text: "Your workspace" }), title), intro);
@@ -151,7 +140,7 @@ export function showHome(main) {
       grid.replaceChildren();
       shelf.replaceChildren(...savedFolders(shown).map((f) => h("section", { class: "nb-folder", "aria-label": folderTitle(f.dir) },
         h("h2", { class: "nb-folder-head", text: folderTitle(f.dir) }, h("span", { text: `${f.shown} · ${plural(f.pages.length, "note")}` })),
-        h("div", { class: "nb-grid", "data-view": grid.dataset.view }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, menu, missing, false))))));
+        h("div", { class: "nb-grid" }, ...f.pages.map((p) => card(p, fresh.has(p.id), f.dir, menu, missing, false))))));
     } else {
       shelf.replaceChildren();
       grid.replaceChildren(...shown.map((p) => card(p, fresh.has(p.id), project.value || null, menu, missing)));
