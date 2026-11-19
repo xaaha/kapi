@@ -165,12 +165,13 @@ its checklist is being edited does not refuse the save.
 
 The browser has no edit mode. One click on a block selects it and shows its
 toolbar. A second click on the selected block, a double click, Enter or the
-toolbar's Edit button starts typing at the spot clicked, and the toolbar gives
+toolbar's Edit button starts typing at the spot clicked (a raw block such as a
+diagram opens its source box on a double click, Enter or Edit, not a second
+click), and the toolbar gives
 way to a thin outline and a Saving, then Saved pill above the block's top
 right. The text saves itself one second after the last keystroke and again
 when typing ends: Escape, Cmd or Ctrl+Enter, Enter in a one-line part, or a
-click outside the block. Escape keeps the text; nothing is ever discarded,
-and Cmd or Ctrl+Z after typing ends, or the Undo button, takes back the whole
+click outside the block. Escape keeps the text, and Cmd or Ctrl+Z after typing ends, or the Undo button, takes back the whole
 typing session. Every save after the first in a session sends `"amend":R`,
 the revision the session's previous save made. When `R` is still the current
 revision and the top undo step ends there, the save is a new revision as
@@ -178,7 +179,11 @@ usual but joins that undo step instead of adding one, so the session undoes
 in one step. `state.json` keeps `"ends":{"<back>":<rev>}` for an undo step
 that ends later than one revision after it. Any other `amend` is ignored and
 the save adds its own undo step. A save that 409s keeps the text in the
-block, says so, and the next save sends the newer `rev`.
+block, says so, and the next save sends the newer `rev`. A save that cannot reach
+kapi keeps trying when typing ends. A save kapi refuses, such as a 404 for a
+block the agent deleted or a 422, shows Not saved with a Copy text button,
+and the next Escape or click outside drops the typed text and shows the
+block as kapi has it.
 
 A `kapi-badge` may sit inside prose, since a badge stays inline. The `HTML` of
 a prose element may hold `<kapi-badge>` elements; any other `kapi-*` element
