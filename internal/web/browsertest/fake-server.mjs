@@ -89,6 +89,14 @@ const renderSource = (src) =>
     .replace(
       /^<kapi-code([^>]*)>([\s\S]*)<\/kapi-code>$/,
       (_, attrs, body) => `<figure${attrs} data-kapi-preset="code" class="kapi-code" data-kapi-text="${idIn(attrs)}" data-kapi-raw=""><pre><code>${body}</code></pre></figure>`,
+    )
+    .replace(
+      /^<kapi-render([^>]*)>([\s\S]*)<\/kapi-render>$/,
+      (_, attrs, body) => {
+        const title = attrs.match(/ title="([^"]*)"/)?.[1] ?? "HTML preview";
+        return `<figure${attrs.replace(/ title="[^"]*"/, "")} data-kapi-preset="render" class="kapi-render"><figcaption class="kapi-render-title" data-kapi-text="${idIn(attrs)}" data-kapi-attr="title">${title}</figcaption>` +
+          `<iframe class="kapi-render-frame" title="${title}" sandbox="allow-same-origin" srcdoc="${escapeAttr(`<!doctype html><html><body>${body}</body></html>`)}"></iframe></figure>`;
+      },
     );
 
 const marked = (html) =>
@@ -100,6 +108,12 @@ function setPart(b, part) {
   if (part.row !== undefined) {
     const cell = new RegExp(`(<(t[hd])[^>]*data-kapi-cell="${part.row},${part.col}"[^>]*>)[\\s\\S]*?(</\\2>)`);
     b.html = b.html.replace(cell, (_, open, tag, close) => open + inner + close);
+  } else if (part.attr && b.source) {
+    const value = escapeAttr(inner.trim().replace(/\s+/g, " "));
+    const [, open, body, close] = tags(b.source);
+    const set = open.includes(` ${part.attr}="`) ? open.replace(new RegExp(` ${part.attr}="[^"]*"`), ` ${part.attr}="${value}"`) : open.replace(/>$/, ` ${part.attr}="${value}">`);
+    b.source = set + body + close;
+    b.html = renderSource(b.source);
   } else if (b.source) {
     const [, open, , close] = tags(b.source);
     b.source = open + inner + close;

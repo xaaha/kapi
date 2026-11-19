@@ -119,11 +119,11 @@ parts are text:
 | Text | Presets | Rendered as | Edited as |
 |---|---|---|---|
 | body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task`, `kapi-badge` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
-| attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
+| attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary`, `kapi-render` `title` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | plain `table`, `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
 | task body | native checkbox `li`, `kapi-task` | the task body carries `data-kapi-text="<task id>"`; native tasks retain their checkbox | in place, rich text |
-| raw | plain `pre`, `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| raw | plain `pre`, `kapi-code`, `kapi-diff`, `kapi-diagram` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
 | none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist`, `kapi-gallery` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the
@@ -132,7 +132,10 @@ that cannot be typed into, and it is saved from its source byte for byte. A
 block with no text part says so and opens no editor. A badge inside text
 stays one piece, but its own text is a part. Attributes that are not shown as
 text (`kind`, `tone`, `state`, `done`, `value`, `name`, ids) and rendered
-chrome (callout labels, plan marks, the form button) are never editable. A new preset fails the render tests
+chrome (callout labels, plan marks, the form button) are never editable.
+A `kapi-render` is edited only through its title, shown in its `figcaption`;
+its HTML and CSS are not text, and a click inside its preview frame stays in
+the frame. A new preset fails the render tests
 until it is in `textParts`, and a test edits every text part of the gallery.
 
 All of it is saved as one `text` op:
