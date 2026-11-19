@@ -160,7 +160,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
 
   const pageHTML = () =>
     `<!doctype html><html data-theme-choice="${state.settings.mode}" data-palette-choice="${state.settings.theme}" data-palette-recent="${state.settings.recent.join(" ")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fake kapi</title>` +
-    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PALETTE_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"><link rel="stylesheet" href="/${TOKEN}/static/tables.css"><link rel="stylesheet" href="/${TOKEN}/static/media.css"></head><body>` +
+    `<script src="/${TOKEN}/static/theme.js"></script><style>${THEME_CSS}${PALETTE_CSS}${PAGE_CSS}</style><link rel="stylesheet" href="/${TOKEN}/static/chrome.css"><link rel="stylesheet" href="/${TOKEN}/static/tables.css"><link rel="stylesheet" href="/${TOKEN}/static/media.css"><link rel="stylesheet" href="/${TOKEN}/static/confirm.css"></head><body>` +
     `<main id="kapi-page" data-rev="${state.rev}" data-undo="${state.history.length > 0}" data-path="${escapeAttr(pagePath)}">${state.blocks.map((b) => marked(b.html)).join("\n")}</main>` +
     `<script src="/${TOKEN}/static/shortcuts.js"></script><script src="/${TOKEN}/static/search.js"></script><script src="/${TOKEN}/static/tables.js"></script><script src="/${TOKEN}/static/media.js"></script><script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 

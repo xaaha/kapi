@@ -1,3 +1,4 @@
+import { confirmStep } from "../../static/confirm.js";
 import { root } from "../../static/core.js";
 import { inlinePopover, popoverButton, popoverContent } from "../../static/popover.js";
 import { restoreQuestion } from "../../static/restore-dialog.js";
@@ -8,11 +9,12 @@ export const keptNote = (p) => (p.rev ? `Version ${p.rev} kept` : "No copy kept"
 export function missingCards(note, redraw) {
   const asking = new Map();
   const problems = new Map();
+  const removing = new Map();
   let busy = false;
 
   const focus = (id) => requestAnimationFrame(() => {
     const target = asking.has(id)
-      ? document.querySelector(`.nb-missing-ask[data-page="${CSS.escape(id)}"] .kapi-pop-actions > :last-child`)
+      ? document.querySelector(`.nb-missing-ask[data-page="${CSS.escape(id)}"] .kapi-pop-actions :is(.kapi-pop-button:last-child, .kapi-confirm-no)`)
       : document.querySelector(`.nb-card[data-key="${CSS.escape(`card\n${id}`)}"]`);
     target?.focus({ preventScroll: true });
   });
@@ -20,6 +22,7 @@ export function missingCards(note, redraw) {
   function step(id, next) {
     if (next) asking.set(id, next);
     else asking.delete(id);
+    removing.delete(id);
     problems.delete(id);
     redraw();
     focus(id);
@@ -49,7 +52,18 @@ export function missingCards(note, redraw) {
   }
 
   async function remove(p, title) {
-    if (await deletePage(p.id, title, note)) asking.delete(p.id);
+    if (!(await deletePage(p.id, title, note))) return;
+    asking.delete(p.id);
+    removing.delete(p.id);
+  }
+
+  function confirmDelete(p, title) {
+    if (!removing.has(p.id)) {
+      const ask = confirmStep({ no: "Keep", run: () => act(p.id, () => remove(p, title)), onChange: (on) => on || step(p.id, null) });
+      ask.arm(false);
+      removing.set(p.id, ask);
+    }
+    return removing.get(p.id).el;
   }
 
   function panel(p, title) {
@@ -61,7 +75,7 @@ export function missingCards(note, redraw) {
     const detail = restoring ? "kapi writes it back where it was." : "Its notes go to the Trash. You can undo for 10 seconds.";
     const actions = restoring
       ? [button("No", "secondary", () => step(p.id, "delete")), button(`Restore version ${p.rev}`, "primary", () => act(p.id, () => restore(p)))]
-      : [button("Keep", "secondary", () => step(p.id, null)), button("Delete", "danger", () => act(p.id, () => remove(p, title)))];
+      : [confirmDelete(p, title)];
     return inlinePopover({
       label: `${title} is missing`,
       className: "nb-missing-ask",

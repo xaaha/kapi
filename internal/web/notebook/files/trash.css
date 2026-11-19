@@ -130,32 +130,6 @@
   outline: none;
 }
 
-.nb-card-menu :is([data-card-action="delete"], [data-card-action="delete-yes"]) {
-  color: var(--kapi-red-text);
-}
-
-.nb-card-menu :is([data-card-action="delete"], [data-card-action="delete-yes"]):is(:hover, :focus-visible) {
-  background: var(--kapi-red-tint);
-}
-
-.nb-card-menu [data-card-action="delete-yes"] {
-  font-weight: 650;
-}
-
-.nb-card-menu [data-card-action="delete-yes"]:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-
-.nb-card-menu-question {
-  margin: 0;
-  padding: 8px 10px 6px;
-  overflow-wrap: anywhere;
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
 .nb-undo {
   position: fixed;
   z-index: 60;

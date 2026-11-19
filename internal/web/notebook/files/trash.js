@@ -1,7 +1,7 @@
+import { confirmStep } from "../../static/confirm.js";
 import { h, icon, root, shortcuts } from "../../static/core.js";
 
 const UNDO_MS = 10000;
-const ARM_MS = 500;
 
 async function post(path) {
   let res;
@@ -62,32 +62,12 @@ export function undoNote() {
 }
 
 export function cardMenu(note) {
-  const question = h("p", { class: "nb-card-menu-question", id: "nb-card-menu-question", role: "presentation", hidden: "" });
-  const item = (kind, glyph, label) => h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-card-action": kind }, icon(glyph), h("span", { text: label }));
-  const remove = item("delete", "trash", "Delete");
-  const yes = item("delete-yes", "trash", "Delete");
-  const no = item("delete-no", "x", "Cancel");
-  for (const el of [yes, no]) {
-    el.hidden = true;
-    el.setAttribute("aria-describedby", question.id);
-  }
-  const menu = h("div", { class: "nb-card-menu", role: "menu", "aria-label": "Note actions", hidden: "" }, remove, question, no, yes);
   let open = null;
-  let armTimer = 0;
+  const remove = confirmStep({ label: "Delete", question: () => `Delete ${open.title}?`, menu: true, run: () => deleteOpen() });
+  const menu = h("div", { class: "nb-card-menu", role: "menu", "aria-label": "Note actions", hidden: "" }, remove.el);
 
   const items = () => [...menu.querySelectorAll('[role="menuitem"]')].filter((el) => !el.hidden);
   const anchor = () => open && document.querySelector(`.nb-card-menu-button[data-page="${CSS.escape(open.page.id)}"]`);
-
-  function confirm(on) {
-    remove.hidden = on;
-    for (const el of [question, yes, no]) el.hidden = !on;
-    yes.disabled = false;
-    yes.removeAttribute("data-armed");
-    clearTimeout(armTimer);
-    if (on) armTimer = setTimeout(() => yes.setAttribute("data-armed", ""), ARM_MS);
-    if (open) question.textContent = `Delete ${open.title}?`;
-    (on ? no : remove).focus();
-  }
 
   function place() {
     const button = anchor();
@@ -113,22 +93,17 @@ export function cardMenu(note) {
     open = { page, title };
     menu.hidden = false;
     button.setAttribute("aria-expanded", "true");
-    confirm(false);
+    remove.disarm(true);
     place();
   }
 
   async function deleteOpen() {
-    if (!open || !yes.hasAttribute("data-armed") || yes.disabled) return;
     const { page, title } = open;
-    yes.disabled = true;
     const done = deletePage(page.id, title, note);
     close(false);
     await done;
   }
 
-  remove.addEventListener("click", () => confirm(true));
-  no.addEventListener("click", () => yes.hasAttribute("data-armed") && confirm(false));
-  yes.addEventListener("click", deleteOpen);
   menu.addEventListener("keydown", (e) => {
     const list = items();
     const at = list.indexOf(document.activeElement);

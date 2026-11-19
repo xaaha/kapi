@@ -520,12 +520,12 @@ func TestAnotherHostIsRefusedEvenWithTheToken(t *testing.T) {
 func TestPageServesTheRenderedBodyWithRevisionAndAssets(t *testing.T) {
 	s := newSite(t, `<p data-kapi-id="aaaaaaaa">hello &amp; welcome</p>`)
 	page := s.get("/p/" + s.id + "/").body
-	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-saved="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<link rel="stylesheet" href="../../static/tables.css">`, `<script src="../../static/tables.js" defer></script>`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
+	for _, want := range []string{`<main id="kapi-page" data-rev="1" data-undo="false" data-saved="false" data-path="` + html.EscapeString(s.path) + `">`, `hello &amp; welcome`, `<link rel="stylesheet" href="../../static/chrome.css">`, `<link rel="stylesheet" href="../../static/tables.css">`, `<link rel="stylesheet" href="../../static/confirm.css">`, `<script src="../../static/tables.js" defer></script>`, `<script src="../../static/kapi.js" defer></script>`, `<title>plan</title>`, `<link rel="icon" type="image/svg+xml" href="../../static/favicon.svg">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
 	}
-	for _, p := range []string{"/static/search.js", "/static/tables.js", "/static/kapi.js", "/static/chrome.css", "/static/tables.css", "/static/logo.svg", "/static/favicon.svg"} {
+	for _, p := range []string{"/static/search.js", "/static/tables.js", "/static/kapi.js", "/static/chrome.css", "/static/tables.css", "/static/confirm.css", "/static/confirm.js", "/static/logo.svg", "/static/favicon.svg"} {
 		if resp := s.get(p); resp.code != http.StatusOK {
 			t.Errorf("GET %s: %d", p, resp.code)
 		}
