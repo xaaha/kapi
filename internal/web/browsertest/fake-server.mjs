@@ -375,8 +375,11 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       const b = list.find((x) => x.id === id);
       const inner = !b && findTask(id)?.html.match(taskPattern(id))[0];
       if (!b && !inner) return json(res, 404, { error: "no block" });
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) });
-      return res.end(b ? marked(b.html) : inner);
+      const head = { "Content-Type": "text/html; charset=utf-8", "Kapi-Rev": String(state.rev), "Kapi-Undo": String(state.history.length > 0) };
+      const body = b ? marked(b.html) : inner;
+      if (state.staleBlocksDelay) await new Promise((r) => setTimeout(r, state.staleBlocksDelay));
+      res.writeHead(200, head);
+      return res.end(body);
     }
     if (req.method === "GET" && rest === "export/html") {
       if (state.dropExport) return req.socket.destroy();

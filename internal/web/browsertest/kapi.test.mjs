@@ -1308,6 +1308,32 @@ test("a held refetch of the block being typed in lands once the typing ends", as
   await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
 });
 
+test("a block reload asked for before a save and landing after it keeps the saved text and revision", async () => {
+  server.state.staleBlocksDelay = 600;
+  server.push({ author: "human", kind: "revision", target: "bbbbbbbb", text: "edited in another tab" });
+  await until(() => requests("GET", "/blocks/bbbbbbbb").length === 1);
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Mine.");
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => requests("GET", "/blocks/bbbbbbbb").length === 2);
+  assert.match(await text("bbbbbbbb"), /Mine\.$/);
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.type(" Again.");
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 2);
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-clash")`), null);
+  assert.match(server.state.blocks.find((b) => b.id === "bbbbbbbb").html, /Mine\. Again\.<\/p>$/);
+  server.state.staleBlocksDelay = 0;
+});
+
 test("an edit started while its block is being refetched keeps the block it is editing", async () => {
   server.state.blocksDelay = 300;
   server.bumpBehindBrowser("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent rewrote this.</p>');
