@@ -5891,3 +5891,44 @@ test("when another note uses the page's images, the tab goes home saying the ima
   const query = new URLSearchParams(await page.eval(`location.search`));
   assert.deepEqual([query.get("deleted"), query.get("kept")], [PAGE_ID, "1"]);
 });
+
+const hoverCenter = async (selector) => {
+  const { x, y } = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+};
+
+for (const width of [1800, 1300]) {
+  test(`at ${width}px the read view and toolbar tooltips sit left of the open chat panel and inside the window, in read view too`, async () => {
+    await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
+    await page.waitFor(`innerWidth === ${width}`);
+    const tip = () => page.eval(`(() => {
+      const b = document.querySelector(".kapi-read-button");
+      const s = getComputedStyle(b, "::after");
+      const r = b.getBoundingClientRect();
+      const w = parseFloat(s.width);
+      const left = s.left === "auto" || s.right === "0px" ? r.right - parseFloat(s.right) - w : r.left + parseFloat(s.left) - (s.transform === "none" ? 0 : w / 2);
+      const collapsed = document.documentElement.hasAttribute("data-kapi-panel-collapsed") || document.documentElement.hasAttribute("data-kapi-reading");
+      return { content: s.content, left, right: left + w, panel: collapsed ? innerWidth : document.querySelector(".kapi-panel").getBoundingClientRect().left };
+    })()`);
+    await hoverCenter(".kapi-read-button");
+    const open = await tip();
+    assert.match(open.content, /Read view/);
+    assert.ok(open.panel < width, "the chat is open");
+    assert.ok(open.left >= 0 && open.right <= open.panel, JSON.stringify(open));
+    await page.key("e", await modifier());
+    await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+    await hoverCenter(".kapi-read-button");
+    const reading = await tip();
+    assert.ok(reading.left >= 0 && reading.right <= width, JSON.stringify(reading));
+    await page.key("e", await modifier());
+    await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-reading")`);
+    await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').style.width = "100%"`);
+    await select("bbbbbbbb");
+    await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    await hoverCenter('.kapi-bar [data-action="delete"]');
+    const last = await page.eval(`(b => (r => ({ right: r.right, panel: document.querySelector(".kapi-panel").getBoundingClientRect().left, content: getComputedStyle(b, "::after").content, tipRight: r.right - parseFloat(getComputedStyle(b, "::after").right) }))(b.getBoundingClientRect()))(document.querySelector('.kapi-bar [data-action="delete"]'))`);
+    assert.match(last.content, /Delete/);
+    assert.ok(last.tipRight <= last.panel, JSON.stringify(last));
+    await page.call("Emulation.clearDeviceMetricsOverride");
+  });
+}
