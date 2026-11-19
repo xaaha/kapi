@@ -12,6 +12,7 @@ const THEMES = ["default", ...PALETTE_FILES.map((f) => f.slice(0, -4))];
 
 export const PAGE_ID = "0123456789abcdef";
 export const TOKEN = "f00dfacecafebeef";
+const TYPING_PAUSE_MS = 2000;
 
 const PAGE_CSS = `
 body { margin: 0; font: 16px/1.6 Georgia, serif; color: var(--kapi-fg); background: var(--kapi-bg); }
@@ -150,10 +151,18 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     `<script src="/${TOKEN}/static/shortcuts.js"></script><script src="/${TOKEN}/static/search.js"></script><script src="/${TOKEN}/static/tables.js"></script><script src="/${TOKEN}/static/media.js"></script><script src="/${TOKEN}/static/kapi.js"></script></body></html>`;
 
   function push(ev) {
+    if (state.deferred) logDeferred();
     const full = { seq: state.events.length + 1, time: new Date().toISOString(), author: "agent", text: "", ...ev };
     state.events.push(full);
     for (const res of state.streams) res.write(`id: ${full.seq}\ndata: ${JSON.stringify(full)}\n\n`);
     return full;
+  }
+
+  function logDeferred() {
+    const { ev, timer } = state.deferred;
+    clearTimeout(timer);
+    state.deferred = null;
+    push(ev);
   }
 
   const taskPattern = (id) => new RegExp(`<li[^>]*data-kapi-id="${id}"[^>]*>[\\s\\S]*?</li>`);
@@ -174,7 +183,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       state.history.push(state.blocks.map((b) => ({ ...b })));
       state.blocks.splice(at, 0, fig);
       state.rev++;
-      const ev = push({ author: "human", kind: "revision", target: id, text: "added an image" });
+      const ev = push({ author: "human", kind: "revision", rev: state.rev, target: id, text: "added an image" });
       return { status: 200, body: { rev: state.rev, undo: true, seq: ev.seq, ids: [id] } };
     }
     if (op.kind === "check") {
@@ -184,7 +193,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       b.html = b.html.replace(taskPattern(op.id), (li) =>
         li.replace(/<input type="checkbox"( checked="")?/, `<input type="checkbox"${op.done ? ' checked=""' : ""}`));
       state.rev++;
-      const ev = push({ author: "human", kind: "revision", target: op.id, text: op.done ? "checked" : "unchecked" });
+      const ev = push({ author: "human", kind: "revision", rev: state.rev, target: op.id, text: op.done ? "checked" : "unchecked" });
       return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: ev.seq } };
     }
     const i = state.blocks.findIndex((b) => b.id === op.id);
@@ -263,8 +272,14 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
     state.rev++;
     state.amendable = op.kind === "text" ? state.rev : 0;
     const target = ["text", "archive", "unarchive", "orient"].includes(op.kind) ? op.id : "";
-    const ev = push({ author: "human", kind: "revision", target, text: `${op.kind} #${op.id}` });
-    return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: ev.seq, ...(changedIDs && { ids: changedIDs }) } };
+    const ev = { author: "human", kind: "revision", rev: state.rev, target, text: `${op.kind} #${op.id}` };
+    if (op.kind === "text") {
+      if (amends) clearTimeout(state.deferred?.timer);
+      else if (state.deferred) logDeferred();
+      state.deferred = { ev, timer: setTimeout(logDeferred, TYPING_PAUSE_MS) };
+      return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, deferred: true } };
+    }
+    return { status: 200, body: { rev: state.rev, undo: state.history.length > 0, seq: push(ev).seq, ...(changedIDs && { ids: changedIDs }) } };
   }
 
   const json = (res, status, body) => {
@@ -530,6 +545,7 @@ export async function startFakeServer({ blocks = SAMPLE, path: pagePath = "/home
       state.textAt[id] = state.rev;
     },
     close() {
+      clearTimeout(state.deferred?.timer);
       const closed = new Promise((resolve) => server.close(resolve));
       server.closeAllConnections();
       return closed;

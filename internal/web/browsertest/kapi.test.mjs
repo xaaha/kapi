@@ -632,6 +632,23 @@ test("one typing session is one undo step, so Undo takes back the whole session"
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').dataset.kapiState`), "archived", "the archive before the session stays");
 });
 
+test("a typing session logs one revision after typing pauses, and the tab does not refetch its own text", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  for (const [word, n] of [[" One", 1], [" two", 2]]) {
+    await page.type(word);
+    await until(() => requests("POST", "/ops").length === n, 2500);
+  }
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => server.state.events.some((e) => e.kind === "revision"), 4000);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(server.state.events.filter((e) => e.kind === "revision").map((e) => e.rev), [3]);
+  assert.equal(requests("GET", "/blocks/bbbbbbbb").length, 1, "only the refresh on leaving");
+});
+
 test("Escape stops typing, keeps the text and saves it, and leaves the block selected with its toolbar", async () => {
   await select("aaaaaaaa");
   await editSelected();

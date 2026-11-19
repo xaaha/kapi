@@ -665,7 +665,7 @@ func TestAnUnchangedEditLogsNothing(t *testing.T) {
 func TestATextOpSetsACell(t *testing.T) {
 	s := newSite(t, "<kapi-table data-kapi-id=\"aaaaaaaa\"><table><tr><th>a</th></tr><tr><td class=\"x\">b</td></tr></table></kapi-table>\n")
 	code, out := s.post("/ops", `{"rev":1,"op":{"kind":"text","id":"aaaaaaaa","parts":[{"id":"aaaaaaaa","row":1,"col":0,"inner":"&lt;c&gt; <code>d</code>"}]}}`)
-	if code != http.StatusOK || out["rev"] != 2.0 {
+	if code != http.StatusOK || out["rev"] != 2.0 || out["deferred"] != true || out["seq"] != nil {
 		t.Fatalf("text: %d %v", code, out)
 	}
 	if resp := s.get("/p/" + s.id + "/source/aaaaaaaa"); resp.body != `<kapi-table data-kapi-id="aaaaaaaa"><table><tr><th>a</th></tr><tr><td class="x">&lt;c&gt; <code>d</code></td></tr></table></kapi-table>` {
@@ -674,8 +674,8 @@ func TestATextOpSetsACell(t *testing.T) {
 	if code, out := s.post("/ops", `{"rev":2,"op":{"kind":"text","id":"aaaaaaaa","parts":[{"id":"aaaaaaaa","inner":"x"}]}}`); code != http.StatusUnprocessableEntity {
 		t.Errorf("a text op on the table itself: %d %v, want 422", code, out)
 	}
-	if ev := s.events(); len(ev) != 1 || ev[0].Target != "aaaaaaaa" {
-		t.Errorf("events = %+v", ev)
+	if ev := s.events(); len(ev) != 0 {
+		t.Errorf("events before typing pauses = %+v, want none", ev)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -653,6 +654,199 @@ func TestAmendedTextOpsUndoAsOneTypingSession(t *testing.T) {
 	mustApply(t, s, &Op{Kind: "undo"})
 	if got := onDisk(t, path); got != orig {
 		t.Fatalf("second undo =\n%s\nwant\n%s", got, orig)
+	}
+}
+
+func TestATypingSessionKeepsOnlyItsLastRevisionFile(t *testing.T) {
+	orig := "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n"
+	home, path := newPage(t, orig)
+	s := open(t, home, path)
+	revs := func() []string {
+		t.Helper()
+		names, err := filepath.Glob(filepath.Join(home, "pages", ID(path), "revs", "*.html"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, n := range names {
+			names[i] = filepath.Base(n)
+		}
+		return names
+	}
+	first, _, err := s.Apply(1, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "ab"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rev := first
+	for _, inner := range []string{"abc", "abcd", "abcde"} {
+		if rev, _, err = s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: inner}}, Amend: rev}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := revs(); rev != 5 || len(got) != 2 || got[0] != "1.html" || got[1] != "5.html" {
+		t.Fatalf("after a first save and three amends, rev = %d and revs = %v, want 1.html and 5.html", rev, got)
+	}
+	if _, err := s.SourceAt(first); !errors.Is(err, ErrNoRev) {
+		t.Errorf("SourceAt(%d) = %v, want ErrNoRev", first, err)
+	}
+	if _, _, err := s.Apply(first, &Op{Kind: "archive", ID: "bbbbbbbb"}); !errors.Is(err, ErrStale) {
+		t.Errorf("an op at a dropped revision: err = %v, want ErrStale", err)
+	}
+	if _, _, err := s.Apply(first+1, &Op{Kind: "text", ID: "bbbbbbbb", Parts: []Part{{ID: "bbbbbbbb", Inner: "x"}}}); !errors.Is(err, ErrStale) {
+		t.Errorf("a text op at a dropped revision: err = %v, want ErrStale", err)
+	}
+	s = open(t, home, path)
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != orig {
+		t.Fatalf("undo after the session =\n%s\nwant\n%s", got, orig)
+	}
+	if rev, _, err = s.Apply(6, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "z"}}}); err != nil || rev != 7 {
+		t.Fatalf("a save after the undo: rev = %d, err = %v, want 7", rev, err)
+	}
+}
+
+func TestATypingSessionLogsOneRevisionEventOnceTypingPauses(t *testing.T) {
+	now := time.Now()
+	clock = func() time.Time { return now }
+	t.Cleanup(func() { clock = time.Now })
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisions := func() []eventlog.Event {
+		events, _ := l.After(0)
+		return slices.DeleteFunc(events, func(e eventlog.Event) bool { return e.Kind != "revision" })
+	}
+	rev, amend := uint64(1), uint64(0)
+	for _, inner := range []string{"ab", "abc", "abcd"} {
+		got, sum, err := s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: inner}}, Amend: amend})
+		if err != nil || !sum.Deferred || sum.Seq != 0 {
+			t.Fatalf("text %q: sum = %+v, err = %v, want a deferred event", inner, sum, err)
+		}
+		rev, amend = got, got
+		now = now.Add(typingPause / 2)
+		if _, _, err := s.Refresh(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := revisions(); len(got) != 0 {
+		t.Fatalf("events while typing = %+v, want none", got)
+	}
+	now = now.Add(typingPause)
+	if _, _, err := s.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	if got := revisions(); len(got) != 1 || got[0].Rev != rev || got[0].Author != "human" || got[0].Target != "aaaaaaaa" {
+		t.Fatalf("events after the pause = %+v, want one human revision at %d", got, rev)
+	}
+
+	if rev, _, err = s.Apply(rev, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "next"}}}); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, s, &Op{Kind: "archive", ID: "bbbbbbbb"})
+	if got := revisions(); len(got) != 3 || got[1].Rev != rev || got[2].Rev != rev+1 {
+		t.Fatalf("another op logs the held typing first: %+v", got)
+	}
+
+	if rev, _, err = s.Apply(rev+1, &Op{Kind: "text", ID: "aaaaaaaa", Parts: []Part{{ID: "aaaaaaaa", Inner: "closed tab"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(home, path, l); err != nil {
+		t.Fatal(err)
+	}
+	if got := revisions(); len(got) != 4 || got[3].Rev != rev {
+		t.Fatalf("a held event after a restart: %+v, want it logged at %d", got, rev)
+	}
+}
+
+func TestOldRevisionFilesNothingNeedsArePruned(t *testing.T) {
+	home, path := newPage(t, "<p data-kapi-id=\"aaaaaaaa\">a</p>\n<p data-kapi-id=\"bbbbbbbb\">b</p>\n")
+	l := pageLog(t, home, path)
+	s, err := Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revs := func() []uint64 {
+		t.Helper()
+		entries, err := os.ReadDir(filepath.Join(home, "pages", ID(path), "revs"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []uint64
+		for _, e := range entries {
+			r, _ := strconv.ParseUint(strings.TrimSuffix(e.Name(), ".html"), 10, 64)
+			out = append(out, r)
+		}
+		slices.Sort(out)
+		return out
+	}
+	text := func(author, id, inner string) {
+		t.Helper()
+		_, rev := s.Source()
+		if _, _, err := s.ApplyBy(author, rev, &Op{Kind: "text", ID: id, Parts: []Part{{ID: id, Inner: inner}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	note := func(ev eventlog.Event) uint64 {
+		t.Helper()
+		e, err := l.Append(&ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e.Seq
+	}
+	text("human", "aaaaaaaa", "h1")
+	for i := range 30 {
+		text("agent", "bbbbbbbb", strconv.Itoa(i))
+		if i == 5 {
+			note(eventlog.Event{Author: "human", Kind: eventlog.KindNote, Target: "bbbbbbbb", Rev: 5, Text: "open"})
+			closed := note(eventlog.Event{Author: "human", Kind: eventlog.KindNote, Target: "bbbbbbbb", Rev: 6, Text: "closed"})
+			reply := note(eventlog.Event{Author: "human", Kind: eventlog.KindNote, Re: []uint64{closed}, Rev: 7, Text: "reply"})
+			note(eventlog.Event{Author: "human", Kind: eventlog.KindResolve, Re: []uint64{reply}})
+		}
+	}
+	beforeH2 := onDisk(t, path)
+	text("human", "aaaaaaaa", "h2")
+	text("human", "aaaaaaaa", "h3")
+
+	want := []uint64{1, 2, 5}
+	for r := uint64(15); r <= 34; r++ {
+		want = append(want, r)
+	}
+	if got := revs(); !slices.Equal(got, want) {
+		t.Fatalf("revs = %v, want the undo files 1 and 2, the open note's 5 and the last 20, %v", got, want)
+	}
+	for _, r := range []uint64{6, 7, 14} {
+		if _, err := s.SourceAt(r); !errors.Is(err, ErrNoRev) {
+			t.Errorf("SourceAt(%d) = %v, want ErrNoRev", r, err)
+		}
+	}
+	if _, _, err := s.Apply(14, &Op{Kind: "archive", ID: "aaaaaaaa"}); !errors.Is(err, ErrStale) {
+		t.Errorf("an op at a pruned revision: err = %v, want ErrStale", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "pages", ID(path), "revs", "3.html"), []byte("left over"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(home, path, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := revs(); !slices.Equal(got, want) {
+		t.Fatalf("after a reopen revs = %v, want %v", got, want)
+	}
+
+	mustApply(t, s, &Op{Kind: "undo"})
+	mustApply(t, s, &Op{Kind: "undo"})
+	if got := onDisk(t, path); got != beforeH2 {
+		t.Fatalf("two undos across the pruned range =\n%s\nwant\n%s", got, beforeH2)
+	}
+	if _, _, err := s.Apply(36, &Op{Kind: "undo"}); !errors.Is(err, ErrUndoConflict) {
+		t.Fatalf("undo of h1 past the agent's edits: err = %v, want ErrUndoConflict", err)
+	}
+	if got := revs(); !slices.Contains(got, 1) || !slices.Contains(got, 2) {
+		t.Fatalf("revs = %v, want 1 and 2 kept while h1 is still on the undo stack", got)
 	}
 }
 
