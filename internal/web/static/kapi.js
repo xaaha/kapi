@@ -1051,7 +1051,7 @@
       if (!res || res.ok) {
         if (res) {
           main.dataset.rev = res.data.rev;
-          if (res.data.seq) ownSeqs.add(res.data.seq);
+          if (res.data.seq || res.data.deferred) ownRevs.add(Number(res.data.rev));
           showUndo(res.data.undo);
         }
         return res;
@@ -2537,11 +2537,11 @@
 
   let heldRevisions = [];
   let opsInFlight = 0;
-  const ownSeqs = new Set();
+  const ownRevs = new Set();
 
   function onRevision(ev) {
     if (opsInFlight) return void heldRevisions.push(ev);
-    if (ownSeqs.delete(ev.seq)) return;
+    if (ownRevs.delete(ev.rev)) return;
     schedule(ev.target ? ev.target.split(",").map((s) => s.trim()).filter(Boolean) : null);
   }
 

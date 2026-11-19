@@ -60,9 +60,10 @@ type Op struct {
 }
 
 type Summary struct {
-	Text string
-	IDs  []string
-	Seq  uint64
+	Text     string
+	IDs      []string
+	Seq      uint64
+	Deferred bool
 }
 
 type Store struct {
@@ -77,11 +78,12 @@ type Store struct {
 	conversion string
 	held       []heldFile
 
-	log    *eventlog.Log
-	event  *revEvent
-	logged uint64
-	fixed  *repairs
-	noted  uint64
+	log        *eventlog.Log
+	event      *revEvent
+	logged     uint64
+	deferUntil time.Time
+	fixed      *repairs
+	noted      uint64
 
 	viewed, touched, archived, released time.Time
 	saved                               bool
@@ -121,6 +123,8 @@ type revEvent struct {
 	Text    string   `json:"text"`
 	IDs     []string `json:"ids,omitempty"`
 	Changed []string `json:"changed,omitempty"`
+
+	deferred, amends bool
 }
 
 type heldFile struct {
@@ -143,6 +147,10 @@ type fileStamp struct {
 }
 
 const heldFor = 10 * time.Second
+
+const typingPause = 2 * time.Second
+
+const keepRevs = 20
 
 var clock = time.Now
 
@@ -214,6 +222,9 @@ func Open(home, path string, l *eventlog.Log) (*Store, error) {
 		if err := s.saveState(&state{Rev: s.rev, Undo: s.undo}); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.pruneAll(); err != nil {
+		return nil, err
 	}
 	if err := s.recoverSwapBacks(); err != nil {
 		return nil, err
@@ -592,9 +603,11 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 		sum := Summary{Text: "undid back to revision " + strconv.FormatUint(back, 10)}
 		ends := maps.Clone(s.ends)
 		delete(ends, back)
+		end := s.undoEnd(back)
 		if sum.Seq, err = s.commit(src, raw, s.rev+1, s.undo[:n-1], ends, &revEvent{Author: "human", Text: sum.Text}); err != nil {
 			return s.rev, Summary{}, stale(err)
 		}
+		s.prune(keepRevs, back, end)
 		return s.rev, sum, nil
 	}
 	if op.Kind == "image" || op.Kind == "gallery" {
@@ -641,7 +654,8 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 		return s.rev, Summary{}, nil
 	}
 	undo, ends := s.undo, s.ends
-	if s.amends(author, op) {
+	amend := s.amends(author, op)
+	if amend {
 		ends = maps.Clone(s.ends)
 		if ends == nil {
 			ends = map[uint64]uint64{}
@@ -650,9 +664,14 @@ func (s *Store) ApplyBy(author string, rev uint64, op *Op) (uint64, Summary, err
 	} else if author == "human" {
 		undo = append(undo, s.rev)
 	}
-	if sum.Seq, err = s.commit(src, raw, s.rev+1, undo, ends, &revEvent{Author: author, Text: sum.Text, IDs: sum.IDs}); err != nil {
+	ev := &revEvent{Author: author, Text: sum.Text, IDs: sum.IDs, deferred: author == "human" && op.Kind == "text", amends: amend}
+	if sum.Seq, err = s.commit(src, raw, s.rev+1, undo, ends, ev); err != nil {
 		return s.rev, Summary{}, stale(err)
 	}
+	if amend {
+		s.prune(0, op.Amend)
+	}
+	sum.Deferred = ev.deferred
 	return s.rev, sum, nil
 }
 
@@ -720,6 +739,12 @@ var (
 )
 
 func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ends map[uint64]uint64, ev *revEvent) (uint64, error) {
+	if ev == nil || !ev.amends {
+		s.deferUntil = time.Time{}
+		if _, err := s.logEvent(); err != nil {
+			return 0, err
+		}
+	}
 	fixed, err := newRepairs(s.src, src, rev)
 	if err != nil {
 		return 0, err
@@ -783,10 +808,79 @@ func (s *Store) commit(src, base []byte, rev uint64, undo []uint64, ends map[uin
 		s.archived = time.Time{}
 	}
 	s.src, s.rev, s.undo, s.ends, s.event, s.fixed = src, rev, undo, ends, ev, fixed
+	if ev != nil && ev.deferred {
+		s.deferUntil = clock().Add(typingPause)
+	}
 	if err := s.saveState(&next); err != nil {
 		return 0, err
 	}
+	s.prune(keepRevs, rev-min(rev, keepRevs))
 	return s.logEvent()
+}
+
+func (s *Store) pruneAll() error {
+	entries, err := os.ReadDir(filepath.Join(s.dir, "revs"))
+	if err != nil {
+		return err
+	}
+	revs := make([]uint64, 0, len(entries))
+	for _, e := range entries {
+		if r, err := strconv.ParseUint(strings.TrimSuffix(e.Name(), ".html"), 10, 64); err == nil {
+			revs = append(revs, r)
+		}
+	}
+	s.prune(keepRevs, revs...)
+	return nil
+}
+
+func (s *Store) prune(window uint64, revs ...uint64) {
+	var needed map[uint64]bool
+	for _, r := range revs {
+		if r == 0 || r+window > s.rev || r == s.rev {
+			continue
+		}
+		if _, err := os.Lstat(s.revPath(r)); err != nil {
+			continue
+		}
+		if needed == nil {
+			needed = s.neededRevs()
+		}
+		if !needed[r] {
+			os.Remove(s.revPath(r))
+		}
+	}
+}
+
+func (s *Store) neededRevs() map[uint64]bool {
+	needed := map[uint64]bool{}
+	for _, back := range s.undo {
+		needed[back], needed[s.undoEnd(back)] = true, true
+	}
+	events, _ := s.log.After(0)
+	root, open := map[uint64]uint64{}, map[uint64]uint64{}
+	for i := range events {
+		switch e := &events[i]; {
+		case e.Kind == eventlog.KindNote && len(e.Re) == 0 && e.Author == "human":
+			root[e.Seq], open[e.Seq] = e.Seq, e.Rev
+		case e.Kind == eventlog.KindNote:
+			for _, re := range e.Re {
+				if r, ok := root[re]; ok {
+					root[e.Seq] = r
+					break
+				}
+			}
+		case e.Kind == eventlog.KindResolve || e.Kind == eventlog.KindDeleteNotes:
+			for _, re := range e.Re {
+				if r, ok := root[re]; ok {
+					delete(open, r)
+				}
+			}
+		}
+	}
+	for _, rev := range open {
+		needed[rev] = true
+	}
+	return needed
 }
 
 func newRepairs(old, cur []byte, rev uint64) (*repairs, error) {
@@ -818,7 +912,7 @@ func newRepairs(old, cur []byte, rev uint64) (*repairs, error) {
 
 func (s *Store) logEvent() (uint64, error) {
 	var seq uint64
-	if s.event != nil && s.event.Rev > s.logged {
+	if s.event != nil && s.event.Rev > s.logged && !clock().Before(s.deferUntil) {
 		e, err := appendEvent(s.log, &eventlog.Event{Author: s.event.Author, Kind: "revision", Rev: s.event.Rev, Target: strings.Join(s.event.IDs, ","), Changed: strings.Join(s.event.Changed, ","), Text: s.event.Text})
 		if err != nil {
 			return 0, err
@@ -897,6 +991,10 @@ func (s *Store) Retire() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.checkHeld(true); err != nil {
+		return err
+	}
+	s.deferUntil = time.Time{}
+	if _, err := s.logEvent(); err != nil {
 		return err
 	}
 	s.gone = ErrRetired

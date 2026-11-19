@@ -676,6 +676,23 @@ test("one typing session is one undo step, so Undo takes back the whole session"
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').dataset.kapiState`), "archived", "the archive before the session stays");
 });
 
+test("a typing session logs one revision after typing pauses, and the tab does not refetch its own text", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  for (const [word, n] of [[" One", 1], [" two", 2]]) {
+    await page.type(word);
+    await until(() => requests("POST", "/ops").length === n, 2500);
+  }
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => server.state.events.some((e) => e.kind === "revision"), 4000);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(server.state.events.filter((e) => e.kind === "revision").map((e) => e.rev), [3]);
+  assert.equal(requests("GET", "/blocks/bbbbbbbb").length, 1, "only the refresh on leaving");
+});
+
 test("Escape stops typing, keeps the text and saves it, and leaves the block selected with its toolbar", async () => {
   await select("aaaaaaaa");
   await editSelected();
@@ -854,7 +871,7 @@ test("W widens a selected table into the margins and W again puts it back in the
 test("a plain prose table gets the same wrapper and expansion as kapi-table", async () => {
   const original = server.state.blocks.find((block) => block.id === "gggggggg").html;
   server.agentEdit("gggggggg", '<table data-kapi-id="gggggggg" data-kapi-text="gggggggg"><thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody></table>');
-  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]')`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]') && document.querySelector('[data-kapi-id="gggggggg"] th')?.textContent === "Screen"`);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] > table')?.hasAttribute("data-kapi-id")`), false);
   const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
   await select("gggggggg");
