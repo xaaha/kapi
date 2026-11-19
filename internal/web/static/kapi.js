@@ -212,14 +212,7 @@
   };
   const pagePath = main.dataset.path || "";
   const pageName = pagePath.split(/[\\/]/).pop() || document.title;
-  const writeKey = `kapi-write:${base.split("/").pop()}`;
-  let writing = false;
-  try {
-    writing = localStorage.getItem(writeKey) === "true";
-  } catch {}
   let leaving = null;
-  const writeButton = h("button", { type: "button", class: "kapi-write-button", "aria-keyshortcuts": keyWords("toggleWrite"), onclick: () => setWriting(!writing) }, icon("pencil"));
-  syncWriting();
   const menuButton = h("button", { type: "button", class: "kapi-menu-button", "aria-label": "Page menu", title: "Page menu", "aria-haspopup": "menu", "aria-expanded": "false" }, icon("dots"));
   const EXPORTS = [
     { glyph: "download", label: "HTML", run: () => exportFile("html", () => pageName) },
@@ -272,6 +265,8 @@
     restartBox, notice, chat, notesView,
     h("div", { class: "kapi-presence", role: "status" }, dot, statusText), bar, strip, queueBox, composer);
   const ring = h("div", { class: "kapi-ring", hidden: "" });
+  const saveState = h("span", { class: "kapi-save-state", role: "status", hidden: "" });
+  const copyTyped = h("button", { type: "button", class: "kapi-link", text: "Copy text", onclick: () => copyEdit() });
   const copyButton = h("button", { type: "button", class: "kapi-copy-code", "aria-label": "Copy code", "data-tip": "Copy", hidden: "" }, icon("copy"));
   const tableFrame = h("div", { class: "kapi-table-frame", title: "Select the whole table", hidden: "" });
   const chatButton = h("button", { type: "button", class: "kapi-chat-button", "aria-label": "Chat", "aria-pressed": "true", "aria-keyshortcuts": keyWords("toggleChat"), "data-tip": `Chat ${keyHint("toggleChat")}`, onclick: () => setPanelCollapsed(!panelIsCollapsed()) }, icon("chat"), h("span", { class: "kapi-action-label", text: "Chat" }));
@@ -279,7 +274,7 @@
     setPanelCollapsed(true);
     setOutline(false);
   } });
-  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, panel, outlineView, drawerScrim, copyButton, tableFrame, backChip);
+  const root = h("div", { id: "kapi-chrome" }, pins, rail, ring, saveState, panel, outlineView, drawerScrim, copyButton, tableFrame, backChip);
   const phone = matchMedia("(max-width: 760px)");
   // Each page starts conversational; panel state does not leak between pages.
   let panelCollapsed = false;
@@ -361,9 +356,8 @@
       h("a", { href: homeURL, text: "All notes" }), icon("caret"), pageTitle),
     h("div", { class: "kapi-panel-head kapi-site-actions" }, undoButton, searchButton, chatButton, menuButton, menu));
   const outlineTools = h("div", { class: "kapi-page-tools kapi-outline-tools" }, outlineButton);
-  const writeTools = h("div", { class: "kapi-page-tools kapi-write-tools" }, writeButton);
   root.prepend(siteHead);
-  root.append(outlineTools, writeTools);
+  root.append(outlineTools);
   main.before(root);
 
   const typing = (el) => !!el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -528,21 +522,13 @@
   }
 
   function renderBar() {
-    writeButton.toggleAttribute("data-editing", !!editing);
     markPicked();
     const text = !editing && !!textRange;
-    if (asking || (!text && (!selected || !selected.isConnected))) {
+    if (editing || asking || (!text && (!selected || !selected.isConnected))) {
       bar.hidden = true;
       return placeRing();
     }
-    if (editing) {
-      const changed = !!editing.op();
-      const primary = changed ? button("Save", "save", `Save (${keyWords("submit")})`) : button("Cancel", "cancel", `Cancel (${keyWords("submit")} or ${keyWords("dismiss")})`);
-      primary.classList.add("kapi-primary");
-      primary.append(h("span", { class: "kapi-key", text: ` ${keyHint("submit")}` }));
-      bar.replaceChildren(primary,
-        ...(changed ? [button("Cancel", "cancel", `Cancel (${keyWords("dismiss")})`)] : []));
-    } else if (text) {
+    if (text) {
       bar.replaceChildren(tool("android", "Ask AI", "ask"));
     } else {
       const archived = selected.getAttribute("data-kapi-state") === "archived";
@@ -554,7 +540,7 @@
       const diagram = !archived && selected.matches('[data-kapi-preset="diagram"]') && selected.querySelector(":scope > svg");
       const part = targetLabel();
       const tools = [tool("android", "Ask AI", "ask"), tool("copy", singleImage({}) ? "Copy image" : `Copy${part} as Markdown`, "copy"), ...(archived ? [tool("unarchive", `Unarchive${part}`, "unarchive")] : [
-        ...(phone.matches ? [tool("pencil", "Edit", "edit")] : []),
+        ...(editable(selected) ? [tool("pencil", "Edit", "edit")] : []),
         ...(preview ? [tool("expand", "Open image", "preview")] : []),
         ...(picture ? [tool("download", "Download", "download")] : []),
         ...(diagram ? [iconTool("minus", "Zoom out", "zoom-out"), iconTool("plus", "Zoom in", "zoom-in")] : []),
@@ -655,7 +641,7 @@
   function placeRing() {
     placeBar();
     placeFrame();
-    ring.hidden = (bar.hidden && !asking) || !selected || !!editing?.area;
+    ring.hidden = (bar.hidden && !asking && !editing) || !selected || !!editing?.area;
     if (!ring.hidden) {
       const r = selected.getBoundingClientRect();
       const table = tables.matches(selected);
@@ -669,6 +655,18 @@
       ring.toggleAttribute("data-editing", !!editing);
       if (editing) ring.removeAttribute("data-flash");
     }
+    placeSaveState();
+  }
+
+  function placeSaveState() {
+    saveState.hidden = !editing?.status;
+    if (saveState.hidden) return;
+    const stuck = editing.refused && editing.status === "Not saved";
+    saveState.replaceChildren(stuck ? "Not saved. Esc discards" : editing.status, ...(stuck ? [copyTyped] : []));
+    saveState.dataset.state = { Saving: "saving", Saved: "saved" }[editing.status] || "failed";
+    const r = (editing.box || editing.el).getBoundingClientRect();
+    saveState.style.left = `${r.right + 4 - saveState.offsetWidth}px`;
+    saveState.style.top = `${r.top - 8 - saveState.offsetHeight}px`;
   }
 
   let stream = null;
@@ -1041,7 +1039,8 @@
   }
 
   const STALE = "The page changed before your change landed. This is the latest version, so try again.";
-  const STALE_EDIT = "The page changed while you were editing. Your text is still here: save again to replace the newer version, or press Escape to discard yours.";
+  const STALE_EDIT = "The page changed while you were typing. Your text is still here, and it replaces the newer version when it saves again.";
+  const AUTOSAVE_MS = 1000;
 
   async function op(kind, fields = {}, { rev = Number(main.dataset.rev), stale = STALE } = {}) {
     notice.hidden = true;
@@ -1133,12 +1132,14 @@
       host.contentEditable = host.dataset.kapiAttr ? "plaintext-only" : "true";
       for (const island of islandsOf(host)) island.contentEditable = "false";
     }
-    const parts = hosts.map((host) => ({ host, original: host.innerHTML, own: ownText(host) }));
+    const parts = hosts.map((host) => ({ host, own: ownText(host) }));
     const op = () => {
       const changed = parts.filter(({ host, own }) => ownText(host) !== own);
       return changed.length ? { kind: "text", parts: changed.map(({ host }) => ({ ...partOf(host), inner: innerOf(host) })) } : null;
     };
-    editing = { el, rev: Number(main.dataset.rev), hosts: parts, op };
+    const snap = () => parts.map(({ host }) => ownText(host));
+    const mark = (sent) => parts.forEach((p, i) => (p.own = sent[i]));
+    editing = session({ el, rev: Number(main.dataset.rev), hosts: parts, op, snap, mark });
     if (at) caretAt(at);
     else caretAtEnd(hosts[0]);
     renderBar();
@@ -1181,60 +1182,74 @@
     el.before(box);
     el.setAttribute("data-kapi-editing-source", "");
     const id = el.dataset.kapiText;
-    editing = { el, area, box, rev, op: () => (area.value === src ? null : { kind: "text", parts: [{ id, inner: area.value }] }) };
+    let saved = src;
+    editing = session({ el, area, box, rev, op: () => (area.value === saved ? null : { kind: "text", parts: [{ id, inner: area.value }] }), snap: () => area.value, mark: (sent) => (saved = sent) });
     area.focus();
     renderBar();
   }
 
   function startEdit(at) {
-    if (!selected || editing || busy) return;
+    if (!selected || editing || busy || archived(selected)) return;
     notice.hidden = true;
     dismissNote();
     const raw = selected.hasAttribute("data-kapi-raw");
     const hosts = raw ? [] : partsOf(selected);
     if (!raw && !hosts.length) return say("This block has no text to edit here. Ask the agent to change it.");
-    if (!writing) setWriting(true);
     if (raw) return editRaw(selected);
     editInPlace(selected, hosts, at);
   }
 
-  function setWriting(on) {
-    writing = on;
-    try {
-      localStorage.setItem(writeKey, String(on));
-    } catch {}
-    syncWriting();
-    if (!on && editing) defaultAction();
+  const archived = (el) => el.getAttribute("data-kapi-state") === "archived";
+
+  function editable(el) {
+    return !archived(el) && (el.hasAttribute("data-kapi-raw") || partsOf(el).length > 0);
   }
 
-  function syncWriting() {
-    writeButton.setAttribute("aria-pressed", String(writing));
-    writeButton.setAttribute("aria-label", "Edit mode");
-    writeButton.dataset.tip = `Edit mode: ${writing ? "on" : "off"} ${keyHint("toggleWrite")}`;
-    document.documentElement.toggleAttribute("data-kapi-writing", writing);
+  function session(fields) {
+    return { ...fields, amend: 0, saved: false, refused: false, status: "", timer: 0, saving: Promise.resolve(true) };
   }
 
   function writeTarget(el, e) {
-    if (!writing || e.metaKey || e.ctrlKey || !getSelection().isCollapsed || el.hasAttribute("data-kapi-raw") || closest(e.target, `${SOLID}, summary, label`)) return null;
+    if (e.metaKey || e.ctrlKey || !getSelection().isCollapsed || archived(el) || el.hasAttribute("data-kapi-raw") || closest(e.target, `${SOLID}, summary, label`)) return null;
     const host = partsOf(el).findLast((n) => n.contains(e.target));
     if (!host) return null;
     e.preventDefault();
     return { host, x: e.clientX, y: e.clientY };
   }
 
-  function leaveEdit() {
-    if (!editing.op()) return endEdit(false);
-    leaving = saveEdit().finally(() => (leaving = null));
+  function typed() {
+    const s = editing;
+    clearTimeout(s.timer);
+    s.refused = false;
+    s.status = s.op() ? "Saving" : s.saved ? "Saved" : "";
+    s.timer = setTimeout(() => saveEdit(s), AUTOSAVE_MS);
+    placeSaveState();
   }
 
-  function endEdit(restore) {
-    const { el, area, box, hosts } = editing;
+  function leaveEdit() {
+    if (leaving) return leaving;
+    const s = editing;
+    leaving = (s.refused ? Promise.resolve(true) : saveEdit(s, true)).then((ok) => {
+      if (!ok || editing !== s) return;
+      endEdit();
+      if (s.saved || s.refused) return refresh([idOf(s.el)]);
+    }).finally(() => (leaving = null));
+    return leaving;
+  }
+
+  function copyEdit() {
+    const text = editing.area ? editing.area.value : editing.hosts.map(({ host }) => host.innerText).join("\n");
+    navigator.clipboard.writeText(text).then(() => (copyTyped.textContent = "Copied"), () => (copyTyped.textContent = "Copy failed"));
+  }
+
+  function endEdit() {
+    const { el, area, box, hosts, timer } = editing;
+    clearTimeout(timer);
     if (area) {
       box.remove();
       el.removeAttribute("data-kapi-editing-source");
     }
-    for (const { host, original } of hosts || []) {
-      if (restore) host.innerHTML = original;
+    for (const { host } of hosts || []) {
       host.removeAttribute("contenteditable");
       for (const n of host.querySelectorAll("[contenteditable]")) n.removeAttribute("contenteditable");
     }
@@ -1243,25 +1258,37 @@
     if (pending) scheduleFlush();
   }
 
-  function cancelEdit() {
-    if (editing && !busy) endEdit(true);
+  function saveEdit(s, all = false) {
+    clearTimeout(s.timer);
+    s.saving = s.saving.then(() => sendEdit(s, all));
+    return s.saving;
   }
 
-  async function saveEdit() {
-    if (!editing || busy) return;
-    const session = editing;
-    const change = session.op();
-    if (!change) return endEdit(false);
-    const id = idOf(session.el);
-    const { kind, ...fields } = change;
-    const res = await op(kind, { id, ...fields }, { rev: session.rev, stale: STALE_EDIT });
-    if (editing !== session) return;
-    if (res?.ok) {
-      endEdit(false);
-      await refresh([id]);
-    } else if (res?.status === 409) {
-      session.rev = res.data.rev;
+  async function sendEdit(s, all) {
+    let ok = true;
+    for (let change = s.op(); change && editing === s; change = all && ok ? s.op() : null) {
+      const sent = s.snap();
+      s.status = "Saving";
+      placeSaveState();
+      const { kind, ...fields } = change;
+      const res = await op(kind, { id: idOf(s.el), ...fields, ...(s.amend && { amend: s.amend }) }, { rev: s.rev, stale: STALE_EDIT });
+      ok = !!res?.ok;
+      s.refused = !!res && !ok && res.status !== 409;
+      if (s.refused) copyTyped.textContent = "Copy text";
+      if (ok) {
+        const rev = Number(res.data.rev);
+        if (rev !== s.rev) s.amend = rev;
+        s.rev = rev;
+        s.saved = true;
+        s.mark(sent);
+      } else if (res?.status === 409) {
+        s.rev = Number(res.data.rev);
+        s.amend = 0;
+      }
     }
+    s.status = !ok ? "Not saved" : s.op() ? "Saving" : s.saved ? "Saved" : "";
+    if (editing === s) placeSaveState();
+    return ok;
   }
 
   async function action(name) {
@@ -1274,8 +1301,6 @@
       await refresh(null);
       return dismissNote();
     }
-    if (name === "save") return saveEdit();
-    if (name === "cancel") return cancelEdit();
     if (name === "ask") return openAsk();
     return scopedAction(name)?.();
   }
@@ -3243,12 +3268,7 @@
       const link = closest(e.target, "a[href]");
       if (link?.isContentEditable && (e.metaKey || e.ctrlKey)) open(link.href, "_blank", "noopener");
       const next = leaving && closest(e.target, BLOCK);
-      const at = next && main.contains(next) && !next.contains(editing.el) && writeTarget(next, e);
-      if (at) leaving.then(() => {
-        if (editing || !at.host.isConnected) return;
-        select(next);
-        startEdit(at);
-      });
+      if (next && main.contains(next) && !next.contains(editing.el)) leaving.then(() => !editing && next.isConnected && select(next));
       return;
     }
     const heading = e.target.parentElement === main && levelOf(e.target) ? e.target : null;
@@ -3257,15 +3277,16 @@
     const pill = closest(e.target, ".kapi-code-lang");
     const pillPre = pill && main.contains(pill) && pill.closest("figure")?.querySelector("pre");
     if (pillPre) return copyCode(pillPre, pillNotice(pill));
-    tables.handleClick(e, selected, lastPoint);
+    const sorted = tables.handleClick(e, selected, lastPoint);
     const el = closest(e.target, BLOCK);
     if (!el || !main.contains(el)) return;
+    const again = el === selected && !sorted && (lastPoint?.el !== el || lastPoint.cell === closest(e.target, "td, th"));
     if (e.isTrusted) {
       const r = el.getBoundingClientRect();
       lastPoint = { el, dx: e.clientX - r.left, dy: e.clientY - r.top, cell: closest(e.target, "td, th") };
     } else lastPoint = null;
     select(el);
-    const at = writeTarget(el, e);
+    const at = again && writeTarget(el, e);
     if (at) startEdit(at);
   });
 
@@ -3285,9 +3306,9 @@
     if (!pointerDown) trackSelection();
   });
   document.addEventListener("pointerdown", (e) => {
-    if (editing && !busy && e.button === 0) {
+    if (editing && e.button === 0) {
       const path = e.composedPath();
-      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(bar) || path.includes(outlineTools) || path.includes(writeTools);
+      const inside = path.includes(editing.el) || (editing.box && path.includes(editing.box)) || path.includes(outlineTools) || path.includes(saveState);
       if (!inside) leaveEdit();
     }
     pointerDown = e.button === 0 && !root.contains(e.target);
@@ -3309,14 +3330,17 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (editing || !selected || !getSelection().isCollapsed) return;
+    if (!selected || !getSelection().isCollapsed) return;
     // A click can re-render the toolbar before it bubbles here, so e.target may already be detached.
     if (e.composedPath().some((n) => n === root || (n instanceof Element && n.matches(BLOCK)))) return;
-    select(null);
+    if (editing) leaving?.then(() => !editing && select(null));
+    else select(null);
   });
 
   main.addEventListener("dblclick", (e) => {
-    if (!editing && closest(e.target, BLOCK) === selected) startEdit();
+    if (editing || closest(e.target, BLOCK) !== selected) return;
+    getSelection().removeAllRanges();
+    startEdit(writeTarget(selected, e));
   });
 
   main.addEventListener("change", async (e) => {
@@ -3354,13 +3378,8 @@
     if (unifiedSearch.isOpen()) return;
     const focus = document.activeElement;
     const inContent = !!editing && (focus === editing.area || !!editing.hosts?.some(({ host }) => host.contains(focus)));
-    const inEditor = inContent || (!!editing && bar.contains(focus));
     const singleLine = inContent && !!editing.hosts?.filter(({ host }) => host.contains(focus)).at(-1)?.host.matches(SINGLE_LINE);
-    const free = !editing && !asking && !typing(focus) && !e.isComposing && e.keyCode !== 229 && !e.altKey;
-    if (SHORTCUTS.is("toggleWrite", e) && !asking && !e.isComposing && (inContent || !typing(focus))) {
-      e.preventDefault();
-      return setWriting(!writing);
-    }
+    const free = !editing && !asking && !typing(focus) && !e.defaultPrevented && !e.isComposing && e.keyCode !== 229 && !e.altKey;
     if (SHORTCUTS.is("toggleOutline", e) && !asking && !e.altKey && !e.isComposing) {
       e.preventDefault();
       return setOutline(!outlineShown());
@@ -3386,7 +3405,8 @@
       }
       if ((textRange || selected) && !bar.hidden) {
         const owner = [...bar.querySelectorAll("[data-action]")].find((b) => SHORTCUTS.isTool(b.dataset.action, e));
-        if (owner && !owner.disabled) {
+        const pressing = SHORTCUTS.is("activate", e) && focus.matches("button, a[href], summary");
+        if (owner && !owner.disabled && !pressing) {
           e.preventDefault();
           return action(owner.dataset.action);
         }
@@ -3412,28 +3432,20 @@
     }
     if (SHORTCUTS.is("dismiss", e)) {
       dismissNote();
-      if (inEditor || (editing && !panel.contains(focus))) cancelEdit();
+      if (editing && !panel.contains(focus)) leaveEdit();
       else if (panel.contains(focus)) focus.blur();
       else if (!notice.hidden) notice.hidden = true;
       else if (!editing) select(null);
       return;
     }
-    if (!inEditor || e.isComposing || e.keyCode === 229) return;
+    if (!inContent || e.isComposing || e.keyCode === 229) return;
     if (SHORTCUTS.is("newLine", e) && singleLine) {
       e.preventDefault();
     } else if (SHORTCUTS.is("submit", e) || (SHORTCUTS.is("send", e) && singleLine)) {
       e.preventDefault();
-      defaultAction();
-    } else if (SHORTCUTS.is("nextField", e) && inContent) {
-      e.preventDefault();
-      bar.querySelector(".kapi-primary")?.focus();
+      leaveEdit();
     }
   });
-
-  function defaultAction() {
-    if (editing?.op()) saveEdit();
-    else cancelEdit();
-  }
 
   addEventListener("scroll", placeRing, { passive: true });
   addEventListener("scroll", placeAsk, { passive: true });
@@ -3493,8 +3505,10 @@
   }
 
   document.addEventListener("input", (e) => {
-    if (editing?.hosts?.some(({ host }) => host.isContentEditable && host.contains(e.target))) backtickToCode(e);
-    return editing ? renderBar() : placeRing();
+    const inHost = editing?.hosts?.some(({ host }) => host.isContentEditable && host.contains(e.target));
+    if (inHost) backtickToCode(e);
+    if (inHost || (editing && e.target === editing.area)) typed();
+    placeRing();
   });
   new ResizeObserver(placeRing).observe(main);
   new ResizeObserver(() => {

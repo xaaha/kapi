@@ -98,7 +98,7 @@ window.kapiCreateMedia = ({ main, icon, shortcuts }) => {
   next.addEventListener("click", () => step(1));
   scrim.addEventListener("click", closeViewer);
   const editable = (img) => !!img.closest('[contenteditable=""], [contenteditable="true"]');
-  const opensOnClick = (img) => main.contains(img) && !editable(img) && !document.documentElement.hasAttribute("data-kapi-writing");
+  const opensOnClick = (img) => main.contains(img) && !editable(img);
   document.addEventListener("keydown", (event) => {
     if (!isOpen()) {
       const img = closest(document.activeElement, cellImage);

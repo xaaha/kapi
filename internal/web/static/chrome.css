@@ -213,7 +213,33 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 #kapi-chrome .kapi-ring[data-editing] {
-  background: color-mix(in srgb, var(--kapi-blue-text) 6%, transparent);
+  box-shadow: 0 0 0 1px var(--kapi-border-strong);
+}
+
+#kapi-chrome .kapi-save-state {
+  position: fixed;
+  z-index: 2147483000;
+  padding: 1px 10px;
+  border: 1px solid var(--kapi-border);
+  border-radius: var(--kapi-radius-lg);
+  background: var(--kapi-surface);
+  color: var(--kapi-muted);
+  font: 12px/1.6 var(--kapi-font);
+  pointer-events: none;
+}
+
+#kapi-chrome .kapi-save-state button {
+  margin-left: 8px;
+  pointer-events: auto;
+}
+
+#kapi-chrome .kapi-save-state[data-state="saved"] {
+  color: var(--kapi-green-text);
+}
+
+#kapi-chrome .kapi-save-state[data-state="failed"] {
+  border-color: var(--kapi-red-border);
+  color: var(--kapi-red-text);
 }
 
 #kapi-chrome .kapi-bar {
@@ -375,7 +401,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
     --kapi-chat-gutter: max(24px, calc((100% - 720px) / 2));
   }
 
-  #kapi-chrome[data-panel-expanded] :is(.kapi-outline-tools, .kapi-write-tools, .kapi-pins, .kapi-rail) { visibility: hidden; }
+  #kapi-chrome[data-panel-expanded] :is(.kapi-outline-tools, .kapi-pins, .kapi-rail) { visibility: hidden; }
 
   #kapi-chrome[data-panel-expanded] .kapi-chat-head {
     justify-content: flex-start;
@@ -590,7 +616,6 @@ html { scroll-padding-top: var(--kapi-header-height); }
   .kapi-current-title { max-width: 130px; }
   #kapi-chrome .kapi-site-actions { gap: 0; flex: none; }
   #kapi-chrome .kapi-site-actions > button:is(.kapi-search-button, .kapi-outline-button, .kapi-chat-button) { width: 32px; min-width: 32px; padding: 6px; justify-content: center; }
-  #kapi-chrome .kapi-site-actions .kapi-write-button,
   #kapi-chrome .kapi-site-actions .kapi-menu-button { width: 32px; }
 }
 
@@ -641,7 +666,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
 }
 
 
-#kapi-chrome .kapi-panel-head :is(.kapi-search-button, .kapi-write-button, .kapi-outline-button) {
+#kapi-chrome .kapi-panel-head :is(.kapi-search-button, .kapi-outline-button) {
   position: relative;
   display: inline-flex;
   flex: none;
@@ -683,7 +708,7 @@ html { scroll-padding-top: var(--kapi-header-height); }
   background: var(--kapi-blue-text);
 }
 
-#kapi-chrome :is(.kapi-search-button, .kapi-write-button, .kapi-outline-button) svg {
+#kapi-chrome :is(.kapi-search-button, .kapi-outline-button) svg {
   display: block;
   width: 16px;
   height: 16px;
@@ -2754,7 +2779,8 @@ html { scroll-padding-top: var(--kapi-header-height); }
   }
 }
 
-html[data-kapi-writing] #kapi-page [data-kapi-text]:not([data-kapi-raw]) {
+#kapi-page [data-kapi-selected][data-kapi-text]:not([data-kapi-raw]),
+#kapi-page [data-kapi-selected] [data-kapi-text]:not([data-kapi-raw]) {
   cursor: text;
 }
 
@@ -2795,10 +2821,6 @@ html[data-kapi-head-hidden] {
   left: max(min(20px, calc(var(--kapi-page-left) - 40px)), 8px);
 }
 
-#kapi-chrome .kapi-write-tools {
-  left: min(max(calc(100% - var(--kapi-panel-gutter) - 56px), calc(var(--kapi-page-right) + 4px)), calc(100% - var(--kapi-panel-gutter) - 44px));
-}
-
 html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   display: none;
 }
@@ -2815,47 +2837,6 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   border-radius: var(--kapi-radius-sm);
   background: var(--kapi-bg);
   color: var(--kapi-muted);
-}
-
-#kapi-chrome .kapi-page-tools > .kapi-write-button[aria-pressed="true"] {
-  background: var(--kapi-blue-fill);
-  color: var(--kapi-blue-text);
-}
-
-#kapi-chrome .kapi-write-button[data-editing] svg {
-  transform-origin: 20% 80%;
-  animation: kapi-writing 0.9s ease-in-out infinite;
-}
-
-@keyframes kapi-writing {
-  0%, 100% { transform: translate(0, 0) rotate(0); }
-  25% { transform: translate(1.5px, 1px) rotate(-10deg); }
-  50% { transform: translate(3px, 0) rotate(0); }
-  75% { transform: translate(1.5px, 1px) rotate(-10deg); }
-}
-
-#kapi-chrome .kapi-write-button[data-editing]::before {
-  content: "";
-  position: absolute;
-  left: 9px;
-  bottom: 8px;
-  width: 11px;
-  height: 1.5px;
-  border-radius: var(--kapi-radius-xs);
-  background: currentColor;
-  transform-origin: left center;
-  animation: kapi-stroke 0.9s ease-in-out infinite;
-}
-
-@keyframes kapi-stroke {
-  0% { transform: scaleX(0.15); opacity: 0.4; }
-  60% { transform: scaleX(1); opacity: 1; }
-  100% { transform: scaleX(1); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #kapi-chrome .kapi-write-button[data-editing] svg,
-  #kapi-chrome .kapi-write-button[data-editing]::before { animation: none; }
 }
 
 #kapi-chrome .kapi-page-tools > button:hover {
@@ -2883,19 +2864,12 @@ html[data-kapi-outline-open] #kapi-chrome .kapi-outline-tools {
   pointer-events: none;
 }
 
-#kapi-chrome .kapi-write-tools > button[data-tip]:is(:hover, :focus-visible)::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 @media (max-width: 760px) {
   #kapi-chrome .kapi-page-tools {
     top: auto;
     bottom: calc(16px + var(--kapi-bar-space) + env(safe-area-inset-bottom));
   }
-  #kapi-chrome .kapi-write-tools { left: auto; right: 16px; }
-  #kapi-chrome .kapi-outline-tools { left: auto; right: 68px; }
+  #kapi-chrome .kapi-outline-tools { left: auto; right: 16px; }
   #kapi-chrome .kapi-page-tools > button { width: 44px; height: 44px; box-shadow: var(--kapi-shadow); }
   #kapi-chrome .kapi-page-tools { transition: transform 0.2s ease; }
   html[data-kapi-head-hidden] #kapi-chrome .kapi-page-tools { transform: translateY(calc(100% + 32px)); }
