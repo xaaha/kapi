@@ -33,7 +33,16 @@ const requests = (method, suffix) =>
   server.state.requests.filter((r) => r.method === method && r.path.endsWith(suffix));
 const pageLoads = () => requests("GET", new URL(server.url).pathname).length;
 const click = (selector) => page.eval(`document.querySelector(${JSON.stringify(selector)}).click()`);
-const select = (id) => page.eval(`(b => b.hasAttribute("data-kapi-selected") || b.click())(document.querySelector('[data-kapi-id="${id}"]'))`);
+const pickBlock = (p, id) => p.eval(`(b => {
+  b.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" }));
+  document.querySelector(".kapi-handle").dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+})(document.querySelector('[data-kapi-id="${id}"]'))`);
+const select = (id) => pickBlock(page, id);
+const pressBlock = async (p, id) => {
+  await p.eval(`document.querySelector('[data-kapi-id="${id}"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", isPrimary: true }))`);
+  await p.waitFor(`!!document.querySelector('[data-kapi-id="${id}"][data-kapi-selected]')`);
+  await p.eval(`document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch", isPrimary: true }))`);
+};
 const editSelected = () => page.eval(`document.querySelector("[data-kapi-selected]").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
 const notice = () => page.eval(`(n => n.hidden ? "" : n.textContent)(document.querySelector(".kapi-notice"))`);
 const CLASH = "The agent also changed this block. Yours is showing.";
@@ -348,7 +357,7 @@ test("a second click on Undo lands on the notice and does nothing", async () => 
 test("the delete notice fits the 390px phone layout", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
-    await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await pressBlock(phone, "cccccccc");
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     await phone.eval(`document.querySelector('.kapi-bar [data-action="delete"]').click()`);
     await phone.waitFor(`!!document.querySelector("#kapi-page .kapi-undo-note")`);
@@ -529,7 +538,7 @@ test("Escape ends an edit even when focus has left the text", async () => {
   await page.waitFor(`document.activeElement.dataset.kapiId === "dddddddd"`);
 });
 
-test("clicking another block saves the typing and the same click only selects its target", async () => {
+test("clicking another text block saves the typing and the same click starts typing there, while a click on a table only selects it", async () => {
   await select("ffffffff");
   await editSelected();
   await page.waitFor(`document.activeElement?.classList.contains("kapi-callout-body")`);
@@ -542,7 +551,13 @@ test("clicking another block saves the typing and the same click only selects it
   })()`);
   await until(() => requests("POST", "/ops").length === 1);
   assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, /Kept\.$/);
-  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "bbbbbbbb" && !document.querySelector(".kapi-bar").hidden`);
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable && document.querySelector(".kapi-bar").hidden`);
+  await page.eval(`(() => {
+    const target = document.querySelector('[data-kapi-id="gggggggg"] td');
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+    target.click();
+  })()`);
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "gggggggg" && !document.querySelector(".kapi-bar").hidden`);
   assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
 });
 
@@ -597,7 +612,7 @@ test("ticking a task while its checklist is being edited keeps the edit", async 
 });
 
 test("a block with no text of its own says so and opens no editor", async () => {
-  await page.eval(`document.querySelector('[data-kapi-id="eeeeeeee"]').click()`);
+  await pickBlock(page, "eeeeeeee");
   await page.waitFor(`document.querySelector('[data-kapi-id="eeeeeeee"]').hasAttribute("data-kapi-selected")`);
   await editSelected();
   await until(async () => /no text to edit/.test(await notice()));
@@ -711,7 +726,7 @@ test("Escape stops typing, keeps the text and saves it, and leaves the block sel
   await until(() => server.state.blocks[0].html.includes("Migration plan kept"));
 });
 
-test("a second real click on a selected block puts the caret where it lands, and the first click only selects", async () => {
+test("one real click on text puts the caret where it lands and starts typing, with no toolbar and no selected state first", async () => {
   const at = await page.eval(`(() => {
     const r = document.createRange();
     const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
@@ -721,11 +736,8 @@ test("a second real click on a selected block puts the caret where it lands, and
     return { x: b.left + 1, y: b.top + b.height / 2 };
   })()`);
   await mouseClickAt(at.x, at.y);
-  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected") && !document.querySelector(".kapi-bar").hidden`);
-  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
-  await new Promise((r) => setTimeout(r, 600));
-  await mouseClickAt(at.x, at.y);
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-bar").hidden`), true);
   await page.type("X");
   assert.equal(await text("bbbbbbbb"), "Move Xthe session store to the new cluster in two steps.");
 });
@@ -754,6 +766,23 @@ test("Cmd or Ctrl+Enter and Escape both stop typing in every editor, posting onl
       assert.equal(requests("POST", "/ops").length, posted, `${id} ${end}`);
     }
   }
+});
+
+test("a raw block opens its source box again right after a save, even when its reload lands while the source loads", async () => {
+  await select("jjjjjjjj");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  await page.type("x");
+  server.state.blocksDelay = 150;
+  server.state.sourceDelay = 600;
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector(".kapi-source")`);
+  await select("jjjjjjjj");
+  await editSelected();
+  await until(() => requests("GET", "/blocks/jjjjjjjj").length === 1);
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source") && document.activeElement.value.includes("x")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-source-box").nextElementSibling === document.querySelector('[data-kapi-id="jjjjjjjj"]')`), true);
 });
 
 test("Escape in a second block stops typing even while the first block is still reloading after its save", async () => {
@@ -2240,7 +2269,7 @@ test("a paragraph right under a heading gets its toolbar above its top right cor
       await page.eval(`document.querySelector(".kapi-panel-collapse").click()`);
       await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
     }
-    await mouseClick('[data-kapi-id="bbbbbbbb"]');
+    await select("bbbbbbbb");
     await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "above"`);
     const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
     assert.ok(sitsAbove(bar, el), JSON.stringify({ closed, bar, el }));
@@ -2258,7 +2287,7 @@ test("the toolbar never sits under the site header and stays clear of a block ju
   await new Promise((r) => setTimeout(r, 100));
   await page.eval(`(h => scrollBy(0, document.querySelector('[data-kapi-id="${target}"]').getBoundingClientRect().top - h - 24))(document.querySelector(".kapi-site-head").offsetHeight)`);
   await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden")`);
-  await mouseClick(`[data-kapi-id="${target}"]`);
+  await select(target);
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
   await page.waitFor(`(h => h.getBoundingClientRect().bottom === h.offsetHeight)(document.querySelector(".kapi-site-head"))`);
   const head = await page.eval(`document.querySelector(".kapi-site-head").offsetHeight`);
@@ -2273,7 +2302,7 @@ test("the toolbar never sits under the site header and stays clear of a block ju
 test("in a narrow window the toolbar floats at the block's top right edge, and pins to the top when the block's top scrolls away", async () => {
   const narrow = await browser.open(server.url, { width: 900, height: 700 });
   try {
-    await narrow.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await pickBlock(narrow, "bbbbbbbb");
     await narrow.waitFor(`["above", "below"].includes(document.querySelector(".kapi-bar").dataset.place)`);
     const [bar, el] = await narrow.eval(`[".kapi-bar", '[data-kapi-id="bbbbbbbb"]'].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
     assert.ok((bar.bottom <= el.top - 4 || bar.top >= el.bottom + 4) && Math.abs(bar.right - el.right) <= 1, JSON.stringify({ bar, el }));
@@ -2284,7 +2313,7 @@ test("in a narrow window the toolbar floats at the block's top right edge, and p
     await narrow.waitFor(`!document.querySelector("[contenteditable]") && ["above", "below"].includes(document.querySelector(".kapi-bar").dataset.place)`);
     assert.equal(await narrow.eval(CLEAR_OF_SELECTED), true);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
-    await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await pickBlock(narrow, "cccccccc");
     await narrow.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
     await narrow.waitFor(`document.querySelector(".kapi-bar").dataset.place === "pinned"`);
     assert.deepEqual(await narrow.eval(OVERLAPS), []);
@@ -2306,7 +2335,7 @@ test("the block toolbar never covers page content", async () => {
   await page.eval(`localStorage.clear()`);
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
-    await phone.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
+    await pressBlock(phone, "cccccccc");
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.equal(await phone.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
     await phone.waitFor(`parseFloat(getComputedStyle(document.documentElement).paddingBottom) >= document.querySelector(".kapi-bar").getBoundingClientRect().height`);
@@ -2427,22 +2456,35 @@ const tap = async (phone, selector) => {
   await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 };
 
+const longPress = async (phone, selector) => {
+  const { x, y } = await phone.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await phone.call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  await new Promise((r) => setTimeout(r, 650));
+  await phone.call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+};
+
 for (const width of [390, 360]) {
-  test(`on a ${width} px touch phone a tap only selects, Edit starts typing, and a tap on another block saves and selects it`, async () => {
+  test(`on a ${width} px touch phone a tap puts the caret in, a long press shows the block actions, and a tap on another block saves and types there`, async () => {
     const phone = await mobilePage(width);
     try {
       await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
       await tap(phone, '[data-kapi-id="bbbbbbbb"]');
-      await phone.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`);
-      assert.equal(await phone.eval(`!!document.querySelector("[contenteditable]")`), false);
-      await tap(phone, '.kapi-bar [data-action="edit"]');
       await phone.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb" && document.activeElement.isContentEditable`);
+      assert.equal(await phone.eval(`document.querySelector(".kapi-bar").hidden`), true);
       await phone.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
       await phone.type("!");
       await tap(phone, '[data-kapi-id="aaaaaaaa"]');
-      await phone.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector('[data-kapi-id="aaaaaaaa"]').hasAttribute("data-kapi-selected")`);
+      await phone.waitFor(`document.activeElement?.dataset.kapiId === "aaaaaaaa" && document.activeElement.isContentEditable`);
       await until(() => requests("POST", "/ops").length === 1);
       assert.match(requests("POST", "/ops")[0].body.op.parts[0].inner, /steps\.!$/);
+      await longPress(phone, '[data-kapi-id="cccccccc"]');
+      await phone.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector('[data-kapi-id="cccccccc"]').hasAttribute("data-kapi-selected") && !document.querySelector(".kapi-bar").hidden`);
+      assert.equal(await phone.eval(`getSelection().toString()`), "");
+      assert.deepEqual(await phone.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "edit", "archive", "delete"]);
+      await longPress(phone, '[data-kapi-id="aaaaaaaa"]');
+      await phone.waitFor(`document.querySelector('[data-kapi-id="aaaaaaaa"]').hasAttribute("data-kapi-selected") && !document.querySelector("[contenteditable]")`);
+      await tap(phone, '.kapi-bar [data-action="edit"]');
+      await phone.waitFor(`document.activeElement?.dataset.kapiId === "aaaaaaaa" && document.activeElement.isContentEditable`);
     } finally {
       await phone.close();
     }
@@ -3133,7 +3175,7 @@ test("the logo sits at the top left of the page as a site header, not in the cha
 test("the docked phone toolbar keeps each icon's label beside it", async () => {
   const phone = await browser.open(server.url, { width: 390, height: 800 });
   try {
-    await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await pressBlock(phone, "bbbbbbbb");
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.deepEqual(await phone.eval(`[...document.querySelectorAll('.kapi-bar [data-action="archive"], .kapi-bar [data-action="delete"], .kapi-bar [data-action="edit"]')].map((b) => b.innerText.trim())`), ["Edit", "Archive", "Delete"]);
   } finally {
@@ -3378,7 +3420,7 @@ test("deleting a folded heading deletes its whole hidden section and Undo restor
   const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
   await mouseClickAt(x, y);
   await page.waitFor(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded === "3 blocks"`);
-  await click('[data-kapi-id="h2aaaaaa"]');
+  await select("h2aaaaaa");
   await click('.kapi-bar [data-action="delete"]');
   await page.waitFor(`!document.querySelector('[data-kapi-id="h2aaaaaa"]')`);
   assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "delete", id: "h2aaaaaa", section: true });
@@ -3404,7 +3446,7 @@ test("every toolbar action on a folded heading acts on its whole section, and on
   const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
   await mouseClickAt(x, y);
   await page.waitFor(`document.querySelector('[data-kapi-id="h2aaaaaa"]').dataset.kapiFolded === "1 block"`);
-  await click('[data-kapi-id="h2aaaaaa"]');
+  await select("h2aaaaaa");
   assert.deepEqual(await labels(), ["Copy section as Markdown", "Archive section", "Delete section"]);
   await click('.kapi-bar [data-action="copy"]');
   await until(async () => (await page.eval(`window.copied.length`)) === 1);
@@ -3413,7 +3455,7 @@ test("every toolbar action on a folded heading acts on its whole section, and on
 
   await mouseClickAt(x, y);
   await page.waitFor(`!document.querySelector('[data-kapi-id="h2aaaaaa"]').hasAttribute("data-kapi-folded")`);
-  await click('[data-kapi-id="h2aaaaaa"]');
+  await select("h2aaaaaa");
   assert.deepEqual(await labels(), ["Copy as Markdown", "Archive", "Delete"]);
   await click('.kapi-bar [data-action="copy"]');
   await until(async () => (await page.eval(`window.copied.length`)) === 2);
@@ -3433,7 +3475,7 @@ test("archiving a folded heading archives its section and unarchiving restores i
   ]);
   const { x, y } = await page.eval(`(({ left, top, height }) => ({ x: left - 12, y: top + height / 2 }))(document.querySelector('[data-kapi-id="h2aaaaaa"]').getBoundingClientRect())`);
   await mouseClickAt(x, y);
-  await click('[data-kapi-id="h2aaaaaa"]');
+  await select("h2aaaaaa");
   await click('.kapi-bar [data-action="archive"]');
   await page.waitFor(`document.querySelector('[data-kapi-id="p3p3p3p3"]')?.dataset.kapiState === "archived"`);
   assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "archive", id: "h2aaaaaa", section: true });
@@ -3443,7 +3485,7 @@ test("archiving a folded heading archives its section and unarchiving restores i
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="oldarchiv"]').dataset.kapiState`), "archived");
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="h2bbbbbb"]').hasAttribute("data-kapi-state")`), false);
 
-  await click('[data-kapi-id="h2aaaaaa"]');
+  await select("h2aaaaaa");
   await click('.kapi-bar [data-action="unarchive"]');
   await page.waitFor(`!document.querySelector('[data-kapi-id="p3p3p3p3"]').hasAttribute("data-kapi-state")`);
   assert.deepEqual(requests("POST", "/ops")[1].body.op, { kind: "unarchive", id: "h2aaaaaa", section: true });
@@ -3535,7 +3577,7 @@ const queued = () => page.eval(`[...document.querySelectorAll(".kapi-queued-note
 const barActions = () => page.eval(`document.querySelector(".kapi-bar").hidden ? null : [...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`);
 const modifier = async () => ((await page.eval(`/Mac/.test(navigator.platform)`)) ? { meta: true } : { ctrl: true });
 
-test("#39 selected text copies with the keyboard as usual, and the toolbar only offers Ask AI", async () => {
+test("#39 selected text copies with the keyboard as usual, and the text toolbar offers Ask AI and Copy", async () => {
   const [x1, x2, y] = await page.eval(`(() => {
     const p = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
     const r = document.createRange();
@@ -3550,7 +3592,7 @@ test("#39 selected text copies with the keyboard as usual, and the toolbar only 
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: x2, y, button: "left", clickCount: 1 });
   assert.equal(await page.eval(`getSelection().toString()`), "session store");
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   const line = await page.eval(`(r => ({ top: r.top, bottom: r.bottom }))([...getSelection().getRangeAt(0).getClientRects()].at(-1))`);
   const box = await barBox();
   assert.ok(box.bottom > line.top - 60 && box.top < line.bottom + 60, "the toolbar stays next to the selected line");
@@ -3709,7 +3751,7 @@ test("#39 A asks, E archives and Delete deletes only while a block is selected a
   assert.equal(requests("POST", "/ops").length, 0);
 
   await selectText('[data-kapi-id="cccccccc"] li', 0, '[data-kapi-id="cccccccc"] li', 4);
-  await page.waitFor(`document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.waitFor(`document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("e");
   await page.key("Delete");
   await new Promise((r) => setTimeout(r, 100));
@@ -3781,9 +3823,9 @@ test("#39 the x on a cell note widens it to the whole table", async () => {
 
 test("#39 real block clicks anchor the toolbar to the block instead of following the pointer", async () => {
   const points = await page.eval(`(r => [
-    { x: r.left + 40, y: r.top + 8 },
+    { x: r.right - 40, y: r.top + 8 },
     { x: r.right - 40, y: r.bottom - 8 },
-  ])(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
+  ])(document.querySelector('[data-kapi-id="eeeeeeee"]').getBoundingClientRect())`);
   const boxes = [];
   for (const { x, y } of points) {
     await page.key("Escape");
@@ -3794,7 +3836,7 @@ test("#39 real block clicks anchor the toolbar to the block instead of following
     boxes.push(await barBox());
   }
   assert.deepEqual(boxes[1], boxes[0]);
-  assert.ok(sitsAbove(boxes[0], await boxOf("bbbbbbbb")), JSON.stringify(boxes[0]));
+  assert.ok(sitsAbove(boxes[0], await boxOf("eeeeeeee")), JSON.stringify(boxes[0]));
 });
 
 test("#39 a clicked table cell gets the same toolbar placement as its table", async () => {
@@ -3814,7 +3856,7 @@ test("#39 on a phone the docked toolbar offers Ask AI and the note opens at the 
   try {
     await phone.call("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 2, mobile: true });
     await phone.waitFor(`matchMedia("(max-width: 760px)").matches`);
-    await phone.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').click()`);
+    await pressBlock(phone, "bbbbbbbb");
     await phone.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").parentElement.id === "kapi-chrome"`);
     assert.deepEqual(await phone.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "edit", "archive", "delete"]);
     await phone.eval(`document.querySelector('.kapi-bar [data-action="ask"]').click()`);
@@ -3862,7 +3904,7 @@ test("#39 a selection that ends at the start of the next block targets only the 
     getSelection().removeAllRanges();
     getSelection().addRange(r);
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("just this");
@@ -3905,7 +3947,7 @@ test("#39 a selection across a block with no text keeps that block in the note",
     getSelection().addRange(r);
     return changed;
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("ends in the picture");
@@ -3922,7 +3964,7 @@ test("#39 a selection across a block with no text keeps that block in the note",
     getSelection().addRange(r);
     return changed;
   })()`);
-  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 1`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden && document.querySelector(".kapi-bar").childElementCount === 2`);
   await page.key("a");
   await page.waitFor(`!!document.querySelector(".kapi-ask")`);
   await page.type("only the text");
@@ -3936,7 +3978,7 @@ test("#39 a cancelled pointer never stops the toolbar following the selection", 
   await page.eval(`document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }))`);
   await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="bbbbbbbb"]', 4);
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.deepEqual(await barActions(), ["ask"]);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
 });
 
 test("#39 a section row inside the body is a row, not a column", async () => {
@@ -3996,7 +4038,7 @@ test("#39 a note box opened while a send is in flight can queue once the send en
 });
 
 async function queueOn(tab, id, text) {
-  await tab.eval(`document.querySelector('[data-kapi-id="${id}"]').click()`);
+  await pickBlock(tab, id);
   await tab.key("a");
   await tab.waitFor(`!!document.querySelector(".kapi-ask")`);
   await tab.type(text);
@@ -4194,7 +4236,7 @@ test("#39 note threads use the chat colours to distinguish the human and agent",
 });
 
 test("the Ask AI action uses the Android logo", async () => {
-  await click('[data-kapi-id="bbbbbbbb"]');
+  await select("bbbbbbbb");
   const path = await page.eval(`document.querySelector('.kapi-bar [data-action="ask"] svg path').getAttribute("d")`);
   assert.ok(path.startsWith("M176,148a12,12"));
 });
@@ -4842,7 +4884,7 @@ test("#30 a drop of an image and a file that is not one adds the image and says 
 
 test("#30 an image from another site has no Download tool", async () => {
   await withPage([{ id: "eeeeeeef", html: '<figure data-kapi-id="eeeeeeef"><img src="data:image/png;base64,' + PNG + '" alt=""></figure>' }], async (own, tab) => {
-    await tab.eval(`document.querySelector('[data-kapi-id="eeeeeeef"]').click()`);
+    await pickBlock(tab, "eeeeeeef");
     await tab.waitFor(`!document.querySelector(".kapi-bar").hidden`);
     assert.deepEqual(await tab.eval(`[...document.querySelectorAll(".kapi-bar button")].map((b) => b.dataset.action)`), ["ask", "copy", "edit", "preview", "archive", "delete"]);
   });
@@ -5569,13 +5611,12 @@ test("an agent reply marks closed chat without changing the independent outline"
 
 const editingId = () => page.eval(`document.activeElement?.isContentEditable ? document.activeElement.dataset.kapiId : null`);
 
-test("the page has no edit mode: no pencil switch and no saved mode, and one click only selects", async () => {
+test("the page has no edit mode: no pencil switch and no saved mode, and one click on text starts typing", async () => {
   assert.equal(await page.eval(`!!document.querySelector(".kapi-write-button, .kapi-write-tools")`), false);
   assert.equal(await page.eval(`document.documentElement.hasAttribute("data-kapi-writing")`), false);
   assert.equal(await page.eval(`Object.keys(localStorage).some((k) => k.startsWith("kapi-write:"))`), false);
   await mouseClick('[data-kapi-id="bbbbbbbb"]');
-  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').hasAttribute("data-kapi-selected")`);
-  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+  await until(async () => (await editingId()) === "bbbbbbbb");
 });
 
 test("while typing the ring is a thin outline instead of the selection ring", async () => {
@@ -5610,44 +5651,58 @@ test("a real double click on an unselected block starts typing where it lands, a
   await page.waitFor(`!document.querySelector("[contenteditable]") && !document.querySelector("[data-kapi-selected]")`);
 });
 
-test("while typing, a click on another block saves and selects it, and a second click there starts typing in it", async () => {
-  await mouseClick('[data-kapi-id="bbbbbbbb"]', 2);
+test("while typing, one click on another text block saves the first and puts the caret in the second", async () => {
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
   await page.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
   await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
   await page.type(" Then verify.");
   await mouseClick('[data-kapi-id="aaaaaaaa"]');
   await until(() => requests("POST", "/ops").length === 1);
   assert.deepEqual(requests("POST", "/ops")[0].body.op.parts, [{ id: "bbbbbbbb", inner: "Move the session store to the new cluster in two steps. Then verify." }]);
-  await page.waitFor(`document.querySelector('[data-kapi-id="aaaaaaaa"]').hasAttribute("data-kapi-selected") && !document.querySelector("[contenteditable]")`);
-  await new Promise((r) => setTimeout(r, 600));
-  await mouseClick('[data-kapi-id="aaaaaaaa"]');
   await until(async () => (await editingId()) === "aaaaaaaa");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`), false);
 });
 
-test("a first click on a link follows it, and a second click on a link in the selected block types in its text", async () => {
+test("a click on a link puts the caret in and shows an Open chip by the link, and the chip follows it", async () => {
   await mouseClick('[data-kapi-id="dddddddd"] a');
-  await page.waitFor(`location.hash === "#bbbbbbbb" && document.querySelector('[data-kapi-id="dddddddd"]').hasAttribute("data-kapi-selected")`);
-  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
-  await page.eval(`history.replaceState(null, "", location.pathname)`);
-  await new Promise((r) => setTimeout(r, 600));
-  await mouseClick('[data-kapi-id="dddddddd"] a');
-  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd"`);
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd" && !document.querySelector(".kapi-link-chip").hidden`);
   assert.equal(await page.eval(`location.hash`), "");
+  const [chip, link] = await page.eval(`[".kapi-link-chip", '[data-kapi-id="dddddddd"] a'].map((q) => (({ left, top, bottom }) => ({ left, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(Math.abs(chip.left - link.left) < 1 && chip.top >= link.bottom && chip.top - link.bottom < 12, JSON.stringify({ chip, link }));
+  assert.equal(await page.eval(`document.querySelector(".kapi-link-chip").textContent`), "Open");
   await page.type("!");
+  await mouseClick(".kapi-link-chip");
+  await page.waitFor(`location.hash === "#bbbbbbbb"`);
+  assert.equal(await editingId(), "dddddddd", "following the link keeps the typing session");
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.querySelector('[data-kapi-id="dddddddd"]').lastChild)`);
+  await page.waitFor(`document.querySelector(".kapi-link-chip").hidden`);
   await page.key("Escape");
   await until(() => requests("POST", "/ops").length === 1);
-  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector(".kapi-link-chip").hidden`);
 });
 
-test("dragging across the text of a selected block selects it for a note instead of typing", async () => {
-  await select("bbbbbbbb");
+test("Cmd or Ctrl click on a link in text that is not being typed in opens it without typing", async () => {
+  const modifiers = process.platform === "darwin" ? 4 : 2;
+  await page.eval(`document.querySelector('[data-kapi-id="dddddddd"] a').addEventListener("click", (e) => { window.followed = !e.defaultPrevented; e.preventDefault(); })`);
+  const { x, y } = await page.eval(`(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }))(document.querySelector('[data-kapi-id="dddddddd"] a').getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
+  await page.waitFor(`window.followed === true`);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable], [data-kapi-selected]")`), false);
+});
+
+test("dragging across text selects it with the text toolbar and keeps it typed over in the same session", async () => {
   const r = await page.eval(`(r => ({ x: r.left + 4, y: r.top + r.height / 2, to: r.left + 120 }))(document.querySelector('[data-kapi-id="bbbbbbbb"]').getBoundingClientRect())`);
   await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x: r.x, y: r.y, button: "left", clickCount: 1 });
   await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.to, y: r.y, button: "left", buttons: 1 });
   await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: r.to, y: r.y, button: "left", clickCount: 1 });
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
-  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
   assert.equal(await page.eval(`getSelection().isCollapsed`), false);
+  assert.equal(await editingId(), "bbbbbbbb");
+  await page.type("Shift");
+  assert.match(await text("bbbbbbbb"), /^Shift/);
+  await page.waitFor(`document.querySelector(".kapi-bar").hidden`);
 });
 
 test("a second click on a form option's text picks it instead of typing in it", async () => {
@@ -5891,3 +5946,279 @@ test("when another note uses the page's images, the tab goes home saying the ima
   const query = new URLSearchParams(await page.eval(`location.search`));
   assert.deepEqual([query.get("deleted"), query.get("kept")], [PAGE_ID, "1"]);
 });
+
+const hover = async (selector, dx = 40, dy = 8) => {
+  const { x, y } = await page.eval(`(r => ({ x: r.left + ${dx}, y: r.top + ${dy} }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+};
+const hoverCenter = async (selector) => {
+  const { x, y } = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+};
+const handleBox = () => page.eval(`(h => h.hidden ? null : (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(h.getBoundingClientRect()))(document.querySelector(".kapi-handle"))`);
+const firstLineOf = (id) => page.eval(`(() => {
+  const r = document.createRange();
+  r.selectNodeContents(document.querySelector('[data-kapi-id="${id}"]').firstChild);
+  const line = r.getClientRects()[0];
+  return { top: line.top, bottom: line.bottom };
+})()`);
+
+test("hovering a block shows a labelled handle in its left margin beside its first line, and clicking it selects the block with its toolbar", async () => {
+  assert.equal(await handleBox(), null);
+  await hover('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`!document.querySelector(".kapi-handle").hidden`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-handle").getAttribute("aria-label")`), "Block actions");
+  const [box, block, line] = [await handleBox(), await boxOf("bbbbbbbb"), await firstLineOf("bbbbbbbb")];
+  assert.ok(box.right <= block.left && block.left - box.right <= 12, JSON.stringify({ box, block }));
+  assert.ok(Math.abs((box.top + box.bottom) / 2 - (line.top + line.bottom) / 2) <= 1, JSON.stringify({ box, line }));
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: block.left - 4, y: (line.top + line.bottom) / 2, button: "none" });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2, button: "none" });
+  assert.deepEqual(await handleBox(), box, "the handle stays put on the way to it");
+  await mouseClick(".kapi-handle");
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "bbbbbbbb" && !document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask", "copy", "edit", "archive", "delete"]);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[data-kapi-selected]") && document.querySelector(".kapi-bar").hidden`);
+  await page.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: 4, y: 700, button: "none" });
+  await page.waitFor(`document.querySelector(".kapi-handle").hidden`);
+});
+
+test("the handle of a heading sits left of its fold arrow, and a table's sits left of its frame", async () => {
+  await hover('[data-kapi-id="aaaaaaaa"]');
+  await page.waitFor(`!document.querySelector(".kapi-handle").hidden`);
+  const [heading, h1] = [await handleBox(), await boxOf("aaaaaaaa")];
+  assert.ok(heading.right <= h1.left - 28, JSON.stringify({ heading, h1 }));
+  await hoverCenter('[data-kapi-id="gggggggg"] td');
+  await page.waitFor(`(h => !h.hidden && h.getBoundingClientRect().top > ${heading.bottom})(document.querySelector(".kapi-handle"))`);
+  const [table, frame] = [await handleBox(), await boxOf("gggggggg")];
+  assert.ok(table.right <= frame.left - 10, JSON.stringify({ table, frame }));
+});
+
+test("the handle while typing saves the text and selects the block, and Escape does the same", async () => {
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await editingId()) === "bbbbbbbb");
+  await page.type("A");
+  await hover('[data-kapi-id="bbbbbbbb"]');
+  await page.waitFor(`!document.querySelector(".kapi-handle").hidden`);
+  await mouseClick(".kapi-handle");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "bbbbbbbb" && !document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask", "copy", "edit", "archive", "delete"]);
+
+  await page.key("Escape");
+  await mouseClick('[data-kapi-id="dddddddd"] a', 2);
+  await page.waitFor(`document.activeElement?.dataset.kapiId === "dddddddd" && !getSelection().isCollapsed`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "dddddddd"`);
+  assert.deepEqual(await barActions(), ["ask", "copy", "edit", "archive", "delete"]);
+  assert.equal(await page.eval(`getSelection().toString()`), "");
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[data-kapi-selected]") && document.querySelector(".kapi-bar").hidden`);
+});
+
+test("Shift+Tab from the text reaches the handle, Enter on it selects the block and moves focus to its toolbar, and Tab goes back to the text", async () => {
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await until(async () => (await editingId()) === "bbbbbbbb");
+  await page.key("Tab", { shift: true });
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-handle") && !document.activeElement.hidden`);
+  await page.key("Tab");
+  await until(async () => (await editingId()) === "bbbbbbbb");
+  await page.key("Tab", { shift: true });
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-handle")`);
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "bbbbbbbb"`);
+  await page.waitFor(`document.activeElement === document.querySelector('.kapi-bar [data-action="ask"]')`);
+});
+
+test("selecting text while typing shows the same text toolbar, and Copy or the keyboard copies the text", async () => {
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
+  const { x, y } = await page.eval(`(() => {
+    const r = document.createRange();
+    const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
+    r.setStart(t, 10);
+    r.setEnd(t, 15);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  })()`);
+  for (const clickCount of [1, 2]) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount });
+  }
+  await page.waitFor(`getSelection().toString() === "session" && !document.querySelector(".kapi-bar").hidden`);
+  assert.equal(await editingId(), "bbbbbbbb");
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
+  const [bar, line] = [await barBox(), await firstLineOf("bbbbbbbb")];
+  assert.ok(bar.bottom <= line.top || bar.top >= line.bottom || bar.left >= (await boxOf("bbbbbbbb")).right, JSON.stringify({ bar, line }));
+  await mouseClick('.kapi-bar [data-action="copy"]');
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.deepEqual(await page.eval(`window.copied`), ["session"]);
+  await page.waitFor(`document.querySelector('.kapi-bar [data-action="copy"]').dataset.copyState === "copied"`);
+  assert.equal(await editingId(), "bbbbbbbb", "Copy keeps the typing session");
+  assert.equal(await page.eval(`getSelection().toString()`), "session");
+
+  await page.eval(`window.copyPrevented = null; addEventListener("copy", (e) => (window.copyPrevented = e.defaultPrevented))`);
+  await page.key("c", { ...(await modifier()), commands: ["copy"] });
+  assert.equal(await page.eval(`window.copyPrevented`), false);
+  assert.equal(await editingId(), "bbbbbbbb", "the keyboard copy keeps the typing session");
+  assert.equal(await page.eval(`getSelection().toString()`), "session");
+
+  await mouseClick('.kapi-bar [data-action="ask"]');
+  await page.waitFor(`document.activeElement === document.querySelector(".kapi-ask textarea")`);
+  assert.equal(await asking(), "About: “session”");
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`), true);
+  await page.type("rename this");
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector(".kapi-ask") && document.querySelectorAll(".kapi-queued-note").length === 1`);
+  assert.equal(await editingId(), "bbbbbbbb", "the caret goes back into the text");
+  assert.equal(await page.eval(`getSelection().isCollapsed`), true);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
+test("the text toolbar never covers the save pill when the first word of the typed block is selected", async () => {
+  const word = (end) => page.eval(`(() => {
+    const r = document.createRange();
+    const t = document.querySelector('[data-kapi-id="bbbbbbbb"]').firstChild;
+    r.setStart(t, 0);
+    r.setEnd(t, ${end});
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  })()`);
+  const at = await word(4);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x: at.x, y: at.y, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: at.x, y: at.y, button: "left", clickCount: 1 });
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  await page.type("X");
+  await until(async () => (await saveState()) === "Saved");
+  const { x, y } = await word(4);
+  for (const clickCount of [1, 2]) {
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount });
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount });
+  }
+  await page.waitFor(`!getSelection().isCollapsed && !document.querySelector(".kapi-bar").hidden`);
+  const [bar, pill] = await page.eval(`[".kapi-bar", ".kapi-save-state"].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
+  assert.ok(bar.right <= pill.left || bar.left >= pill.right || bar.bottom <= pill.top || bar.top >= pill.bottom, JSON.stringify({ bar, pill }));
+});
+
+test("clicking from one text block into another moves the caret without flashing the block toolbar in between", async () => {
+  const start = async (id) => {
+    const { x, y } = await page.eval(`(r => ({ x: r.left + 20, y: r.top + 10 }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+    await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await new Promise((r) => setTimeout(r, 150));
+    await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  };
+  await start("bbbbbbbb");
+  await page.waitFor(`document.querySelector('[data-kapi-id="bbbbbbbb"]').isContentEditable`);
+  await page.type("X");
+  await page.eval(`window.barSeen = 0; (function tick() { if (!document.querySelector(".kapi-bar").hidden) window.barSeen++; requestAnimationFrame(tick); })()`);
+  await start("dddddddd");
+  await page.waitFor(`document.querySelector('[data-kapi-id="dddddddd"]').isContentEditable`);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`window.barSeen`), 0);
+  assert.equal(await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').textContent.includes("X")`), true);
+});
+
+test("a selection outside any typing session shows the same text toolbar, and A and C act on it", async () => {
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
+  await selectText('[data-kapi-id="bbbbbbbb"]', 0, '[data-kapi-id="dddddddd"]', 3);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  assert.deepEqual(await barActions(), ["ask", "copy"]);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable], [data-kapi-selected]")`), false);
+  await page.key("c");
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.match(await page.eval(`window.copied[0]`), /^Move the session store[\s\S]*See$/);
+  await page.key("n");
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-ask")`), false);
+  await page.key("a");
+  await page.waitFor(`!!document.querySelector(".kapi-ask") && document.querySelector(".kapi-ask textarea").placeholder === "Ask the agent about this"`);
+  await page.key("Escape");
+  await page.key("Escape");
+  await page.waitFor(`getSelection().isCollapsed && document.querySelector(".kapi-bar").hidden`);
+});
+
+test("a real click on the box of a task with text ticks it without selecting the block or typing", async () => {
+  await reopenWith([{ id: "llllllll", html: `<ul class="kapi-checklist" data-kapi-preset="checklist" data-kapi-id="llllllll"><li class="kapi-task" data-kapi-preset="task" data-kapi-id="tttttttt"><input type="checkbox" aria-label="Copy"><span class="kapi-task-body" data-kapi-text="tttttttt">Copy</span></li></ul>` }]);
+  await mouseClick('[data-kapi-id="tttttttt"] input');
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op, { kind: "check", id: "tttttttt", done: true });
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable], [data-kapi-selected]")`), false);
+  assert.equal(await page.eval(`document.querySelector(".kapi-bar").hidden`), true);
+});
+
+test("a table and a code block keep select on click and open on double click", async () => {
+  await mouseClick('[data-kapi-id="gggggggg"] tbody td');
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "gggggggg" && !document.querySelector(".kapi-bar").hidden`);
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable]")`), false);
+  await page.key("Escape");
+  await new Promise((r) => setTimeout(r, 600));
+  await mouseClick('[data-kapi-id="gggggggg"] tbody td', 2);
+  await page.waitFor(`document.activeElement?.matches('[data-kapi-id="gggggggg"] td[contenteditable]')`);
+  await page.key("Escape");
+  await page.key("Escape");
+  await new Promise((r) => setTimeout(r, 600));
+  await page.eval(`document.querySelector('[data-kapi-id="jjjjjjjj"]').scrollIntoView({ block: "center" })`);
+  await mouseClick('[data-kapi-id="jjjjjjjj"] pre');
+  await page.waitFor(`document.querySelector("[data-kapi-selected]")?.dataset.kapiId === "jjjjjjjj" && !document.querySelector(".kapi-source")`);
+  await new Promise((r) => setTimeout(r, 600));
+  await mouseClick('[data-kapi-id="jjjjjjjj"] pre', 2);
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+});
+
+test("read view shows no handle and a click on text neither types nor selects", async () => {
+  await page.key("e", await modifier());
+  await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+  await hover('[data-kapi-id="bbbbbbbb"]');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`document.querySelector(".kapi-handle").checkVisibility()`), false);
+  await mouseClick('[data-kapi-id="bbbbbbbb"]');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.eval(`!!document.querySelector("[contenteditable], [data-kapi-selected]")`), false);
+});
+
+test("a phone shows no handle on a tap", async () => {
+  const phone = await mobilePage(390);
+  try {
+    await phone.eval(`document.querySelector(".kapi-chat-button").click()`);
+    await tap(phone, '[data-kapi-id="bbbbbbbb"]');
+    await phone.waitFor(`document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
+    assert.equal(await phone.eval(`document.querySelector(".kapi-handle").hidden`), true);
+  } finally {
+    await phone.close();
+  }
+});
+
+for (const width of [1800, 1300]) {
+  test(`at ${width}px the read view and toolbar tooltips sit left of the open chat panel and inside the window, in read view too`, async () => {
+    await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
+    await page.waitFor(`innerWidth === ${width}`);
+    const tip = () => page.eval(`(() => {
+      const b = document.querySelector(".kapi-read-button");
+      const s = getComputedStyle(b, "::after");
+      const r = b.getBoundingClientRect();
+      const w = parseFloat(s.width);
+      const left = s.left === "auto" || s.right === "0px" ? r.right - parseFloat(s.right) - w : r.left + parseFloat(s.left) - (s.transform === "none" ? 0 : w / 2);
+      const collapsed = document.documentElement.hasAttribute("data-kapi-panel-collapsed") || document.documentElement.hasAttribute("data-kapi-reading");
+      return { content: s.content, left, right: left + w, panel: collapsed ? innerWidth : document.querySelector(".kapi-panel").getBoundingClientRect().left };
+    })()`);
+    await hoverCenter(".kapi-read-button");
+    const open = await tip();
+    assert.match(open.content, /Read view/);
+    assert.ok(open.panel < width, "the chat is open");
+    assert.ok(open.left >= 0 && open.right <= open.panel, JSON.stringify(open));
+    await page.key("e", await modifier());
+    await page.waitFor(`document.documentElement.hasAttribute("data-kapi-reading")`);
+    await hoverCenter(".kapi-read-button");
+    const reading = await tip();
+    assert.ok(reading.left >= 0 && reading.right <= width, JSON.stringify(reading));
+    await page.key("e", await modifier());
+    await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-reading")`);
+    await page.eval(`document.querySelector('[data-kapi-id="bbbbbbbb"]').style.width = "100%"`);
+    await select("bbbbbbbb");
+    await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+    await hoverCenter('.kapi-bar [data-action="delete"]');
+    const last = await page.eval(`(b => (r => ({ right: r.right, panel: document.querySelector(".kapi-panel").getBoundingClientRect().left, content: getComputedStyle(b, "::after").content, tipRight: r.right - parseFloat(getComputedStyle(b, "::after").right) }))(b.getBoundingClientRect()))(document.querySelector('.kapi-bar [data-action="delete"]'))`);
+    assert.match(last.content, /Delete/);
+    assert.ok(last.tipRight <= last.panel, JSON.stringify(last));
+    await page.call("Emulation.clearDeviceMetricsOverride");
+  });
+}
