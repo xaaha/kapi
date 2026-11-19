@@ -1,5 +1,5 @@
 html:has(#kapi-home) {
-  padding-right: 0;
+  --kapi-panel-gutter: 0px;
 }
 
 body:has(#kapi-home) {
