@@ -2609,7 +2609,8 @@
       tpl.innerHTML = (await res.text()).trim();
       const next = tpl.content.firstElementChild;
       if (!next) return loadPage();
-      if (touchesEdit(el)) {
+      const rev = res.headers.get("Kapi-Rev");
+      if (touchesEdit(el) || (rev && Number(rev) < Number(main.dataset.rev))) {
         schedule([id]);
         continue;
       }
@@ -2618,7 +2619,6 @@
       labelArchived(next);
       tables.prepare(next);
       media.prepare(next);
-      const rev = res.headers.get("Kapi-Rev");
       if (rev) main.dataset.rev = rev;
       if (res.headers.has("Kapi-Undo")) showUndo(res.headers.get("Kapi-Undo"));
       if (selected === el) {
