@@ -768,6 +768,23 @@ test("Cmd or Ctrl+Enter and Escape both stop typing in every editor, posting onl
   }
 });
 
+test("a raw block opens its source box again right after a save, even when its reload lands while the source loads", async () => {
+  await select("jjjjjjjj");
+  await editSelected();
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source")`);
+  await page.type("x");
+  server.state.blocksDelay = 150;
+  server.state.sourceDelay = 600;
+  await page.key("Escape");
+  await until(() => requests("POST", "/ops").length === 1);
+  await page.waitFor(`!document.querySelector(".kapi-source")`);
+  await select("jjjjjjjj");
+  await editSelected();
+  await until(() => requests("GET", "/blocks/jjjjjjjj").length === 1);
+  await page.waitFor(`document.activeElement?.classList.contains("kapi-source") && document.activeElement.value.includes("x")`);
+  assert.equal(await page.eval(`document.querySelector(".kapi-source-box").nextElementSibling === document.querySelector('[data-kapi-id="jjjjjjjj"]')`), true);
+});
+
 test("Escape in a second block stops typing even while the first block is still reloading after its save", async () => {
   server.state.blocksDelay = 800;
   await select("bbbbbbbb");

@@ -1179,7 +1179,8 @@
       }, () => null);
     busy = false;
     if (src === null) say("Could not load the text of this block.", "error");
-    if (src === null || selected !== el || editing) return renderBar();
+    if (src === null || !selected || idOf(selected) !== idOf(el) || editing) return renderBar();
+    el = selected;
     const kind = el.getAttribute("data-kapi-preset");
     const area = h("textarea", { class: "kapi-source", spellcheck: "false", "aria-label": `Text of ${describe(idOf(el))}` });
     area.value = src;
