@@ -13,6 +13,11 @@
   color: var(--kapi-muted);
 }
 
+.nb-missing-ask .kapi-confirm {
+  --kapi-confirm-height: 36px;
+  font-size: 13.5px;
+}
+
 .nb-grid[data-view="list"] .nb-missing-ask {
   flex-direction: row;
   align-items: center;

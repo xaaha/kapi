@@ -38,6 +38,9 @@ const editSelected = () => page.eval(`document.querySelector("[data-kapi-selecte
 const notice = () => page.eval(`(n => n.hidden ? "" : n.textContent)(document.querySelector(".kapi-notice"))`);
 const text = (id) => page.eval(`document.querySelector('[data-kapi-id="${id}"]')?.textContent ?? null`);
 
+const failOnNativeDialogs = () => page.eval(`window.nativeDialogs = []; for (const name of ["alert", "confirm", "prompt"]) window[name] = () => { window.nativeDialogs.push(name); throw new Error(name + "() opened a native dialog"); }`);
+const nativeDialogs = () => page.eval(`window.nativeDialogs`);
+
 async function until(fn, timeout = 3000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -4097,18 +4100,58 @@ test("#39 an agent edit marks its note changed with Before and Now, and Resolve 
   assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), false);
 });
 
-test("a note can be deleted from its popover", async () => {
+const popFoot = `[...document.querySelectorAll(".kapi-note-pop .kapi-pop-foot :is(button, .kapi-confirm-question):not([hidden])")].map((b) => b.textContent)`;
+
+test("a note is deleted from its popover through the in-place confirm, and no native dialog opens", async () => {
+  await failOnNativeDialogs();
   server.push(sessionNote);
   await until(async () => (await pinStates()) === "1:waiting");
   await hoverPin(1);
-  assert.deepEqual(await page.eval(`[...document.querySelectorAll(".kapi-note-pop .kapi-pop-foot button")].map((b) => b.textContent)`), ["Reply", "Resolve", "Delete"]);
-  assert.equal(await page.eval(`[...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").classList.contains("kapi-danger")`), true);
-  await page.eval(`window.confirm = () => true; [...document.querySelectorAll(".kapi-note-pop button")].find((b) => b.textContent === "Delete").click()`);
+  assert.deepEqual(await page.eval(popFoot), ["Reply", "Resolve", "Delete"]);
+  await page.eval(`document.querySelector(".kapi-note-pop .kapi-confirm-trigger").click()`);
+  assert.deepEqual(await page.eval(popFoot), ["Reply", "Resolve", "Delete note 1? This cannot be undone.", "Cancel", "Delete"]);
+  assert.equal(await page.eval(`document.activeElement === document.querySelector(".kapi-note-pop .kapi-confirm-no")`), true);
+  await page.eval(`document.querySelector(".kapi-note-pop .kapi-confirm-yes").click()`);
+  assert.equal(requests("POST", "/delete-notes").length, 0, "a click on Delete right after it appeared went through");
+  await page.waitFor(`document.querySelector(".kapi-note-pop .kapi-confirm-yes").hasAttribute("data-armed")`);
+  await page.eval(`document.querySelector(".kapi-note-pop .kapi-confirm-yes").click()`);
   await until(() => requests("POST", "/delete-notes").length === 1);
   assert.deepEqual(requests("POST", "/delete-notes")[0].body, { notes: [1] });
   await until(async () => (await pinStates()) === "");
   assert.equal(await page.eval(`document.querySelector(".kapi-tabs").hidden`), true);
   assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), false);
+  assert.deepEqual(await nativeDialogs(), []);
+});
+
+test("Cancel and Escape on a note's delete confirm leave the note in place", async () => {
+  await failOnNativeDialogs();
+  server.push(sessionNote);
+  await until(async () => (await pinStates()) === "1:waiting");
+  await hoverPin(1);
+  const yes = `document.querySelector(".kapi-note-pop .kapi-confirm-yes")`;
+  const trigger = `document.querySelector(".kapi-note-pop .kapi-confirm-trigger")`;
+  await page.eval(`${trigger}.click()`);
+  await page.waitFor(`${yes}.hasAttribute("data-armed")`);
+  await page.eval(`document.querySelector(".kapi-note-pop .kapi-confirm-no").click()`);
+  assert.deepEqual(await page.eval(popFoot), ["Reply", "Resolve", "Delete"]);
+  assert.equal(await page.eval(`document.activeElement === ${trigger}`), true);
+  await page.eval(`${trigger}.click()`);
+  await page.key("Escape");
+  assert.deepEqual(await page.eval(popFoot), ["Reply", "Resolve", "Delete"]);
+  assert.equal(await page.eval(`document.activeElement === ${trigger}`), true);
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-note-pop")`), true);
+
+  await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
+  const all = `document.querySelector(".kapi-notes-delete-all")`;
+  await page.eval(`${all}.querySelector(".kapi-confirm-trigger").click()`);
+  assert.equal(await page.eval(`${all}.querySelector(".kapi-confirm-question").textContent`), "Delete note 1? This cannot be undone.");
+  await page.key("Escape");
+  assert.equal(await page.eval(`${all}.hasAttribute("data-confirming")`), false);
+  assert.equal(await page.eval(`document.querySelector(".kapi-panel").hasAttribute("data-notes")`), true);
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(requests("POST", "/delete-notes").length, 0);
+  assert.equal(await pinStates(), "1:waiting");
+  assert.deepEqual(await nativeDialogs(), []);
 });
 
 test("Delete all removes open and resolved notes from the Notes section", async () => {
@@ -4118,8 +4161,11 @@ test("Delete all removes open and resolved notes from the Notes section", async 
   await until(async () => (await pinStates()) === "1:waiting 2:resolved");
   await page.eval(`document.querySelectorAll(".kapi-tabs button")[1].click()`);
   assert.equal(await page.eval(`document.querySelectorAll(".kapi-note-item").length`), 2);
-  assert.equal(await page.eval(`document.querySelector(".kapi-notes-delete-all").classList.contains("kapi-danger")`), true);
-  await page.eval(`window.confirm = () => true; document.querySelector(".kapi-notes-delete-all").click()`);
+  const all = `document.querySelector(".kapi-notes-delete-all")`;
+  await page.eval(`${all}.querySelector(".kapi-confirm-trigger").click()`);
+  assert.equal(await page.eval(`${all}.querySelector(".kapi-confirm-question").textContent`), "Delete all 2 notes, including unresolved notes? This cannot be undone.");
+  await page.waitFor(`${all}.querySelector(".kapi-confirm-yes").hasAttribute("data-armed")`);
+  await page.eval(`${all}.querySelector(".kapi-confirm-yes").click()`);
   await until(() => requests("POST", "/delete-notes").length === 1);
   assert.deepEqual(requests("POST", "/delete-notes")[0].body, { notes: [1, 2] });
   await until(async () => await page.eval(`document.querySelector(".kapi-tabs").hidden`));
@@ -4658,7 +4704,7 @@ test("#30 an image from another site has no Download tool", async () => {
 
 const menuOpen = () => page.eval(`!document.querySelector(".kapi-menu").hidden`);
 const expanded = () => page.eval(`document.querySelector(".kapi-menu-button").getAttribute("aria-expanded")`);
-const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? (document.activeElement.querySelector(".kapi-menu-label")?.textContent ?? document.activeElement.getAttribute("aria-label")) : document.activeElement.className`);
+const focusedItem = () => page.eval(`document.activeElement.closest(".kapi-menu") ? (document.activeElement.querySelector(":is(.kapi-menu-label, .kapi-confirm-label)")?.textContent ?? document.activeElement.getAttribute("aria-label")) : document.activeElement.className`);
 const topLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [role=menuitem]:not([hidden])")].filter((b) => !b.closest(".kapi-submenu")).map((b) => b.querySelector(".kapi-menu-label").textContent)`);
 const submenuOpen = () => page.eval(`!document.querySelector(".kapi-submenu").hidden`);
 const exportExpanded = () => page.eval(`document.querySelector(".kapi-menu [data-menu=export]").getAttribute("aria-expanded")`);
@@ -5037,7 +5083,7 @@ test("#26 a human message, note or answer after an end shows Session started aga
 });
 
 const sessionOpen = () => page.eval(`!document.querySelector(".kapi-menu [data-menu=session] + .kapi-submenu").hidden`);
-const sessionLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [data-menu=session] + .kapi-submenu :is([role=menuitem], .kapi-menu-question):not([hidden])")].map((b) => b.textContent)`);
+const sessionLabels = () => page.eval(`[...document.querySelectorAll(".kapi-menu [data-menu=session] + .kapi-submenu :is([role=menuitem], .kapi-confirm-question):not([hidden])")].map((b) => b.textContent)`);
 const openSession = async () => {
   if (!(await menuOpen())) {
     await mouseOn(".kapi-menu-button");
@@ -5497,7 +5543,7 @@ test("End session is a submenu like Export, and the keys reach End session and E
   assert.equal(await sessionOpen(), true);
   await pressKey("ArrowDown");
   assert.equal(await focusedItem(), "End and delete");
-  const [end, del, copy] = await page.eval(`["end", "delete", "copy"].map((id) => getComputedStyle(document.querySelector(".kapi-menu [data-menu=" + id + "]")).color)`);
+  const [end, del, copy] = await page.eval(`["[data-menu=end]", ".kapi-confirm-trigger", "[data-menu=copy]"].map((s) => getComputedStyle(document.querySelector(".kapi-menu " + s)).color)`);
   assert.equal(del, end);
   assert.notEqual(del, copy);
   await pressKey("ArrowLeft");
@@ -5505,24 +5551,28 @@ test("End session is a submenu like Export, and the keys reach End session and E
   assert.equal(await sessionOpen(), false);
 });
 
-test("End and delete asks inside the menu, never with window.confirm, and Cancel sends nothing", async () => {
-  await page.eval(`window.confirm = () => { window.confirmed = true; return true; }`);
+test("End and delete asks inside the menu with the shared confirm, and Cancel or Escape sends nothing", async () => {
+  await failOnNativeDialogs();
   await openSession();
-  await mouseOn(".kapi-menu [data-menu=delete]");
+  await mouseOn(".kapi-menu .kapi-confirm-trigger");
   const title = await page.eval(`document.querySelector(".kapi-current-title").textContent`);
   assert.deepEqual(await sessionLabels(), [`Delete ${title}?`, "Cancel", "Delete"]);
   assert.equal(await focusedItem(), "Cancel");
-  assert.equal(await page.eval(`document.querySelector(".kapi-menu [data-menu=delete-yes]").getAttribute("aria-describedby")`), "kapi-delete-question");
-  await page.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
+  assert.equal(await page.eval(`document.getElementById(document.querySelector(".kapi-menu .kapi-confirm-yes").getAttribute("aria-describedby")).textContent`), `Delete ${title}?`);
+  await page.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
   await pressKey("ArrowDown");
   assert.equal(await focusedItem(), "Delete");
   await mouseMove('[data-kapi-id="bbbbbbbb"]');
   await new Promise((r) => setTimeout(r, 400));
   assert.equal(await sessionOpen(), true, "moving the mouse off the menu closed the question");
-  await mouseOn(".kapi-menu [data-menu=delete-no]");
+  await mouseOn(".kapi-menu .kapi-confirm-no");
   assert.deepEqual(await sessionLabels(), ["End session", "End and delete"]);
   assert.equal(await focusedItem(), "End and delete");
-  await mouseOn(".kapi-menu [data-menu=delete]");
+  await mouseOn(".kapi-menu .kapi-confirm-trigger");
+  await page.key("Escape");
+  assert.deepEqual(await sessionLabels(), ["End session", "End and delete"]);
+  assert.equal(await focusedItem(), "End and delete");
+  assert.equal(await sessionOpen(), true);
   await page.key("Escape");
   assert.equal(await sessionOpen(), false);
   assert.equal(await menuOpen(), true);
@@ -5533,15 +5583,15 @@ test("End and delete asks inside the menu, never with window.confirm, and Cancel
   assert.equal(await menuOpen(), false);
   assert.equal(requests("POST", "/delete").length, 0);
   assert.equal(requests("POST", "/end").length, 0);
-  assert.equal(await page.eval(`window.confirmed ?? false`), false);
+  assert.deepEqual(await nativeDialogs(), []);
 });
 
 test("Delete in the menu deletes the page through the notebook and the tab goes home to an undo note", async () => {
   const title = await page.eval(`document.querySelector(".kapi-current-title").textContent`);
   await openSession();
-  await mouseOn(".kapi-menu [data-menu=delete]");
-  await page.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
-  await mouseOn(".kapi-menu [data-menu=delete-yes]");
+  await mouseOn(".kapi-menu .kapi-confirm-trigger");
+  await page.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+  await mouseOn(".kapi-menu .kapi-confirm-yes");
   await page.waitFor(`location.pathname === "/${TOKEN}/" && !!document.getElementById("kapi-home")`);
   const sent = requests("POST", `/api/notebook/pages/${PAGE_ID}/delete`);
   assert.equal(sent.length, 1);
@@ -5553,9 +5603,9 @@ test("Delete in the menu deletes the page through the notebook and the tab goes 
 test("a failed delete says why in the notice and the tab stays on the page", async () => {
   server.state.deleteError = "could not move plan.html to the Trash";
   await openSession();
-  await mouseOn(".kapi-menu [data-menu=delete]");
-  await page.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
-  await mouseOn(".kapi-menu [data-menu=delete-yes]");
+  await mouseOn(".kapi-menu .kapi-confirm-trigger");
+  await page.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+  await mouseOn(".kapi-menu .kapi-confirm-yes");
   await until(async () => (await notice()) === "Could not delete the page: could not move plan.html to the Trash");
   assert.equal(await menuOpen(), false);
   assert.equal(await page.eval(`!!document.getElementById("kapi-page")`), true);
@@ -5577,16 +5627,16 @@ test("another tab on a page deleted elsewhere goes home, and a delete already in
 test("a real double click on End and delete only asks; the Delete it reveals ignores the second click", async () => {
   await page.eval(`window.deleteCalls = 0; const real = window.fetch; window.fetch = (url, opts) => { if (String(url).endsWith("/delete")) window.deleteCalls++; return real(url, opts); }`);
   await openSession();
-  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(".kapi-menu [data-menu=delete]").getBoundingClientRect())`);
+  const { x, y } = await page.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(".kapi-menu .kapi-confirm-trigger").getBoundingClientRect())`);
   for (const clickCount of [1, 2]) {
     await page.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount });
     await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount });
   }
   assert.equal(await page.eval(`window.deleteCalls`), 0);
-  assert.notEqual(await page.eval(`document.elementFromPoint(${x}, ${y})?.closest("[data-menu]")?.dataset.menu`), "delete-yes");
-  await page.eval(`document.querySelector(".kapi-menu [data-menu=delete-yes]").click()`);
+  assert.equal(await page.eval(`document.elementFromPoint(${x}, ${y})?.closest("button")?.classList.contains("kapi-confirm-yes") ?? false`), false);
+  await page.eval(`document.querySelector(".kapi-menu .kapi-confirm-yes").click()`);
   assert.equal(await page.eval(`window.deleteCalls`), 0, "a click on Delete right after it appeared went through");
-  await page.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
+  await page.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
   assert.equal(await page.eval(`window.deleteCalls`), 0);
   assert.deepEqual(await sessionLabels(), [`Delete ${await page.eval(`document.querySelector(".kapi-current-title").textContent`)}?`, "Cancel", "Delete"]);
   await page.key("Escape");
@@ -5596,9 +5646,9 @@ test("a real double click on End and delete only asks; the Delete it reveals ign
 test("when another note uses the page's images, the tab goes home saying the images were kept", async () => {
   server.state.keptImages = true;
   await openSession();
-  await mouseOn(".kapi-menu [data-menu=delete]");
-  await page.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
-  await mouseOn(".kapi-menu [data-menu=delete-yes]");
+  await mouseOn(".kapi-menu .kapi-confirm-trigger");
+  await page.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+  await mouseOn(".kapi-menu .kapi-confirm-yes");
   await page.waitFor(`location.pathname === "/${TOKEN}/" && !!document.getElementById("kapi-home")`);
   const query = new URLSearchParams(await page.eval(`location.search`));
   assert.deepEqual([query.get("deleted"), query.get("kept")], [PAGE_ID, "1"]);

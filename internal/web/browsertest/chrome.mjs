@@ -94,6 +94,10 @@ export async function launch() {
       listeners.add((msg) => {
         if (msg.sessionId !== sessionId) return;
         if (msg.method === "Runtime.exceptionThrown") errors.push(msg.params.exceptionDetails.exception?.description);
+        if (msg.method === "Page.javascriptDialogOpening") {
+          errors.push(`native ${msg.params.type} dialog: ${msg.params.message}`);
+          call("Page.handleJavaScriptDialog", { accept: false });
+        }
       });
       await call("Runtime.enable");
       await call("Page.enable");

@@ -360,13 +360,16 @@ test("a note whose file is gone stays in the switcher and on home, marked missin
     await h.waitFor(`${card}?.querySelector(".kapi-pop-question")?.textContent.startsWith("Restore version 1, from ")`);
     await h.eval(`${card}.querySelector(".kapi-pop-button[data-kind=secondary]").click()`);
     await h.waitFor(`${card}?.querySelector(".kapi-pop-question")?.textContent === "Delete it instead?"`);
-    await h.eval(`${card}.querySelector(".kapi-pop-button[data-kind=secondary]").click()`);
+    assert.deepEqual(await h.eval(`[...${card}.querySelectorAll(".kapi-pop-actions .kapi-confirm button:not([hidden])")].map((b) => b.textContent)`), ["Keep", "Delete"]);
+    await h.waitFor(`document.activeElement === ${card}.querySelector(".kapi-confirm-no")`);
+    await h.waitFor(`${card}.querySelector(".kapi-confirm-yes").hasAttribute("data-armed")`);
+    await h.eval(`${card}.querySelector(".kapi-confirm-no").click()`);
     await h.waitFor(`!!${card} && !${card}.querySelector(".nb-missing-ask")`);
     await h.eval(`${card}.querySelector(".nb-card").click()`);
     await h.waitFor(`!!${card}?.querySelector(".kapi-pop-question")`);
     await h.eval(`${card}.querySelector(".kapi-pop-button[data-kind=secondary]").click()`);
-    await h.waitFor(`!!${card}?.querySelector(".kapi-pop-button[data-kind=danger]")`);
-    await h.eval(`${card}.querySelector(".kapi-pop-button[data-kind=danger]").click()`);
+    await h.waitFor(`!!${card}?.querySelector(".kapi-confirm-yes[data-armed]")`);
+    await h.eval(`${card}.querySelector(".kapi-confirm-yes").click()`);
     await p.waitFor(`!${row}`);
     await h.waitFor(`!${card}`);
   } finally {
@@ -898,10 +901,10 @@ test("End and delete on a page trashes its file and images, wakes kapi wait, and
   try {
     await p.eval(`document.querySelector(".kapi-menu-button").click()`);
     await p.eval(`document.querySelector(".kapi-menu [data-menu=session]").click()`);
-    await p.eval(`document.querySelector(".kapi-menu [data-menu=delete]").click()`);
-    assert.equal(await p.eval(`document.querySelector(".kapi-menu-question").textContent`), "Delete Doomed note?");
-    await p.waitFor(`document.querySelector(".kapi-menu [data-menu=delete-yes]").hasAttribute("data-armed")`);
-    await p.eval(`document.querySelector(".kapi-menu [data-menu=delete-yes]").click()`);
+    await p.eval(`document.querySelector(".kapi-menu .kapi-confirm-trigger").click()`);
+    assert.equal(await p.eval(`document.querySelector(".kapi-menu .kapi-confirm-question").textContent`), "Delete Doomed note?");
+    await p.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector(".kapi-menu .kapi-confirm-yes").click()`);
     await p.waitFor(`location.pathname === new URL(${JSON.stringify(base)}).pathname && location.search === "" && !!document.querySelector(".nb-home")`, 5000);
     await p.waitFor(`${undoText} === "Deleted Doomed note · Undo"`);
     assert.equal(await exited, 0);
@@ -939,7 +942,7 @@ test("a home card has its own menu button outside the link, with the same in-men
     await p.eval(`${button}.focus()`);
     assert.equal(await p.eval(`getComputedStyle(${button}).opacity`), "1");
     await p.eval(`${button}.click()`);
-    const menuLabels = `[...document.querySelectorAll(".nb-card-menu > :not([hidden])")].map((b) => b.textContent)`;
+    const menuLabels = `[...document.querySelectorAll(".nb-card-menu :is([role=menuitem], .kapi-confirm-question):not([hidden])")].map((b) => b.textContent)`;
     await p.waitFor(`!document.querySelector(".nb-card-menu").hidden`);
     assert.deepEqual(await p.eval(menuLabels), ["Delete"]);
     assert.equal(await p.eval(`${button}.getAttribute("aria-expanded")`), "true");
@@ -947,7 +950,7 @@ test("a home card has its own menu button outside the link, with the same in-men
     await p.key("Enter");
     assert.deepEqual(await p.eval(menuLabels), ["Delete Card note?", "Cancel", "Delete"]);
     assert.equal(await p.eval(`document.activeElement.textContent`), "Cancel");
-    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
+    await p.waitFor(`document.querySelector('.nb-card-menu .kapi-confirm-yes').hasAttribute("data-armed")`);
     await p.key("Enter");
     assert.deepEqual(await p.eval(menuLabels), ["Delete"]);
     await p.key("Escape");
@@ -955,12 +958,12 @@ test("a home card has its own menu button outside the link, with the same in-men
     assert.equal(existsSync(path), true);
 
     await p.eval(`${button}.click()`);
-    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete"]').click()`);
+    await p.eval(`document.querySelector('.nb-card-menu .kapi-confirm-trigger').click()`);
     await p.eval(`window.deleteCalls = 0; const real = window.fetch; window.fetch = (url, opts) => { if (String(url).endsWith("/delete")) window.deleteCalls++; return real(url, opts); }`);
-    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    await p.eval(`document.querySelector('.nb-card-menu .kapi-confirm-yes').click()`);
     assert.equal(await p.eval(`window.deleteCalls`), 0, "a click on Delete right after it appeared went through");
-    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
-    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    await p.waitFor(`document.querySelector('.nb-card-menu .kapi-confirm-yes').hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector('.nb-card-menu .kapi-confirm-yes').click()`);
     await p.waitFor(`!${hasCard("Card note")} && ${undoText} === "Deleted Card note · Undo"`, 5000);
     assert.equal(await p.eval(`document.querySelector(".nb-card-menu").hidden`), true);
     assert.equal(existsSync(path), false);
@@ -971,6 +974,50 @@ test("a home card has its own menu button outside the link, with the same in-men
     assert.deepEqual(p.errors, []);
   } finally {
     await p.close();
+  }
+});
+
+test("the page menu and the home card menu confirm a delete with the same shared component and look", async () => {
+  const { path, url } = notePage("sameconfirm", "Same confirm");
+  const p = await browser.open(url, { width: 1440 });
+  const h = await home(base, { width: 1440 });
+  try {
+    const look = (scope, parts) => `${JSON.stringify(parts)}.map((part) => {
+      const s = getComputedStyle(document.querySelector(${JSON.stringify(scope)} + " " + part));
+      return [part, s.color, s.backgroundColor, s.fontSize, part.includes("label") ? "" : s.fontWeight, s.opacity, s.padding];
+    })`;
+    const hover = async (q, selector) => {
+      const { x, y } = await q.eval(`(({ left, top, width, height }) => ({ x: left + width / 2, y: top + height / 2 }))(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+      await q.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+    };
+    await p.eval(`document.querySelector(".kapi-menu-button").click()`);
+    await p.eval(`document.querySelector(".kapi-menu [data-menu=session]").click()`);
+    await showAll(h);
+    await h.waitFor(hasCard("Same confirm"));
+    await h.eval(`[...document.querySelectorAll(".nb-card-menu-button")].find((b) => b.getAttribute("aria-label") === "Actions for Same confirm").click()`);
+    assert.deepEqual(await h.eval(look(".nb-card-menu", [".kapi-confirm-trigger .kapi-confirm-label"])), await p.eval(look(".kapi-menu", [".kapi-confirm-trigger .kapi-confirm-label"])));
+
+    await p.eval(`document.querySelector(".kapi-menu .kapi-confirm-trigger").click()`);
+    await h.eval(`document.querySelector(".nb-card-menu .kapi-confirm-trigger").click()`);
+    const parts = [".kapi-confirm-question", ".kapi-confirm-no .kapi-confirm-label", ".kapi-confirm-yes"];
+    assert.deepEqual(await h.eval(look(".nb-card-menu", parts)), await p.eval(look(".kapi-menu", parts)));
+    await p.waitFor(`document.querySelector(".kapi-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+    await h.waitFor(`document.querySelector(".nb-card-menu .kapi-confirm-yes").hasAttribute("data-armed")`);
+    assert.equal(await p.eval(`document.querySelectorAll(".kapi-menu .kapi-confirm[data-layout=menu][data-confirming]").length`), 1);
+    assert.equal(await h.eval(`document.querySelectorAll(".nb-card-menu .kapi-confirm[data-layout=menu][data-confirming]").length`), 1);
+    await hover(p, ".kapi-menu .kapi-confirm-yes");
+    await hover(h, ".nb-card-menu .kapi-confirm-yes");
+    await new Promise((r) => setTimeout(r, 200));
+    const yes = await h.eval(look(".nb-card-menu", [".kapi-confirm-yes"]));
+    assert.deepEqual(yes, await p.eval(look(".kapi-menu", [".kapi-confirm-yes"])));
+    assert.equal(yes[0][5], "1");
+    assert.notEqual(yes[0][2], "rgba(0, 0, 0, 0)");
+    assert.equal(existsSync(path), true);
+    assert.deepEqual(p.errors, []);
+    assert.deepEqual(h.errors, []);
+  } finally {
+    await p.close();
+    await h.close();
   }
 });
 
@@ -997,9 +1044,9 @@ test("deleting a note whose images another note shows keeps the images folder an
     await p.waitFor(hasCard("Shared images"));
     const button = `[...document.querySelectorAll(".nb-card-menu-button")].find((b) => b.getAttribute("aria-label") === "Actions for Shared images")`;
     await p.eval(`${button}.click()`);
-    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete"]').click()`);
-    await p.waitFor(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').hasAttribute("data-armed")`);
-    await p.eval(`document.querySelector('.nb-card-menu [data-card-action="delete-yes"]').click()`);
+    await p.eval(`document.querySelector('.nb-card-menu .kapi-confirm-trigger').click()`);
+    await p.waitFor(`document.querySelector('.nb-card-menu .kapi-confirm-yes').hasAttribute("data-armed")`);
+    await p.eval(`document.querySelector('.nb-card-menu .kapi-confirm-yes').click()`);
     await p.waitFor(`${undoText} === "Deleted Shared images. Its images stay, since another note uses them · Undo"`, 5000);
     assert.equal(existsSync(path), false);
     assert.equal(readFileSync(join(lifecycleDir, "shared.files", "a.png"), "utf8"), "png");

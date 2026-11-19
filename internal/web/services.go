@@ -64,6 +64,7 @@ func (s *Server) shell(w http.ResponseWriter, r *http.Request, root, title, main
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/chrome.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/tables.css\">\n", root)
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/media.css\">\n", root)
+	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sstatic/confirm.css\">\n", root)
 	for _, svc := range s.services {
 		if ships(svc, "style.css") {
 			fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%sassets/%s/style.css\">\n", root, svc.Name())

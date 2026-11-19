@@ -8,6 +8,7 @@
   const unifiedSearch = searchDialog();
   const { icon: sharedIcon } = await import(new URL("../../static/core.js", location.href));
   const { restorePrompt } = await import(new URL("../../static/restore-dialog.js", location.href));
+  const { confirmStep } = await import(new URL("../../static/confirm.js", location.href));
 
   const STATUS = {
     connecting: "Connecting to kapi\u2026",
@@ -31,8 +32,6 @@
   let lastReply = 0;
   let ended = false;
   let leftDeleted = false;
-  let armTimer = 0;
-  const ARM_MS = 500;
   let opened = false;
   const loadedAt = new Date();
   let busy = false;
@@ -170,6 +169,8 @@
   const notesTab = h("button", { type: "button", role: "tab", "aria-selected": "false", text: "Notes", onclick: () => showTab("notes") });
   const tabs = h("div", { class: "kapi-tabs", role: "tablist", "aria-label": "Panel", hidden: "" }, chatTab, notesTab);
   const notesView = h("section", { class: "kapi-notes", "aria-label": "Notes" });
+  const deleteAll = confirmStep({ label: "Delete all", question: () => deleteQuestion(activeNotes()), run: () => deleteNotes(activeNotes()) });
+  deleteAll.el.classList.add("kapi-notes-delete-all");
   const searchButton = searchTrigger();
   const collapsePanelButton = h("button", { type: "button", class: "kapi-panel-collapse", "aria-label": "Close chat", title: "Close chat", onclick: () => setPanelCollapsed(true) }, icon("x"));
   const expandPanelButton = h("button", { type: "button", class: "kapi-panel-expand", "aria-label": "Expand chat", "data-tip": "Expand chat", "aria-pressed": "false", onclick: () => setPanelExpanded(!panelExpanded) }, icon("expand"));
@@ -227,16 +228,14 @@
   const menuEntry = ({ id, glyph, label, detail, run }) =>
     h("button", { type: "button", role: "menuitem", tabindex: "-1", ...(id && { "data-menu": id }), onclick: () => (closeMenu(true), run()) },
       icon(glyph), h("span", { class: "kapi-menu-label", text: label }), ...(detail ? [h("code", { class: "kapi-menu-detail", title: detail, text: `\u200e${detail}` })] : []));
-  const confirmEntry = (id, glyph, label, run) =>
-    h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": id, hidden: "", onclick: run }, icon(glyph), h("span", { class: "kapi-menu-label", text: label }));
   const endEntry = menuEntry({ id: "end", glyph: "stop", label: "End session", run: endSession });
-  const deleteEntry = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": "delete", onclick: () => askDelete(true) },
-    icon("trash"), h("span", { class: "kapi-menu-label", text: "End and delete" }));
-  const deleteQuestion = h("p", { class: "kapi-menu-question", id: "kapi-delete-question", role: "presentation", hidden: "" });
-  const deleteYes = confirmEntry("delete-yes", "trash", "Delete", () => deletePage());
-  const deleteNo = confirmEntry("delete-no", "x", "Cancel", () => deleteYes.hasAttribute("data-armed") && askDelete(false));
-  deleteYes.setAttribute("aria-describedby", deleteQuestion.id);
-  deleteNo.setAttribute("aria-describedby", deleteQuestion.id);
+  const deleteStep = confirmStep({
+    label: () => (ended ? "Delete page" : "End and delete"),
+    question: () => `Delete ${pageTitle.textContent || pageName}?`,
+    menu: true,
+    run: () => deletePage(),
+    onChange: (on) => (endEntry.hidden = on || ended),
+  });
   const submenus = [];
   const submenuGroup = (id, glyph, label, items) => {
     const button = h("button", { type: "button", role: "menuitem", tabindex: "-1", "data-menu": id, "aria-haspopup": "menu", "aria-expanded": "false" },
@@ -252,7 +251,7 @@
   };
   const menu = h("div", { class: "kapi-menu", role: "menu", "aria-label": "Page", hidden: "" },
     submenuGroup("export", "download", "Export", EXPORTS.map(menuEntry)), ...themeItems(), ...MENU.map(menuEntry),
-    submenuGroup("session", "stop", "End session", [endEntry, deleteEntry, deleteQuestion, deleteNo, deleteYes]));
+    submenuGroup("session", "stop", "End session", [endEntry, deleteStep.el]));
   const sessionMenu = submenus.at(-1);
   const syncSaved = () => {
     const saved = main.dataset.saved === "true";
@@ -692,7 +691,7 @@
     return true;
   }
 
-  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemradio"]):not([hidden]), :scope > [role="none"] > [role="menuitem"], :scope > [role="group"] > [role="menuitemradio"]')];
+  const menuItems = (within) => [...within.querySelectorAll(':scope > :is([role="menuitem"], [role="menuitemradio"]):not([hidden]), :scope > [role="none"] > [role="menuitem"]:not([hidden]), :scope > [role="group"] > [role="menuitemradio"]')];
   let hoverOpened = false;
   let submenuTimer;
 
@@ -710,7 +709,7 @@
     hoverOpened = false;
     clearTimeout(submenuTimer);
     if (!openSub) return;
-    if (openSub === sessionMenu) askDelete(false, false);
+    if (openSub === sessionMenu) deleteStep.disarm();
     const sub = openSub;
     openSub = null;
     sub.list.hidden = true;
@@ -751,7 +750,7 @@
       else hoverOpen();
     });
     sub.group.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "mouse" || !openSub || confirmingDelete()) return;
+      if (e.pointerType !== "mouse" || !openSub || deleteStep.confirming()) return;
       clearTimeout(submenuTimer);
       submenuTimer = setTimeout(() => closeSubmenu(openSub.list.contains(document.activeElement)), 300);
     });
@@ -800,22 +799,6 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
-  function confirmingDelete() {
-    return !deleteYes.hidden;
-  }
-
-  function askDelete(on, focus = true) {
-    deleteQuestion.textContent = `Delete ${pageTitle.textContent || pageName}?`;
-    for (const el of [endEntry, deleteEntry]) el.hidden = on || (el === endEntry && ended);
-    for (const el of [deleteQuestion, deleteYes, deleteNo]) el.hidden = !on;
-    sessionMenu.list.toggleAttribute("data-confirming", on);
-    deleteYes.disabled = false;
-    deleteYes.removeAttribute("data-armed");
-    clearTimeout(armTimer);
-    if (on) armTimer = setTimeout(() => deleteYes.setAttribute("data-armed", ""), ARM_MS);
-    if (focus) (on ? deleteNo : deleteEntry).focus();
-  }
-
   function leaveDeleted(kept = false) {
     if (leftDeleted) return;
     leftDeleted = true;
@@ -823,8 +806,6 @@
   }
 
   async function deletePage() {
-    if (!deleteYes.hasAttribute("data-armed") || deleteYes.disabled) return;
-    deleteYes.disabled = true;
     let res;
     try {
       res = await fetch(`${homeURL}api/notebook/pages/${base.split("/").pop()}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
@@ -2223,9 +2204,9 @@
         h("button", { type: "button", class: "kapi-link", text: "Reply", onclick: () => replyTo(n) }),
         h("button", { type: "button", class: "kapi-link", text: "Resolve", onclick: () => resolveNote(n) }));
     }
-    foot.append(h("button", { type: "button", class: "kapi-link kapi-danger", text: "Delete", onclick: () => deleteNotes([n]) }));
+    foot.append(pop.remove.el);
     kids.push(foot);
-    pop.box.replaceChildren(...kids);
+    keepFocus(pop.box, () => pop.box.replaceChildren(...kids));
     placePop();
   }
 
@@ -2240,7 +2221,7 @@
         if (e.pointerType === "mouse") hidePop();
       });
       root.append(box);
-      pop = { seq: n.seq, box, anchor };
+      pop = { seq: n.seq, box, anchor, remove: confirmStep({ label: "Delete", question: deleteQuestion([n]), run: () => deleteNotes([n]), onChange: () => placePop() }) };
     }
     pop.anchor = anchor;
     fillPop(n);
@@ -2288,13 +2269,21 @@
     if (res?.ok) hidePop(true);
   }
 
+  const deleteQuestion = (list) => (list.length > 1 ? `Delete all ${list.length} notes, including unresolved notes? This cannot be undone.` : `Delete note ${list[0].num}? This cannot be undone.`);
+
+  function keepFocus(within, put) {
+    const held = within.contains(document.activeElement) ? document.activeElement : null;
+    put();
+    if (held?.isConnected) held.focus({ preventScroll: true });
+  }
+
   async function deleteNotes(list) {
     if (!list.length) return;
-    const all = list.length > 1;
-    if (!confirm(all ? `Delete all ${list.length} notes, including unresolved notes? This cannot be undone.` : `Delete note ${list[0].num}? This cannot be undone.`)) return;
     const res = await request("/delete-notes", { notes: list.map((n) => n.seq) });
     if (res && !res.ok) say(res.data.error || `Notes not deleted (HTTP ${res.status}).`, "error");
-    if (res?.ok) hidePop(true);
+    if (!res?.ok) return;
+    hidePop(true);
+    deleteAll.disarm();
   }
 
   function noteAt(x, y) {
@@ -2331,6 +2320,7 @@
     if (!active.length) {
       showTab("chat");
       setSheet(false);
+      deleteAll.disarm();
       return notesView.replaceChildren();
     }
     const nav = h("div", { class: "kapi-notes-nav" },
@@ -2346,14 +2336,14 @@
         h("span", { class: "kapi-note-text", text: n.text }),
         h("span", { class: "kapi-note-chip", "data-state": stateOf(n), text: stateOf(n) === "changed" && n.changedTime ? `Changed \u00b7 ${ago(n.changedTime)}` : STATE_LABEL[stateOf(n)] }))));
     const resolved = active.filter((n) => n.resolved);
-    notesView.replaceChildren(
-      h("div", { class: "kapi-notes-head" }, h("h2", { text: "Notes" }), h("span", { class: "kapi-notes-summary", text: summary }),
-        h("button", { type: "button", class: "kapi-link kapi-danger kapi-notes-delete-all", text: "Delete all", onclick: () => deleteNotes(active) }),
+    deleteAll.refresh();
+    keepFocus(notesView, () => notesView.replaceChildren(
+      h("div", { class: "kapi-notes-head" }, h("h2", { text: "Notes" }), h("span", { class: "kapi-notes-summary", text: summary }), deleteAll.el,
         h("button", { type: "button", class: "kapi-notes-close", "aria-label": "Close notes", onclick: () => setSheet(false) }, icon("x"))),
       nav,
       h("p", { class: "kapi-notes-keys" }, h("kbd", { text: "J" }), " next  ", h("kbd", { text: "K" }), " previous"),
       ...(open.length ? [h("ul", { class: "kapi-note-list" }, ...pageOrder(open).map(item))] : [h("p", { class: "kapi-empty", text: "Every note is resolved." })]),
-      ...(resolved.length ? [h("h3", { class: "kapi-note-group", text: "Resolved" }), h("ul", { class: "kapi-note-list" }, ...resolved.map(item))] : []));
+      ...(resolved.length ? [h("h3", { class: "kapi-note-group", text: "Resolved" }), h("ul", { class: "kapi-note-list" }, ...resolved.map(item))] : [])));
   }
 
   function paintRail() {
@@ -2523,9 +2513,9 @@
 
   function setEnded(on) {
     ended = on;
-    endEntry.hidden = on || confirmingDelete();
+    endEntry.hidden = on || deleteStep.confirming();
     sessionMenu.button.querySelector(".kapi-menu-label").textContent = on ? "Delete" : "End session";
-    deleteEntry.querySelector(".kapi-menu-label").textContent = on ? "Delete page" : "End and delete";
+    deleteStep.refresh();
   }
 
   function agentState() {
@@ -2578,7 +2568,7 @@
       addEntry(ev, h("div", {}, ...(ev.quote ? [h("blockquote", { class: "kapi-msg-quote", text: clip(ev.quote, 200) })] : []),
         prose("div", "kapi-msg-text", ev.text, ev.html), ...thumbs(ev.files)));
     }
-    if (ev.kind === "end" && ev.text === "deleted" && new Date(ev.time) >= loadedAt && !deleteYes.disabled) return leaveDeleted();
+    if (ev.kind === "end" && ev.text === "deleted" && new Date(ev.time) >= loadedAt && !deleteStep.busy()) return leaveDeleted();
     if (ev.kind === "end") {
       setEnded(true);
       log.append(h("li", { class: "kapi-end", "data-seq": ev.seq, text: `${ev.text === "deleted" ? "You deleted the page" : "You ended the session"}${clock(ev.time)}` }));
