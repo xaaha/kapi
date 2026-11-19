@@ -228,6 +228,11 @@ html { scroll-padding-top: var(--kapi-header-height); }
   pointer-events: none;
 }
 
+#kapi-chrome .kapi-save-state button {
+  margin-left: 8px;
+  pointer-events: auto;
+}
+
 #kapi-chrome .kapi-save-state[data-state="saved"] {
   color: var(--kapi-green-text);
 }

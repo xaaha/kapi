@@ -2504,6 +2504,32 @@ test("block tags stay inside their message bubble and the panel", async () => {
 
 const restartText = () => page.eval(`(b => b && !b.hidden ? b.textContent : "")(document.querySelector(".kapi-restart"))`);
 
+test("a save kapi refuses offers Copy text, and the next Escape drops the typed text", async () => {
+  await select("bbbbbbbb");
+  const before = await text("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  server.state.nextOpError = "no block with that id";
+  await page.type(" Mine.");
+  await until(async () => (await saveState()).startsWith("Not saved"));
+  assert.equal(await saveState(), "Not saved. Esc discardsCopy text");
+
+  await page.eval(`window.copied = []; navigator.clipboard.writeText = async (t) => { window.copied.push(t); }`);
+  const at = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))(document.querySelector(".kapi-save-state button").getBoundingClientRect())`);
+  await page.call("Input.dispatchMouseEvent", { type: "mousePressed", ...at, button: "left", clickCount: 1 });
+  await page.call("Input.dispatchMouseEvent", { type: "mouseReleased", ...at, button: "left", clickCount: 1 });
+  await until(async () => (await page.eval(`window.copied.length`)) === 1);
+  assert.match((await page.eval(`window.copied`))[0], /Mine\.$/);
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable]").length`), 1);
+
+  const ops = requests("POST", "/ops").length;
+  await page.key("Escape");
+  await until(async () => (await page.eval(`document.querySelectorAll("[contenteditable]").length`)) === 0);
+  await until(async () => (await text("bbbbbbbb")) === before);
+  assert.equal(requests("POST", "/ops").length, ops);
+  assert.equal(await saveState(), "");
+});
+
 test("after a daemon restart the stream stops and the reopen command is shown, keeping unsaved text", async () => {
   await select("bbbbbbbb");
   await editSelected();
