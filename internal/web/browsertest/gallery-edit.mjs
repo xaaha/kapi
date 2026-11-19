@@ -85,7 +85,7 @@ try {
     try {
       await page.eval(`${block}.click()`);
       await page.eval(`${block}.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
-      await page.waitFor(`!!document.querySelector("[contenteditable=true]")`);
+      await page.waitFor(`!!document.querySelector("[contenteditable]")`);
       const leak = await page.eval(`[...${block}.querySelectorAll("[data-kapi-raw]")].filter((n) => n.isContentEditable).length + document.querySelectorAll(".kapi-source").length`);
       if (leak) throw new Error(`${leak} raw parts or text boxes opened while editing the whole block`);
       const stuck = await page.eval(`(() => {

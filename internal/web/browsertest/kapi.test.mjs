@@ -449,6 +449,50 @@ test("plain Enter in the block and source editors is a new line, not the end of 
   assert.equal(requests("POST", "/ops")[1].body.op.parts[0].inner, "if a &lt; b {\n\tswap()\n}\nmore");
 });
 
+const RENDER = [{ id: "rrrrrrrr", source: '<kapi-render data-kapi-id="rrrrrrrr" title="Status cards"><style>.a { padding: 40px }</style><div class="a">Preview</div></kapi-render>' }];
+const RENDER_TITLE = '[data-kapi-id="rrrrrrrr"] .kapi-render-title';
+
+test("a real double click on a render's title edits only the title, in place on one line, and saves it as the title attribute", async () => {
+  await reopenWith(RENDER);
+  await mouseClick(RENDER_TITLE, 2);
+  await page.waitFor(`document.activeElement?.matches(${JSON.stringify(RENDER_TITLE)})`);
+  assert.equal(await page.eval(`document.activeElement.getAttribute("contenteditable")`), "plaintext-only");
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable], .kapi-source").length`), 1);
+  await page.eval(`getSelection().collapse(document.activeElement.firstChild, document.activeElement.textContent.length)`);
+  await page.type(" v2");
+  await page.key("Enter");
+  await until(() => requests("POST", "/ops").length === 1);
+  assert.deepEqual(requests("POST", "/ops")[0].body.op.parts, [{ id: "rrrrrrrr", attr: "title", inner: "Status cards v2" }]);
+  await page.waitFor(`!document.querySelector("[contenteditable]") && document.querySelector(${JSON.stringify(RENDER_TITLE)}).textContent === "Status cards v2"`);
+  assert.match(server.state.blocks[0].source, /^<kapi-render data-kapi-id="rrrrrrrr" title="Status cards v2"><style>/);
+  assert.equal(requests("GET", "/source/rrrrrrrr").length, 0);
+});
+
+test("Enter, a second click and the Edit button on a render all edit its title, and a double click in its preview opens nothing", async () => {
+  await reopenWith(RENDER);
+  const titleFocused = `document.activeElement?.matches(${JSON.stringify(RENDER_TITLE)}) && document.activeElement.isContentEditable`;
+  const idle = `!document.querySelector("[contenteditable], .kapi-source") && !document.querySelector(".kapi-bar").hidden`;
+  await select("rrrrrrrr");
+  await page.waitFor(idle);
+  await page.key("Enter");
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await click('.kapi-bar [data-action="edit"]');
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await mouseClick(RENDER_TITLE);
+  await page.waitFor(titleFocused);
+  await page.key("Escape");
+  await page.waitFor(idle);
+  await mouseClick('[data-kapi-id="rrrrrrrr"] iframe', 2);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(await page.eval(`document.querySelectorAll("[contenteditable], .kapi-source").length`), 0);
+  assert.equal(requests("GET", "/source/rrrrrrrr").length, 0);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
+
 test("edits a prose preset's rendered body in place and saves it as inner", async () => {
   await select("ffffffff");
   await editSelected();
@@ -633,6 +677,23 @@ test("one typing session is one undo step, so Undo takes back the whole session"
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').dataset.kapiState`), "archived", "the archive before the session stays");
 });
 
+test("a typing session logs one revision after typing pauses, and the tab does not refetch its own text", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  await page.eval(`(t => getSelection().collapse(t, t.length))(document.activeElement.firstChild)`);
+  for (const [word, n] of [[" One", 1], [" two", 2]]) {
+    await page.type(word);
+    await until(() => requests("POST", "/ops").length === n, 2500);
+  }
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector("[contenteditable]")`);
+  await until(() => server.state.events.some((e) => e.kind === "revision"), 4000);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(server.state.events.filter((e) => e.kind === "revision").map((e) => e.rev), [3]);
+  assert.equal(requests("GET", "/blocks/bbbbbbbb").length, 1, "only the refresh on leaving");
+});
+
 test("Escape stops typing, keeps the text and saves it, and leaves the block selected with its toolbar", async () => {
   await select("aaaaaaaa");
   await editSelected();
@@ -811,7 +872,7 @@ test("W widens a selected table into the margins and W again puts it back in the
 test("a plain prose table gets the same wrapper and expansion as kapi-table", async () => {
   const original = server.state.blocks.find((block) => block.id === "gggggggg").html;
   server.agentEdit("gggggggg", '<table data-kapi-id="gggggggg" data-kapi-text="gggggggg"><thead><tr><th>Screen</th><th>Today</th><th>Ask</th></tr></thead><tbody><tr><td>Review</td><td>Editable form</td><td>Summary rows</td></tr></tbody></table>');
-  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]')`);
+  await page.waitFor(`document.querySelector('[data-kapi-id="gggggggg"]')?.matches('.kapi-table[data-kapi-preset="table"]') && document.querySelector('[data-kapi-id="gggggggg"] th')?.textContent === "Screen"`);
   assert.equal(await page.eval(`document.querySelector('[data-kapi-id="gggggggg"] > table')?.hasAttribute("data-kapi-id")`), false);
   const width = () => page.eval(`Math.round(document.querySelector('[data-kapi-id="gggggggg"]').getBoundingClientRect().width)`);
   await select("gggggggg");
@@ -1172,22 +1233,17 @@ test("chrome styles do not reach page content that reuses chrome class names", a
   assert.deepEqual(leaks, []);
 });
 
-test("refetches other changed blocks while one is being edited", async () => {
+test("refetches other changed blocks while one is being edited, and ends typing in a block the agent changed before anything was typed", async () => {
   await select("aaaaaaaa");
   await editSelected();
   await page.waitFor(`document.activeElement.dataset.kapiId === "aaaaaaaa"`);
   server.bumpBehindBrowser("cccccccc", '<ul data-kapi-id="cccccccc"><li>Agent rewrote this</li></ul>');
   server.push({ kind: "revision", target: "aaaaaaaa,cccccccc", text: "edited" });
   await until(async () => (await text("cccccccc")) === "Agent rewrote this");
-  assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0);
-  assert.equal(await page.eval(`document.activeElement.dataset.kapiId`), "aaaaaaaa");
-  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
-  await page.key("Escape");
-  await page.waitFor(`!!document.querySelector('[data-kapi-id="aaaaaaaa"] + .kapi-clash')`);
-  assert.equal(requests("GET", "/blocks/aaaaaaaa").length, 0, "the agent named the block being typed in, so it waits for a choice");
-  await click('.kapi-clash [data-clash="theirs"]');
   await page.waitFor(`!document.querySelector("[contenteditable], .kapi-clash")`);
+  await until(() => requests("GET", "/blocks/aaaaaaaa").length === 1);
   assert.equal(await text("aaaaaaaa"), "Migration plan");
+  assert.equal(await page.eval(`document.getElementById("kapi-page").dataset.rev`), "2");
   assert.equal(requests("POST", "/ops").length, 0);
 });
 
@@ -1306,6 +1362,16 @@ async function typeThenAgentEdits(words = " Mine.") {
   server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
   await page.waitFor(`!!document.querySelector('[data-kapi-id="bbbbbbbb"] + .kapi-clash')`);
 }
+
+test("an agent change to a block you are in but have not typed in shows the agent's version without a clash bar", async () => {
+  await select("bbbbbbbb");
+  await editSelected();
+  await page.waitFor(`document.activeElement.dataset.kapiId === "bbbbbbbb"`);
+  server.agentEdit("bbbbbbbb", '<p data-kapi-id="bbbbbbbb">Agent wrote this.</p>');
+  await until(async () => (await text("bbbbbbbb")) === "Agent wrote this.");
+  assert.equal(await page.eval(`!!document.querySelector(".kapi-clash") || !!document.querySelector("[contenteditable]")`), false);
+  assert.equal(requests("POST", "/ops").length, 0);
+});
 
 test("an agent change to the block being typed in keeps your text under a clash bar, and nothing saves until you choose", async () => {
   await typeThenAgentEdits();
@@ -2094,16 +2160,17 @@ const OVERLAPS = `(() => {
 
 const barBox = () => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(".kapi-bar").getBoundingClientRect())`);
 const boxOf = (id) => page.eval(`(({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector('[data-kapi-id="${id}"]').getBoundingClientRect())`);
+const sitsAbove = (bar, el) => bar.bottom <= el.top && el.top - bar.bottom <= 12 && Math.abs(bar.right - el.right) <= 1;
+const CLEAR_OF_SELECTED = `((b, e) => b.bottom <= e.top || b.top >= e.bottom)(document.querySelector(".kapi-bar").getBoundingClientRect(), document.querySelector("[data-kapi-selected]").getBoundingClientRect())`;
 
-test("on wide screens the toolbar sits in the margin at the block's top right, and typing swaps it for the save pill", async () => {
+test("on wide screens the toolbar sits above the block's top right corner, and typing swaps it for the save pill", async () => {
   await page.call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 800, deviceScaleFactor: 2, mobile: false });
   await page.waitFor(`innerWidth === 1600`);
   await select("bbbbbbbb");
-  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "above"`);
   assert.equal(await page.eval(`document.querySelector(".kapi-bar").parentElement.id`), "kapi-chrome");
   const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
-  assert.ok(bar.left >= el.right && bar.left - el.right <= 12 && Math.abs(bar.top - el.top) <= 1, JSON.stringify({ bar, el }));
-  assert.deepEqual(await page.eval(OVERLAPS), []);
+  assert.ok(sitsAbove(bar, el), JSON.stringify({ bar, el }));
   await editSelected();
   await page.waitFor(`document.querySelector(".kapi-bar").hidden && document.activeElement?.dataset.kapiId === "bbbbbbbb"`);
   await page.type("!");
@@ -2116,9 +2183,10 @@ test("on a tall block the toolbar stays in view while the block scrolls", async 
   await page.waitFor(`innerWidth === 1600`);
   await page.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
   await select("cccccccc");
-  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "above"`);
   await page.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
-  await page.waitFor(`(b => b.top >= 0 && b.bottom <= innerHeight)(document.querySelector(".kapi-bar").getBoundingClientRect())`);
+  await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "pinned"`);
+  assert.equal(await page.eval(`(b => b.top >= 0 && b.bottom <= innerHeight)(document.querySelector(".kapi-bar").getBoundingClientRect())`), true);
   assert.deepEqual(await page.eval(OVERLAPS), []);
   await page.eval(`scrollTo(0, document.body.scrollHeight)`);
   await page.waitFor(`(b => b.parentElement.classList.contains("kapi-panel") || b.getBoundingClientRect().bottom <= document.querySelector('[data-kapi-id="cccccccc"]').getBoundingClientRect().bottom + 1)(document.querySelector(".kapi-bar"))`);
@@ -2133,9 +2201,52 @@ test("the toolbar is one row and stays fully in view for a block at the bottom o
   await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
   const tops = await page.eval(`[...new Set([...document.querySelectorAll(".kapi-bar button")].map((b) => Math.round(b.getBoundingClientRect().top)))]`);
   assert.equal(tops.length, 1, JSON.stringify(tops));
-  const bar = await barBox();
+  const [bar, el] = [await barBox(), await boxOf("cccccccc")];
   assert.ok(bar.top >= 0 && bar.bottom <= 800, JSON.stringify(bar));
-  assert.deepEqual(await page.eval(OVERLAPS), []);
+  assert.ok(sitsAbove(bar, el), JSON.stringify({ bar, el }));
+});
+
+test("a paragraph right under a heading gets its toolbar above its top right corner on a wide screen, with the chat open or closed", async () => {
+  await reopenWith([
+    { id: "aaaaaaaa", html: '<h2 data-kapi-id="aaaaaaaa">Moving the session store to the new cluster this quarter</h2>' },
+    { id: "bbbbbbbb", html: '<p data-kapi-id="bbbbbbbb">Move the session store to the new cluster in two steps, copying first and then flipping reads.</p>' },
+  ]);
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 800, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`innerWidth === 1600`);
+  for (const closed of [false, true]) {
+    if (closed) {
+      await page.key("Escape");
+      await page.eval(`document.querySelector(".kapi-panel-collapse").click()`);
+      await page.waitFor(`document.documentElement.hasAttribute("data-kapi-panel-collapsed")`);
+    }
+    await mouseClick('[data-kapi-id="bbbbbbbb"]');
+    await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "above"`);
+    const [bar, el] = [await barBox(), await boxOf("bbbbbbbb")];
+    assert.ok(sitsAbove(bar, el), JSON.stringify({ closed, bar, el }));
+  }
+  await page.call("Emulation.clearDeviceMetricsOverride");
+});
+
+test("the toolbar never sits under the site header and stays clear of a block just below it", async () => {
+  const ids = Array.from({ length: 40 }, (_, i) => `p${String(i).padStart(2, "0")}aaaaa`.slice(0, 8));
+  await reopenWith(ids.map((id, i) => ({ id, html: `<p data-kapi-id="${id}">Paragraph ${i} with enough words to wrap a little across the reading column.</p>` })));
+  await page.call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 800, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`innerWidth === 1600`);
+  const target = ids[6];
+  await page.eval(`scrollTo(0, document.documentElement.scrollHeight)`);
+  await new Promise((r) => setTimeout(r, 100));
+  await page.eval(`(h => scrollBy(0, document.querySelector('[data-kapi-id="${target}"]').getBoundingClientRect().top - h - 24))(document.querySelector(".kapi-site-head").offsetHeight)`);
+  await page.waitFor(`!document.documentElement.hasAttribute("data-kapi-head-hidden")`);
+  await mouseClick(`[data-kapi-id="${target}"]`);
+  await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
+  await page.waitFor(`(h => h.getBoundingClientRect().bottom === h.offsetHeight)(document.querySelector(".kapi-site-head"))`);
+  const head = await page.eval(`document.querySelector(".kapi-site-head").offsetHeight`);
+  const [bar, el] = [await barBox(), await boxOf(target)];
+  assert.ok(head > 0, "the site header is showing");
+  assert.ok(el.top - head < 60, JSON.stringify({ head, el }));
+  assert.ok(bar.top >= head, JSON.stringify({ head, bar, el }));
+  assert.ok(bar.bottom <= el.top || bar.top >= el.bottom, JSON.stringify({ bar, el }));
+  await page.call("Emulation.clearDeviceMetricsOverride");
 });
 
 test("in a narrow window the toolbar floats at the block's top right edge, and pins to the top when the block's top scrolls away", async () => {
@@ -2145,12 +2256,12 @@ test("in a narrow window the toolbar floats at the block's top right edge, and p
     await narrow.waitFor(`["above", "below"].includes(document.querySelector(".kapi-bar").dataset.place)`);
     const [bar, el] = await narrow.eval(`[".kapi-bar", '[data-kapi-id="bbbbbbbb"]'].map((q) => (({ left, right, top, bottom }) => ({ left, right, top, bottom }))(document.querySelector(q).getBoundingClientRect()))`);
     assert.ok((bar.bottom <= el.top - 4 || bar.top >= el.bottom + 4) && Math.abs(bar.right - el.right) <= 1, JSON.stringify({ bar, el }));
-    assert.deepEqual(await narrow.eval(OVERLAPS), []);
+    assert.equal(await narrow.eval(CLEAR_OF_SELECTED), true);
     await narrow.eval(`document.querySelector("[data-kapi-selected]").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`);
     await narrow.waitFor(`document.querySelector(".kapi-bar").hidden && !!document.querySelector("[contenteditable]")`);
     await narrow.key("Escape");
     await narrow.waitFor(`!document.querySelector("[contenteditable]") && ["above", "below"].includes(document.querySelector(".kapi-bar").dataset.place)`);
-    assert.deepEqual(await narrow.eval(OVERLAPS), []);
+    assert.equal(await narrow.eval(CLEAR_OF_SELECTED), true);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').style.paddingBottom = "2400px"`);
     await narrow.eval(`document.querySelector('[data-kapi-id="cccccccc"]').click()`);
     await narrow.eval(`scrollTo(0, document.querySelector('[data-kapi-id="cccccccc"]').offsetTop + 900)`);
@@ -2199,7 +2310,7 @@ const COMPARE = [
   { id: "cccccccc", html: '<ul data-kapi-id="cccccccc"><li>Copy data</li><li>Flip reads</li></ul>' },
 ];
 
-test("selecting a block never moves the page, and its toolbar covers no block's content, at every desktop width", async () => {
+test("selecting a block never moves the page, and its toolbar sits clear of that block, at every desktop width", async () => {
   await reopenWith(COMPARE);
   for (const width of [900, 1100, 1280, 1440, 1920]) {
     await page.call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -2213,7 +2324,7 @@ test("selecting a block never moves the page, and its toolbar covers no block's 
       await page.waitFor(`!document.querySelector(".kapi-bar").hidden`);
       await page.eval(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
       assert.equal(await page.eval(boxes), before, `${id} at ${width}`);
-      assert.deepEqual(await page.eval(OVERLAPS), [], `${id} at ${width}`);
+      assert.equal(await page.eval(CLEAR_OF_SELECTED), true, `${id} at ${width}`);
     }
   }
   await page.call("Emulation.clearDeviceMetricsOverride");
@@ -3653,17 +3764,16 @@ test("#39 real block clicks anchor the toolbar to the block instead of following
     boxes.push(await barBox());
   }
   assert.deepEqual(boxes[1], boxes[0]);
-  assert.deepEqual(await page.eval(OVERLAPS), []);
+  assert.ok(sitsAbove(boxes[0], await boxOf("bbbbbbbb")), JSON.stringify(boxes[0]));
 });
 
-test("#39 a clicked table cell uses the same outside toolbar placement as its table", async () => {
+test("#39 a clicked table cell gets the same toolbar placement as its table", async () => {
   await page.call("Emulation.setDeviceMetricsOverride", { width: 1500, height: 800, deviceScaleFactor: 2, mobile: false });
   try {
     await mouseClick('[data-kapi-id="gggggggg"] tbody tr:nth-child(2) td');
-    await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "outside"`);
+    await page.waitFor(`document.querySelector(".kapi-bar").dataset.place === "above"`);
     const [bar, table] = [await barBox(), await boxOf("gggggggg")];
-    assert.ok(bar.left >= table.right && bar.left - table.right <= 12, JSON.stringify({ bar, table }));
-    assert.deepEqual(await page.eval(OVERLAPS), []);
+    assert.ok(sitsAbove(bar, table), JSON.stringify({ bar, table }));
   } finally {
     await page.call("Emulation.clearDeviceMetricsOverride");
   }

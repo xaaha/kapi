@@ -119,11 +119,11 @@ parts are text:
 | Text | Presets | Rendered as | Edited as |
 |---|---|---|---|
 | body | prose blocks, `kapi-callout`, `kapi-option`, `kapi-step`, `kapi-risk`, `kapi-question`, `kapi-opt`, `kapi-text`, `kapi-item`, `kapi-details`, `kapi-task`, `kapi-badge` | the element that shows the body carries `data-kapi-text="<id>"` | in place, rich text |
-| attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
+| attribute | `kapi-item` `key`, `kapi-option` `title`, `kapi-details` `summary`, `kapi-render` `title` (`textAttrs`) | the element that shows it carries `data-kapi-text="<id>"` and `data-kapi-attr="<name>"` | in place, plain text |
 | question | `kapi-choice`, the text before its first `kapi-opt` | its `legend` carries `data-kapi-text="<id>"` and `data-kapi-lead` | in place, rich text |
 | cells | plain `table`, `kapi-table` | each `th` and `td` carries `data-kapi-text="<table id>"` and `data-kapi-cell="<row>,<col>"` | in place, rich text |
 | task body | native checkbox `li`, `kapi-task` | the task body carries `data-kapi-text="<task id>"`; native tasks retain their checkbox | in place, rich text |
-| raw | plain `pre`, `kapi-code`, `kapi-diff`, `kapi-diagram`, `kapi-render` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
+| raw | plain `pre`, `kapi-code`, `kapi-diff`, `kapi-diagram` | the outer element carries `data-kapi-text="<id>"` and `data-kapi-raw` | a text box with `GET /p/{id}/source/{block}?part=inner` |
 | none | `kapi-compare`, `kapi-plan`, `kapi-form`, `kapi-kv`, `kapi-checklist`, `kapi-gallery` | nothing | through the parts inside it |
 
 Editing a block edits every text part inside it at once. A preset inside the
@@ -132,7 +132,10 @@ that cannot be typed into, and it is saved from its source byte for byte. A
 block with no text part says so and opens no editor. A badge inside text
 stays one piece, but its own text is a part. Attributes that are not shown as
 text (`kind`, `tone`, `state`, `done`, `value`, `name`, ids) and rendered
-chrome (callout labels, plan marks, the form button) are never editable. A new preset fails the render tests
+chrome (callout labels, plan marks, the form button) are never editable.
+A `kapi-render` is edited only through its title, shown in its `figcaption`;
+its HTML and CSS are not text, and a click inside its preview frame stays in
+the frame. A new preset fails the render tests
 until it is in `textParts`, and a test edits every text part of the gallery.
 
 All of it is saved as one `text` op:
@@ -177,17 +180,23 @@ the revision the session's previous save made. When `R` is still the current
 revision and the top undo step ends there, the save is a new revision as
 usual but joins that undo step instead of adding one, so the session undoes
 in one step. `state.json` keeps `"ends":{"<back>":<rev>}` for an undo step
-that ends later than one revision after it. Any other `amend` is ignored and
-the save adds its own undo step. A save that 409s keeps the text in the
+that ends later than one revision after it. Nothing undoes to `R` any more,
+so once the new revision commits kapi deletes `revs/<R>.html`, and a session
+keeps one revision file, its last. Revision numbers still only go up: `R` is
+never reused, a `?rev=R` read is 404, and an op sent at `R` is 409. Any other
+`amend` is ignored and the save adds its own undo step. A save that 409s keeps the text in the
 block and pauses saving until the human settles the clash.
 
-When the agent changes a block while the human is typing in it, by a
-revision event that names the block or a save that 409s, the browser keeps
+When the agent changes a block the human is in but has not typed in yet,
+typing ends and the block shows the agent's version. When the human has typed
+in it, by a revision event that names the block or a save
+that 409s, the browser keeps
 the human's text and shows a bar under the block: "The agent also changed
 this block. Yours is showing." with Keep mine, Use theirs and Compare. Keep
 mine saves the human's text over the agent's change. Use theirs first saves
 the human's unsaved text and then undoes that save, so the page shows the
-agent's version and both stay in `revs/`. Compare shows the two texts one
+agent's version and the human's stays in `revs/` for as long as the
+retention rule below keeps it. Compare shows the two texts one
 above the other. Either choice posts `POST /p/{id}/kept`. A block the agent
 rewrites while the human is not typing in it shows an "Agent changed this"
 tag for a moment.
@@ -270,7 +279,17 @@ Mermaid outside the drawn subset, a header orient cannot place, any other elemen
 422. The browser shows a Flip
 action for diagrams that carry `data-kapi-dir`, except an archived one.
 Every applied op saves the previous source as `revs/<rev>.html` so `undo`
-restores it.
+restores it. kapi keeps a revision file only while something can still read
+it: the current revision and the 19 before it, so an op from a tab a little
+behind still passes the check below; every `back` on the undo stack and the
+revision its step ends at; and the `rev` of every human note not yet resolved
+or deleted, which the browser reads with `?rev=` to show what changed since
+the note. Every other file is deleted when the page opens and, one at a time,
+after each commit: the revision that just left the window, and the two
+revisions an undo stopped needing. An amended typing save also deletes the
+file of the save it amends, inside the window, unless a note needs it. A
+missing file reads as 404 from `?rev=` and as 409 for an op sent at that
+`rev`.
 
 An op whose `rev` is older than the current revision still applies when its
 target element's outer source at that `rev` (from `revs/<rev>.html`) equals
@@ -348,6 +367,17 @@ next open, an append that failed is retried by the next op or refresh, and a
 reopen with nothing lost logs nothing. A commit that logs no
 event, such as the first load, records none. A file edit made while kapi was
 down is logged on the next open like any file edit, with author `file`.
+
+A human `text` op is the one exception to logging at once. Its event waits
+until two seconds pass with no further save that amends it, so a typing
+session that autosaves on every pause logs one revision event, for its last
+save, and an agent on `kapi wait` wakes once, about three seconds after the
+last keystroke. An amending save replaces the waiting event; any other commit,
+by anyone, logs the waiting event first, so events stay in revision order.
+The waiting event is the one in `state.json`, so the poll that refreshes open
+pages logs it when the two seconds are up, after the tab closed too, and a
+restart logs it on open. The op's reply then has `"deferred":true` and no
+`seq`.
 
 After the revision event, a commit whose new source needs repairs that the
 previous source did not appends one `repaired` event with author `kapi`, the
@@ -542,7 +572,7 @@ when it was last used: when it was uploaded or an event referenced it. The
 daemon deletes images unused for 7 days, on start and every hour, and keeps
 all of them under 512 MB by deleting the least recently used first, but never
 one used in the last hour; an upload that still does not fit is refused.
-| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S,"ids":[...]}`, where `seq` is the revision event the op logged and `ids` names the blocks it changed, the new one for an `image` op, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
+| `POST /p/{id}/ops` | `{"rev":N,"op":{...Op}}`; `{"kind":"image","id":"<block or empty>","src":"<name>"}` adds `<figure data-kapi-id="<new>"><img src="./plan.files/<name>" alt=""></figure>` after the top-level block holding `id`, or at the end of the body, names the new id in its revision event, and 422s when the image is not in the page's files folder | `{"rev":N,"undo":bool,"seq":S,"ids":[...]}`, where `seq` is the revision event the op logged, replaced by `"deferred":true` for a human `text` op whose event waits for typing to pause and `ids` names the blocks it changed, the new one for an `image` op, left out when it changed nothing; 409 `{"rev":current,"undo":bool}` when stale; 422 `{"error":"..."}` |
 | `POST /p/{id}/answers` | `{"form":"name","values":{"field":["v"]}}` | `{"seq":N}` |
 | `POST /p/{id}/kept` | `{"block":"<id>","kept":"mine"}` or `"theirs"`, sent when the human settles a clash | `{"seq":N}`; 422 without a block or with any other `kept` |
 | `POST /p/{id}/recover` | `{}` | `{"id":...,"path":...,"title":...,"rev":N,"at":...}`; writes the newest kept revision back to the page's missing file, recreating its folder; 409 when a file is already there or kapi kept no revision |
@@ -651,7 +681,7 @@ Kinds the browser cares about:
 | `resolve` | a human closed the note `re[0]` | fade its pin and clear its marks |
 | `answer` | form answer | show as sent |
 | `end` | the human ended the session; it stays ended until the next human `message`, `note` or `answer` | add an "ended" line to the chat and show "Session ended. Send a message to start again." as the status until then; the human event that lifts it gets a "Session started again" line before it |
-| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `seq` is the one this tab's own op returned |
+| `revision` | page changed to revision `rev`; `text` is the summary, `target` lists changed ids comma-separated, empty when the list of top-level blocks changed; a file edit also sets `changed` to every id, at any depth, whose element changed or went away, even when `target` is empty | refetch those blocks, or the page when `target` is empty, unless its `rev` is one this tab's own op made, which the op's `seq` or `deferred` marks |
 | `presence` | `text` is `watching` or `none`: whether a `kapi watch` or `kapi wait` is attached | set the status dot |
 | `repaired` | author `kapi`: the page at `rev` had preset mistakes that kapi repaired so it still renders styled; `text` lists them | nothing; it is for the agent |
 

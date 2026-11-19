@@ -33,6 +33,21 @@ func TestRichRenderKeepsHTMLAndCSSButDropsExecution(t *testing.T) {
 	}
 }
 
+func TestRichRenderMarksOnlyItsTitleAsText(t *testing.T) {
+	for src, want := range map[string]string{
+		`<kapi-render data-kapi-id="aaaaaaaa" title="Cards"><div>x</div></kapi-render>`: `<figcaption class="kapi-render-title" data-kapi-text="aaaaaaaa" data-kapi-attr="title">Cards</figcaption>`,
+		`<kapi-render data-kapi-id="aaaaaaaa"><div>x</div></kapi-render>`:               `<figcaption class="kapi-render-title" data-kapi-text="aaaaaaaa" data-kapi-attr="title">HTML preview</figcaption>`,
+	} {
+		out := render(t, src)
+		if !strings.Contains(out, want) {
+			t.Errorf("%s rendered without %s:\n%s", src, want, out)
+		}
+		if strings.Contains(out, "data-kapi-raw") || strings.Count(out, "data-kapi-text") != 1 {
+			t.Errorf("%s marks more than its title as text:\n%s", src, out)
+		}
+	}
+}
+
 func TestPresetWarningsKeepSafeContentVisible(t *testing.T) {
 	out := strict(t, `<kapi-callout kind="alarm"><p>Keep this explanation.</p></kapi-callout>`)
 	if !strings.Contains(out, "kapi-error") || !strings.Contains(out, "Keep this explanation.") {
