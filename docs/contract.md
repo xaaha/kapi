@@ -628,9 +628,9 @@ missing and asks the same inside the card, then offers Delete. `kapi open`,
 `say`, `send`, `wait` and `watch` restore a missing page first and print
 which revision, and `kapi ls` marks it missing.
 
-Ask AI and Note write the notes: on any text selection, across blocks too,
-they target the blocks the selection touches, and Ask AI on a selected block
-targets the block, or the table cell last clicked in it. Queued notes stay in the
+Ask AI writes the notes: on any text selection, across blocks too, it
+targets the blocks the selection touches, and on a selected block it targets
+the block, or the table cell last clicked in it. Queued notes stay in the
 tab's `sessionStorage` under `kapi-drafts:<page id>`, editable and
 removable, until one Send posts them, with any typed message, to
 `POST /p/{id}/notes`. A tab that learns kapi restarted can no longer send,
